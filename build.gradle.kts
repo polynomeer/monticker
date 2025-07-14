@@ -1,4 +1,5 @@
 plugins {
+    java
 }
 
 group = "com.polynomeer"
@@ -19,7 +20,7 @@ tasks.withType<Test> {
 }
 
 allprojects {
-    group = "com.romanticker"
+    group = "com.polynomeer.romanticker"
     version = "1.0.0"
 
     repositories {
@@ -33,26 +34,5 @@ subprojects {
 
     dependencies {
         testImplementation(kotlin("test"))
-    }
-}
-
-project("app-api").apply {
-    apply(plugin = "org.springframework.boot")
-    dependencies {
-        implementation(project(":shared-common"))
-        implementation(project(":shared-config"))
-        implementation(project(":domain-price"))
-        implementation(project(":domain-ticker"))
-        implementation(project(":infra-redis"))
-        implementation(project(":infra-timescaledb"))
-    }
-}
-
-project("app-batch").apply {
-    apply(plugin = "org.springframework.boot")
-    dependencies {
-        implementation(project(":shared-common"))
-        implementation(project(":domain-price"))
-        implementation(project(":infra-timescaledb"))
     }
 }
