@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @Repository
@@ -21,7 +22,7 @@ public class TimeSeriesPriceRepositoryImpl implements TimeSeriesPriceRepository 
     }
 
     @Override
-    public Price findLatest(String tickerCode) {
+    public Optional<Price> findLatest(String tickerCode) {
         try {
             log.debug("[TimescaleDB] SELECT * FROM price_history WHERE ticker_code = '{}'", tickerCode);
 
@@ -30,11 +31,12 @@ public class TimeSeriesPriceRepositoryImpl implements TimeSeriesPriceRepository 
                 log.warn("[TimescaleDB] No data found for ticker: {}", tickerCode);
             }
 
-            return price;
+            return Optional.ofNullable(price);
         } catch (Exception e) {
             log.error("[TimescaleDB] Failed to read price for {}: {}", tickerCode, e.getMessage(), e);
-            return null;
+            return Optional.empty();
         }
     }
+
 }
 

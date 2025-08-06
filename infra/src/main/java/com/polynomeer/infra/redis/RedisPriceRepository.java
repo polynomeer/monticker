@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.Duration;
 import java.time.ZonedDateTime;
+import java.util.Optional;
 
 @Slf4j
 @Repository
@@ -37,7 +38,7 @@ public class RedisPriceRepository implements CachePriceRepository {
     }
 
     @Override
-    public Price find(String tickerCode) {
+    public Optional<Price> find(String tickerCode) {
         String redisKey = key(tickerCode);
         try {
             Price cached = redisTemplate.opsForValue().get(redisKey);
@@ -46,10 +47,10 @@ public class RedisPriceRepository implements CachePriceRepository {
             } else {
                 log.debug("[Redis] Cache miss: {}", redisKey);
             }
-            return cached;
+            return Optional.ofNullable(cached);
         } catch (Exception e) {
             log.warn("[Redis] Cache read error for {}: {}", redisKey, e.getMessage());
-            return null;
+            return Optional.empty();
         }
     }
 

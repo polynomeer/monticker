@@ -8,7 +8,6 @@ import com.polynomeer.shared.common.error.PriceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -19,20 +18,23 @@ public class PriceQueryServiceImpl implements PriceQueryService {
 
     @Override
     public Price getCurrentPrice(String tickerCode) {
-        Price cached = redisRepository.find(tickerCode);
-        if (cached != null) {
-            log.debug("Cache hit for {}", tickerCode);
-            return cached;
-        }
-
-        Price latestFromDb = timeSeriesRepository.findLatest(tickerCode);
-        if (latestFromDb != null) {
-            log.debug("DB fallback for {}", tickerCode);
-            redisRepository.save(tickerCode, latestFromDb);
-            return latestFromDb;
-        }
-
-        log.warn("Price not found in cache or DB for {}", tickerCode);
-        throw new PriceNotFoundException(PriceErrorCode.PRICE_NOT_FOUND);
+        return redisRepository.find(tickerCode)
+                .map(cached -> {
+                    log.debug("Cache hit for {}", tickerCode);
+                    return cached;
+                })
+                .or(() -> {
+                    log.debug("Cache miss for {}", tickerCode);
+                    return timeSeriesRepository.findLatest(tickerCode)
+                            .map(latest -> {
+                                log.debug("DB fallback for {}", tickerCode);
+                                redisRepository.save(tickerCode, latest);
+                                return latest;
+                            });
+                })
+                .orElseThrow(() -> {
+                    log.warn("Price not found in cache or DB for {}", tickerCode);
+                    return new PriceNotFoundException(PriceErrorCode.PRICE_NOT_FOUND);
+                });
     }
 }
