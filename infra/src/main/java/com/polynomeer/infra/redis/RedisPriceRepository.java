@@ -17,7 +17,6 @@ import java.time.ZonedDateTime;
 public class RedisPriceRepository implements CachePriceRepository {
 
     private static final Duration TTL = Duration.ofMinutes(1);
-
     private final RedisTemplate<String, Price> redisTemplate;
 
     private String key(String tickerCode) {
@@ -40,21 +39,28 @@ public class RedisPriceRepository implements CachePriceRepository {
     @Override
     public Price find(String tickerCode) {
         String redisKey = key(tickerCode);
-        Price cached = redisTemplate.opsForValue().get(redisKey);
-
-        if (cached != null) {
-            log.debug("[Redis] Cache hit: {}", redisKey);
-        } else {
-            log.debug("[Redis] Cache miss: {}", redisKey);
+        try {
+            Price cached = redisTemplate.opsForValue().get(redisKey);
+            if (cached != null) {
+                log.debug("[Redis] Cache hit: {}", redisKey);
+            } else {
+                log.debug("[Redis] Cache miss: {}", redisKey);
+            }
+            return cached;
+        } catch (Exception e) {
+            log.warn("[Redis] Cache read error for {}: {}", redisKey, e.getMessage());
+            return null;
         }
-
-        return cached;
     }
 
     @Override
     public void save(String tickerCode, Price price) {
         String redisKey = key(tickerCode);
-        redisTemplate.opsForValue().set(redisKey, price, TTL);
-        log.debug("[Redis] Cache set: {} (TTL {}s)", redisKey, TTL.getSeconds());
+        try {
+            redisTemplate.opsForValue().set(redisKey, price, TTL);
+            log.debug("[Redis] Cache set: {} (TTL {}s)", redisKey, TTL.getSeconds());
+        } catch (Exception e) {
+            log.warn("[Redis] Cache write error for {}: {}", redisKey, e.getMessage());
+        }
     }
 }

@@ -19,34 +19,16 @@ public class PriceQueryServiceImpl implements PriceQueryService {
 
     @Override
     public Price getCurrentPrice(String tickerCode) {
-        Price cached;
-        try {
-            cached = redisRepository.find(tickerCode);
-            if (cached != null) {
-                log.debug("Cache hit for {}", tickerCode);
-                return cached;
-            }
-            log.debug("Cache miss for {}", tickerCode);
-        } catch (Exception e) {
-            log.warn("Redis access failed for {}: {}", tickerCode, e.getMessage());
+        Price cached = redisRepository.find(tickerCode);
+        if (cached != null) {
+            log.debug("Cache hit for {}", tickerCode);
+            return cached;
         }
 
-        Price latestFromDb;
-        try {
-            latestFromDb = timeSeriesRepository.findLatest(tickerCode);
-        } catch (Exception e) {
-            log.error("DB access failed for {}: {}", tickerCode, e.getMessage(), e);
-            throw new PriceNotFoundException(PriceErrorCode.PRICE_NOT_FOUND);
-        }
-
+        Price latestFromDb = timeSeriesRepository.findLatest(tickerCode);
         if (latestFromDb != null) {
             log.debug("DB fallback for {}", tickerCode);
-            try {
-                redisRepository.save(tickerCode, latestFromDb);
-            } catch (Exception e) {
-                log.warn("Redis write failed for {}: {}", tickerCode, e.getMessage());
-            }
-
+            redisRepository.save(tickerCode, latestFromDb);
             return latestFromDb;
         }
 

@@ -22,13 +22,19 @@ public class TimeSeriesPriceRepositoryImpl implements TimeSeriesPriceRepository 
 
     @Override
     public Price findLatest(String tickerCode) {
-        log.debug("[TimescaleDB] SELECT * FROM price_history WHERE ticker_code = '{}'", tickerCode);
+        try {
+            log.debug("[TimescaleDB] SELECT * FROM price_history WHERE ticker_code = '{}'", tickerCode);
 
-        Price price = mockDb.get(tickerCode);
-        if (price == null) {
-            log.warn("[TimescaleDB] No data found for ticker: {}", tickerCode);
+            Price price = mockDb.get(tickerCode);
+            if (price == null) {
+                log.warn("[TimescaleDB] No data found for ticker: {}", tickerCode);
+            }
+
+            return price;
+        } catch (Exception e) {
+            log.error("[TimescaleDB] Failed to read price for {}: {}", tickerCode, e.getMessage(), e);
+            return null;
         }
-        return price;
     }
 }
 
