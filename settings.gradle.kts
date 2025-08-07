@@ -6,9 +6,7 @@ include(
 
     "domain:domain-price",
 
-    "infra:infra-redis",
-    "infra:infra-timescaledb",
-    "infra:infra-external",
+    "infra",
 
     "shared"
 )
