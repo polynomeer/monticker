@@ -2,18 +2,15 @@ rootProject.name = "romanticker"
 
 include(
     "app:app-api-price",
-    "app:app-api-ticker",
     "app:app-batch-collector",
 
     "domain:domain-price",
-    "domain:domain-ticker",
 
     "infra:infra-redis",
     "infra:infra-timescaledb",
     "infra:infra-external",
 
-    "shared:shared-common",
-    "shared:shared-config",
+    "shared"
 )
 
 plugins {
