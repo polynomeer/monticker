@@ -1,4 +1,4 @@
-package com.polynomeer.app.api.price;
+package com.polynomeer.domain.price.model;
 
 import java.time.ZonedDateTime;
 

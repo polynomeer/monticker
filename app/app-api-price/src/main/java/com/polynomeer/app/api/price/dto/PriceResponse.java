@@ -1,6 +1,6 @@
 package com.polynomeer.app.api.price.dto;
 
-import com.polynomeer.app.api.price.Price;
+import com.polynomeer.domain.price.model.Price;
 
 import java.time.ZonedDateTime;
 
