@@ -8,4 +8,6 @@ public interface CachePriceRepository {
     Optional<Price> find(String tickerCode);
 
     void save(String tickerCode, Price latestFromDb);
+
+    boolean saveIfAbsent(String tickerCode, Price price);
 }

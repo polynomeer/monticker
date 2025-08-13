@@ -64,4 +64,22 @@ public class RedisPriceRepository implements CachePriceRepository {
             log.warn("[Redis] Cache write error for {}: {}", redisKey, e.getMessage());
         }
     }
+
+    @Override
+    public boolean saveIfAbsent(String tickerCode, Price price) {
+        String redisKey = key(tickerCode);
+        try {
+            Boolean result = redisTemplate.opsForValue()
+                    .setIfAbsent(redisKey, price, TTL);
+            boolean success = Boolean.TRUE.equals(result);
+            log.debug("[Redis] Cache {}: {} (TTL {}s)",
+                    success ? "setIfAbsent" : "skip-existing",
+                    redisKey, TTL.getSeconds());
+            return success;
+        } catch (Exception e) {
+            log.warn("[Redis] Cache writeIfAbsent error for {}: {}", redisKey, e.getMessage());
+            return false;
+        }
+    }
+
 }
