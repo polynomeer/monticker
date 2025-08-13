@@ -13,10 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executor;
-import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.*;
 
 @Slf4j
 @Service
@@ -43,12 +40,21 @@ public class PriceQueryServiceImpl implements PriceQueryService {
 
     @Override
     public Price getCurrentPrice(String tickerCode) {
-        return flights
-                .computeIfAbsent(tickerCode, k ->
-                        CompletableFuture.supplyAsync(() -> loadOnce(k), executor)
-                )
-                .whenComplete((r, t) -> flights.remove(tickerCode))
-                .join();
+        CompletableFuture<Price> future = flights.computeIfAbsent(
+                tickerCode,
+                k -> CompletableFuture.supplyAsync(() -> loadOnce(k), executor)
+        );
+        try {
+            return future.join();
+        } catch (CompletionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException re) {
+                throw re;
+            }
+            throw new RuntimeException(cause);
+        } finally {
+            flights.remove(tickerCode);
+        }
     }
 
     Price loadOnce(String code) {
