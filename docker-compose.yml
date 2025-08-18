@@ -4,3 +4,18 @@ services:
     image: redis:7
     ports:
       - "6379:6379"
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    container_name: timescaledb
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: romanticker
+      POSTGRES_PASSWORD: romanticker
+      POSTGRES_DB: romanticker
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+
+volumes:
+  timescale_data:

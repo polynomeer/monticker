@@ -28,6 +28,8 @@ repositories {
 dependencies {
     implementation(project(":shared"))
     implementation(project(":domain:domain-price"))
+    implementation("org.springframework.boot:spring-boot-starter-jdbc")
+    runtimeOnly("org.postgresql:postgresql")
     implementation(project(":infra"))
 
     implementation("org.springframework.boot:spring-boot-starter-web")

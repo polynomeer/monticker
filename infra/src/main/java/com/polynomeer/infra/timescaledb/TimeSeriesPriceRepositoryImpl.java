@@ -2,41 +2,51 @@ package com.polynomeer.infra.timescaledb;
 
 import com.polynomeer.domain.price.model.Price;
 import com.polynomeer.domain.price.repository.TimeSeriesPriceRepository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
-import java.time.ZonedDateTime;
-import java.util.HashMap;
-import java.util.Map;
+import java.time.ZoneId;
 import java.util.Optional;
 
 @Slf4j
 @Repository
+@RequiredArgsConstructor
 public class TimeSeriesPriceRepositoryImpl implements TimeSeriesPriceRepository {
 
-    private final Map<String, Price> mockDb = new HashMap<>();
-
-    public TimeSeriesPriceRepositoryImpl() {
-        mockDb.put("005930", new Price("005930", 76800, -300, -0.39, 22000000, ZonedDateTime.now()));
-        mockDb.put("AAPL", new Price("AAPL", 19500, 200, 1.03, 15000000, ZonedDateTime.now()));
-    }
+    private final JdbcTemplate jdbcTemplate;
 
     @Override
     public Optional<Price> findLatest(String tickerCode) {
-        try {
-            log.debug("[TimescaleDB] SELECT * FROM price_history WHERE ticker_code = '{}'", tickerCode);
+        String sql = """
+                    SELECT price, volume, timestamp
+                    FROM price_history
+                    WHERE ticker_code = ?
+                    ORDER BY timestamp DESC
+                    LIMIT 1
+                """;
 
-            Price price = mockDb.get(tickerCode);
-            if (price == null) {
-                log.warn("[TimescaleDB] No data found for ticker: {}", tickerCode);
-            }
+        log.debug("[TimescaleDB] Executing SQL to find latest price for tickerCode={}", tickerCode);
+
+        try {
+            Price price = jdbcTemplate.queryForObject(sql, new Object[]{tickerCode}, (rs, rowNum) -> {
+                Price p = new Price(
+                        tickerCode,
+                        rs.getLong("price"),
+                        0L, // change (not available)
+                        0.0, // changeRate (not available)
+                        rs.getLong("volume"),
+                        rs.getTimestamp("timestamp").toInstant().atZone(ZoneId.of("Asia/Seoul"))
+                );
+                log.debug("[TimescaleDB] Query result mapped: {}", p);
+                return p;
+            });
 
             return Optional.ofNullable(price);
         } catch (Exception e) {
-            log.error("[TimescaleDB] Failed to read price for {}: {}", tickerCode, e.getMessage(), e);
+            log.warn("[TimescaleDB] Failed to fetch latest price for {}: {}", tickerCode, e.getMessage());
             return Optional.empty();
         }
     }
-
 }
-
