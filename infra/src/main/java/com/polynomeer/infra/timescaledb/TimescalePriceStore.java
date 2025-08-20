@@ -7,6 +7,8 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.sql.Timestamp;
+
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -27,13 +29,12 @@ public class TimescalePriceStore {
         try {
             MapSqlParameterSource params = new MapSqlParameterSource()
                     .addValue("ticker_code", snapshot.ticker())
-                    .addValue("timestamp", snapshot.timestamp())
+                    .addValue("timestamp", Timestamp.from(snapshot.timestamp()))
                     .addValue("price", snapshot.price())
                     .addValue("volume", snapshot.volume())
                     .addValue("currency", snapshot.currency());
 
             jdbc.update(UPSERT_SQL, params);
-
         } catch (Exception e) {
             log.error("TimescaleDB 저장 실패: {}", snapshot, e);
         }
