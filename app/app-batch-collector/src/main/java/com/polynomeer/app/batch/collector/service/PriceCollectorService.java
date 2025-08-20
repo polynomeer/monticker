@@ -1,8 +1,8 @@
 package com.polynomeer.app.batch.collector.service;
 
+import com.polynomeer.infra.external.AlphaVantageClient;
+import com.polynomeer.infra.external.AlphaVantageResponseParser;
 import com.polynomeer.infra.external.PriceSnapshot;
-import com.polynomeer.infra.external.YahooFinancePriceClient;
-import com.polynomeer.infra.external.YahooResponseParser;
 import com.polynomeer.infra.redis.RedisPriceStore;
 import com.polynomeer.infra.timescaledb.TimescalePriceStore;
 import lombok.RequiredArgsConstructor;
@@ -16,8 +16,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class PriceCollectorService {
 
-    private final YahooFinancePriceClient yahooFinanceClient;
-    private final YahooResponseParser parser;
+    private final AlphaVantageClient alphaVantageClient;
+    private final AlphaVantageResponseParser parser;
     private final RedisPriceStore redisStore;
     private final TimescalePriceStore timescaleStore;
 
@@ -25,8 +25,8 @@ public class PriceCollectorService {
         if (tickers.isEmpty()) return;
 
         try {
-            String rawResponse = yahooFinanceClient.fetchQuotes(tickers);
-            List<PriceSnapshot> snapshots = parser.parse(rawResponse);
+            String json = alphaVantageClient.fetchQuotes(tickers);
+            List<PriceSnapshot> snapshots = parser.parse(json);
 
             for (PriceSnapshot snapshot : snapshots) {
                 redisStore.save(snapshot);
@@ -38,7 +38,6 @@ public class PriceCollectorService {
 
         } catch (Exception e) {
             log.error("Failed to collect prices for tickers: {}", tickers, e);
-            // retry/backoff는 RetryExecutor 또는 AOP 등에서 처리 예정
         }
     }
 }

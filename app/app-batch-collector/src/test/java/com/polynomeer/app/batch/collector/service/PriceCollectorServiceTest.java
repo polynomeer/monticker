@@ -1,8 +1,8 @@
 package com.polynomeer.app.batch.collector.service;
 
+import com.polynomeer.infra.external.AlphaVantageClient;
+import com.polynomeer.infra.external.AlphaVantageResponseParser;
 import com.polynomeer.infra.external.PriceSnapshot;
-import com.polynomeer.infra.external.YahooFinancePriceClient;
-import com.polynomeer.infra.external.YahooResponseParser;
 import com.polynomeer.infra.redis.RedisPriceStore;
 import com.polynomeer.infra.timescaledb.TimescalePriceStore;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,16 +17,16 @@ import static org.mockito.Mockito.*;
 
 class PriceCollectorServiceTest {
 
-    private YahooFinancePriceClient client;
-    private YahooResponseParser parser;
+    private AlphaVantageClient client;
+    private AlphaVantageResponseParser parser;
     private RedisPriceStore redisStore;
     private TimescalePriceStore timescaleStore;
     private PriceCollectorService service;
 
     @BeforeEach
     void setUp() {
-        client = mock(YahooFinancePriceClient.class);
-        parser = mock(YahooResponseParser.class);
+        client = mock(AlphaVantageClient.class);
+        parser = mock(AlphaVantageResponseParser.class);
         redisStore = mock(RedisPriceStore.class);
         timescaleStore = mock(TimescalePriceStore.class);
 
