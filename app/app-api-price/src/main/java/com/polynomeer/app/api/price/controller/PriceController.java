@@ -2,9 +2,10 @@ package com.polynomeer.app.api.price.controller;
 
 import com.polynomeer.app.api.price.dto.PriceResponse;
 import com.polynomeer.domain.price.service.PriceQueryService;
+import com.polynomeer.domain.ticker.validation.TickerFormat;
 import com.polynomeer.shared.common.dto.CommonResponse;
 import com.polynomeer.shared.common.error.TickerErrorCode;
-import com.polynomeer.shared.common.error.TickerNotFoundException;
+import com.polynomeer.shared.common.error.TickerValidationException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -38,12 +39,17 @@ public class PriceController {
     ) {
         log.info("getQuote tickerCode={}", tickerCode);
 
-        if (tickerCode.equals("error")) {
-            throw new TickerNotFoundException(TickerErrorCode.TICKER_NOT_FOUND);
-        }
+        validateTickerCode(tickerCode);
 
         var price = priceQueryService.getCurrentPrice(tickerCode);
         var response = PriceResponse.from(price);
         return new CommonResponse<>("SUCCESS", response);
     }
+
+    private void validateTickerCode(String tickerCode) {
+        if (!TickerFormat.isValid(tickerCode)) {
+            throw new TickerValidationException(TickerErrorCode.TICKER_INVALID);
+        }
+    }
+
 }
