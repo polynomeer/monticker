@@ -1,7 +1,6 @@
 package com.polynomeer.app.batch.collector.service;
 
-import com.polynomeer.infra.external.AlphaVantageClient;
-import com.polynomeer.infra.external.AlphaVantageResponseParser;
+import com.polynomeer.infra.external.PriceDataProvider;
 import com.polynomeer.infra.external.PriceSnapshot;
 import com.polynomeer.infra.redis.RedisPriceStore;
 import com.polynomeer.infra.timescaledb.TimescalePriceStore;
@@ -17,47 +16,49 @@ import static org.mockito.Mockito.*;
 
 class PriceCollectorServiceTest {
 
-    private AlphaVantageClient client;
-    private AlphaVantageResponseParser parser;
+    private PriceDataProvider dataProvider;
     private RedisPriceStore redisStore;
     private TimescalePriceStore timescaleStore;
     private PriceCollectorService service;
 
     @BeforeEach
     void setUp() {
-        client = mock(AlphaVantageClient.class);
-        parser = mock(AlphaVantageResponseParser.class);
+        dataProvider = mock(PriceDataProvider.class);
         redisStore = mock(RedisPriceStore.class);
         timescaleStore = mock(TimescalePriceStore.class);
-
-        service = new PriceCollectorService(client, parser, redisStore, timescaleStore);
+        service = new PriceCollectorService(dataProvider, redisStore, timescaleStore);
     }
 
     @Test
-    void shouldCollectAndSavePrices() {
+    void shouldCollectAndSavePricesUsingPriceDataProvider() {
         // given
         List<String> tickers = List.of("AAPL", "TSLA");
-        String fakeResponse = "{...}"; // JSON 생략
-        List<PriceSnapshot> parsed = List.of(
-                new PriceSnapshot("AAPL", 19435, 1234567, "USD", Instant.now()),
-                new PriceSnapshot("TSLA", 25500, 987654, "USD", Instant.now())
+        List<PriceSnapshot> snapshots = List.of(
+                new PriceSnapshot("AAPL", 19435, 1_234_567, "USD", Instant.now()),
+                new PriceSnapshot("TSLA", 25500, 987_654, "USD", Instant.now())
         );
-
-        when(client.fetchQuotes(tickers)).thenReturn(fakeResponse);
-        when(parser.parse(fakeResponse)).thenReturn(parsed);
+        when(dataProvider.fetchSnapshots(tickers)).thenReturn(snapshots);
 
         // when
         service.collectPrices(tickers);
 
         // then
-        verify(client).fetchQuotes(tickers);
-        verify(parser).parse(fakeResponse);
+        verify(dataProvider).fetchSnapshots(tickers);
 
         ArgumentCaptor<PriceSnapshot> captor = ArgumentCaptor.forClass(PriceSnapshot.class);
         verify(redisStore, times(2)).save(captor.capture());
         verify(timescaleStore, times(2)).save(captor.capture());
 
+        // Redis + Timescale 호출합계 4회(각 2회) 검증
         List<PriceSnapshot> allSaved = captor.getAllValues();
-        assertThat(allSaved).hasSize(4); // 2 Redis + 2 Timescale
+        assertThat(allSaved).hasSize(4);
+        assertThat(allSaved.stream().map(PriceSnapshot::ticker))
+                .contains("AAPL", "TSLA");
+    }
+
+    @Test
+    void shouldSkipWhenNoTickers() {
+        service.collectPrices(List.of());
+        verifyNoInteractions(dataProvider, redisStore, timescaleStore);
     }
 }
