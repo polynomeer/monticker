@@ -1,9 +1,31 @@
 spring:
   application:
     name: app-batch-collector
-
   profiles:
     active: local
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
+        enable.idempotence: true
+        acks: all
+    consumer:
+      group-id: romanticker-default
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    listener:
+      ack-mode: record
+      concurrency: 6   # 파티션 수에 맞춰 조정
+
+kafka:
+  topic:
+    quote-request: quote.request
+    quote-normalized: quote.normalized
 
 logging:
   pattern:
