@@ -11,9 +11,9 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: romanticker
-      POSTGRES_PASSWORD: romanticker
-      POSTGRES_DB: romanticker
+      POSTGRES_USER: monticker
+      POSTGRES_PASSWORD: monticker
+      POSTGRES_DB: monticker
     volumes:
       - timescale_data:/var/lib/postgresql/data
 

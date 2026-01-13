@@ -12,9 +12,9 @@ spring:
       port: 6379
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/romanticker
-    username: romanticker
-    password: romanticker
+    url: jdbc:postgresql://localhost:5432/monticker
+    username: monticker
+    password: monticker
     driver-class-name: org.postgresql.Driver
   sql:
     init:

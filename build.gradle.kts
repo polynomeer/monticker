@@ -20,7 +20,7 @@ tasks.withType<Test> {
 }
 
 allprojects {
-    group = "com.polynomeer.romanticker"
+    group = "com.polynomeer.monticker"
     version = "1.0.0"
 
     repositories {

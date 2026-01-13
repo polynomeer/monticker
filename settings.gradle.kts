@@ -1,4 +1,4 @@
-rootProject.name = "romanticker"
+rootProject.name = "monticker"
 
 include(
     "app:app-api-price",
