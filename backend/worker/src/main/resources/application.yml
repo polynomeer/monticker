@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: monticker-worker
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/monticker}
+    username: ${DB_USER:monticker}
+    password: ${DB_PASSWORD:monticker}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  flyway:
+    enabled: false
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
