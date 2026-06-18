@@ -1,0 +1,67 @@
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: monticker-postgres
+    environment:
+      POSTGRES_DB: monticker
+      POSTGRES_USER: monticker
+      POSTGRES_PASSWORD: monticker
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U monticker"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: monticker-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./backend/api
+      dockerfile: Dockerfile
+    container_name: monticker-api
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/monticker
+      DB_USER: monticker
+      DB_PASSWORD: monticker
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    profiles:
+      - full
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: monticker-web
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    profiles:
+      - full
+
+volumes:
+  postgres_data:
+  redis_data:
