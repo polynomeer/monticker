@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "monticker",
+    "slug": "monticker",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "platforms": ["ios", "android"],
+    "notification": {
+      "icon": "./assets/notification-icon.png",
+      "androidMode": "default"
+    },
+    "android": {
+      "package": "com.augboot.monticker",
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.augboot.monticker",
+      "supportsTablet": false
+    },
+    "plugins": [
+      "expo-router",
+      "expo-notifications"
+    ]
+  }
+}
