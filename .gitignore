@@ -1,0 +1,65 @@
+# ── Dependencies ──────────────────────────────────────────────
+node_modules/
+**/node_modules/
+
+# ── pnpm ──────────────────────────────────────────────────────
+pnpm-lock.yaml
+**/pnpm-lock.yaml
+
+# ── Next.js ───────────────────────────────────────────────────
+apps/web/.next/
+apps/web/out/
+apps/web/next-env.d.ts
+
+# ── Expo / React Native ───────────────────────────────────────
+apps/mobile/.expo/
+apps/mobile/dist/
+apps/mobile/android/
+apps/mobile/ios/
+
+# ── Gradle ────────────────────────────────────────────────────
+**/build/
+**/.gradle/
+**/gradle/wrapper/gradle-wrapper.jar
+!**/gradle/wrapper/gradle-wrapper.properties
+
+# ── JVM ───────────────────────────────────────────────────────
+**/*.class
+**/*.jar
+**/*.war
+
+# ── IDE ───────────────────────────────────────────────────────
+.idea/
+**/.idea/
+*.iml
+.vscode/
+**/.vscode/
+*.swp
+*.swo
+
+# ── OS ────────────────────────────────────────────────────────
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# ── Secrets / Env ─────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+**/.env.*.local
+
+# ── Logs ──────────────────────────────────────────────────────
+*.log
+logs/
+**/logs/
+
+# ── Test / Coverage ───────────────────────────────────────────
+**/test-results/
+**/jacoco/
+coverage/
+.nyc_output/
+
+# ── Claude Code internals ─────────────────────────────────────
+.claude/worktrees/
