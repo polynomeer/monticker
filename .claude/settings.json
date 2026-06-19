@@ -1,0 +1,51 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'cmd=\"$1\"; if echo \"$cmd\" | grep -qE \"(rm -rf|git push --force|git reset --hard|DROP TABLE|DELETE FROM [a-z]+ WHERE|kubectl delete)\"; then echo \"BLOCKED: destructive command detected: $cmd\" >&2; exit 1; fi' -- \"$CLAUDE_TOOL_INPUT_COMMAND\""
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'path=\"$1\"; if echo \"$path\" | grep -qE \"(\\.env$|\\.env\\.local$|\\.env\\.production$|secrets\\.|credentials\\.)\"; then echo \"BLOCKED: writing to secret file: $path\" >&2; exit 1; fi' -- \"$CLAUDE_TOOL_INPUT_FILE_PATH\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'path=\"$1\"; if echo \"$path\" | grep -qE \"\\.(kt|java)$\"; then cd \"$(git rev-parse --show-toplevel)\" && module=$(echo \"$path\" | grep -oE \"backend/(api|worker)\") && if [ -n \"$module\" ]; then (cd \"$module\" && ./gradlew ktlintCheck -q 2>&1 | head -20) || true; fi; fi' -- \"$CLAUDE_TOOL_INPUT_FILE_PATH\""
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git status)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add*)",
+      "Bash(./gradlew build*)",
+      "Bash(./gradlew test*)",
+      "Bash(./gradlew ktlintCheck*)",
+      "Bash(pnpm *)",
+      "Bash(find . *)",
+      "Bash(grep *)",
+      "Read(*)"
+    ],
+    "deny": []
+  }
+}
