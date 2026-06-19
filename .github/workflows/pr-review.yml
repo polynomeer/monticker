@@ -1,0 +1,58 @@
+name: pr-review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get diff
+        id: diff
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          DIFF=$(git diff origin/${{ github.base_ref }}...HEAD -- '*.kt' '*.tsx' '*.ts' '*.sql' | head -c 12000)
+          echo "diff<<EOF" >> $GITHUB_OUTPUT
+          echo "$DIFF" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Claude code review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PR_DIFF: ${{ steps.diff.outputs.diff }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          REVIEW=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "$(jq -n \
+              --arg diff "$PR_DIFF" \
+              --arg title "$PR_TITLE" \
+              '{
+                model: "claude-haiku-4-5-20251001",
+                max_tokens: 1024,
+                messages: [{
+                  role: "user",
+                  content: ("PR: " + $title + "\n\nDiff:\n" + $diff + "\n\nReview this diff for: (1) correctness bugs, (2) security issues (SQL injection, XSS, auth bypass), (3) missing error handling at boundaries, (4) any financial safety issues (real trade execution, investment recommendations). Keep it concise — bullet points only, group by severity: 🔴 Critical / 🟡 Warning / 🟢 Note. If nothing notable, say LGTM.")
+                }]
+              }')" | jq -r '.content[0].text')
+
+          curl -s -X POST \
+            "https://api.github.com/repos/$REPO/issues/$PR_NUMBER/comments" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg body "## 🤖 Claude Code Review\n\n$REVIEW" '{body: $body}')"
