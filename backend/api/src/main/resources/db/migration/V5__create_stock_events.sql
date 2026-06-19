@@ -21,4 +21,4 @@ CREATE INDEX idx_stock_events_stock_type_time  ON stock_events (stock_id, event_
 
 -- Prevent duplicate events for the same stock/type within the same minute
 CREATE UNIQUE INDEX uq_stock_events_dedup
-    ON stock_events (stock_id, event_type, date_trunc('minute', event_time));
+    ON stock_events (stock_id, event_type, date_trunc('minute', event_time AT TIME ZONE 'UTC'));
