@@ -23,52 +23,20 @@ Start as **Modular Monolith + async workers + Redis + TimescaleDB**. Do not intr
 ## System Overview
 
 ```
-┌─────────────────────────────────────┐
-│              Client                  │
-│   Next.js Web / Mobile (future)      │
-└──────────────┬──────────────────────┘
-               │ REST / WebSocket
-               ▼
-┌─────────────────────────────────────┐
-│         API Application              │
-│     Spring Boot Modular Monolith     │
-│                                      │
-│  Auth / Stock / Market Data Query /  │
-│  Watchlist / Event Timeline /        │
-│  News / Disclosure / Alert /         │
-│  Portfolio / Simulation / AI Insight │
-└────────────┬────────────┬────────────┘
-             │            │
-             ▼            ▼
-    ┌─────────────┐  ┌──────────────┐
-    │ PostgreSQL  │  │    Redis     │
-    │ +TimescaleDB│  │              │
-    │             │  │ Latest price │
-    │ Business /  │  │ Pub/Sub      │
-    │ event /     │  │ Streams      │
-    │ tick data   │  │ Rate limit   │
-    └──────┬──────┘  └──────┬───────┘
-           │                │
-           ▼                ▼
-┌─────────────────────────────────────┐
-│           Async Workers              │
-│                                      │
-│  Market Data Collector               │
-│  Candle Aggregator                   │
-│  News Collector                      │
-│  Disclosure Collector                │
-│  Event Detector                      │
-│  Sentiment Analyzer                  │
-│  AI Summary Worker                   │
-│  Alert Dispatcher                    │
-└────────────────┬────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────┐
-│        External Data Sources         │
-│  Stock Price / News / Disclosure /   │
-│  Index / Sector / AI Provider        │
-└─────────────────────────────────────┘
+┌─────────────┐   WebSocket/REST   ┌─────────────────┐
+│  Next.js 15 │ ◄────────────────► │  Spring Boot API │
+│  (apps/web) │                    │  (backend/api)   │
+└─────────────┘                    └────────┬─────────┘
+                                            │ JPA / JDBC
+┌─────────────┐   Expo Push        ┌────────▼─────────┐
+│  Expo Mobile│ ◄── notification ─ │   TimescaleDB     │
+│(apps/mobile)│                    │  (PostgreSQL 16)  │
+└─────────────┘                    └────────▲─────────┘
+                                            │ JDBC
+                                   ┌────────┴─────────┐
+                                   │  Spring Worker   │
+                                   │ (backend/worker) │
+                                   └──────────────────┘
 ```
 
 ---
@@ -78,230 +46,183 @@ Start as **Modular Monolith + async workers + Redis + TimescaleDB**. Do not intr
 ### Backend
 
 ```
-Language:    Java or Kotlin
-Framework:   Spring Boot
+Language:    Kotlin 2.0
+Framework:   Spring Boot 3.5
 Pattern:     Modular Monolith
-API:         REST + WebSocket
-Security:    Spring Security + JWT
-ORM:         JPA + QueryDSL
-Migration:   Flyway
-Batch:       Spring Scheduler / Spring Batch
+API:         REST + WebSocket (STOMP over SockJS)
+ORM:         Spring Data JPA
+Migration:   Flyway (V1–V6)
+Batch:       Spring @Scheduled
 ```
 
 ### Frontend
 
 ```
-Framework:   Next.js
+Framework:   Next.js 15 (App Router)
 Language:    TypeScript
 Server state: TanStack Query
 Client state: Zustand
-Chart:       Lightweight Charts
+Chart:       Lightweight Charts 4
 UI:          Tailwind CSS + shadcn/ui
-Realtime:    WebSocket
+Realtime:    WebSocket (STOMP)
 ```
 
-Start with responsive web. Native app (React Native / Expo) comes later.
+### Mobile
+
+```
+Framework:   Expo 52 (React Native)
+Push:        Expo Push Notifications
+```
 
 ### Database
 
 ```
-Business data:   PostgreSQL
-Time-series:     TimescaleDB (price_ticks, candles_*)
-Cache / Realtime: Redis
-Search:          PostgreSQL FTS (MVP) → OpenSearch later
-Object storage:  S3-compatible
+Business data:    PostgreSQL 16
+Time-series:      TimescaleDB (candles_1m)
+Cache / Realtime: Redis 7
 ```
 
 ### Infra
 
 ```
 Local:      Docker Compose
-Stage 1:    Single VM + Docker Compose
-Stage 2:    AWS ECS / Naver Cloud
-Stage 3:    Kubernetes
 CI/CD:      GitHub Actions
-Monitoring: Prometheus + Grafana
-Logging:    Loki
-Errors:     Sentry
-Tracing:    OpenTelemetry
 ```
 
 ---
 
 ## Backend Module Boundaries
 
+### Implemented Modules (MVP)
+
+| Module | Tables | Status |
+|--------|--------|--------|
+| Stock | `stocks` | Done |
+| Watchlist | `watchlist_groups`, `watchlist_items` | Done |
+| Market Data | `candles_1m` | Done |
+| Event Timeline | `stock_events` | Done |
+| Alert | `alert_rules`, `alert_histories` | Done |
+
 ### Stock Module
+
 Manages static stock metadata.
 
-Tables: `stocks`, `stock_aliases`, `sectors`, `stock_sector_mappings`
+Tables: `stocks`
 
 ### Market Data Module
-Collects and serves price, tick, and candle data.
 
-Tables: `price_ticks`, `candles_1m`, `candles_5m`, `candles_1d` (TimescaleDB)
+Collects and caches price ticks and candles.
+
+Tables: `candles_1m` (TimescaleDB hypertable)
 
 ```sql
--- TimescaleDB hypertable
-CREATE TABLE price_ticks (
-    stock_id   BIGINT         NOT NULL,
-    price      NUMERIC(18, 4) NOT NULL,
-    volume     BIGINT         NOT NULL,
-    trade_time TIMESTAMPTZ    NOT NULL,
-    PRIMARY KEY (stock_id, trade_time)
+CREATE TABLE candles_1m (
+    stock_id    BIGINT         NOT NULL,
+    candle_time TIMESTAMPTZ    NOT NULL,
+    open        NUMERIC(18,4),
+    high        NUMERIC(18,4),
+    low         NUMERIC(18,4),
+    close       NUMERIC(18,4),
+    volume      BIGINT,
+    PRIMARY KEY (stock_id, candle_time)
 );
-SELECT create_hypertable('price_ticks', 'trade_time');
+SELECT create_hypertable('candles_1m', 'candle_time');
 ```
 
 ### Event Timeline Module
 
 **The most important module.** Centralizes all event types into a single queryable table for the chart timeline.
 
-Tables: `stock_events`, `event_relations`
-
-```
-stock_events
-├── id
-├── stock_id
-├── event_type         -- see enum below
-├── title
-├── description
-├── event_time
-├── importance_score
-├── sentiment_score
-├── source_type
-├── source_id
-├── metadata_json
-└── created_at
-```
+Tables: `stock_events`
 
 Event types:
 ```
 PRICE_SPIKE / PRICE_DROP
 VOLUME_SURGE
-NEWS_PUBLISHED
-DISCLOSURE_PUBLISHED
-SECTOR_MOVE
-SENTIMENT_CHANGE
-USER_MEMO
-SIMULATION_TRADE
 ```
 
-All data sources converge here:
-```
-news_articles  ──┐
-disclosures    ──┼──► stock_events ──► chart timeline
-price_ticks    ──┤
-user_notes     ──┘
+Duplicate prevention via unique index:
+```sql
+CREATE UNIQUE INDEX ON stock_events (stock_id, event_type, date_trunc('minute', event_time));
 ```
 
-### News Module
-Collects news, deduplicates, maps to stocks, extracts keywords, scores sentiment.
+### Watchlist Module
 
-Mapping priority:
-1. Exact stock name match
-2. Alias match
-3. Ticker match
-4. Sector keyword match
-5. AI relevance scoring
+Tables: `watchlist_groups`, `watchlist_items`
 
 ### Alert Module
-Supports composite conditions, not just simple price thresholds.
 
-Example rule:
-```
-If stock rises ≥2% in 5 min
-AND volume is ≥3× same-time average
-AND related news within 30 min
-→ send alert
-```
+Tables: `alert_rules`, `alert_histories`
+
+Supported rule types: `PRICE_ABOVE`, `PRICE_BELOW`, `VOLUME_SURGE`
+
+10-minute cooldown: `alert:cooldown:{ruleId}` in Redis; also enforced via DB query on `alert_histories`.
 
 ---
 
-## Realtime Data Pipeline
+## Worker Pipeline
 
 ```
-External Price API
+MockPriceGenerator (@Scheduled 1s)
   │
-  ▼
-Market Collector
-  ├── Redis latest price cache
-  ├── TimescaleDB tick storage
-  ├── Redis Stream → Candle Aggregator
-  ├── Redis Stream → Event Detector
-  └── Redis Stream → WebSocket Broadcaster
+  ├── RedisTickWriter
+  │     └── SET stock:price:{stockId} → latest price JSON
+  │
+  ├── EventDetector
+  │     ├── PriceSpikeDetector  (EMA α=0.1, ratio threshold)
+  │     ├── VolumeSurgeDetector (EMA α=0.1, ≥3× ratio)
+  │     └── INSERT stock_events (dedup by minute index)
+  │
+  └── AlertEvaluator (@Scheduled 30s)
+        ├── Fetch active alert_rules
+        ├── Evaluate PRICE_ABOVE / PRICE_BELOW against candles_1m
+        ├── 10-minute cooldown check
+        └── INSERT alert_histories
 ```
 
-**MVP:** Redis Streams  
-**Scale-up:** Kafka  
-**Large-scale:** Kafka + Flink
-
----
-
-## Event Detector Design
-
-### Price Spike Score
-```
-current 5-min return
-÷ 20-day same-time average return
-= Price Spike Score
-```
-A 2% move on a large-cap is a strong signal; on a small-cap it may be normal. Use stock-specific baselines, not fixed thresholds.
-
-### Volume Surge Ratio
-```
-current 5-min volume
-÷ 20-day same-time 5-min average volume
-= Volume Spike Ratio
-
-1.5×  → weak signal
-3×    → meaningful signal
-5×+   → strong signal
-```
-
-### Event Importance Score
-```
-importance_score =
-  price change score
-  + volume score
-  + news importance
-  + disclosure importance
-  + sector co-movement
-  + user interest weight
-```
-
-Used for: home feed ranking, timeline sort, alert trigger, AI summary selection.
-
----
-
-## Redis Key Conventions
+### EMA-based Anomaly Detection
 
 ```
-stock:price:KR:005930
-stock:orderbook:KR:005930
-stock:candle:1m:KR:005930
-watchlist:prices:user:{userId}
-news:dedup:{hash}
-alert:cooldown:{ruleId}
+EMA(t) = α × value(t) + (1 - α) × EMA(t-1)   where α = 0.1
+
+PriceSpikeDetector:
+  changeRate = abs(current - ema) / ema
+  fire PRICE_SPIKE if changeRate ≥ spikeThreshold
+
+VolumeSurgeDetector:
+  ratio = currentVolume / emaVolume
+  fire VOLUME_SURGE if ratio ≥ 3.0
 ```
 
 ---
 
-## API Design
+## Flyway Migrations
+
+| Version | Description |
+|---------|-------------|
+| V1 | Create stocks table |
+| V2 | Create watchlist_groups, watchlist_items |
+| V3 | Create candles_1m (TimescaleDB hypertable) |
+| V4 | Create stock_events with dedup index |
+| V5 | Create alert_rules, alert_histories |
+| V6 | Seed sample stocks (Samsung, SK Hynix, NAVER, Kakao, Hyundai) |
+
+---
+
+## API Endpoints
 
 ### REST
 
 ```http
-GET  /api/stocks/search?query=samsung
-GET  /api/stocks/{stockId}
-GET  /api/stocks/{stockId}/price
-GET  /api/stocks/{stockId}/candles?interval=1m&from=&to=
-GET  /api/stocks/{stockId}/events?from=&to=
-GET  /api/stocks/{stockId}/news
-GET  /api/stocks/{stockId}/disclosures
+GET    /api/stocks/search?query=
+GET    /api/stocks/{stockId}
+GET    /api/stocks/{stockId}/price
+GET    /api/stocks/{stockId}/candles?interval=1m&from=&to=
+GET    /api/stocks/{stockId}/events?from=&to=
 
-GET  /api/watchlists
-POST /api/watchlists/groups
-POST /api/watchlists/{groupId}/items
+GET    /api/watchlists
+POST   /api/watchlists/groups
+POST   /api/watchlists/{groupId}/items
 DELETE /api/watchlists/items/{itemId}
 
 GET    /api/alerts/rules
@@ -309,20 +230,16 @@ POST   /api/alerts/rules
 PATCH  /api/alerts/rules/{ruleId}
 DELETE /api/alerts/rules/{ruleId}
 GET    /api/alerts/histories
-
-POST /api/simulations/trades
-GET  /api/simulations/trades
-GET  /api/simulations/performance
-GET  /api/simulations/reviews
 ```
 
-### WebSocket
+### WebSocket (STOMP)
 
-```
-/ws/market
-/ws/stocks/{stockId}
-/ws/watchlists/{watchlistId}
-```
+Connect: `ws://localhost:8080/ws` (SockJS fallback)
+
+| Topic | Description |
+|-------|-------------|
+| `/topic/stocks/{stockId}` | 종목별 실시간 가격 |
+| `/topic/market` | 전체 시장 요약 |
 
 Price message:
 ```json
@@ -351,46 +268,70 @@ Event message:
 
 ---
 
+## Redis Key Schema
+
+```
+stock:price:{stockId}          # latest price JSON (STRING)
+alert:cooldown:{ruleId}        # cooldown flag (STRING, TTL 600s)
+```
+
+---
+
+## Mobile Push Notification Flow
+
+```
+AlertEvaluator (Worker)
+  → INSERT alert_histories (delivery_status = PENDING)
+  → [future] AlertDispatcher reads PENDING rows
+  → Expo Push API → device FCM/APNs token
+  → delivery_status = DELIVERED / FAILED
+```
+
+Current MVP: alert is recorded in DB. Expo push dispatch is stubbed for EAS integration.
+
+---
+
+## Realtime Data Pipeline
+
+```
+MockPriceGenerator (1s)
+  ├── Redis latest price cache
+  └── EventDetector → stock_events INSERT
+
+API WebSocket Broadcaster
+  └── @Scheduled 1s → reads Redis price → broadcast /topic/stocks/{id}
+```
+
+---
+
 ## Frontend Structure
 
 ```
-monticker-web/
+apps/web/
 ├── app/
-│   ├── page.tsx
-│   ├── stocks/[symbol]/page.tsx
-│   ├── watchlist/
-│   ├── portfolio/
-│   ├── simulation/
-│   └── alerts/
+│   ├── page.tsx                 # Home — market overview
+│   ├── stocks/[symbol]/page.tsx # Stock detail + chart + events
+│   ├── watchlist/               # Watchlist groups
+│   └── alerts/                  # Alert rules management
 ├── components/
 │   ├── chart/
-│   │   ├── StockChart.tsx
-│   │   ├── EventMarker.tsx
-│   │   └── TimelinePanel.tsx
-│   ├── stock/
-│   ├── news/
+│   │   ├── StockChart.tsx       # Lightweight Charts wrapper
+│   │   ├── EventMarker.tsx      # Event overlay markers
+│   │   └── TimelinePanel.tsx    # Event timeline list
 │   └── common/
 ├── hooks/
 │   ├── useStockPrice.ts
 │   ├── useStockEvents.ts
 │   ├── useWatchlist.ts
 │   └── useWebSocket.ts
-├── api/
-│   ├── stockApi.ts
-│   ├── watchlistApi.ts
-│   ├── eventApi.ts
-│   └── alertApi.ts
 └── stores/
-    ├── authStore.ts
-    ├── realtimeStore.ts
-    └── watchlistStore.ts
+    └── realtimeStore.ts
 ```
 
 State management:
 - Server state → TanStack Query
 - Realtime state → Zustand
 - Chart state → component-local
-- Auth state → Auth Store
 
 ---
 
@@ -420,30 +361,17 @@ Docker Compose services: `nginx`, `web`, `api`, `worker`, `postgres`, `redis`
 
 | Stage | Change |
 |-------|--------|
-| 1 | Modular Monolith + single Worker |
-| 2 | Split workers by domain (market / news / event / alert / AI) |
+| 1 | Modular Monolith + single Worker (current) |
+| 2 | Split workers by domain (market / event / alert) |
 | 3 | Replace Redis Streams with Kafka |
 | 4 | Split into microservices only if traffic demands it |
 
 ---
 
-## Resilience
-
-| Failure | Response |
-|---------|----------|
-| External price API down | Show last known price, display "delayed" badge, retry |
-| News collector failure | Show last collected time, retry queue, alert ops |
-| WebSocket disconnect | Client auto-reconnect, re-fetch snapshot, REST fallback |
-| Worker crash | Job status table, retry limit, dead letter queue, monitoring alert |
-
----
-
 ## Security
 
-- JWT access token + refresh token rotation
-- HttpOnly cookie or Secure storage
-- Rate limiting on all public APIs
+- Rate limiting on public APIs
 - CORS restriction
 - Strict input validation
 - Encrypted external API keys
-- Never implement real order execution without explicit authorization
+- JWT auth planned (post-MVP)
