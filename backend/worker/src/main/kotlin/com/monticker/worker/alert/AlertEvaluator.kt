@@ -12,8 +12,8 @@ import java.time.Instant
 @Component
 class AlertEvaluator(
     private val jdbc: JdbcTemplate,
-    private val objectMapper: ObjectMapper,
 ) {
+    private val objectMapper = ObjectMapper()
     private val log = LoggerFactory.getLogger(AlertEvaluator::class.java)
 
     @Scheduled(fixedDelay = 5000)

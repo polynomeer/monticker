@@ -1,6 +1,5 @@
 package com.monticker.worker.alert
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import io.mockk.*
 import org.junit.jupiter.api.Test
 import org.springframework.jdbc.core.JdbcTemplate
@@ -10,8 +9,7 @@ import java.math.BigDecimal
 class AlertEvaluatorTest {
 
     private val jdbc = mockk<JdbcTemplate>(relaxed = true)
-    private val objectMapper = ObjectMapper()
-    private val evaluator = AlertEvaluator(jdbc, objectMapper)
+    private val evaluator = AlertEvaluator(jdbc)
 
     @Test
     fun `PRICE_ABOVE triggers when current price exceeds threshold`() {

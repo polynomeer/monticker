@@ -1,6 +1,5 @@
 package com.monticker.worker.integration
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.worker.alert.AlertEvaluator
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
@@ -83,7 +82,7 @@ class AlertEvaluatorIntegrationTest {
             )
         """)
 
-        evaluator = AlertEvaluator(jdbc, ObjectMapper())
+        evaluator = AlertEvaluator(jdbc)
     }
 
     @BeforeEach

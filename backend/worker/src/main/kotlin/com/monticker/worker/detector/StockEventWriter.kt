@@ -24,8 +24,8 @@ data class DetectedEvent(
 @Component
 class StockEventWriter(
     private val jdbcTemplate: JdbcTemplate,
-    private val objectMapper: ObjectMapper,
 ) {
+    private val objectMapper = ObjectMapper()
     private val log = LoggerFactory.getLogger(javaClass)
 
     fun write(event: DetectedEvent): Boolean {

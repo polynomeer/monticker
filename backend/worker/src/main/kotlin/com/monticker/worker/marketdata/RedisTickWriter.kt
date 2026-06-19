@@ -7,8 +7,8 @@ import org.springframework.stereotype.Component
 @Component
 class RedisTickWriter(
     private val redisTemplate: StringRedisTemplate,
-    private val objectMapper: ObjectMapper,
 ) {
+    private val objectMapper = ObjectMapper()
     fun write(tick: GeneratedTick) {
         val key = "stock:price:${tick.market}:${tick.symbol}"
         val value = objectMapper.writeValueAsString(
