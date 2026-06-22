@@ -27,6 +27,5 @@ logging:
   level:
     com.monticker.worker: INFO
 
-kis:
-  app-key: ${KIS_APP_KEY:}
-  app-secret: ${KIS_APP_SECRET:}
+anthropic:
+  api-key: ${ANTHROPIC_API_KEY:}
