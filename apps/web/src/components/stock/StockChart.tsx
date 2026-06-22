@@ -5,7 +5,6 @@ import {
   createChart,
   IChartApi,
   ISeriesApi,
-  CandlestickSeries,
   Time,
 } from "lightweight-charts";
 
@@ -60,12 +59,12 @@ export default function StockChart({ candles, events = [], height = 300 }: Props
       timeScale: { timeVisible: true, secondsVisible: false },
     });
 
-    const series = chart.addSeries(CandlestickSeries, {
-      upColor: "#0ecb81",
-      downColor: "#f6465d",
+    const series = chart.addCandlestickSeries({
+      upColor:       ct.upColor,
+      downColor:     ct.downColor,
       borderVisible: false,
-      wickUpColor: "#0ecb81",
-      wickDownColor: "#f6465d",
+      wickUpColor:   ct.wickUp,
+      wickDownColor: ct.wickDown,
     });
 
     if (candles.length > 0) {
