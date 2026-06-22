@@ -24,8 +24,9 @@ data class DetectedEvent(
 @Component
 class StockEventWriter(
     private val jdbcTemplate: JdbcTemplate,
+    private val objectMapper: ObjectMapper,
+    private val pushSender: com.monticker.worker.push.ExpoPushSender,
 ) {
-    private val objectMapper = ObjectMapper()
     private val log = LoggerFactory.getLogger(javaClass)
 
     fun write(event: DetectedEvent): Boolean {
@@ -64,6 +65,44 @@ class StockEventWriter(
         )
 
         log.info("Event created: {} {} score={}", event.eventType, event.stockId, event.importanceScore)
+        sendEventPush(event)
         return true
+    }
+
+    private fun sendEventPush(event: DetectedEvent) {
+        try {
+            // 이 stock_id를 관심종목으로 가진 user들의 device token 조회
+            val tokens = jdbcTemplate.queryForList(
+                """
+                SELECT dt.token
+                FROM device_tokens dt
+                JOIN watchlist_items wi ON wi.stock_id = ?
+                JOIN watchlist_groups wg ON wg.id = wi.watchlist_group_id
+                WHERE wg.user_id = dt.user_id AND dt.is_active = true
+                """,
+                String::class.java,
+                event.stockId,
+            )
+            if (tokens.isEmpty()) return
+
+            val body = when (event.eventType) {
+                DetectedEventType.VOLUME_SURGE -> "거래량이 급증했습니다"
+                DetectedEventType.PRICE_SPIKE  -> "가격이 급등했습니다"
+                DetectedEventType.PRICE_DROP   -> "가격이 급락했습니다"
+            }
+
+            val messages = tokens.map { token ->
+                com.monticker.worker.push.PushMessage(
+                    to    = token,
+                    title = "monticker 이벤트 알림",
+                    body  = "${event.title} — $body",
+                    data  = mapOf("stockId" to event.stockId, "eventType" to event.eventType.name),
+                )
+            }
+            pushSender.send(messages)
+            log.info("Event push sent: {} tokens for stockId={}", tokens.size, event.stockId)
+        } catch (e: Exception) {
+            log.debug("Event push failed: {}", e.message)
+        }
     }
 }
