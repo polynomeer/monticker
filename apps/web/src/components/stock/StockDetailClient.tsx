@@ -6,7 +6,7 @@ import StockChart from "./StockChart";
 import EventTimeline from "./EventTimeline";
 import NewsPanel from "./NewsPanel";
 import AlertPanel from "./AlertPanel";
-import WatchlistAddButton from "./WatchlistAddButton";
+import SummaryPanel from "./SummaryPanel";
 import { useStockChart } from "@/hooks/useStockChart";
 
 interface Props {
@@ -28,8 +28,8 @@ export default function StockDetailClient({ stockId, symbol }: Props) {
       {/* Price */}
       <PriceCard symbol={symbol} />
 
-      {/* Watchlist */}
-      <WatchlistAddButton stockId={stockId} />
+      {/* AI Summary */}
+      <SummaryPanel stockId={stockId} symbol={symbol} />
 
       {/* Chart */}
       <div>
