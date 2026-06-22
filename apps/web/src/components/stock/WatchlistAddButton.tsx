@@ -1,0 +1,77 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { authFetch } from "@/services/api";
+import { getAccessToken } from "@/services/auth";
+
+interface Props {
+  stockId: number;
+}
+
+interface Group {
+  id: number;
+  name: string;
+}
+
+export default function WatchlistAddButton({ stockId }: Props) {
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [selectedGroup, setSelectedGroup] = useState<number | null>(null);
+  const [added, setAdded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    setIsLoggedIn(!!getAccessToken());
+  }, []);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    authFetch("/api/watchlists")
+      .then(r => r.ok ? r.json() : [])
+      .then((data: Group[]) => {
+        setGroups(data);
+        if (data.length > 0) setSelectedGroup(data[0].id);
+      });
+  }, [isLoggedIn]);
+
+  if (!isLoggedIn || groups.length === 0) return null;
+
+  const handleAdd = async () => {
+    if (!selectedGroup) return;
+    setLoading(true);
+    try {
+      const res = await authFetch(`/api/watchlists/groups/${selectedGroup}/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stockId }),
+      });
+      if (res.ok || res.status === 409) {
+        setAdded(true);
+        setTimeout(() => setAdded(false), 2000);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex gap-2 items-center">
+      <select
+        value={selectedGroup ?? ""}
+        onChange={e => setSelectedGroup(Number(e.target.value))}
+        className="border border-gray-200 rounded px-3 py-1.5 text-sm flex-1"
+      >
+        {groups.map(g => (
+          <option key={g.id} value={g.id}>{g.name}</option>
+        ))}
+      </select>
+      <button
+        onClick={handleAdd}
+        disabled={loading}
+        className="border border-blue-500 text-blue-600 rounded px-4 py-1.5 text-sm hover:bg-blue-50 disabled:opacity-50 whitespace-nowrap"
+      >
+        {added ? "추가됨 ✓" : loading ? "추가 중..." : "관심종목 추가"}
+      </button>
+    </div>
+  );
+}

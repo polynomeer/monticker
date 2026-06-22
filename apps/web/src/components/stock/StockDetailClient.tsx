@@ -6,6 +6,7 @@ import StockChart from "./StockChart";
 import EventTimeline from "./EventTimeline";
 import NewsPanel from "./NewsPanel";
 import AlertPanel from "./AlertPanel";
+import WatchlistAddButton from "./WatchlistAddButton";
 import { useStockChart } from "@/hooks/useStockChart";
 
 interface Props {
@@ -26,6 +27,9 @@ export default function StockDetailClient({ stockId, symbol }: Props) {
     <div className="grid grid-cols-1 gap-4">
       {/* Price */}
       <PriceCard symbol={symbol} />
+
+      {/* Watchlist */}
+      <WatchlistAddButton stockId={stockId} />
 
       {/* Chart */}
       <div>

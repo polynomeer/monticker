@@ -1,8 +1,14 @@
+import RecentEvents from "@/components/home/RecentEvents";
+import MarketSummary from "@/components/home/MarketSummary";
+
 export default function Home() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-24">
-      <h1 className="text-4xl font-bold">monticker</h1>
-      <p className="mt-4 text-gray-500">Event-centric stock observation</p>
+    <main className="max-w-4xl mx-auto p-6">
+      <h1 className="text-2xl font-bold mb-6">시장 현황</h1>
+      <div className="grid grid-cols-1 gap-6">
+        <MarketSummary />
+        <RecentEvents />
+      </div>
     </main>
   );
 }
