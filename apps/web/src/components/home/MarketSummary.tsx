@@ -1,9 +1,9 @@
 "use client";
 
-import { useMarketPrices } from "@/hooks/useMarketPrices";
+import { useMarketPricesWs } from "@/hooks/useMarketPricesWs";
 
 export default function MarketSummary() {
-  const { prices, connected } = useMarketPrices();
+  const { prices, connected } = useMarketPricesWs();
   const list = Object.values(prices);
 
   return (

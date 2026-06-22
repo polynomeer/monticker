@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 
 interface StockResult {
@@ -12,11 +12,31 @@ interface StockResult {
   currency: string;
 }
 
+function getAccessToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("accessToken");
+}
+
+async function authFetch(url: string, options?: RequestInit): Promise<Response> {
+  const token = getAccessToken();
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...(options?.headers ?? {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+}
+
 export default function StockSearchPage() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [addedIds, setAddedIds] = useState<Set<number>>(new Set());
+
+  useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,6 +52,23 @@ export default function StockSearchPage() {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAddToWatchlist = async (stock: StockResult) => {
+    const groupsRes = await authFetch("/api/watchlists");
+    if (!groupsRes.ok) { alert("로그인이 필요합니다."); return; }
+    const groups = await groupsRes.json();
+    if (!groups.length) { alert("먼저 관심종목 그룹을 만들어주세요."); return; }
+    const res = await authFetch(`/api/watchlists/groups/${groups[0].id}/items`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stockId: stock.id }),
+    });
+    if (res.ok) {
+      setAddedIds((prev) => new Set(prev).add(stock.id));
+    } else {
+      alert("추가에 실패했습니다.");
     }
   };
 
@@ -62,10 +99,10 @@ export default function StockSearchPage() {
 
       <ul className="space-y-2">
         {results.map((stock) => (
-          <li key={stock.id}>
+          <li key={stock.id} className="flex items-center gap-2">
             <Link
               href={`/stocks/${stock.symbol}`}
-              className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
+              className="flex-1 flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
             >
               <div>
                 <span className="font-semibold">{stock.name}</span>
@@ -78,6 +115,20 @@ export default function StockSearchPage() {
                 )}
               </div>
             </Link>
+            {isLoggedIn && (
+              <button
+                onClick={() => handleAddToWatchlist(stock)}
+                disabled={addedIds.has(stock.id)}
+                className={`w-10 h-10 rounded-lg text-lg font-bold flex items-center justify-center flex-shrink-0 ${
+                  addedIds.has(stock.id)
+                    ? "bg-gray-100 text-gray-400 cursor-default"
+                    : "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                }`}
+                title="관심종목에 추가"
+              >
+                {addedIds.has(stock.id) ? "✓" : "+"}
+              </button>
+            )}
           </li>
         ))}
       </ul>

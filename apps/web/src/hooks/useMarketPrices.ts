@@ -1,48 +1,45 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Client } from "@stomp/stompjs";
-import SockJS from "sockjs-client";
+import { useEffect, useState } from "react";
 
-interface MarketPrice {
+interface PriceData {
   stockId: number;
   symbol: string;
   price: number;
   volume: number;
   timestamp: string;
+  hasData: boolean;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+type PricesMap = Record<number, PriceData>;
 
-export function useMarketPrices() {
-  const [prices, setPrices] = useState<Record<number, MarketPrice>>({});
-  const [connected, setConnected] = useState(false);
-  const clientRef = useRef<Client | null>(null);
+export function useMarketPrices(stockIds: number[]): PricesMap {
+  const [prices, setPrices] = useState<PricesMap>({});
 
   useEffect(() => {
-    const client = new Client({
-      webSocketFactory: () => new SockJS(`${API_BASE}/ws`),
-      reconnectDelay: 5000,
-      onConnect: () => {
-        setConnected(true);
-        client.subscribe("/topic/market", msg => {
-          try {
-            const data: MarketPrice = JSON.parse(msg.body);
-            setPrices(prev => ({ ...prev, [data.stockId]: data }));
-          } catch {/* ignore */}
-        });
-      },
-      onDisconnect: () => setConnected(false),
-    });
+    if (stockIds.length === 0) return;
 
-    client.activate();
-    clientRef.current = client;
-
-    return () => {
-      client.deactivate();
-      clientRef.current = null;
+    const fetchPrices = async () => {
+      const results = await Promise.allSettled(
+        stockIds.map((id) =>
+          fetch(`/api/stocks/${id}/price`)
+            .then((r) => r.json())
+            .then((data: PriceData) => ({ id, data }))
+        )
+      );
+      const updated: PricesMap = {};
+      for (const r of results) {
+        if (r.status === "fulfilled" && r.value.data.hasData) {
+          updated[r.value.id] = r.value.data;
+        }
+      }
+      setPrices((prev) => ({ ...prev, ...updated }));
     };
-  }, []);
 
-  return { prices, connected };
+    fetchPrices();
+    const interval = setInterval(fetchPrices, 5000);
+    return () => clearInterval(interval);
+  }, [stockIds.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return prices;
 }
