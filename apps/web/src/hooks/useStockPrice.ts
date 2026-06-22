@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Client } from "@stomp/stompjs";
+import SockJS from "sockjs-client";
 
 interface PriceData {
   stockId: number;
@@ -10,31 +12,52 @@ interface PriceData {
   timestamp: string;
 }
 
-export function useStockPrice(stockId: number, initialPrice?: PriceData) {
-  const [price, setPrice] = useState<PriceData | null>(initialPrice ?? null);
-  const [connected, setConnected] = useState(false);
+type ConnectionState = "connecting" | "connected" | "disconnected";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+
+export function useStockPrice(stockId: number) {
+  const [price, setPrice] = useState<PriceData | null>(null);
+  const [state, setState] = useState<ConnectionState>("connecting");
+  const clientRef = useRef<Client | null>(null);
 
   useEffect(() => {
-    // Fetch latest price via REST on mount
+    // REST로 최신가 즉시 표시
     fetch(`/api/stocks/${stockId}/price`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.hasData) setPrice(data);
-      })
+      .then(r => r.json())
+      .then(data => { if (data?.hasData) setPrice(data); })
       .catch(() => {});
 
-    // WebSocket via native (SockJS/STOMP 없이 일단 polling fallback)
-    const interval = setInterval(() => {
-      fetch(`/api/stocks/${stockId}/price`)
-        .then((r) => r.json())
-        .then((data) => {
-          if (data.hasData) setPrice(data);
-        })
-        .catch(() => {});
-    }, 3000);
+    const client = new Client({
+      webSocketFactory: () => new SockJS(`${API_BASE}/ws`),
+      reconnectDelay: 5000,
+      onConnect: () => {
+        setState("connected");
+        client.subscribe(`/topic/stocks/${stockId}`, msg => {
+          try {
+            const data = JSON.parse(msg.body);
+            setPrice({
+              stockId: data.stockId,
+              symbol:  data.symbol,
+              price:   data.price,
+              volume:  data.volume,
+              timestamp: data.timestamp,
+            });
+          } catch {/* ignore malformed */}
+        });
+      },
+      onDisconnect: () => setState("disconnected"),
+      onStompError:  () => setState("disconnected"),
+    });
 
-    return () => clearInterval(interval);
+    client.activate();
+    clientRef.current = client;
+
+    return () => {
+      client.deactivate();
+      clientRef.current = null;
+    };
   }, [stockId]);
 
-  return { price, connected };
+  return { price, state };
 }

@@ -5,7 +5,6 @@ import {
   createChart,
   IChartApi,
   ISeriesApi,
-  CandlestickSeries,
   Time,
 } from "lightweight-charts";
 
@@ -59,7 +58,7 @@ export default function StockChart({ candles, events = [], height = 300 }: Props
       timeScale: { timeVisible: true, secondsVisible: false },
     });
 
-    const series = chart.addSeries(CandlestickSeries, {
+    const series = chart.addCandlestickSeries({
       upColor: "#16a34a",
       downColor: "#dc2626",
       borderVisible: false,

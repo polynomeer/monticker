@@ -16,7 +16,9 @@
     "zustand": "^5.0.2",
     "clsx": "^2.1.1",
     "tailwind-merge": "^2.5.5",
-    "lightweight-charts": "^4.2.0"
+    "lightweight-charts": "^4.2.0",
+    "@stomp/stompjs": "^7.0.0",
+    "sockjs-client": "^1.6.1"
   },
   "devDependencies": {
     "typescript": "^5",
@@ -27,6 +29,7 @@
     "postcss": "^8",
     "autoprefixer": "^10.0.1",
     "eslint": "^8",
-    "eslint-config-next": "15.1.0"
+    "eslint-config-next": "15.1.0",
+    "@types/sockjs-client": "^1.5.4"
   }
 }
