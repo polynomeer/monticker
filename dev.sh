@@ -15,6 +15,12 @@ cleanup() {
 }
 trap cleanup INT TERM
 
+# ── kill any leftover processes on our ports ──────────────────
+echo "Clearing ports 3000 and 8080..."
+lsof -ti :3000 | xargs kill -9 2>/dev/null || true
+lsof -ti :8080 | xargs kill -9 2>/dev/null || true
+sleep 1
+
 # ── 1. infra ──────────────────────────────────────────────────
 echo "Starting infra (postgres + redis)..."
 docker compose up -d postgres redis
@@ -32,7 +38,7 @@ cd "$ROOT/backend/api"
 API_PID=$!
 
 echo "  Waiting for API..."
-until curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1 || \
+until /usr/bin/curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1 || \
       grep -q "Started ApiApplication" "$ROOT/logs/api.log" 2>/dev/null; do
   sleep 2
 done
@@ -54,8 +60,17 @@ pnpm dev > "$ROOT/logs/web.log" 2>&1 &
 WEB_PID=$!
 
 echo "  Waiting for Web..."
-until curl -sf http://localhost:3000 > /dev/null 2>&1; do
+for _ in $(seq 1 30); do
   sleep 2
+  if /usr/bin/curl -sf http://localhost:3000 > /dev/null 2>&1; then
+    break
+  fi
+  # bail early if the process died
+  if ! kill -0 "$WEB_PID" 2>/dev/null; then
+    echo "  Web process died. Check logs/web.log"
+    cat "$ROOT/logs/web.log" | tail -20
+    exit 1
+  fi
 done
 echo "  Web OK  (log: logs/web.log)"
 
