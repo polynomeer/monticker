@@ -63,3 +63,4 @@ coverage/
 
 # ── Claude Code internals ─────────────────────────────────────
 .claude/worktrees/
+logs/
