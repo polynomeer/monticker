@@ -49,6 +49,7 @@ echo "  Worker OK  (log: logs/worker.log)"
 # ── 4. web ────────────────────────────────────────────────────
 echo "Starting Web (port 3000)..."
 cd "$ROOT/apps/web"
+pnpm install --ignore-scripts --frozen-lockfile 2>/dev/null || true
 pnpm dev > "$ROOT/logs/web.log" 2>&1 &
 WEB_PID=$!
 
