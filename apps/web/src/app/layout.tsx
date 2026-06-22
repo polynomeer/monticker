@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import AuthNav from "@/components/AuthNav";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -15,6 +16,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Link href="/" className="font-bold text-blue-600">monticker</Link>
           <Link href="/stocks/search" className="text-gray-600 hover:text-gray-900">종목 검색</Link>
           <Link href="/watchlist" className="text-gray-600 hover:text-gray-900">관심종목</Link>
+          <div className="ml-auto">
+            <AuthNav />
+          </div>
         </nav>
         {children}
       </body>
