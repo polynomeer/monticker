@@ -2,6 +2,7 @@ package com.monticker.api.event.infrastructure
 
 import com.monticker.api.event.domain.EventType
 import com.monticker.api.event.domain.StockEvent
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import java.time.Instant
@@ -26,4 +27,6 @@ interface StockEventRepository : JpaRepository<StockEvent, Long> {
         from: Instant,
         to: Instant,
     ): Boolean
+
+    fun findTopByOrderByEventTimeDesc(pageable: Pageable): List<StockEvent>
 }

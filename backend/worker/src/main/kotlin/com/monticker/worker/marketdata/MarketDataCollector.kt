@@ -12,6 +12,7 @@ class MarketDataCollector(
     private val generator: MockPriceGenerator,
     private val writer: RedisTickWriter,
     private val eventDetector: EventDetector,
+    private val candleAggregator: CandleAggregator,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -22,10 +23,21 @@ class MarketDataCollector(
             ticks.forEach { tick ->
                 writer.write(tick)
                 eventDetector.detect(tick)
+                candleAggregator.onTick(tick)
             }
             log.debug("Published {} ticks", ticks.size)
         } catch (e: Exception) {
             log.error("Tick collection failed — skipping cycle", e)
+        }
+    }
+
+    @Scheduled(fixedDelay = 60_000)
+    fun flushCandles() {
+        try {
+            candleAggregator.flushAll()
+            log.debug("Flushed current-minute candles")
+        } catch (e: Exception) {
+            log.error("Candle flush failed", e)
         }
     }
 }

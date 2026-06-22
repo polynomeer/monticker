@@ -1,5 +1,6 @@
 package com.monticker.worker.marketdata
 
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -16,7 +17,7 @@ data class GeneratedTick(
 )
 
 @Component
-class MockPriceGenerator {
+class MockPriceGenerator(private val jdbc: JdbcTemplate) {
 
     private val basePrice = mapOf(
         "005930" to BigDecimal("71000"),
@@ -36,6 +37,27 @@ class MockPriceGenerator {
 
     private val currentPrice = basePrice.toMutableMap()
 
+    // Cached symbol->id mapping from DB; populated lazily
+    private var dbSymbolIds: Map<String, Long>? = null
+
+    private fun resolveStockId(symbol: String): Long {
+        val ids = dbSymbolIds ?: run {
+            val fetched = try {
+                jdbc.query("SELECT id, symbol FROM stocks WHERE symbol = ANY(?)",
+                    { rs, _ -> rs.getString("symbol") to rs.getLong("id") },
+                    jdbc.queryForList("SELECT symbol FROM stocks", String::class.java).toTypedArray()
+                ).toMap()
+            } catch (e: Exception) {
+                emptyMap()
+            }
+            if (fetched.isNotEmpty()) {
+                dbSymbolIds = fetched
+            }
+            fetched
+        }
+        return ids[symbol] ?: symbolToIdFallback(symbol)
+    }
+
     fun generate(): List<GeneratedTick> {
         return currentPrice.keys.map { symbol ->
             val prev = currentPrice[symbol]!!
@@ -45,7 +67,7 @@ class MockPriceGenerator {
             currentPrice[symbol] = next
 
             GeneratedTick(
-                stockId = symbolToId(symbol),
+                stockId = resolveStockId(symbol),
                 symbol = symbol,
                 market = marketOf[symbol] ?: "UNKNOWN",
                 price = next,
@@ -55,7 +77,7 @@ class MockPriceGenerator {
         }
     }
 
-    private fun symbolToId(symbol: String): Long = when (symbol) {
+    private fun symbolToIdFallback(symbol: String): Long = when (symbol) {
         "005930" -> 1L
         "000660" -> 2L
         "035420" -> 3L
