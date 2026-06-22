@@ -19,8 +19,8 @@ export default function ThemeToggle() {
       <select
         value={chartTheme}
         onChange={e => setChartTheme(e.target.value as ChartThemeKey)}
-        className="text-xs border border-gray-300 dark:border-gray-600 rounded px-2 py-1
-                   bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300
+        className="text-xs border border-gray-300 dark:border-[#2b3240] dark:border-gray-600 rounded px-2 py-1
+                   bg-white dark:bg-[#1e2329] text-gray-700 dark:text-[#eaecef]
                    focus:outline-none cursor-pointer"
         title="차트 테마"
       >
@@ -34,7 +34,7 @@ export default function ThemeToggle() {
         onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
         className="flex items-center justify-center w-8 h-8 rounded-lg
                    border border-gray-300 dark:border-gray-600
-                   bg-white dark:bg-gray-800
+                   bg-white dark:bg-[#1e2329]
                    text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700
                    transition-colors"
         title={resolvedTheme === "dark" ? "라이트 모드" : "다크 모드"}

@@ -2,23 +2,52 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Light mode ────────────────────────────────────────────── */
 :root {
-  --bg:        #ffffff;
-  --surface:   #f9fafb;
-  --border:    #e5e7eb;
-  --text:      #111827;
-  --text-muted:#6b7280;
+  --bg:          #f5f5f5;
+  --bg-nav:      #ffffff;
+  --surface:     #ffffff;
+  --surface-2:   #f0f0f0;
+  --border:      #e2e8f0;
+  --text:        #1a202c;
+  --text-muted:  #718096;
+  --accent:      #f0b90b;
+  --up:          #0ecb81;
+  --down:        #f6465d;
 }
 
+/* ── Bybit-style dark mode ────────────────────────────────── */
 .dark {
-  --bg:        #0f1117;
-  --surface:   #1a1d27;
-  --border:    #2d3142;
-  --text:      #e5e7eb;
-  --text-muted:#9ca3af;
+  --bg:          #0b0e11;
+  --bg-nav:      #1e2329;
+  --surface:     #1e2329;
+  --surface-2:   #252c3a;
+  --border:      #2b3240;
+  --text:        #eaecef;
+  --text-muted:  #848e9c;
+  --accent:      #f0b90b;
+  --up:          #0ecb81;
+  --down:        #f6465d;
 }
 
+/* ── Base ───────────────────────────────────────────────────── */
 body {
   background-color: var(--bg);
   color: var(--text);
+  transition: background-color 0.15s, color 0.15s;
+}
+
+/* ── Utility classes for CSS-variable-based theming ────────── */
+@layer utilities {
+  .bg-theme        { background-color: var(--bg); }
+  .bg-theme-nav    { background-color: var(--bg-nav); }
+  .bg-surface      { background-color: var(--surface); }
+  .bg-surface-2    { background-color: var(--surface-2); }
+  .border-theme    { border-color: var(--border); }
+  .text-theme      { color: var(--text); }
+  .text-muted      { color: var(--text-muted); }
+  .text-accent     { color: var(--accent); }
+  .text-up         { color: var(--up); }
+  .text-down       { color: var(--down); }
+  .border-accent   { border-color: var(--accent); }
 }

@@ -74,8 +74,8 @@ export default function TopMovers() {
   };
 
   return (
-    <div className="border border-gray-200 rounded-lg p-4">
-      <h2 className="font-semibold mb-3">주목 종목</h2>
+    <div className="border border-gray-200 dark:border-[#2b3240] dark:bg-[#1e2329] rounded-lg p-4">
+      <h2 className="font-semibold dark:text-[#eaecef] mb-3">주목 종목</h2>
       <ul className="space-y-2">
         {movers.map(m => (
           <li key={m.stockId}>

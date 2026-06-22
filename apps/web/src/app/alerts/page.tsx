@@ -67,16 +67,16 @@ export default function AlertsPage() {
       )}
       <ul className="space-y-3">
         {histories.map(h => (
-          <li key={h.id} className="border border-gray-200 rounded-lg p-4">
+          <li key={h.id} className="border border-gray-200 dark:border-[#2b3240] dark:bg-[#1e2329] rounded-lg p-4">
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1">
                 {h.symbol && (
-                  <Link href={`/stocks/${h.symbol}`} className="text-sm font-semibold text-blue-600 hover:underline">
+                  <Link href={`/stocks/${h.symbol}`} className="text-sm font-semibold text-blue-600 dark:text-[#eaecef] hover:underline">
                     {h.stockName} ({h.symbol})
                   </Link>
                 )}
-                <p className="text-sm text-gray-700 mt-1">{h.message}</p>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-sm text-gray-700 dark:text-[#eaecef] mt-1">{h.message}</p>
+                <p className="text-xs text-gray-400 dark:text-[#848e9c] mt-1">
                   {new Date(h.triggeredAt).toLocaleString("ko-KR")}
                 </p>
               </div>

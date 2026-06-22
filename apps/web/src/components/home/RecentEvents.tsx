@@ -46,15 +46,15 @@ export default function RecentEvents() {
   }, []);
 
   return (
-    <div className="border border-gray-200 rounded-lg p-4">
-      <h2 className="font-semibold mb-3">최근 이벤트</h2>
+    <div className="border border-gray-200 dark:border-[#2b3240] dark:bg-[#1e2329] rounded-lg p-4">
+      <h2 className="font-semibold dark:text-[#eaecef] mb-3">최근 이벤트</h2>
       {loading && (
         <div className="space-y-2">
           {[1,2,3].map(i => <div key={i} className="h-12 bg-gray-100 rounded animate-pulse" />)}
         </div>
       )}
       {!loading && events.length === 0 && (
-        <p className="text-gray-400 text-sm py-4 text-center">Worker 실행 후 이벤트가 표시됩니다.</p>
+        <p className="text-gray-400 dark:text-[#848e9c] text-sm py-4 text-center">Worker 실행 후 이벤트가 표시됩니다.</p>
       )}
       <ul className="space-y-2">
         {events.map(e => {

@@ -5,10 +5,9 @@ import {
   createChart,
   IChartApi,
   ISeriesApi,
+  CandlestickSeries,
   Time,
 } from "lightweight-charts";
-import { useTheme } from "next-themes";
-import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
 
 interface CandleData {
   time: number;
@@ -41,37 +40,32 @@ const EVENT_MARKER_COLOR: Record<string, string> = {
 export default function StockChart({ candles, events = [], height = 300 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const seriesRef = useRef<ISeriesApi<any> | null>(null);
-  const { resolvedTheme } = useTheme();
-  const { chartTheme } = useThemeStore();
+  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const ct = CHART_THEMES[chartTheme];
-    const isDark = resolvedTheme === "dark";
-
+    const isDark = typeof window !== "undefined" && document.documentElement.classList.contains("dark");
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth,
       height,
       layout: {
-        background: { color: isDark ? "#131722" : "#ffffff" },
-        textColor:  isDark ? "#d1d4dc" : "#374151",
+        background: { color: isDark ? "#0b0e11" : "#ffffff" },
+        textColor: isDark ? "#848e9c" : "#374151",
       },
       grid: {
-        vertLines: { color: isDark ? "#2a2e39" : "#f0f0f0" },
-        horzLines: { color: isDark ? "#2a2e39" : "#f0f0f0" },
+        vertLines: { color: isDark ? "#2b3240" : "#f3f4f6" },
+        horzLines: { color: isDark ? "#2b3240" : "#f3f4f6" },
       },
       timeScale: { timeVisible: true, secondsVisible: false },
     });
 
-    const series = chart.addCandlestickSeries({
-      upColor:      ct.upColor,
-      downColor:    ct.downColor,
+    const series = chart.addSeries(CandlestickSeries, {
+      upColor: "#0ecb81",
+      downColor: "#f6465d",
       borderVisible: false,
-      wickUpColor:   ct.wickUp,
-      wickDownColor: ct.wickDown,
+      wickUpColor: "#0ecb81",
+      wickDownColor: "#f6465d",
     });
 
     if (candles.length > 0) {
@@ -114,12 +108,12 @@ export default function StockChart({ candles, events = [], height = 300 }: Props
       window.removeEventListener("resize", handleResize);
       chart.remove();
     };
-  }, [candles, events, height, resolvedTheme, chartTheme]);
+  }, [candles, events, height]);
 
   if (candles.length === 0) {
     return (
       <div
-        className="border border-gray-200 dark:border-gray-700 rounded-lg flex items-center justify-center text-gray-400 text-sm"
+        className="border border-gray-200 dark:border-[#2b3240] rounded-lg flex items-center justify-center text-gray-400 dark:text-[#848e9c] text-sm dark:bg-[#1e2329]"
         style={{ height }}
       >
         차트 데이터 없음 (Worker 실행 후 candle 데이터가 쌓이면 표시됩니다)
@@ -127,5 +121,5 @@ export default function StockChart({ candles, events = [], height = 300 }: Props
     );
   }
 
-  return <div ref={containerRef} className="w-full rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700" />;
+  return <div ref={containerRef} className="w-full rounded-lg overflow-hidden border border-gray-200 dark:border-[#2b3240]" />;
 }
