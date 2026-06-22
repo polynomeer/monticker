@@ -30,7 +30,5 @@ management:
       exposure:
         include: health,info
 
-jwt:
-  secret: monticker-dev-secret-key-must-be-at-least-32-bytes-long
-  access-token-expiry-ms: 900000      # 15분
-  refresh-token-expiry-ms: 604800000  # 7일
+anthropic:
+  api-key: ${ANTHROPIC_API_KEY:}
