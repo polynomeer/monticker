@@ -12,6 +12,8 @@ import org.springframework.stereotype.Component
 class MarketDataCollector(
     private val generator: MockPriceGenerator,
     private val writer: RedisTickWriter,
+    private val priceTickDbWriter: PriceTickDbWriter,
+    private val candleAggregator: CandleAggregator,
     private val eventDetector: EventDetector,
     private val kisPriceProvider: KisPriceProvider,
 ) {
@@ -24,11 +26,18 @@ class MarketDataCollector(
             val ticks = if (kisTicks.isNotEmpty()) kisTicks else generator.generate()
             ticks.forEach { tick ->
                 writer.write(tick)
+                priceTickDbWriter.write(tick)
+                candleAggregator.onTick(tick)
                 eventDetector.detect(tick)
             }
             log.debug("Published {} ticks", ticks.size)
         } catch (e: Exception) {
             log.error("Tick collection failed — skipping cycle", e)
         }
+    }
+
+    @Scheduled(fixedDelay = 60_000)
+    fun flushCandles() {
+        candleAggregator.flushAll()
     }
 }
