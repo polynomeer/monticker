@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import SearchAutocomplete from "@/components/stock/SearchAutocomplete";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -13,9 +14,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen bg-white">
         <nav className="border-b border-gray-200 px-6 py-3 flex gap-6 text-sm">
           <Link href="/" className="font-bold text-blue-600">monticker</Link>
-          <Link href="/stocks/search" className="text-gray-600 hover:text-gray-900">종목 검색</Link>
+          <SearchAutocomplete />
           <Link href="/watchlist" className="text-gray-600 hover:text-gray-900">관심종목</Link>
-          <Link href="/alerts" className="text-gray-600 hover:text-gray-900">알림</Link>
+          <Link href="/compare" className="text-gray-600 hover:text-gray-900">비교</Link>
         </nav>
         {children}
       </body>
