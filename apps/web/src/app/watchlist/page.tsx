@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { authFetch } from "@/services/api";
+import { getAccessToken } from "@/services/auth";
 
 interface WatchlistItem {
   id: number;
@@ -20,24 +23,32 @@ interface WatchlistGroup {
 export default function WatchlistPage() {
   const [groups, setGroups] = useState<WatchlistGroup[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
+
+  useEffect(() => {
+    setIsLoggedIn(!!getAccessToken());
+  }, []);
 
   const fetchGroups = async () => {
     try {
-      const res = await fetch("/api/watchlists");
+      const res = await authFetch("/api/watchlists");
       if (res.ok) setGroups(await res.json());
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchGroups(); }, []);
+  useEffect(() => {
+    if (isLoggedIn) fetchGroups();
+    else setLoading(false);
+  }, [isLoggedIn]);
 
   const handleCreateGroup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newGroupName.trim()) return;
 
-    const res = await fetch("/api/watchlists/groups", {
+    const res = await authFetch("/api/watchlists/groups", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: newGroupName }),
@@ -49,6 +60,17 @@ export default function WatchlistPage() {
   };
 
   if (loading) return <div className="p-6 text-gray-500">불러오는 중...</div>;
+
+  if (!isLoggedIn) {
+    return (
+      <div className="max-w-2xl mx-auto p-6 text-center py-20">
+        <p className="text-gray-500 mb-4">관심종목을 이용하려면 로그인이 필요합니다.</p>
+        <Link href="/login" className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 inline-block">
+          로그인
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl mx-auto p-6">

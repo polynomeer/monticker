@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { authFetch } from "@/services/api";
 
 interface Props {
   stockId: number;
@@ -19,7 +20,7 @@ export default function AlertPanel({ stockId, symbol }: Props) {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/alerts/rules", {
+      const res = await authFetch("/api/alerts/rules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
