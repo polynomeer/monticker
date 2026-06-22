@@ -23,10 +23,8 @@ management:
       exposure:
         include: health,info
 
-naver:
-  news:
-    client-id: ${NAVER_CLIENT_ID:}
-    client-secret: ${NAVER_CLIENT_SECRET:}
+dart:
+  api-key: ${DART_API_KEY:}
 
 logging:
   level:
