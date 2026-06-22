@@ -2,6 +2,7 @@ package com.monticker.api.watchlist.api
 
 import com.monticker.api.watchlist.application.WatchlistService
 import org.springframework.http.ResponseEntity
+import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.*
 
 @RestController
@@ -9,29 +10,30 @@ import org.springframework.web.bind.annotation.*
 class WatchlistController(
     private val watchlistService: WatchlistService,
 ) {
-    // TODO: replace hardcoded userId with JWT principal after auth is implemented
-    private val tempUserId = 1L
-
     @GetMapping
-    fun getGroups(): ResponseEntity<List<WatchlistGroupResponse>> {
-        val groups = watchlistService.getGroups(tempUserId)
+    fun getGroups(@AuthenticationPrincipal userId: Long): ResponseEntity<List<WatchlistGroupResponse>> {
+        val groups = watchlistService.getGroups(userId)
         return ResponseEntity.ok(groups.map { WatchlistGroupResponse.from(it) })
     }
 
     @PostMapping("/groups")
-    fun createGroup(@RequestBody request: CreateGroupRequest): ResponseEntity<WatchlistGroupResponse> {
+    fun createGroup(
+        @AuthenticationPrincipal userId: Long,
+        @RequestBody request: CreateGroupRequest,
+    ): ResponseEntity<WatchlistGroupResponse> {
         if (request.name.isBlank()) return ResponseEntity.badRequest().build()
-        val group = watchlistService.createGroup(tempUserId, request.name)
+        val group = watchlistService.createGroup(userId, request.name)
         return ResponseEntity.ok(WatchlistGroupResponse.from(group))
     }
 
     @PostMapping("/groups/{groupId}/items")
     fun addItem(
         @PathVariable groupId: Long,
+        @AuthenticationPrincipal userId: Long,
         @RequestBody request: AddItemRequest,
     ): ResponseEntity<WatchlistItemResponse> {
         return try {
-            val item = watchlistService.addItem(tempUserId, groupId, request.stockId, request.memo)
+            val item = watchlistService.addItem(userId, groupId, request.stockId, request.memo)
             ResponseEntity.ok(WatchlistItemResponse.from(item))
         } catch (e: NoSuchElementException) {
             ResponseEntity.notFound().build()
@@ -41,9 +43,12 @@ class WatchlistController(
     }
 
     @DeleteMapping("/items/{itemId}")
-    fun removeItem(@PathVariable itemId: Long): ResponseEntity<Void> {
+    fun removeItem(
+        @PathVariable itemId: Long,
+        @AuthenticationPrincipal userId: Long,
+    ): ResponseEntity<Void> {
         return try {
-            watchlistService.removeItem(tempUserId, itemId)
+            watchlistService.removeItem(userId, itemId)
             ResponseEntity.noContent().build()
         } catch (e: NoSuchElementException) {
             ResponseEntity.notFound().build()
