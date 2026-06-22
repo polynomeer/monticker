@@ -35,23 +35,32 @@ export function useStockChart(stockId: number | null, interval: string = "1d") {
 
         if (candleRes.ok) {
           const data = await candleRes.json();
-          setCandles(data.map((c: { time: number; open: string; high: string; low: string; close: string }) => ({
+          const mapped = data.map((c: { time: number; open: string; high: string; low: string; close: string }) => ({
             time: c.time,
             open: parseFloat(c.open),
             high: parseFloat(c.high),
             low: parseFloat(c.low),
             close: parseFloat(c.close),
-          })));
+          }));
+          // Lightweight Charts requires strictly ascending time order
+          mapped.sort((a: CandleData, b: CandleData) => a.time - b.time);
+          // Remove duplicate timestamps (keep last)
+          const deduped = mapped.filter((c: CandleData, i: number, arr: CandleData[]) =>
+            i === arr.length - 1 || c.time !== arr[i + 1].time
+          );
+          setCandles(deduped);
         }
 
         if (eventRes.ok) {
           const data = await eventRes.json();
-          setEvents(data.map((e: { eventTime: string; eventType: string; title: string; importanceScore: number }) => ({
+          const mappedEvents = data.map((e: { eventTime: string; eventType: string; title: string; importanceScore: number }) => ({
             time: Math.floor(new Date(e.eventTime).getTime() / 1000),
             eventType: e.eventType,
             title: e.title,
             importanceScore: e.importanceScore,
-          })));
+          }));
+          mappedEvents.sort((a: EventMarker, b: EventMarker) => a.time - b.time);
+          setEvents(mappedEvents);
         }
       } finally {
         setLoading(false);
