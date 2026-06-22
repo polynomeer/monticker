@@ -1,6 +1,7 @@
 package com.monticker.api.event.api
 
 import com.monticker.api.event.application.EventTimelineService
+import com.monticker.api.event.application.SectorEventSummary
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import java.time.Instant
@@ -23,11 +24,11 @@ class EventTimelineController(
         return ResponseEntity.ok(events)
     }
 
-    @GetMapping("/api/events/recent")
-    fun getRecentEvents(
-        @RequestParam(defaultValue = "10") limit: Int,
-    ): ResponseEntity<List<StockEventResponse>> {
-        val events = eventTimelineService.getRecentEvents(limit.coerceIn(1, 50))
-        return ResponseEntity.ok(events.map { StockEventResponse.from(it) })
+    @GetMapping("/api/sectors/events")
+    fun getSectorEvents(
+        @RequestParam(defaultValue = "24") hours: Int,
+    ): ResponseEntity<List<SectorEventSummary>> {
+        val summary = eventTimelineService.getSectorSummary(hours.coerceIn(1, 72))
+        return ResponseEntity.ok(summary)
     }
 }

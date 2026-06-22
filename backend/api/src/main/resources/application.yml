@@ -28,7 +28,11 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
-
-anthropic:
-  api-key: ${ANTHROPIC_API_KEY:}
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    export:
+      prometheus:
+        enabled: true
