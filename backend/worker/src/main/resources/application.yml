@@ -23,6 +23,11 @@ management:
       exposure:
         include: health,info
 
+naver:
+  news:
+    client-id: ${NAVER_CLIENT_ID:}
+    client-secret: ${NAVER_CLIENT_SECRET:}
+
 logging:
   level:
     com.monticker.worker: INFO
