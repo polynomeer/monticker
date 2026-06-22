@@ -1,12 +1,9 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import {
-  createChart,
-  IChartApi,
-  ISeriesApi,
-  Time,
-} from "lightweight-charts";
+import { createChart, IChartApi, ISeriesApi, Time } from "lightweight-charts";
+import { useTheme } from "next-themes";
+import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
 
 interface CandleData {
   time: number;
@@ -30,35 +27,41 @@ interface Props {
 }
 
 const EVENT_MARKER_COLOR: Record<string, string> = {
-  PRICE_SPIKE:  "#16a34a",
-  PRICE_DROP:   "#dc2626",
-  VOLUME_SURGE: "#2563eb",
-  default:      "#6b7280",
+  PRICE_SPIKE:          "#0ecb81",
+  PRICE_DROP:           "#f6465d",
+  VOLUME_SURGE:         "#f0b90b",
+  DISCLOSURE_PUBLISHED: "#a78bfa",
+  default:              "#848e9c",
 };
 
 export default function StockChart({ candles, events = [], height = 300 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const chartRef     = useRef<IChartApi | null>(null);
+  const seriesRef    = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const { resolvedTheme } = useTheme();
+  const { chartTheme }    = useThemeStore();
 
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const isDark = typeof window !== "undefined" && document.documentElement.classList.contains("dark");
+    const isDark = resolvedTheme === "dark";
+    const ct     = CHART_THEMES[chartTheme] ?? CHART_THEMES.default;
+
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth,
       height,
       layout: {
         background: { color: isDark ? "#0b0e11" : "#ffffff" },
-        textColor: isDark ? "#848e9c" : "#374151",
+        textColor:   isDark ? "#848e9c" : "#374151",
       },
       grid: {
-        vertLines: { color: isDark ? "#2b3240" : "#f3f4f6" },
-        horzLines: { color: isDark ? "#2b3240" : "#f3f4f6" },
+        vertLines: { color: isDark ? "#2b3240" : "#f0f0f0" },
+        horzLines: { color: isDark ? "#2b3240" : "#f0f0f0" },
       },
       timeScale: { timeVisible: true, secondsVisible: false },
     });
 
+    // lightweight-charts v4: addCandlestickSeries (NOT addSeries)
     const series = chart.addCandlestickSeries({
       upColor:       ct.upColor,
       downColor:     ct.downColor,
@@ -70,30 +73,29 @@ export default function StockChart({ candles, events = [], height = 300 }: Props
     if (candles.length > 0) {
       series.setData(
         candles.map((c) => ({
-          time: c.time as Time,
-          open: c.open,
-          high: c.high,
-          low: c.low,
+          time:  c.time as Time,
+          open:  c.open,
+          high:  c.high,
+          low:   c.low,
           close: c.close,
         }))
       );
     }
 
-    // Add event markers
     if (events.length > 0) {
       series.setMarkers(
         events.map((e) => ({
-          time: e.time as Time,
+          time:     e.time as Time,
           position: "aboveBar" as const,
-          color: EVENT_MARKER_COLOR[e.eventType] ?? EVENT_MARKER_COLOR.default,
-          shape: "arrowDown" as const,
-          text: e.title.slice(0, 10),
-          size: e.importanceScore > 70 ? 2 : 1,
+          color:    EVENT_MARKER_COLOR[e.eventType] ?? EVENT_MARKER_COLOR.default,
+          shape:    "arrowDown" as const,
+          text:     e.title.slice(0, 10),
+          size:     e.importanceScore > 70 ? 2 : 1,
         }))
       );
     }
 
-    chartRef.current = chart;
+    chartRef.current  = chart;
     seriesRef.current = series;
 
     const handleResize = () => {
@@ -107,12 +109,12 @@ export default function StockChart({ candles, events = [], height = 300 }: Props
       window.removeEventListener("resize", handleResize);
       chart.remove();
     };
-  }, [candles, events, height]);
+  }, [candles, events, height, resolvedTheme, chartTheme]);
 
   if (candles.length === 0) {
     return (
       <div
-        className="border border-gray-200 dark:border-[#2b3240] rounded-lg flex items-center justify-center text-gray-400 dark:text-[#848e9c] text-sm dark:bg-[#1e2329]"
+        className="border border-gray-200 dark:border-[#2b3240] dark:bg-[#1e2329] rounded-lg flex items-center justify-center text-gray-400 dark:text-[#848e9c] text-sm"
         style={{ height }}
       >
         차트 데이터 없음 (Worker 실행 후 candle 데이터가 쌓이면 표시됩니다)
@@ -120,5 +122,10 @@ export default function StockChart({ candles, events = [], height = 300 }: Props
     );
   }
 
-  return <div ref={containerRef} className="w-full rounded-lg overflow-hidden border border-gray-200 dark:border-[#2b3240]" />;
+  return (
+    <div
+      ref={containerRef}
+      className="w-full rounded-lg overflow-hidden border border-gray-200 dark:border-[#2b3240]"
+    />
+  );
 }
