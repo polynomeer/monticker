@@ -1,0 +1,9 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/monticker
+    username: monticker
+    password: monticker
+
+logging:
+  level:
+    com.monticker: DEBUG
