@@ -15,6 +15,24 @@ cleanup() {
 }
 trap cleanup INT TERM
 
+# ── ensure Docker Desktop is running ─────────────────────────
+if ! docker info > /dev/null 2>&1; then
+  echo "Docker is not running. Starting Docker Desktop..."
+  open -a Docker
+  echo "  Waiting for Docker to start (up to 60s)..."
+  for i in $(seq 1 60); do
+    sleep 1
+    if docker info > /dev/null 2>&1; then
+      echo "  Docker ready after ${i}s"
+      break
+    fi
+    if [ "$i" -eq 60 ]; then
+      echo "  Docker did not start in time. Please start Docker Desktop manually."
+      exit 1
+    fi
+  done
+fi
+
 # ── kill any leftover processes on our ports ──────────────────
 echo "Clearing ports 3000 and 8080..."
 lsof -ti :3000 | xargs kill -9 2>/dev/null || true
