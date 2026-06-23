@@ -31,4 +31,12 @@ class EventTimelineController(
         val summary = eventTimelineService.getSectorSummary(hours.coerceIn(1, 72))
         return ResponseEntity.ok(summary)
     }
+
+    @GetMapping("/api/events/recent")
+    fun getRecentEvents(
+        @RequestParam(defaultValue = "10") limit: Int,
+    ): ResponseEntity<List<StockEventResponse>> {
+        val events = eventTimelineService.getRecentEvents(limit.coerceIn(1, 50))
+        return ResponseEntity.ok(events.map { StockEventResponse.from(it) })
+    }
 }

@@ -40,6 +40,11 @@ class EventTimelineService(
             )
         }
     }
+
+    fun getRecentEvents(limit: Int): List<StockEvent> =
+        eventRepository.findTopByOrderByEventTimeDesc(
+            org.springframework.data.domain.PageRequest.of(0, limit)
+        )
 }
 
 data class SectorEventSummary(
