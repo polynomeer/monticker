@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import PriceCard from "./PriceCard";
-import StockChart from "./StockChart";
+import StockChart from "./chart/StockChart";
 import EventTimeline from "./EventTimeline";
 import NewsPanel from "./NewsPanel";
 import AlertPanel from "./AlertPanel";
