@@ -43,7 +43,7 @@ export default function ScreenerPage() {
   const [market, setMarket] = useState("all");
   const [sort,   setSort]   = useState("amount");
 
-  const { items, total, hasMore, loading, loadingMore, loadMore } =
+  const { items, total, hasMore, loading, loadingMore, loadMore, wsConnected } =
     useScreener(tab, market, sort);
 
   return (
@@ -51,7 +51,7 @@ export default function ScreenerPage() {
       {/* 헤더 */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold dark:text-[#f8f8f2]">종목 스크리너</h1>
-        <p className="text-sm text-[#6272a4] mt-1">실시간 시세 기준 · 10초 자동 갱신</p>
+        <p className="text-sm text-[#6272a4] mt-1 flex items-center gap-2">랭킹 10초 갱신 · <span className={wsConnected ? "text-[#0ecb81]" : "text-[#6272a4]"}>● {wsConnected ? "실시간 연결됨" : "연결 중..."}</span></p>
       </div>
 
       {/* 탭 */}
