@@ -65,7 +65,7 @@ export default function EventTimeline({ stockId }: Props) {
           {events.map((event) => (
             <li
               key={event.id}
-              className={`flex items-start gap-3 p-3 rounded-lg border text-sm dark:bg-[#44475a] dark:border-[#44475a] dark:text-[#f8f8f2] ${
+              className={`flex items-start gap-3 p-3 rounded-lg border text-sm ${
                 EVENT_COLORS[event.eventType] ?? "bg-gray-50 dark:bg-[#44475a] text-gray-700 dark:text-[#f8f8f2] border-gray-200 dark:border-[#44475a]"
               }`}
             >
