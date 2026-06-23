@@ -134,8 +134,8 @@ export default function EChartsAdapter({
 
         // ── 그리드 ──────────────────────────────────────────
         grid: [
-          { left: 16, right: 82, top: 32, bottom: height - CHART_H + 4 },
-          { left: 16, right: 82, top: VOL_TOP, bottom: 52 },
+          { left: 48, right: 82, top: 32, bottom: height - CHART_H + 4 },
+          { left: 48, right: 82, top: VOL_TOP, bottom: 52 },
         ],
 
         // ── X축 ─────────────────────────────────────────────
