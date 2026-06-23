@@ -135,7 +135,7 @@ export default function EChartsAdapter({
         // ── 그리드 ──────────────────────────────────────────
         grid: [
           { left: 82, right: 82, top: 32, bottom: height - CHART_H + 4 },
-          { left: 82, right: 82, top: VOL_TOP, bottom: 28 },
+          { left: 82, right: 82, top: VOL_TOP, bottom: 52 },
         ],
 
         // ── X축 ─────────────────────────────────────────────
@@ -153,7 +153,7 @@ export default function EChartsAdapter({
             boundaryGap: false,
             axisLine:   { lineStyle: { color: theme.grid } },
             axisTick:   { lineStyle: { color: theme.grid } },
-            axisLabel:  { color: theme.text, fontSize: 10, margin: 4 },
+            axisLabel:  { color: theme.text, fontSize: 10, margin: 8 },
             splitLine:  { show: false },
           },
         ],
@@ -205,11 +205,15 @@ export default function EChartsAdapter({
             bottom: 4, height: 22,
             borderColor: theme.grid,
             backgroundColor: theme.bg,
-            fillerColor: `${theme.grid}55`,
-            handleStyle: { color: theme.grid },
+            fillerColor: `${theme.text}22`,
+            handleStyle: { color: theme.text },
             moveHandleStyle: { color: theme.text },
             textStyle: { color: theme.text, fontSize: 10 },
             labelFormatter: (_: unknown, v: string) => v.slice(5),
+            emphasis: {
+              handleStyle: { color: theme.upColor },
+              moveHandleStyle: { color: theme.upColor },
+            },
           },
         ],
 
