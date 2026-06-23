@@ -40,8 +40,8 @@ export default function StockDetailClient({ stockId, symbol }: Props) {
               onClick={() => setInterval(i.value)}
               className={`text-sm px-3 py-1 rounded ${
                 interval === i.value
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  ? "bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] font-semibold"
+                  : "bg-gray-100 dark:bg-[#44475a] text-gray-600 dark:text-[#6272a4] hover:bg-gray-200 dark:hover:bg-[#44475a]/80 dark:hover:text-[#f8f8f2]"
               }`}
             >
               {i.label}

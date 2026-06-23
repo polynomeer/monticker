@@ -54,7 +54,7 @@ export default function AlertsPage() {
   if (!isLoggedIn) return (
     <div className="max-w-2xl mx-auto p-6 text-center py-20">
       <p className="text-gray-500 mb-4">알림 이력을 보려면 로그인이 필요합니다.</p>
-      <Link href="/login" className="bg-blue-600 text-white px-6 py-2 rounded-lg">로그인</Link>
+      <Link href="/login" className="bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] px-6 py-2 rounded-lg">로그인</Link>
     </div>
   );
 

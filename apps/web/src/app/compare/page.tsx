@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import StockChart from "@/components/stock/StockChart";
+import StockChart from "@/components/stock/chart/StockChart";
 import { useStockChart } from "@/hooks/useStockChart";
 
 function ComparePane({ symbol }: { symbol: string }) {
@@ -53,7 +53,7 @@ export default function ComparePage() {
           placeholder="종목 코드 입력 (최대 4개)"
           className="border border-gray-300 rounded-lg px-4 py-2 text-sm w-52 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
-        <button onClick={addSymbol} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">
+        <button onClick={addSymbol} className="bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] px-4 py-2 rounded-lg text-sm hover:bg-blue-700 dark:hover:bg-[#a87de8]">
           추가
         </button>
         {symbols.map(s => (
