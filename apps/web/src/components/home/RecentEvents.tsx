@@ -13,11 +13,11 @@ interface RecentEvent {
 }
 
 const EVENT_COLOR: Record<string, string> = {
-  PRICE_SPIKE:          "bg-green-50 border-green-200 text-green-800",
-  PRICE_DROP:           "bg-red-50 border-red-200 text-red-800",
-  VOLUME_SURGE:         "bg-blue-50 border-blue-200 text-blue-800",
-  DISCLOSURE_PUBLISHED: "bg-purple-50 border-purple-200 text-purple-800",
-  default:              "bg-gray-50 border-gray-200 text-gray-800",
+  PRICE_SPIKE:          "bg-green-50 dark:bg-[#0ecb81]/10 border-green-200 dark:border-[#0ecb81]/30 text-green-800 dark:text-[#0ecb81]",
+  PRICE_DROP:           "bg-red-50 dark:bg-[#f6465d]/10 border-red-200 dark:border-[#f6465d]/30 text-red-800 dark:text-[#f6465d]",
+  VOLUME_SURGE:         "bg-blue-50 dark:bg-[#8be9fd]/10 border-blue-200 dark:border-[#8be9fd]/30 text-blue-800 dark:text-[#8be9fd]",
+  DISCLOSURE_PUBLISHED: "bg-purple-50 dark:bg-[#bd93f9]/10 border-purple-200 dark:border-[#bd93f9]/30 text-purple-800 dark:text-[#bd93f9]",
+  default:              "bg-gray-50 dark:bg-[#44475a] border-gray-200 dark:border-[#6272a4] text-gray-800 dark:text-[#f8f8f2]",
 };
 
 const EVENT_LABEL: Record<string, string> = {
@@ -50,7 +50,7 @@ export default function RecentEvents() {
       <h2 className="font-semibold dark:text-[#f8f8f2] mb-3">최근 이벤트</h2>
       {loading && (
         <div className="space-y-2">
-          {[1,2,3].map(i => <div key={i} className="h-12 bg-gray-100 rounded animate-pulse" />)}
+          {[1,2,3].map(i => <div key={i} className="h-12 bg-gray-100 dark:bg-[#44475a] rounded animate-pulse" />)}
         </div>
       )}
       {!loading && events.length === 0 && (

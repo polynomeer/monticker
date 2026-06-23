@@ -10,7 +10,7 @@ export default function MarketSummary() {
     <div className="border border-gray-200 dark:border-[#44475a] dark:bg-[#282a36] rounded-lg p-4">
       <div className="flex items-center justify-between mb-3">
         <h2 className="font-semibold dark:text-[#f8f8f2]">실시간 시세</h2>
-        <span className={`text-xs px-2 py-0.5 rounded-full ${connected ? "bg-green-50 text-green-600" : "bg-gray-50 text-gray-400"}`}>
+        <span className={`text-xs px-2 py-0.5 rounded-full ${connected ? "bg-green-50 dark:bg-[#0ecb81]/15 text-green-600 dark:text-[#0ecb81]" : "bg-gray-50 dark:bg-[#44475a] text-gray-400 dark:text-[#6272a4]"}`}>
           {connected ? "● 연결됨" : "○ 연결 중"}
         </span>
       </div>

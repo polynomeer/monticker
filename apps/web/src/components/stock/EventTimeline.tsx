@@ -13,12 +13,12 @@ interface StockEvent {
 }
 
 const EVENT_COLORS: Record<string, string> = {
-  PRICE_SPIKE:          "bg-green-100 text-green-800 border-green-200",
-  PRICE_DROP:           "bg-red-100 text-red-800 border-red-200",
-  VOLUME_SURGE:         "bg-blue-100 text-blue-800 border-blue-200",
-  NEWS_PUBLISHED:       "bg-yellow-100 text-yellow-800 border-yellow-200",
-  DISCLOSURE_PUBLISHED: "bg-purple-100 text-purple-800 border-purple-200",
-  SECTOR_MOVE:          "bg-gray-100 text-gray-800 border-gray-200",
+  PRICE_SPIKE:          "bg-green-100 dark:bg-[#0ecb81]/20 text-green-800 dark:text-[#0ecb81] border-green-200 dark:border-[#0ecb81]/30",
+  PRICE_DROP:           "bg-red-100 dark:bg-[#f6465d]/20 text-red-800 dark:text-[#f6465d] border-red-200 dark:border-[#f6465d]/30",
+  VOLUME_SURGE:         "bg-blue-100 dark:bg-[#8be9fd]/20 text-blue-800 dark:text-[#8be9fd] border-blue-200 dark:border-[#8be9fd]/30",
+  NEWS_PUBLISHED:       "bg-yellow-100 dark:bg-[#f1fa8c]/20 text-yellow-800 dark:text-[#f1fa8c] border-yellow-200 dark:border-[#f1fa8c]/30",
+  DISCLOSURE_PUBLISHED: "bg-purple-100 dark:bg-[#bd93f9]/20 text-purple-800 dark:text-[#bd93f9] border-purple-200 dark:border-[#bd93f9]/30",
+  SECTOR_MOVE:          "bg-gray-100 dark:bg-[#44475a] text-gray-800 dark:text-[#f8f8f2] border-gray-200 dark:border-[#6272a4]",
 };
 
 interface Props {
@@ -66,7 +66,7 @@ export default function EventTimeline({ stockId }: Props) {
             <li
               key={event.id}
               className={`flex items-start gap-3 p-3 rounded-lg border text-sm dark:bg-[#44475a] dark:border-[#44475a] dark:text-[#f8f8f2] ${
-                EVENT_COLORS[event.eventType] ?? "bg-gray-50 text-gray-700 border-gray-200"
+                EVENT_COLORS[event.eventType] ?? "bg-gray-50 dark:bg-[#44475a] text-gray-700 dark:text-[#f8f8f2] border-gray-200 dark:border-[#44475a]"
               }`}
             >
               <div className="flex-1">

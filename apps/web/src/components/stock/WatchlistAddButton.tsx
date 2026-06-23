@@ -59,7 +59,7 @@ export default function WatchlistAddButton({ stockId }: Props) {
       <select
         value={selectedGroup ?? ""}
         onChange={e => setSelectedGroup(Number(e.target.value))}
-        className="border border-gray-200 rounded px-3 py-1.5 text-sm flex-1"
+        className="border border-gray-200 dark:border-[#44475a] dark:bg-[#44475a] dark:text-[#f8f8f2] rounded px-3 py-1.5 text-sm flex-1"
       >
         {groups.map(g => (
           <option key={g.id} value={g.id}>{g.name}</option>
