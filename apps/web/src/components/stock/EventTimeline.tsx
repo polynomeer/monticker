@@ -13,11 +13,11 @@ interface StockEvent {
 }
 
 const EVENT_COLORS: Record<string, string> = {
-  PRICE_SPIKE:          "bg-green-100 dark:bg-[#0ecb81]/10 text-green-800 dark:text-[#0ecb81] border-green-200 dark:border-[#0ecb81]/25",
-  PRICE_DROP:           "bg-red-100 dark:bg-[#f6465d]/10 text-red-800 dark:text-[#f6465d] border-red-200 dark:border-[#f6465d]/25",
-  VOLUME_SURGE:         "bg-blue-100 dark:bg-[#f1fa8c]/10 text-blue-800 dark:text-[#f1fa8c] border-blue-200 dark:border-[#f1fa8c]/25",
-  NEWS_PUBLISHED:       "bg-yellow-100 dark:bg-[#8be9fd]/10 text-yellow-800 dark:text-[#8be9fd] border-yellow-200 dark:border-[#8be9fd]/25",
-  DISCLOSURE_PUBLISHED: "bg-purple-100 dark:bg-[#bd93f9]/10 text-purple-800 dark:text-[#bd93f9] border-purple-200 dark:border-[#bd93f9]/25",
+  PRICE_SPIKE:          "bg-green-100 dark:bg-[#0ecb81]/25 text-green-800 dark:text-[#0ecb81] border-green-200 dark:border-[#0ecb81]/25",
+  PRICE_DROP:           "bg-red-100 dark:bg-[#f6465d]/25 text-red-800 dark:text-[#f6465d] border-red-200 dark:border-[#f6465d]/25",
+  VOLUME_SURGE:         "bg-blue-100 dark:bg-[#f1fa8c]/25 text-blue-800 dark:text-[#f1fa8c] border-blue-200 dark:border-[#f1fa8c]/25",
+  NEWS_PUBLISHED:       "bg-yellow-100 dark:bg-[#8be9fd]/25 text-yellow-800 dark:text-[#8be9fd] border-yellow-200 dark:border-[#8be9fd]/25",
+  DISCLOSURE_PUBLISHED: "bg-purple-100 dark:bg-[#bd93f9]/25 text-purple-800 dark:text-[#bd93f9] border-purple-200 dark:border-[#bd93f9]/25",
   SECTOR_MOVE:          "bg-gray-100 dark:bg-[#44475a] text-gray-800 dark:text-[#f8f8f2] border-gray-200 dark:border-[#6272a4]",
 };
 
