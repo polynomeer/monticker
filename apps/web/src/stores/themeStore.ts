@@ -14,10 +14,10 @@ export interface ChartThemeConfig {
 export const CHART_THEMES: Record<ChartThemeKey, ChartThemeConfig> = {
   default: {
     label:     "Default",
-    upColor:   "#0ecb81",
-    downColor: "#f6465d",
-    wickUp:    "#0ecb81",
-    wickDown:  "#f6465d",
+    upColor:   "#26a69a",
+    downColor: "#ef5350",
+    wickUp:    "#26a69a",
+    wickDown:  "#ef5350",
   },
   classic: {
     label:     "Classic",
