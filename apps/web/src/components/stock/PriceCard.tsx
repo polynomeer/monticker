@@ -43,7 +43,7 @@ export default function PriceCard({ symbol }: Props) {
 
   if (loading) {
     return (
-      <div className="border border-gray-200 dark:border-[#2b3240] dark:bg-[#1e2329] rounded-lg p-4 animate-pulse">
+      <div className="border border-gray-200 dark:border-[#44475a] dark:bg-[#282a36] rounded-lg p-4 animate-pulse">
         <div className="h-8 bg-gray-100 rounded w-32 mb-2" />
         <div className="h-4 bg-gray-100 rounded w-24" />
       </div>
@@ -52,27 +52,27 @@ export default function PriceCard({ symbol }: Props) {
 
   if (!data || !data.hasData) {
     return (
-      <div className="border border-gray-200 dark:border-[#2b3240] dark:bg-[#1e2329] rounded-lg p-4 text-gray-400 dark:text-[#848e9c]">
+      <div className="border border-gray-200 dark:border-[#44475a] dark:bg-[#282a36] rounded-lg p-4 text-gray-400 dark:text-[#6272a4]">
         시세 데이터 없음 (워커가 실행 중이어야 합니다)
       </div>
     );
   }
 
   return (
-    <div className="border border-gray-200 dark:border-[#2b3240] dark:bg-[#1e2329] rounded-lg p-4">
+    <div className="border border-gray-200 dark:border-[#44475a] dark:bg-[#282a36] rounded-lg p-4">
       <div className="flex items-baseline gap-3">
-        <span className="text-3xl font-bold dark:text-[#eaecef]">
+        <span className="text-3xl font-bold dark:text-[#f8f8f2]">
           {data.price?.toLocaleString()}
         </span>
-        <span className="text-sm text-gray-500 dark:text-[#848e9c]">{symbol}</span>
+        <span className="text-sm text-gray-500 dark:text-[#6272a4]">{symbol}</span>
       </div>
       {data.volume && (
-        <p className="text-sm text-gray-500 dark:text-[#848e9c] mt-1">
+        <p className="text-sm text-gray-500 dark:text-[#6272a4] mt-1">
           거래량 {data.volume.toLocaleString()}
         </p>
       )}
       {data.tradeTime && (
-        <p className="text-xs text-gray-400 dark:text-[#848e9c] mt-1">
+        <p className="text-xs text-gray-400 dark:text-[#6272a4] mt-1">
           {new Date(data.tradeTime).toLocaleTimeString("ko-KR")}
         </p>
       )}

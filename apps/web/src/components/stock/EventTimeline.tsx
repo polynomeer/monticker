@@ -43,21 +43,21 @@ export default function EventTimeline({ stockId }: Props) {
 
   if (loading) {
     return (
-      <div className="border border-gray-200 dark:border-[#2b3240] dark:bg-[#1e2329] rounded-lg p-4">
-        <div className="h-4 bg-gray-100 dark:bg-[#252c3a] rounded w-32 mb-3 animate-pulse" />
+      <div className="border border-gray-200 dark:border-[#44475a] dark:bg-[#282a36] rounded-lg p-4">
+        <div className="h-4 bg-gray-100 dark:bg-[#44475a] rounded w-32 mb-3 animate-pulse" />
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-12 bg-gray-50 dark:bg-[#252c3a] rounded mb-2 animate-pulse" />
+          <div key={i} className="h-12 bg-gray-50 dark:bg-[#44475a] rounded mb-2 animate-pulse" />
         ))}
       </div>
     );
   }
 
   return (
-    <div className="border border-gray-200 dark:border-[#2b3240] dark:bg-[#1e2329] rounded-lg p-4">
-      <h3 className="font-semibold mb-3 dark:text-[#eaecef]">이벤트 타임라인</h3>
+    <div className="border border-gray-200 dark:border-[#44475a] dark:bg-[#282a36] rounded-lg p-4">
+      <h3 className="font-semibold mb-3 dark:text-[#f8f8f2]">이벤트 타임라인</h3>
 
       {events.length === 0 ? (
-        <p className="text-gray-400 dark:text-[#848e9c] text-sm text-center py-6">
+        <p className="text-gray-400 dark:text-[#6272a4] text-sm text-center py-6">
           최근 24시간 내 이벤트가 없습니다.
         </p>
       ) : (
@@ -65,7 +65,7 @@ export default function EventTimeline({ stockId }: Props) {
           {events.map((event) => (
             <li
               key={event.id}
-              className={`flex items-start gap-3 p-3 rounded-lg border text-sm dark:bg-[#252c3a] dark:border-[#2b3240] dark:text-[#eaecef] ${
+              className={`flex items-start gap-3 p-3 rounded-lg border text-sm dark:bg-[#44475a] dark:border-[#44475a] dark:text-[#f8f8f2] ${
                 EVENT_COLORS[event.eventType] ?? "bg-gray-50 text-gray-700 border-gray-200"
               }`}
             >

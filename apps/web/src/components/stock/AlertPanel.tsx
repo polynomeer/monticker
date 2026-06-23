@@ -39,14 +39,14 @@ export default function AlertPanel({ stockId, symbol }: Props) {
   };
 
   return (
-    <div className="border border-gray-200 dark:border-[#2b3240] dark:bg-[#1e2329] rounded-lg p-4">
-      <h3 className="font-semibold mb-3 dark:text-[#eaecef]">알림 설정 <span className="text-gray-400 dark:text-[#848e9c] text-sm font-normal">({symbol})</span></h3>
+    <div className="border border-gray-200 dark:border-[#44475a] dark:bg-[#282a36] rounded-lg p-4">
+      <h3 className="font-semibold mb-3 dark:text-[#f8f8f2]">알림 설정 <span className="text-gray-400 dark:text-[#6272a4] text-sm font-normal">({symbol})</span></h3>
 
       <form onSubmit={handleSave} className="flex flex-col gap-3">
         <select
           value={ruleType}
           onChange={(e) => setRuleType(e.target.value)}
-          className="border border-gray-300 rounded px-3 py-2 text-sm dark:bg-[#252c3a] dark:border-[#2b3240] dark:text-[#eaecef]"
+          className="border border-gray-300 rounded px-3 py-2 text-sm dark:bg-[#44475a] dark:border-[#44475a] dark:text-[#f8f8f2]"
         >
           <option value="PRICE_ABOVE">가격 이상 알림</option>
           <option value="PRICE_BELOW">가격 이하 알림</option>
@@ -59,14 +59,14 @@ export default function AlertPanel({ stockId, symbol }: Props) {
             value={threshold}
             onChange={(e) => setThreshold(e.target.value)}
             placeholder="기준 가격 입력"
-            className="border border-gray-300 rounded px-3 py-2 text-sm dark:bg-[#252c3a] dark:border-[#2b3240] dark:text-[#eaecef] dark:placeholder-[#848e9c]"
+            className="border border-gray-300 rounded px-3 py-2 text-sm dark:bg-[#44475a] dark:border-[#44475a] dark:text-[#f8f8f2] dark:placeholder-[#6272a4]"
           />
         )}
 
         <button
           type="submit"
           disabled={loading}
-          className="bg-blue-600 text-white rounded px-4 py-2 text-sm hover:bg-blue-700 disabled:opacity-50 dark:bg-[#f0b90b] dark:text-black dark:hover:bg-[#d4a20a]"
+          className="bg-blue-600 text-white rounded px-4 py-2 text-sm hover:bg-blue-700 disabled:opacity-50 dark:bg-[#bd93f9] dark:text-black dark:hover:bg-[#a87de8]"
         >
           {saved ? "저장됨 ✓" : loading ? "저장 중..." : "알림 저장"}
         </button>

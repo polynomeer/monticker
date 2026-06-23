@@ -29,9 +29,9 @@ interface Props {
 const EVENT_MARKER_COLOR: Record<string, string> = {
   PRICE_SPIKE:          "#0ecb81",
   PRICE_DROP:           "#f6465d",
-  VOLUME_SURGE:         "#f0b90b",
+  VOLUME_SURGE:         "#bd93f9",
   DISCLOSURE_PUBLISHED: "#a78bfa",
-  default:              "#848e9c",
+  default:              "#6272a4",
 };
 
 export default function StockChart({ candles, events = [], height = 300 }: Props) {
@@ -51,12 +51,12 @@ export default function StockChart({ candles, events = [], height = 300 }: Props
       width: containerRef.current.clientWidth,
       height,
       layout: {
-        background: { color: isDark ? "#0b0e11" : "#ffffff" },
-        textColor:   isDark ? "#848e9c" : "#374151",
+        background: { color: isDark ? "#1e1f29" : "#ffffff" },
+        textColor:   isDark ? "#6272a4" : "#374151",
       },
       grid: {
-        vertLines: { color: isDark ? "#2b3240" : "#f0f0f0" },
-        horzLines: { color: isDark ? "#2b3240" : "#f0f0f0" },
+        vertLines: { color: isDark ? "#44475a" : "#f0f0f0" },
+        horzLines: { color: isDark ? "#44475a" : "#f0f0f0" },
       },
       timeScale: { timeVisible: true, secondsVisible: false },
     });
@@ -114,7 +114,7 @@ export default function StockChart({ candles, events = [], height = 300 }: Props
   if (candles.length === 0) {
     return (
       <div
-        className="border border-gray-200 dark:border-[#2b3240] dark:bg-[#1e2329] rounded-lg flex items-center justify-center text-gray-400 dark:text-[#848e9c] text-sm"
+        className="border border-gray-200 dark:border-[#44475a] dark:bg-[#282a36] rounded-lg flex items-center justify-center text-gray-400 dark:text-[#6272a4] text-sm"
         style={{ height }}
       >
         차트 데이터 없음 (Worker 실행 후 candle 데이터가 쌓이면 표시됩니다)
@@ -125,7 +125,7 @@ export default function StockChart({ candles, events = [], height = 300 }: Props
   return (
     <div
       ref={containerRef}
-      className="w-full rounded-lg overflow-hidden border border-gray-200 dark:border-[#2b3240]"
+      className="w-full rounded-lg overflow-hidden border border-gray-200 dark:border-[#44475a]"
     />
   );
 }

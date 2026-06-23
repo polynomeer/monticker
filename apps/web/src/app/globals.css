@@ -4,28 +4,28 @@
 
 /* ── Light mode ────────────────────────────────────────────── */
 :root {
-  --bg:          #f5f5f5;
+  --bg:          #f8f8f2;
   --bg-nav:      #ffffff;
   --surface:     #ffffff;
-  --surface-2:   #f0f0f0;
+  --surface-2:   #f0f0f3;
   --border:      #e2e8f0;
-  --text:        #1a202c;
-  --text-muted:  #718096;
-  --accent:      #f0b90b;
+  --text:        #282a36;
+  --text-muted:  #6272a4;
+  --accent:      #bd93f9;
   --up:          #0ecb81;
   --down:        #f6465d;
 }
 
-/* ── Bybit-style dark mode ────────────────────────────────── */
+/* ── Dracula dark mode ──────────────────────────────────────── */
 .dark {
-  --bg:          #0b0e11;
-  --bg-nav:      #1e2329;
-  --surface:     #1e2329;
-  --surface-2:   #252c3a;
-  --border:      #2b3240;
-  --text:        #eaecef;
-  --text-muted:  #848e9c;
-  --accent:      #f0b90b;
+  --bg:          #282a36;
+  --bg-nav:      #21222c;
+  --surface:     #282a36;
+  --surface-2:   #44475a;
+  --border:      #44475a;
+  --text:        #f8f8f2;
+  --text-muted:  #6272a4;
+  --accent:      #bd93f9;
   --up:          #0ecb81;
   --down:        #f6465d;
 }
@@ -37,17 +37,16 @@ body {
   transition: background-color 0.15s, color 0.15s;
 }
 
-/* ── Utility classes for CSS-variable-based theming ────────── */
+/* ── Utility classes ────────────────────────────────────────── */
 @layer utilities {
-  .bg-theme        { background-color: var(--bg); }
-  .bg-theme-nav    { background-color: var(--bg-nav); }
-  .bg-surface      { background-color: var(--surface); }
-  .bg-surface-2    { background-color: var(--surface-2); }
-  .border-theme    { border-color: var(--border); }
-  .text-theme      { color: var(--text); }
-  .text-muted      { color: var(--text-muted); }
-  .text-accent     { color: var(--accent); }
-  .text-up         { color: var(--up); }
-  .text-down       { color: var(--down); }
-  .border-accent   { border-color: var(--accent); }
+  .bg-theme      { background-color: var(--bg); }
+  .bg-theme-nav  { background-color: var(--bg-nav); }
+  .bg-surface    { background-color: var(--surface); }
+  .bg-surface-2  { background-color: var(--surface-2); }
+  .border-theme  { border-color: var(--border); }
+  .text-theme    { color: var(--text); }
+  .text-muted    { color: var(--text-muted); }
+  .text-accent   { color: var(--accent); }
+  .text-up       { color: var(--up); }
+  .text-down     { color: var(--down); }
 }
