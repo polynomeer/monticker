@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
-export type ChartThemeKey = "default" | "classic" | "mono";
+export type ChartThemeKey = "default" | "classic" | "mono" | "korean";
 
 export interface ChartThemeConfig {
   label: string;
@@ -32,6 +32,13 @@ export const CHART_THEMES: Record<ChartThemeKey, ChartThemeConfig> = {
     downColor: "#475569",
     wickUp:    "#e2e8f0",
     wickDown:  "#475569",
+  },
+  korean: {
+    label:     "Korean",
+    upColor:   "#e84142",   // 양봉 — 빨강
+    downColor: "#1763b0",   // 음봉 — 파랑
+    wickUp:    "#e84142",
+    wickDown:  "#1763b0",
   },
 };
 
