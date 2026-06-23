@@ -35,10 +35,10 @@ export const CHART_THEMES: Record<ChartThemeKey, ChartThemeConfig> = {
   },
   korean: {
     label:     "Korean",
-    upColor:   "#e84142",   // 양봉 — 빨강
-    downColor: "#1763b0",   // 음봉 — 파랑
-    wickUp:    "#e84142",
-    wickDown:  "#1763b0",
+    upColor:   "#e84545",   // 양봉 — 빨강
+    downColor: "#4a8fd4",   // 음봉 — 파랑
+    wickUp:    "#e84545",
+    wickDown:  "#4a8fd4",
   },
 };
 
