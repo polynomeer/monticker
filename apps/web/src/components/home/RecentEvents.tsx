@@ -13,8 +13,8 @@ interface RecentEvent {
 }
 
 const EVENT_COLOR: Record<string, string> = {
-  PRICE_SPIKE:          "bg-green-50 dark:bg-[#26a69a]/10 border-green-200 dark:border-[#26a69a]/25 text-green-800 dark:text-[#26a69a]",
-  PRICE_DROP:           "bg-red-50 dark:bg-[#ef5350]/10 border-red-200 dark:border-[#ef5350]/25 text-red-800 dark:text-[#ef5350]",
+  PRICE_SPIKE:          "bg-green-50 dark:bg-[#0ecb81]/10 border-green-200 dark:border-[#0ecb81]/25 text-green-800 dark:text-[#0ecb81]",
+  PRICE_DROP:           "bg-red-50 dark:bg-[#f6465d]/10 border-red-200 dark:border-[#f6465d]/25 text-red-800 dark:text-[#f6465d]",
   VOLUME_SURGE:         "bg-blue-50 dark:bg-[#f1fa8c]/10 border-blue-200 dark:border-[#f1fa8c]/25 text-blue-800 dark:text-[#f1fa8c]",
   DISCLOSURE_PUBLISHED: "bg-purple-50 dark:bg-[#bd93f9]/10 border-purple-200 dark:border-[#bd93f9]/25 text-purple-800 dark:text-[#bd93f9]",
   default:              "bg-gray-50 dark:bg-[#44475a] border-gray-200 dark:border-[#6272a4] text-gray-800 dark:text-[#f8f8f2]",

@@ -25,8 +25,8 @@ function calcMA(data: CandleData[], period: number): (number | null)[] {
 
 // ── 이벤트 타입 색상 ─────────────────────────────────────────
 const EVENT_COLORS: Record<string, string> = {
-  PRICE_SPIKE:          "#26a69a",
-  PRICE_DROP:           "#ef5350",
+  PRICE_SPIKE:          "#0ecb81",
+  PRICE_DROP:           "#f6465d",
   VOLUME_SURGE:         "#f1fa8c",
   DISCLOSURE_PUBLISHED: "#bd93f9",
   default:              "#6272a4",
