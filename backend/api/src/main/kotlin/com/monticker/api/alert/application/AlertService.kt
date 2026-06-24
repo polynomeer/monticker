@@ -46,42 +46,43 @@ class AlertService(
     }
 
     @Transactional(readOnly = true)
-    fun getHistories(userId: Long): List<AlertHistoryResponse> {
-        return jdbc.query(
-            """
-            SELECT ah.id, ah.rule_id, ah.stock_id, ah.triggered_at, ah.message, ah.delivery_status,
-                   s.symbol, s.name as stock_name
+    fun getStats(userId: Long): AlertStatsResponse {
+        val counts = jdbc.queryForMap("""
+            SELECT
+              COUNT(*) FILTER (WHERE ah.delivery_status = 'SENT')    AS sent,
+              COUNT(*) FILTER (WHERE ah.delivery_status = 'FAILED')  AS failed,
+              COUNT(*) FILTER (WHERE ah.delivery_status = 'PENDING') AS pending
             FROM alert_histories ah
-            LEFT JOIN stocks s ON s.id = ah.stock_id
             JOIN alert_rules ar ON ar.id = ah.rule_id
             WHERE ar.user_id = ?
-            ORDER BY ah.triggered_at DESC
-            LIMIT 50
-            """,
-            { rs, _ ->
-                AlertHistoryResponse(
-                    id = rs.getLong("id"),
-                    ruleId = rs.getLong("rule_id"),
-                    stockId = rs.getLong("stock_id"),
-                    symbol = rs.getString("symbol"),
-                    stockName = rs.getString("stock_name"),
-                    triggeredAt = rs.getTimestamp("triggered_at").toInstant(),
-                    message = rs.getString("message"),
-                    deliveryStatus = rs.getString("delivery_status"),
-                )
-            },
-            userId,
-        )
+        """, userId)
+
+        val sent    = (counts["sent"]    as? Number)?.toInt() ?: 0
+        val failed  = (counts["failed"]  as? Number)?.toInt() ?: 0
+        val pending = (counts["pending"] as? Number)?.toInt() ?: 0
+        val total   = sent + failed + pending
+        val rate    = if (sent + failed > 0) sent.toDouble() / (sent + failed) * 100 else 0.0
+
+        val activeRules = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM alert_rules WHERE user_id = ? AND is_active = true",
+            Int::class.java, userId
+        ) ?: 0
+
+        val daily = jdbc.query("""
+            SELECT DATE(ah.triggered_at AT TIME ZONE 'Asia/Seoul') AS d, COUNT(*) AS cnt
+            FROM alert_histories ah
+            JOIN alert_rules ar ON ar.id = ah.rule_id
+            WHERE ar.user_id = ? AND ah.triggered_at > NOW() - INTERVAL '7 days'
+            GROUP BY d ORDER BY d
+        """, { rs, _ -> AlertFireStat(rs.getString("d"), rs.getInt("cnt")) }, userId)
+
+        return AlertStatsResponse(total, sent, failed, rate, activeRules, daily)
     }
 }
 
-data class AlertHistoryResponse(
-    val id: Long,
-    val ruleId: Long,
-    val stockId: Long,
-    val symbol: String?,
-    val stockName: String?,
-    val triggeredAt: java.time.Instant,
-    val message: String,
-    val deliveryStatus: String,
+data class AlertStatsResponse(
+    val totalFired: Int, val totalSent: Int, val totalFailed: Int,
+    val successRate: Double, val activeRules: Int,
+    val recentFires: List<AlertFireStat>
 )
+data class AlertFireStat(val date: String, val count: Int)

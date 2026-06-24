@@ -1,9 +1,9 @@
 package com.monticker.api.alert.api
 
 import com.monticker.api.alert.application.AlertService
-import com.monticker.api.alert.application.AlertHistoryResponse
 import com.monticker.api.alert.domain.AlertRuleType
 import org.springframework.http.ResponseEntity
+import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.*
 import java.time.Instant
 
@@ -28,12 +28,6 @@ class AlertController(private val alertService: AlertService) {
         return ResponseEntity.ok(AlertRuleResponse.from(rule))
     }
 
-    @GetMapping("/histories")
-    fun getHistories(): ResponseEntity<List<AlertHistoryResponse>> {
-        val histories = alertService.getHistories(tempUserId)
-        return ResponseEntity.ok(histories)
-    }
-
     @DeleteMapping("/rules/{ruleId}")
     fun deactivateRule(@PathVariable ruleId: Long): ResponseEntity<Void> {
         return try {
@@ -43,6 +37,10 @@ class AlertController(private val alertService: AlertService) {
             ResponseEntity.notFound().build()
         }
     }
+
+    @GetMapping("/stats")
+    fun getStats(@AuthenticationPrincipal userId: Long) =
+        ResponseEntity.ok(alertService.getStats(userId))
 }
 
 data class CreateAlertRuleRequest(
