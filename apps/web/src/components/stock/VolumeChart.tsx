@@ -94,6 +94,8 @@ export default function VolumeChart({ candles, height = 140 }: Props) {
         series: [{
           type: "bar",
           barMaxWidth: 14,
+          barGap: "0%",
+          barCategoryGap: "0%",
           data: candles.map(c => ({
             value: c.volume ?? 0,
             itemStyle: {
