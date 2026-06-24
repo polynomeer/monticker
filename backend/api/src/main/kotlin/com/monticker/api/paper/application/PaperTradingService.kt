@@ -104,6 +104,95 @@ class PaperTradingService(
         accountRepo.save(account)
         jdbc.update("DELETE FROM paper_trades WHERE user_id = ?", userId)
     }
+    @Transactional(readOnly = true)
+    fun getRiskMetrics(userId: Long): RiskMetricsResponse {
+        val account  = getOrCreateAccount(userId)
+        val trades   = tradeRepo.findTop20ByUserIdOrderByTradedAtDesc(userId)
+        val holdings = buildHoldings(userId)
+
+        if (holdings.isEmpty() && trades.isEmpty()) {
+            return RiskMetricsResponse(
+                sharpeRatio = 0.0, beta = 1.0, maxDrawdown = 0.0,
+                volatility = 0.0, var95 = 0.0,
+                winRate = 0.0, totalTrades = 0, avgReturn = 0.0,
+                dailyReturns = emptyList(), drawdownSeries = emptyList(),
+                hasEnoughData = false,
+                message = "거래 내역이 없습니다. 먼저 모의 투자를 시작해보세요."
+            )
+        }
+
+        val stockIds = (holdings.map { it.stockId } + trades.map { it.stockId }).distinct()
+        if (stockIds.isEmpty()) return RiskMetricsResponse(
+            0.0, 1.0, 0.0, 0.0, 0.0, 0.0, trades.size, 0.0,
+            emptyList(), emptyList(), false, "종목 데이터 없음"
+        )
+
+        val placeholders = stockIds.joinToString(",") { "?" }
+        val candles = jdbc.query(
+            """SELECT stock_id, DATE(candle_time AT TIME ZONE 'Asia/Seoul') AS d, close
+               FROM candles_1d WHERE stock_id IN ($placeholders) ORDER BY d, stock_id""",
+            { rs, _ -> Triple(rs.getLong("stock_id"), rs.getDate("d").toLocalDate(), rs.getBigDecimal("close").toDouble()) },
+            *stockIds.toTypedArray()
+        )
+
+        val priceMap = candles.groupBy { it.second }
+            .mapValues { (_, v) -> v.associate { it.first to it.third } }
+        val dates = priceMap.keys.sorted()
+
+        if (dates.size < 5) {
+            return RiskMetricsResponse(
+                sharpeRatio = 0.0, beta = 1.0, maxDrawdown = 0.0,
+                volatility = 0.0, var95 = 0.0,
+                winRate = 0.0, totalTrades = trades.size, avgReturn = 0.0,
+                dailyReturns = emptyList(), drawdownSeries = emptyList(),
+                hasEnoughData = false,
+                message = "수익률 계산 데이터 부족 (${dates.size}일, 최소 5일 필요)"
+            )
+        }
+
+        // 동일가중 포트폴리오 일별 평균가격
+        val portfolioPrices = dates.map { d -> priceMap[d]?.values?.average() ?: 0.0 }
+        val portfolioReturns = portfolioPrices.zipWithNext { a, b -> if (a == 0.0) 0.0 else (b - a) / a }
+
+        // 포트폴리오 가치 곡선
+        val initial = account.cash.toDouble() + holdings.sumOf { it.value.toDouble() }.coerceAtLeast(account.cash.toDouble())
+        var equity  = initial
+        val equityCurve = mutableListOf(initial)
+        portfolioReturns.forEach { r -> equity *= (1 + r); equityCurve.add(equity) }
+
+        // 거래 승률
+        val sellTrades = trades.filter { it.side == "SELL" }
+        val wins = sellTrades.count { t ->
+            val avgBuy = runCatching {
+                jdbc.queryForObject(
+                    "SELECT AVG(price) FROM paper_trades WHERE user_id=? AND stock_id=? AND side='BUY'",
+                    BigDecimal::class.java, userId, t.stockId
+                )
+            }.getOrNull() ?: t.price
+            t.price > avgBuy
+        }
+        val winRate = if (sellTrades.isNotEmpty()) wins.toDouble() / sellTrades.size * 100 else 0.0
+
+        val dailyReturnsList = dates.drop(1).zip(portfolioReturns) { d, r -> DailyReturn(d.toString(), r * 100) }
+        val ddSeries = dates.zip(RiskCalculator.drawdownSeries(equityCurve)) { d, dd -> DrawdownPoint(d.toString(), dd) }
+
+        return RiskMetricsResponse(
+            sharpeRatio     = RiskCalculator.sharpe(portfolioReturns),
+            beta            = RiskCalculator.beta(portfolioReturns, portfolioReturns),
+            maxDrawdown     = RiskCalculator.maxDrawdown(equityCurve),
+            volatility      = RiskCalculator.annualizedVolatility(portfolioReturns),
+            var95           = RiskCalculator.var95(portfolioReturns),
+            winRate         = winRate,
+            totalTrades     = trades.size,
+            avgReturn       = if (portfolioReturns.isNotEmpty()) portfolioReturns.average() * 100 else 0.0,
+            dailyReturns    = dailyReturnsList,
+            drawdownSeries  = ddSeries,
+            hasEnoughData   = true,
+            message         = null,
+        )
+    }
+
+
 }
 
 data class PortfolioResponse(val cash: BigDecimal, val totalValue: BigDecimal, val totalPnl: BigDecimal, val totalPnlRate: Double, val holdings: List<HoldingResponse>)
