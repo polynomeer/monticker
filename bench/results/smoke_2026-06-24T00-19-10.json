@@ -1,0 +1,377 @@
+{
+  "metrics": {
+    "iterations": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 113,
+        "rate": 1.8817723404511846
+      }
+    },
+    "screener_duration": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 8.522079646017696,
+        "min": 3.068,
+        "med": 7.635,
+        "max": 32.138,
+        "p(90)": 12.817800000000002,
+        "p(95)": 14.535199999999998
+      },
+      "thresholds": {
+        "p(95)<500": {
+          "ok": true
+        }
+      }
+    },
+    "stocks_duration": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "max": 91.464,
+        "p(90)": 10.7844,
+        "p(95)": 11.9598,
+        "avg": 7.772504424778762,
+        "min": 2.719,
+        "med": 6.369
+      },
+      "thresholds": {
+        "p(95)<300": {
+          "ok": true
+        }
+      }
+    },
+    "recent_events_duration": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "med": 6.406,
+        "max": 22.868,
+        "p(90)": 10.9276,
+        "p(95)": 12.001799999999998,
+        "avg": 7.267460176991152,
+        "min": 3.584
+      }
+    },
+    "http_req_receiving": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 0.3705907079646022,
+        "min": 0.021,
+        "med": 0.3295,
+        "max": 3.41,
+        "p(90)": 0.5608000000000001,
+        "p(95)": 0.6767499999999997
+      }
+    },
+    "checks": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 904,
+        "fails": 0
+      }
+    },
+    "events_duration": {
+      "values": {
+        "avg": 6.438256637168147,
+        "min": 2.878,
+        "med": 5.871,
+        "max": 33.757,
+        "p(90)": 9.771200000000002,
+        "p(95)": 10.785199999999998
+      },
+      "type": "trend",
+      "contains": "time"
+    },
+    "http_req_duration{expected_response:true}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "med": 6.5745000000000005,
+        "max": 91.464,
+        "p(90)": 10.9641,
+        "p(95)": 12.662349999999998,
+        "avg": 7.500075221238937,
+        "min": 2.719
+      }
+    },
+    "http_req_waiting": {
+      "contains": "time",
+      "values": {
+        "avg": 7.085834070796456,
+        "min": 2.634,
+        "med": 6.1645,
+        "max": 90.643,
+        "p(90)": 10.5173,
+        "p(95)": 11.938999999999998
+      },
+      "type": "trend"
+    },
+    "http_req_failed": {
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 452
+      },
+      "thresholds": {
+        "rate<0.01": {
+          "ok": true
+        }
+      },
+      "type": "rate"
+    },
+    "http_req_tls_handshaking": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 0,
+        "min": 0,
+        "med": 0,
+        "max": 0,
+        "p(90)": 0,
+        "p(95)": 0
+      }
+    },
+    "http_req_sending": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(95)": 0.04644999999999998,
+        "avg": 0.04365044247787605,
+        "min": 0.005,
+        "med": 0.0225,
+        "max": 2.572,
+        "p(90)": 0.035
+      }
+    },
+    "data_sent": {
+      "values": {
+        "count": 53519,
+        "rate": 891.2440167133358
+      },
+      "type": "counter",
+      "contains": "data"
+    },
+    "http_reqs": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 452,
+        "rate": 7.527089361804738
+      }
+    },
+    "group_duration": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "max": 92.832209,
+        "p(90)": 11.5410289,
+        "p(95)": 13.222737500000001,
+        "avg": 7.821274511061944,
+        "min": 2.763709,
+        "med": 6.9414165
+      }
+    },
+    "success_rate": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 113,
+        "fails": 0
+      }
+    },
+    "data_received": {
+      "values": {
+        "count": 310967,
+        "rate": 5178.487605248526
+      },
+      "type": "counter",
+      "contains": "data"
+    },
+    "vus": {
+      "values": {
+        "min": 1,
+        "max": 3,
+        "value": 1
+      },
+      "type": "gauge",
+      "contains": "default"
+    },
+    "http_req_blocked": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(95)": 0.015,
+        "avg": 0.015088495575221182,
+        "min": 0.001,
+        "med": 0.006,
+        "max": 0.919,
+        "p(90)": 0.012
+      }
+    },
+    "http_req_duration": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(90)": 10.9641,
+        "p(95)": 12.662349999999998,
+        "avg": 7.500075221238937,
+        "min": 2.719,
+        "med": 6.5745000000000005,
+        "max": 91.464
+      }
+    },
+    "http_req_connecting": {
+      "contains": "time",
+      "values": {
+        "avg": 0.00463495575221239,
+        "min": 0,
+        "med": 0,
+        "max": 0.532,
+        "p(90)": 0,
+        "p(95)": 0
+      },
+      "type": "trend"
+    },
+    "iteration_duration": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "max": 1086.454834,
+        "p(90)": 944.7133912,
+        "p(95)": 948.1668748,
+        "avg": 936.3247507610621,
+        "min": 918.363417,
+        "med": 933.999167
+      }
+    },
+    "vus_max": {
+      "type": "gauge",
+      "contains": "default",
+      "values": {
+        "max": 3,
+        "value": 3,
+        "min": 3
+      }
+    }
+  },
+  "root_group": {
+    "path": "",
+    "id": "d41d8cd98f00b204e9800998ecf8427e",
+    "groups": [
+      {
+        "name": "종목 검색",
+        "path": "::종목 검색",
+        "id": "063449de3605a397006dc9f5c3164f09",
+        "groups": [],
+        "checks": [
+            {
+              "name": "status 200",
+              "path": "::종목 검색::status 200",
+              "id": "40404e4f4df03a15fc0bc7f1db5a452d",
+              "passes": 113,
+              "fails": 0
+            },
+            {
+              "name": "응답시간 < 300ms",
+              "path": "::종목 검색::응답시간 < 300ms",
+              "id": "8c215dbdb13529128a0d7f43d70bff39",
+              "passes": 113,
+              "fails": 0
+            }
+          ]
+      },
+      {
+        "checks": [
+          {
+            "id": "007a26726014f3758d1cfd316af4b5f6",
+            "passes": 113,
+            "fails": 0,
+            "name": "status 200",
+            "path": "::스크리너::status 200"
+          },
+          {
+            "passes": 113,
+            "fails": 0,
+            "name": "응답시간 < 200ms",
+            "path": "::스크리너::응답시간 < 200ms",
+            "id": "a1bb913ff4dc89e2fa0b5f767c38765d"
+          },
+          {
+            "id": "beeddd06eda8505f108b7422a7b0a3a2",
+            "passes": 113,
+            "fails": 0,
+            "name": "items 존재",
+            "path": "::스크리너::items 존재"
+          }
+        ],
+        "name": "스크리너",
+        "path": "::스크리너",
+        "id": "3609bb864b2c6f33bef8dfec740d57ae",
+        "groups": []
+      },
+      {
+        "name": "이벤트 타임라인",
+        "path": "::이벤트 타임라인",
+        "id": "c7d4cf82c4215117259fe99c86dde785",
+        "groups": [],
+        "checks": [
+            {
+              "id": "3414e97daa4f36943f2f80f6081805d2",
+              "passes": 113,
+              "fails": 0,
+              "name": "status 200",
+              "path": "::이벤트 타임라인::status 200"
+            },
+            {
+              "id": "db05e9fceb2431172d882869ee19a46f",
+              "passes": 113,
+              "fails": 0,
+              "name": "응답시간 < 200ms",
+              "path": "::이벤트 타임라인::응답시간 < 200ms"
+            }
+          ]
+      },
+      {
+        "name": "최근 이벤트 (홈)",
+        "path": "::최근 이벤트 (홈)",
+        "id": "94421ee326fb31d1f0054db44b15762f",
+        "groups": [],
+        "checks": [
+            {
+              "name": "status 200",
+              "path": "::최근 이벤트 (홈)::status 200",
+              "id": "21db16d61e91dc378f6ef276ba42b3c5",
+              "passes": 113,
+              "fails": 0
+            }
+          ]
+      }
+    ],
+    "checks": [],
+    "name": ""
+  },
+  "options": {
+    "summaryTrendStats": [
+      "avg",
+      "min",
+      "med",
+      "max",
+      "p(90)",
+      "p(95)"
+    ],
+    "summaryTimeUnit": "",
+    "noColor": false
+  },
+  "state": {
+    "isStdOutTTY": false,
+    "isStdErrTTY": false,
+    "testRunDurationMs": 60049.772
+  }
+}

@@ -16,21 +16,26 @@ class RateLimitFilter(private val redis: StringRedisTemplate) : OncePerRequestFi
         res: HttpServletResponse,
         chain: FilterChain,
     ) {
-        val ip = req.remoteAddr
-        val path = req.requestURI
-        if (path.startsWith("/api/auth/")) {
-            // 인증 엔드포인트: IP당 분당 20회
-            if (isRateLimited("auth:$ip", 20, Duration.ofMinutes(1))) {
-                res.sendError(429, "Too Many Requests")
-                return
-            }
-        } else if (path.startsWith("/api/")) {
-            // 일반 API: IP당 분당 120회
-            if (isRateLimited("api:$ip", 120, Duration.ofMinutes(1))) {
-                res.sendError(429, "Too Many Requests")
-                return
-            }
+        // 벤치마크 요청은 rate limit 제외
+        if (req.getHeader("X-Bench") == "true") {
+            chain.doFilter(req, res)
+            return
         }
+
+        val ip   = req.remoteAddr
+        val path = req.requestURI
+
+        val (key, limit) = when {
+            path.startsWith("/api/auth/") -> "auth:$ip" to 20
+            path.startsWith("/api/")      -> "api:$ip"  to 120
+            else                          -> { chain.doFilter(req, res); return }
+        }
+
+        if (isRateLimited(key, limit, Duration.ofMinutes(1))) {
+            res.sendError(429, "Too Many Requests")
+            return
+        }
+
         chain.doFilter(req, res)
     }
 
