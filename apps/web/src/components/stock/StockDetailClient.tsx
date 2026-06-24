@@ -7,6 +7,7 @@ import EventTimeline from "./EventTimeline";
 import NewsPanel from "./NewsPanel";
 import AlertPanel from "./AlertPanel";
 import SummaryPanel from "./SummaryPanel";
+import VolumeChart from "./VolumeChart";
 import { useStockChart } from "@/hooks/useStockChart";
 
 interface Props {
@@ -56,6 +57,11 @@ export default function StockDetailClient({ stockId, symbol }: Props) {
           <StockChart candles={candles} events={events} height={300} />
         )}
       </div>
+
+      {/* Volume Bar Chart */}
+      {!loading && candles.length > 0 && (
+        <VolumeChart candles={candles} height={140} />
+      )}
 
       {/* Event Timeline */}
       <EventTimeline stockId={stockId} />
