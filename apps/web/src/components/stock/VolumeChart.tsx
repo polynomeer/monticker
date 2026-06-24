@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useTheme } from "next-themes";
+import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
 import type { CandleData } from "./chart/types";
 
 let echartsPromise: Promise<typeof import("echarts")> | null = null;
@@ -25,6 +26,8 @@ export default function VolumeChart({ candles, height = 140 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef     = useRef<import("echarts").ECharts | null>(null);
   const { resolvedTheme } = useTheme();
+  const { chartTheme } = useThemeStore();
+  const ct = CHART_THEMES[chartTheme] ?? CHART_THEMES.default;
 
   useEffect(() => {
     if (!containerRef.current || candles.length === 0) return;
@@ -38,8 +41,8 @@ export default function VolumeChart({ candles, height = 140 }: Props) {
       const bg      = isDark ? "#1e1f29" : "#ffffff";
       const grid    = isDark ? "#44475a" : "#e5e7eb";
       const text    = isDark ? "#6272a4" : "#6b7280";
-      const upColor = isDark ? "#0ecb81cc" : "#16a34acc";
-      const dnColor = isDark ? "#f6465dcc" : "#dc2626cc";
+      const upColor = `${ct.upColor}cc`;
+      const dnColor = `${ct.downColor}cc`;
 
       const chart = echarts.init(containerRef.current, undefined, {
         renderer: "canvas",
@@ -126,7 +129,7 @@ export default function VolumeChart({ candles, height = 140 }: Props) {
         chartRef.current = null;
       }
     };
-  }, [candles, height, resolvedTheme]);
+  }, [candles, height, resolvedTheme, chartTheme]);
 
   if (candles.length === 0) return null;
 
