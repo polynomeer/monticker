@@ -1,6 +1,7 @@
 package com.monticker.worker.push
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.net.URI
@@ -25,13 +26,26 @@ data class PushResult(
 )
 
 @Component
-class ExpoPushSender {
+class ExpoPushSender(
+    private val cbRegistry: CircuitBreakerRegistry,
+) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
     private val mapper = ObjectMapper()
     private val EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 
     fun send(messages: List<PushMessage>): List<PushResult> {
+        if (messages.isEmpty()) return emptyList()
+        val cb = cbRegistry.circuitBreaker("expoPush")
+        return try {
+            cb.executeCallable { sendInternal(messages) }
+        } catch (e: io.github.resilience4j.circuitbreaker.CallNotPermittedException) {
+            log.warn("[CircuitBreaker:expoPush] OPEN — Push 발송 건너뜀 ({}건)", messages.size)
+            emptyList()
+        }
+    }
+
+    private fun sendInternal(messages: List<PushMessage>): List<PushResult> {
         if (messages.isEmpty()) return emptyList()
 
         return try {

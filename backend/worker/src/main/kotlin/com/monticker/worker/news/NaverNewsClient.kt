@@ -1,6 +1,7 @@
 package com.monticker.worker.news
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
@@ -25,6 +26,7 @@ data class NaverNewsItem(
 class NaverNewsClient(
     @Value("\${naver.news.client-id:}") private val clientId: String,
     @Value("\${naver.news.client-secret:}") private val clientSecret: String,
+    private val cbRegistry: CircuitBreakerRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val http = HttpClient.newHttpClient()
@@ -34,6 +36,16 @@ class NaverNewsClient(
     val isConfigured: Boolean get() = clientId.isNotBlank() && clientSecret.isNotBlank()
 
     fun search(query: String, display: Int = 10): List<NaverNewsItem> {
+        val cb = cbRegistry.circuitBreaker("naverNews")
+        return try {
+            cb.executeCallable { searchInternal(query, display) }
+        } catch (e: io.github.resilience4j.circuitbreaker.CallNotPermittedException) {
+            log.warn("[CircuitBreaker:naverNews] OPEN — 뉴스 검색 차단")
+            emptyList()
+        }
+    }
+
+    private fun searchInternal(query: String, display: Int = 10): List<NaverNewsItem> {
         val encoded = URLEncoder.encode(query, Charsets.UTF_8)
         val request = HttpRequest.newBuilder()
             .uri(URI.create("https://openapi.naver.com/v1/search/news.json?query=$encoded&display=$display&sort=date"))

@@ -1,6 +1,7 @@
 package com.monticker.worker.kis
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
@@ -24,6 +25,7 @@ data class KisPrice(
 class KisClient(
     @Value("\${kis.app-key:}") private val appKey: String,
     @Value("\${kis.app-secret:}") private val appSecret: String,
+    private val cbRegistry: CircuitBreakerRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
@@ -74,6 +76,13 @@ class KisClient(
     }
 
     fun fetchPrice(symbol: String): KisPrice? {
+        val cb = cbRegistry.circuitBreaker("kisApi")
+        return cb.executeCallable {
+            fetchPriceInternal(symbol)
+        }
+    }
+
+    private fun fetchPriceInternal(symbol: String): KisPrice? {
         val token = getAccessToken() ?: return null
         return try {
             val req = HttpRequest.newBuilder()
