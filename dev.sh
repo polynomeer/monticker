@@ -27,7 +27,7 @@ if ! docker info > /dev/null 2>&1; then
       break
     fi
     if [ "$i" -eq 60 ]; then
-      echo "  Docker did not start in time. Please start Docker Desktop manually."
+      echo "  Docker did not start in time."
       exit 1
     fi
   done
@@ -40,8 +40,8 @@ lsof -ti :8080 | xargs kill -9 2>/dev/null || true
 sleep 1
 
 # ── 1. infra ──────────────────────────────────────────────────
-echo "Starting infra (postgres + redis)..."
-docker compose up -d postgres redis
+echo "Starting infra (postgres + redis + jaeger)..."
+docker compose up -d postgres redis jaeger
 
 echo "Waiting for postgres to be healthy..."
 until docker compose exec postgres pg_isready -U monticker -q 2>/dev/null; do
@@ -52,7 +52,8 @@ echo "  postgres OK"
 # ── 2. api ────────────────────────────────────────────────────
 echo "Starting API (port 8080)..."
 cd "$ROOT/backend/api"
-./gradlew bootRun --console=plain -q > "$ROOT/logs/api.log" 2>&1 &
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+  ./gradlew bootRun --console=plain -q > "$ROOT/logs/api.log" 2>&1 &
 API_PID=$!
 
 echo "  Waiting for API..."
@@ -65,7 +66,8 @@ echo "  API OK  (log: logs/api.log)"
 # ── 3. worker ─────────────────────────────────────────────────
 echo "Starting Worker..."
 cd "$ROOT/backend/worker"
-./gradlew bootRun --console=plain -q > "$ROOT/logs/worker.log" 2>&1 &
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+  ./gradlew bootRun --console=plain -q > "$ROOT/logs/worker.log" 2>&1 &
 WORKER_PID=$!
 sleep 4
 echo "  Worker OK  (log: logs/worker.log)"
@@ -83,7 +85,6 @@ for _ in $(seq 1 30); do
   if /usr/bin/curl -sf http://localhost:3000 > /dev/null 2>&1; then
     break
   fi
-  # bail early if the process died
   if ! kill -0 "$WEB_PID" 2>/dev/null; then
     echo "  Web process died. Check logs/web.log"
     cat "$ROOT/logs/web.log" | tail -20
@@ -94,11 +95,12 @@ echo "  Web OK  (log: logs/web.log)"
 
 # ── ready ─────────────────────────────────────────────────────
 echo ""
-echo "=============================="
+echo "========================================"
 echo "  monticker is running"
-echo "  Web  → http://localhost:3000"
-echo "  API  → http://localhost:8080"
-echo "=============================="
+echo "  Web    → http://localhost:3000"
+echo "  API    → http://localhost:8080"
+echo "  Jaeger → http://localhost:16686"
+echo "========================================"
 echo "Press Ctrl-C to stop all."
 
 wait

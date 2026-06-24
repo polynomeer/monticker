@@ -46,3 +46,16 @@ spring:
 scheduling:
   pool:
     size: 4
+
+# ── OpenTelemetry ────────────────────────────────────────────
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+
+otel:
+  service:
+    name: monticker-worker

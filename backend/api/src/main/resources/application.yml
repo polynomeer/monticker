@@ -44,3 +44,19 @@ jwt:
 
 anthropic:
   api-key: ${ANTHROPIC_API_KEY:}
+
+# ── OpenTelemetry ────────────────────────────────────────────
+management:
+  tracing:
+    sampling:
+      probability: 1.0   # 개발환경: 100% 샘플링
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+
+otel:
+  service:
+    name: monticker-api
+  instrumentation:
+    logback-appender:
+      enabled: true
