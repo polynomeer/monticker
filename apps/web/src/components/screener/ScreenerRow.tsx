@@ -6,63 +6,65 @@ import type { ScreenerItem } from "@/hooks/useScreener";
 
 interface Props { item: ScreenerItem; }
 
+/**
+ * div 기반 행 — TanStack Virtual의 absolute 포지셔닝과 호환.
+ * 헤더의 HEADERS 배열과 width 클래스를 동일하게 맞춰야 정렬됨.
+ */
 export default function ScreenerRow({ item }: Props) {
   const isKR = ["KOSPI","KOSDAQ"].includes(item.market);
 
   return (
-    <tr className="border-b border-[#44475a]/40 hover:bg-[#44475a]/20 transition-colors">
-      {/* 순위 */}
-      <td className="py-3 pl-4 pr-2 text-center">
-        <span className="text-sm text-[#6272a4] tabular-nums w-6 inline-block text-right">
-          {item.rank}
-        </span>
-      </td>
+    <div className="flex items-center h-[52px] px-2 border-b border-[#44475a]/30
+                    hover:bg-[#44475a]/10 transition-colors">
+
+      {/* # 순위 */}
+      <div className="w-10 px-2 shrink-0">
+        <span className="text-xs text-[#6272a4] tabular-nums">{item.rank}</span>
+      </div>
 
       {/* 종목명 */}
-      <td className="py-3 px-3">
+      <div className="flex-1 min-w-[160px] px-2">
         <Link href={`/stocks/${item.symbol}`} className="flex items-center gap-2 hover:opacity-80">
-          <div className="w-8 h-8 rounded-full bg-[#44475a] flex items-center justify-center shrink-0">
-            <span className="text-[10px] font-bold text-[#f8f8f2]">
-              {item.name.slice(0, 2)}
-            </span>
+          <div className="w-7 h-7 rounded-full bg-[#44475a] flex items-center justify-center shrink-0">
+            <span className="text-[9px] font-bold text-[#f8f8f2]">{item.name.slice(0, 2)}</span>
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-medium dark:text-[#f8f8f2] truncate max-w-[140px]">{item.name}</p>
+            <p className="text-sm font-medium dark:text-[#f8f8f2] truncate">{item.name}</p>
             <p className="text-[10px] text-[#6272a4]">{item.symbol} · {item.market}</p>
           </div>
         </Link>
-      </td>
+      </div>
 
       {/* 현재가 */}
-      <td className="py-3 px-3 text-right">
+      <div className="w-28 px-2 text-right shrink-0">
         <span className="text-sm font-semibold tabular-nums dark:text-[#f8f8f2]">
           {isKR ? "₩" : "$"}{item.price.toLocaleString("ko-KR")}
         </span>
-      </td>
+      </div>
 
       {/* 등락률 */}
-      <td className="py-3 px-3 text-right">
+      <div className="w-28 px-2 text-right shrink-0">
         <ChangeRateBadge rate={item.changeRate} amount={item.changeAmount} />
-      </td>
+      </div>
 
       {/* 거래대금 */}
-      <td className="py-3 px-3 text-right">
+      <div className="w-24 px-2 text-right shrink-0">
         <AmountLabel value={item.amount} />
-      </td>
+      </div>
 
-      {/* 매수비율 */}
-      <td className="py-3 px-4 min-w-[120px]">
+      {/* 매수/매도 비율 */}
+      <div className="w-32 px-2 shrink-0">
         <BuySellBar buy={item.buyRatio} sell={item.sellRatio} />
-      </td>
+      </div>
 
       {/* 산업 */}
-      <td className="py-3 px-3">
+      <div className="w-24 px-2 shrink-0">
         {item.sector && (
-          <span className="text-[10px] px-2 py-1 rounded-full bg-[#44475a] text-[#6272a4] whitespace-nowrap">
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#44475a] text-[#6272a4] whitespace-nowrap">
             {item.sector}
           </span>
         )}
-      </td>
-    </tr>
+      </div>
+    </div>
   );
 }
