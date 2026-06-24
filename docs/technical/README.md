@@ -10,6 +10,7 @@
 | [timescaledb-candle-pipeline.md](./timescaledb-candle-pipeline.md) | 캔들 데이터 파이프라인 | TimescaleDB, LATERAL JOIN, CAgg |
 | [chart-adapter-pattern.md](./chart-adapter-pattern.md) | 차트 라이브러리 어댑터 패턴 | TypeScript, Apache ECharts, Next.js |
 | [realtime-price-architecture.md](./realtime-price-architecture.md) | 실시간 가격 아키텍처 | STOMP, WebSocket, React |
+| [worker-performance.md](./worker-performance.md) | Worker 성능 분석 및 병목 해결 | Kotlin, HikariCP, Thread Pool |
 | [benchmark-debugging.md](./benchmark-debugging.md) | API 벤치마크 디버깅 포스트모템 | k6, Spring Security, PostgreSQL |
 
 ## 관련 문서
