@@ -29,3 +29,20 @@ logging:
 
 anthropic:
   api-key: ${ANTHROPIC_API_KEY:}
+
+# ── HikariCP 커넥션 풀 ────────────────────────────────────────
+# 기본값(10)은 종목 수 확장 시 부족. price_ticks 쓰기 + 이벤트 감지 동시 처리 고려.
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 20          # 동시 DB 쓰기 최대치
+      minimum-idle: 5
+      connection-timeout: 3000       # 3초 대기 후 예외 — 무한 블로킹 방지
+      idle-timeout: 600000
+
+# ── 스케줄러 스레드 풀 ────────────────────────────────────────
+# fixedDelay 스케줄러는 기본 단일 스레드.
+# 여러 @Scheduled 메서드(collect, flushCandles, newsCollect 등)가 독립 실행 가능하도록.
+scheduling:
+  pool:
+    size: 4

@@ -6,6 +6,7 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
 import java.sql.Timestamp
 import java.time.Instant
+import java.util.concurrent.Executors
 
 enum class DetectedEventType {
     PRICE_SPIKE, PRICE_DROP, VOLUME_SURGE
@@ -28,6 +29,8 @@ class StockEventWriter(
     private val pushSender: com.monticker.worker.push.ExpoPushSender,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+    // Push 알림은 hot path 밖에서 처리 — 별도 스레드 풀로 비동기 처리
+    private val pushExecutor = Executors.newCachedThreadPool()
 
     fun write(event: DetectedEvent): Boolean {
         // Check duplicate: same stock_id + event_type within same minute
@@ -70,9 +73,16 @@ class StockEventWriter(
     }
 
     private fun sendEventPush(event: DetectedEvent) {
-        try {
-            // 이 stock_id를 관심종목으로 가진 user들의 device token 조회
-            val tokens = jdbcTemplate.queryForList(
+        // hot path 탈출 — collect() 스레드를 블로킹하지 않음
+        pushExecutor.submit {
+            runCatching { sendEventPushAsync(event) }
+                .onFailure { log.debug("Event push failed: {}", it.message) }
+        }
+    }
+
+    private fun sendEventPushAsync(event: DetectedEvent) {
+        // 이 stock_id를 관심종목으로 가진 user들의 device token 조회
+        val tokens = jdbcTemplate.queryForList(
                 """
                 SELECT dt.token
                 FROM device_tokens dt
@@ -101,8 +111,5 @@ class StockEventWriter(
             }
             pushSender.send(messages)
             log.info("Event push sent: {} tokens for stockId={}", tokens.size, event.stockId)
-        } catch (e: Exception) {
-            log.debug("Event push failed: {}", e.message)
-        }
     }
 }
