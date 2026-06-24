@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
 import ThemeProvider from "@/components/ThemeProvider";
+import QueryProvider from "@/components/QueryProvider";
 import ThemeToggle from "@/components/ThemeToggle";
 import AuthNav from "@/components/AuthNav";
 import SearchAutocomplete from "@/components/stock/SearchAutocomplete";
@@ -15,6 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ko" suppressHydrationWarning>
       <body className="min-h-screen bg-white dark:bg-[#282a36] text-gray-900 dark:text-[#f8f8f2]">
+        <QueryProvider>
         <ThemeProvider>
           <nav className="border-b border-gray-200 dark:border-[#44475a] px-6 py-3 flex items-center gap-4 text-sm bg-white dark:bg-[#21222c]">
             <Link href="/" className="font-bold text-blue-600 dark:text-[#bd93f9]">monticker</Link>
@@ -30,6 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </nav>
           <main>{children}</main>
         </ThemeProvider>
+        </QueryProvider>
       </body>
     </html>
   );
