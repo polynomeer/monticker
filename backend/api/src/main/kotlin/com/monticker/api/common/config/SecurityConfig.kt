@@ -35,6 +35,7 @@ class SecurityConfig(private val jwtTokenProvider: JwtTokenProvider) {
                     .requestMatchers(HttpMethod.GET, "/api/stocks/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/events/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/screener/**").permitAll()
+                    .requestMatchers("/api/backtest/**").permitAll()
                     .requestMatchers("/actuator/**").permitAll()
                     .requestMatchers("/ws/**").permitAll()
                     .anyRequest().authenticated()

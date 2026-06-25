@@ -53,7 +53,7 @@ export default function BacktestPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(submitted),
       });
-      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "백테스트 실패"); }
+      if (!res.ok) { const text = await res.text(); let msg = "백테스트 실패"; try { msg = JSON.parse(text).error ?? msg; } catch {} throw new Error(msg + " (" + res.status + ")"); }
       return res.json();
     },
     enabled: !!submitted,
