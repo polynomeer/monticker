@@ -26,14 +26,13 @@ export default async function StockDetailPage({ params }: Props) {
   return (
     <div className="max-w-4xl mx-auto p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">{stock?.name ?? symbol}</h1>
-        <p className="text-gray-500 text-sm">{symbol}</p>
+        <h1 className="text-2xl font-bold dark:text-[#f8f8f2]">{stock?.name ?? symbol}</h1>
+        <p className="text-gray-500 dark:text-[#6272a4] text-sm">{symbol}</p>
       </div>
-
       {stock ? (
-        <StockDetailClient stockId={stock.id} symbol={symbol} />
+        <StockDetailClient stockId={stock.id} symbol={symbol} stockName={stock.name} />
       ) : (
-        <p className="text-gray-400">종목을 찾을 수 없습니다: {symbol}</p>
+        <p className="text-gray-400 dark:text-[#6272a4]">종목을 찾을 수 없습니다: {symbol}</p>
       )}
     </div>
   );
