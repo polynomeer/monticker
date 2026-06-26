@@ -52,3 +52,4 @@ monticker의 핵심 기술 구현에 대한 심층 기술 문서입니다.
 - [Architecture Overview](../architecture.md) — 전체 시스템 아키텍처
 - [Data Model](../data-model.md) — DB 스키마
 - [ADRs](../decisions/) — 아키텍처 결정 기록
+| [market-hours-vwap.md](./market-hours-vwap.md) | 장 시간 처리와 VWAP | MarketSchedule, VWAP, 지연 측정 |
