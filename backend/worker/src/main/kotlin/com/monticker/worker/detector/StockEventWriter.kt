@@ -25,10 +25,10 @@ data class DetectedEvent(
 @Component
 class StockEventWriter(
     private val jdbcTemplate: JdbcTemplate,
-    private val objectMapper: ObjectMapper,
     private val pushSender: com.monticker.worker.push.ExpoPushSender,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+    private val objectMapper = ObjectMapper()
     // Push 알림은 hot path 밖에서 처리 — 별도 스레드 풀로 비동기 처리
     private val pushExecutor = Executors.newCachedThreadPool()
 
