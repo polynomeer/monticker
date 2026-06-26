@@ -1,71 +1,100 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { stockKeys } from "@/hooks/useStockChart";
+import { useEffect, useState } from "react";
+import { Badge } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 interface StockEvent {
-  id: number; stockId: number; eventType: string;
-  title: string; description: string | null;
-  eventTime: string; importanceScore: number;
+  id: number;
+  stockId: number;
+  eventType: string;
+  title: string;
+  description: string | null;
+  eventTime: string;
+  importanceScore: number;
 }
 
-const EVENT_COLORS: Record<string, string> = {
-  PRICE_SPIKE:          "bg-green-100 dark:bg-[#0ecb81]/40 dark:text-[#f8f8f2] dark:border-transparent",
-  PRICE_DROP:           "bg-red-100 dark:bg-[#f6465d]/40 dark:text-[#f8f8f2] dark:border-transparent",
-  VOLUME_SURGE:         "bg-blue-100 dark:bg-[#f1fa8c]/40 dark:text-[#f8f8f2] dark:border-transparent",
-  NEWS_PUBLISHED:       "bg-yellow-100 dark:bg-[#8be9fd]/40 dark:text-[#f8f8f2] dark:border-transparent",
-  DISCLOSURE_PUBLISHED: "bg-purple-100 dark:bg-[#bd93f9]/40 dark:text-[#f8f8f2] dark:border-transparent",
-  SECTOR_MOVE:          "bg-gray-100 dark:bg-[#44475a] text-gray-800 dark:text-[#f8f8f2] border-gray-200 dark:border-[#6272a4]",
+type BadgeVariant = "up" | "down" | "neutral" | "info" | "purple";
+
+const EVENT_BADGE: Record<string, BadgeVariant> = {
+  PRICE_SPIKE:          "up",
+  PRICE_DROP:           "down",
+  VOLUME_SURGE:         "info",
+  NEWS_PUBLISHED:       "neutral",
+  DISCLOSURE_PUBLISHED: "purple",
+  SECTOR_MOVE:          "neutral",
 };
 
-interface Props { stockId: number; }
+interface Props {
+  stockId: number;
+}
 
 export default function EventTimeline({ stockId }: Props) {
-  // stockKeys.events(stockId) === useStockChart의 events 키와 동일
-  // → TanStack Query가 두 컴포넌트의 요청을 하나로 병합 (Single Flight)
-  const { data: events = [], isLoading } = useQuery<StockEvent[]>({
-    queryKey:        stockKeys.events(stockId),
-    queryFn:         async () => {
-      const res = await fetch(`/api/stocks/${stockId}/events`);
-      return res.ok ? res.json() : [];
-    },
-    refetchInterval: 10_000,
-    staleTime:       10_000,
-  });
+  const [events, setEvents] = useState<StockEvent[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  if (isLoading) return (
-    <div className="border border-gray-200 dark:border-[#44475a] dark:bg-[#282a36] rounded-lg p-4">
-      <div className="h-4 bg-gray-100 dark:bg-[#44475a] rounded w-32 mb-3 animate-pulse" />
-      {[1,2,3].map(i => <div key={i} className="h-12 bg-gray-50 dark:bg-[#44475a] rounded mb-2 animate-pulse" />)}
-    </div>
-  );
+  const fetchEvents = async () => {
+    const res = await fetch(`/api/stocks/${stockId}/events`);
+    if (res.ok) setEvents(await res.json());
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchEvents();
+    const interval = setInterval(fetchEvents, 5000);
+    return () => clearInterval(interval);
+    // fetchEvents is stable per stockId — eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stockId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="border border-gray-200 dark:border-[#44475a] dark:bg-[#282a36] rounded-lg p-4">
-      <h3 className="font-semibold mb-3 dark:text-[#f8f8f2]">이벤트 타임라인</h3>
-      {events.length === 0 ? (
-        <p className="text-gray-400 dark:text-[#6272a4] text-sm text-center py-6">
-          최근 24시간 내 이벤트가 없습니다.
-        </p>
-      ) : (
+    <div className="rounded-xl border border-[#44475a] bg-[#21222c] p-4">
+      <h3 className="font-semibold text-[#f8f8f2] mb-3">이벤트 타임라인</h3>
+
+      {loading && (
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-14 w-full rounded-lg" />
+          ))}
+        </div>
+      )}
+
+      {!loading && events.length === 0 && (
+        <EmptyState
+          icon="📅"
+          title="이벤트 없음"
+          description="최근 24시간 내 이벤트가 없습니다."
+        />
+      )}
+
+      {!loading && events.length > 0 && (
         <ul className="space-y-2">
-          {events.map((event: StockEvent) => (
-            <li key={event.id}
-              className={`flex items-start gap-3 p-3 rounded-lg border text-sm ${
-                EVENT_COLORS[event.eventType] ?? "bg-gray-50 dark:bg-[#44475a] text-gray-700 dark:text-[#f8f8f2] border-gray-200 dark:border-[#44475a]"
-              }`}>
-              <div className="flex-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">{event.title}</span>
-                  <span className="text-xs opacity-60">
+          {events.map((event) => (
+            <li
+              key={event.id}
+              className="flex items-start gap-3 p-3 rounded-lg border border-[#44475a]/60 bg-[#282a36] text-sm"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-[#f8f8f2] truncate">
+                    {event.title}
+                  </span>
+                  <span className="text-xs text-[#6272a4] shrink-0">
                     {new Date(event.eventTime).toLocaleTimeString("ko-KR")}
                   </span>
                 </div>
                 {event.description && (
-                  <p className="text-xs mt-1 opacity-75">{event.description}</p>
+                  <p className="text-xs mt-1 text-[#6272a4]">{event.description}</p>
                 )}
+                <div className="mt-1.5">
+                  <Badge variant={EVENT_BADGE[event.eventType] ?? "neutral"}>
+                    {event.eventType.replace(/_/g, " ")}
+                  </Badge>
+                </div>
               </div>
-              <span className="text-xs font-bold opacity-70 shrink-0">{event.importanceScore}</span>
+              <span className="text-xs font-semibold text-[#6272a4] shrink-0">
+                {event.importanceScore}
+              </span>
             </li>
           ))}
         </ul>

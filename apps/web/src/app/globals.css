@@ -2,51 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Light mode ────────────────────────────────────────────── */
-:root {
-  --bg:          #f8f8f2;
-  --bg-nav:      #ffffff;
-  --surface:     #ffffff;
-  --surface-2:   #f0f0f3;
-  --border:      #e2e8f0;
-  --text:        #282a36;
-  --text-muted:  #6272a4;
-  --accent:      #bd93f9;
-  --up:          #0ecb81;
-  --down:        #f6465d;
-}
-
-/* ── Dracula dark mode ──────────────────────────────────────── */
-.dark {
-  --bg:          #282a36;
-  --bg-nav:      #21222c;
-  --surface:     #282a36;
-  --surface-2:   #44475a;
-  --border:      #44475a;
-  --text:        #f8f8f2;
-  --text-muted:  #6272a4;
-  --accent:      #bd93f9;
-  --up:          #0ecb81;
-  --down:        #f6465d;
-}
-
-/* ── Base ───────────────────────────────────────────────────── */
-body {
-  background-color: var(--bg);
-  color: var(--text);
-  transition: background-color 0.15s, color 0.15s;
-}
-
-/* ── Utility classes ────────────────────────────────────────── */
 @layer utilities {
-  .bg-theme      { background-color: var(--bg); }
-  .bg-theme-nav  { background-color: var(--bg-nav); }
-  .bg-surface    { background-color: var(--surface); }
-  .bg-surface-2  { background-color: var(--surface-2); }
-  .border-theme  { border-color: var(--border); }
-  .text-theme    { color: var(--text); }
-  .text-muted    { color: var(--text-muted); }
-  .text-accent   { color: var(--accent); }
-  .text-up       { color: var(--up); }
-  .text-down     { color: var(--down); }
+  .animate-slide-in {
+    animation: slideIn 0.2s ease-out both;
+  }
+
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateX(1rem);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
 }
