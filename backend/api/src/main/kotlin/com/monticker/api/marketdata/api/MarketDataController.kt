@@ -1,6 +1,9 @@
 package com.monticker.api.marketdata.api
 
 import com.monticker.api.marketdata.application.MarketDataService
+import com.monticker.api.marketdata.application.VwapService
+import com.monticker.api.marketdata.application.VwapResponse
+import com.monticker.api.marketdata.application.VwapPoint
 import com.monticker.api.stock.application.StockService
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
@@ -12,6 +15,7 @@ import java.time.Instant
 class MarketDataController(
     private val marketDataService: MarketDataService,
     private val stockService: StockService,
+    private val vwapService: VwapService,
 ) {
     @GetMapping("/{stockId}/price")
     fun getPrice(@PathVariable stockId: Long): ResponseEntity<PriceResponse> {
@@ -24,6 +28,14 @@ class MarketDataController(
             ?: return ResponseEntity.ok(PriceResponse.noData(stockId, stock.symbol))
         return ResponseEntity.ok(PriceResponse.from(tick))
     }
+
+    @GetMapping("/{stockId}/vwap")
+    fun getVwap(@PathVariable stockId: Long): ResponseEntity<VwapResponse> =
+        ResponseEntity.ok(vwapService.getDailyVwap(stockId))
+
+    @GetMapping("/{stockId}/vwap/series")
+    fun getVwapSeries(@PathVariable stockId: Long): ResponseEntity<List<VwapPoint>> =
+        ResponseEntity.ok(vwapService.getVwapSeries(stockId))
 }
 
 data class PriceResponse(

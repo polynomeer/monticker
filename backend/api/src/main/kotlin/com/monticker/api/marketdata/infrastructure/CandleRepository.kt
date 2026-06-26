@@ -3,6 +3,7 @@ package com.monticker.api.marketdata.infrastructure
 import com.monticker.api.marketdata.domain.Candle
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
+import java.math.BigDecimal
 import java.sql.ResultSet
 import java.time.Instant
 
@@ -13,37 +14,10 @@ class CandleRepository(private val jdbc: JdbcTemplate) {
         val allowed = setOf("candles_1m", "candles_1d")
         require(table in allowed) { "Invalid candle table: $table" }
 
-        // CAgg view 이름 매핑
-        val caggView = "${table}_cagg"
-
-        // CAgg view 존재하면 우선 사용
-        val viewExists = caggViewExists(caggView)
-        val source = if (viewExists) caggView else table
-
-        return query(source, stockId, from, to, limit)
-    }
-
-    private fun caggViewExists(viewName: String): Boolean =
-        try {
-            jdbc.queryForObject(
-                """
-                SELECT COUNT(*) FROM information_schema.views
-                WHERE table_name = ?
-                UNION ALL
-                SELECT COUNT(*) FROM pg_matviews WHERE matviewname = ?
-                LIMIT 1
-                """,
-                Int::class.java,
-                viewName,
-                viewName,
-            ) ?: 0 > 0
-        } catch (_: Exception) { false }
-
-    private fun query(source: String, stockId: Long, from: Instant, to: Instant, limit: Int): List<Candle> =
-        jdbc.query(
+        return jdbc.query(
             """
             SELECT stock_id, open, high, low, close, volume, candle_time
-            FROM $source
+            FROM $table
             WHERE stock_id = ? AND candle_time BETWEEN ? AND ?
             ORDER BY candle_time ASC
             LIMIT ?
@@ -64,4 +38,5 @@ class CandleRepository(private val jdbc: JdbcTemplate) {
             java.sql.Timestamp.from(to),
             limit,
         )
+    }
 }

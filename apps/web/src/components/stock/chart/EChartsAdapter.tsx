@@ -51,6 +51,7 @@ export default function EChartsAdapter({
   events = [],
   height = 420,
   theme,
+  vwapData,
 }: ChartAdapterProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef     = useRef<import("echarts").ECharts | null>(null);
@@ -98,7 +99,7 @@ export default function EChartsAdapter({
           icon: "line",
           itemWidth: 16, itemHeight: 2,
           textStyle: { color: theme.text, fontSize: 11 },
-          data: ["MA5", "MA20"],
+          data: ["MA5", "MA20", ...(vwapData?.length ? ["VWAP"] : [])],
         },
 
         // ── 툴팁 ────────────────────────────────────────────
@@ -286,6 +287,20 @@ export default function EChartsAdapter({
             tooltip: { show: false },
           },
 
+
+          // VWAP
+          ...(vwapData && vwapData.length > 0 ? [{
+            name: "VWAP",
+            type: "line",
+            xAxisIndex: 0, yAxisIndex: 0,
+            data: (() => {
+              const map = new Map(vwapData.map((p: { time: number; vwap: string }) => [p.time, parseFloat(p.vwap)]));
+              return candles.map(c => map.get(c.time) ?? null);
+            })(),
+            smooth: false, symbol: "none",
+            lineStyle: { color: "#ff79c6", width: 1.5, type: "dashed" as const },
+            tooltip: { show: false },
+          }] : []),
           // 거래량 바
           {
             name: "Volume",

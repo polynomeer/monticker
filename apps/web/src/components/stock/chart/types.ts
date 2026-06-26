@@ -23,11 +23,17 @@ export interface ChartTheme {
   downColor: string;
 }
 
+export interface VwapPoint {
+  time: number;
+  vwap: string;
+}
+
 export interface ChartAdapterProps {
   candles: CandleData[];
   events?: EventMarker[];
   height?: number;
   theme: ChartTheme;
+  vwapData?: VwapPoint[];
 }
 
 // ── 어댑터 구현체가 준수해야 할 인터페이스 ───────────────────

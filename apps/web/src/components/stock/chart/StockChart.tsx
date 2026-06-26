@@ -1,32 +1,24 @@
 "use client";
 
-/**
- * 차트 래퍼 컴포넌트.
- * 어댑터 구현체를 교체하려면 EChartsAdapter import만 바꾸면 됩니다.
- *
- * 예) import CanvasAdapter from "./CanvasAdapter";
- *     const ActiveAdapter = CanvasAdapter;
- */
-
 import { useTheme }      from "next-themes";
 import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
 import type { ChartTheme, CandleData, EventMarker } from "./types";
-import EChartsAdapter from "./EChartsAdapter";  // ← 교체 지점
+import EChartsAdapter from "./EChartsAdapter";
 
-// 현재 활성 어댑터 — 라이브러리를 바꾸려면 이 줄만 수정
 const ActiveAdapter = EChartsAdapter;
 
 interface Props {
   candles: CandleData[];
   events?: EventMarker[];
   height?: number;
+  vwapData?: Array<{ time: number; vwap: string }>;
 }
 
-export default function StockChart({ candles, events = [], height = 340 }: Props) {
-  const { resolvedTheme }       = useTheme();
-  const { chartTheme }          = useThemeStore();
-  const ct                      = CHART_THEMES[chartTheme] ?? CHART_THEMES.default;
-  const isDark                  = resolvedTheme === "dark";
+export default function StockChart({ candles, events = [], height = 340, vwapData }: Props) {
+  const { resolvedTheme } = useTheme();
+  const { chartTheme }    = useThemeStore();
+  const ct                = CHART_THEMES[chartTheme] ?? CHART_THEMES.default;
+  const isDark            = resolvedTheme === "dark";
 
   const theme: ChartTheme = {
     bg:        isDark ? "#1e1f29" : "#ffffff",
@@ -54,6 +46,7 @@ export default function StockChart({ candles, events = [], height = 340 }: Props
       events={events}
       height={height}
       theme={theme}
+      vwapData={vwapData}
     />
   );
 }

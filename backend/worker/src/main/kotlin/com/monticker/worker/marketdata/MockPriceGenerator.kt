@@ -1,6 +1,5 @@
 package com.monticker.worker.marketdata
 
-import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -14,10 +13,12 @@ data class GeneratedTick(
     val price: BigDecimal,
     val volume: Long,
     val tradeTime: Instant,
+    val generatedAt: Instant = Instant.now(),
+    val marketStatus: String = "OPEN",
 )
 
 @Component
-class MockPriceGenerator(private val jdbc: JdbcTemplate) {
+class MockPriceGenerator {
 
     private val basePrice = mapOf(
         "005930" to BigDecimal("71000"),
@@ -37,47 +38,38 @@ class MockPriceGenerator(private val jdbc: JdbcTemplate) {
 
     private val currentPrice = basePrice.toMutableMap()
 
-    // Cached symbol->id mapping from DB; populated lazily
-    private var dbSymbolIds: Map<String, Long>? = null
-
-    private fun resolveStockId(symbol: String): Long {
-        val ids = dbSymbolIds ?: run {
-            val fetched = try {
-                jdbc.query("SELECT id, symbol FROM stocks WHERE symbol = ANY(?)",
-                    { rs, _ -> rs.getString("symbol") to rs.getLong("id") },
-                    jdbc.queryForList("SELECT symbol FROM stocks", String::class.java).toTypedArray()
-                ).toMap()
-            } catch (e: Exception) {
-                emptyMap()
-            }
-            if (fetched.isNotEmpty()) {
-                dbSymbolIds = fetched
-            }
-            fetched
-        }
-        return ids[symbol] ?: symbolToIdFallback(symbol)
-    }
-
     fun generate(): List<GeneratedTick> {
-        return currentPrice.keys.map { symbol ->
-            val prev = currentPrice[symbol]!!
-            val change = prev.multiply(BigDecimal(Random.nextDouble(-0.005, 0.005)))
+        return currentPrice.keys.mapNotNull { symbol ->
+            val market = marketOf[symbol] ?: "UNKNOWN"
+            val config = MarketSchedule.getTickConfig(symbol, market)
+
+            // 장 닫힘: 틱 생성 안 함
+            if (config.status == MarketSchedule.MarketStatus.CLOSED) return@mapNotNull null
+
+            val prev  = currentPrice[symbol]!!
+            // 장외: 변동폭 축소
+            val range = 0.005 * config.volatilityMultiplier
+            val change = prev.multiply(BigDecimal(Random.nextDouble(-range, range)))
                 .setScale(0, RoundingMode.HALF_UP)
             val next = (prev + change).coerceAtLeast(BigDecimal.ONE)
             currentPrice[symbol] = next
 
             GeneratedTick(
-                stockId = resolveStockId(symbol),
-                symbol = symbol,
-                market = marketOf[symbol] ?: "UNKNOWN",
-                price = next,
-                volume = Random.nextLong(1000, 50000),
-                tradeTime = Instant.now(),
+                stockId      = symbolToId(symbol),
+                symbol       = symbol,
+                market       = market,
+                price        = next,
+                volume       = if (config.status == MarketSchedule.MarketStatus.OPEN)
+                                   Random.nextLong(1000, 50000)
+                               else Random.nextLong(100, 2000),
+                tradeTime    = Instant.now(),
+                generatedAt  = Instant.now(),
+                marketStatus = config.status.name,
             )
         }
     }
 
-    private fun symbolToIdFallback(symbol: String): Long = when (symbol) {
+    private fun symbolToId(symbol: String): Long = when (symbol) {
         "005930" -> 1L
         "000660" -> 2L
         "035420" -> 3L

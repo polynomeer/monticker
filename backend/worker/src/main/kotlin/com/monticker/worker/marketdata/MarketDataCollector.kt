@@ -1,7 +1,6 @@
 package com.monticker.worker.marketdata
 
 import com.monticker.worker.detector.EventDetector
-import com.monticker.worker.kis.KisPriceProvider
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.EnableScheduling
 import org.springframework.scheduling.annotation.Scheduled
@@ -12,32 +11,25 @@ import org.springframework.stereotype.Component
 class MarketDataCollector(
     private val generator: MockPriceGenerator,
     private val writer: RedisTickWriter,
-    private val priceTickDbWriter: PriceTickDbWriter,
-    private val candleAggregator: CandleAggregator,
     private val eventDetector: EventDetector,
-    private val kisPriceProvider: KisPriceProvider,
+    private val latencyTracker: LatencyTracker,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
     @Scheduled(fixedDelay = 1000)
     fun collect() {
         try {
-            val kisTicks = kisPriceProvider.fetchTicks()
-            val ticks = if (kisTicks.isNotEmpty()) kisTicks else generator.generate()
+            val ticks = generator.generate()
             ticks.forEach { tick ->
+                latencyTracker.recordTickGenerated(tick.stockId, tick.generatedAt)
                 writer.write(tick)
-                priceTickDbWriter.write(tick)
-                candleAggregator.onTick(tick)
+                latencyTracker.recordRedisWrite(tick.stockId)
                 eventDetector.detect(tick)
+                latencyTracker.recordBroadcast(tick.stockId)
             }
             log.debug("Published {} ticks", ticks.size)
         } catch (e: Exception) {
             log.error("Tick collection failed — skipping cycle", e)
         }
-    }
-
-    @Scheduled(fixedDelay = 60_000)
-    fun flushCandles() {
-        candleAggregator.flushAll()
     }
 }
