@@ -346,15 +346,206 @@ SELECT create_hypertable('candles_1m', 'candle_time');
 
 ---
 
+## Quant Lab Tables (planned — V13)
+
+### rule_sets
+
+Stores user-defined investment rulesets. `rule_definition_encrypted` is never sent to clients.
+
+```sql
+CREATE TABLE rule_sets (
+    id                        BIGSERIAL PRIMARY KEY,
+    user_id                   BIGINT       NOT NULL REFERENCES users(id),
+    name                      VARCHAR(200) NOT NULL,
+    description               TEXT,
+    version                   INTEGER      NOT NULL DEFAULT 1,
+    status                    VARCHAR(30)  NOT NULL DEFAULT 'DRAFT',
+    -- DRAFT | BACKTESTED | FORWARD_TESTING | RUNNING | PUBLISHED | ARCHIVED
+    visibility                VARCHAR(20)  NOT NULL DEFAULT 'PRIVATE',
+    -- PRIVATE | LINK_ONLY | MARKET
+    rule_definition_encrypted TEXT         NOT NULL,  -- AES-256, never sent to client
+    rule_set_fingerprint      VARCHAR(64)  NOT NULL,  -- SHA-256(normalised definition)
+    universe_json             JSONB        NOT NULL,  -- market, filters, sectors
+    created_at                TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at                TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_rule_sets_user     ON rule_sets (user_id);
+CREATE INDEX idx_rule_sets_status   ON rule_sets (status);
+CREATE INDEX idx_rule_sets_fingerprint ON rule_sets (rule_set_fingerprint);
+```
+
+Status transitions:
+```
+DRAFT → BACKTESTED → FORWARD_TESTING → RUNNING → PUBLISHED
+                                              ↘ ARCHIVED
+```
+
+### rule_set_versions
+
+Immutable version history. Each `PUT /rulesets/{id}` creates a new row.
+
+```sql
+CREATE TABLE rule_set_versions (
+    id                        BIGSERIAL PRIMARY KEY,
+    rule_set_id               BIGINT      NOT NULL REFERENCES rule_sets(id),
+    version                   INTEGER     NOT NULL,
+    rule_definition_encrypted TEXT        NOT NULL,
+    rule_set_fingerprint      VARCHAR(64) NOT NULL,
+    change_summary            TEXT,
+    created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (rule_set_id, version)
+);
+```
+
+### backtest_results
+
+One row per backtest run. Linked to a specific ruleset version.
+
+```sql
+CREATE TABLE backtest_results (
+    id                   BIGSERIAL PRIMARY KEY,
+    rule_set_id          BIGINT         NOT NULL REFERENCES rule_sets(id),
+    rule_set_version     INTEGER        NOT NULL,
+    start_date           DATE           NOT NULL,
+    end_date             DATE           NOT NULL,
+    universe_snapshot    JSONB          NOT NULL,  -- frozen at run time
+    total_return         NUMERIC(10, 4),
+    annual_return        NUMERIC(10, 4),
+    mdd                  NUMERIC(10, 4),           -- maximum drawdown (%)
+    win_rate             NUMERIC(10, 4),
+    profit_factor        NUMERIC(10, 4),
+    trade_count          INTEGER,
+    avg_holding_days     NUMERIC(8, 2),
+    max_consecutive_loss INTEGER,
+    benchmark_symbol     VARCHAR(20),              -- KOSPI | NASDAQ
+    benchmark_return     NUMERIC(10, 4),
+    excess_return        NUMERIC(10, 4),
+    commission_rate      NUMERIC(8, 4) NOT NULL DEFAULT 0.015,
+    tax_rate             NUMERIC(8, 4) NOT NULL DEFAULT 0.2,
+    slippage_rate        NUMERIC(8, 4) NOT NULL DEFAULT 0.1,
+    reliability_score    VARCHAR(1),               -- A | B | C | D
+    reliability_notes    JSONB,                    -- penalised factors
+    phase_performance    JSONB,                    -- bull / bear / sideways breakdown
+    survivorship_bias    BOOLEAN NOT NULL DEFAULT false,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+Reliability score criteria:
+```
+A: 5y+ data, 100+ trades, forward tested 90d, no over-optimisation flag
+B: 3y+ data, 50+ trades, forward tested 30d
+C: < 3y or < 30 trades or param changed > 10 times
+D: out-of-sample gap > 20%, or < 10 trades
+```
+
+### forward_test_results
+
+Aggregated daily summary of live-market forward testing.
+
+```sql
+CREATE TABLE forward_test_results (
+    id              BIGSERIAL PRIMARY KEY,
+    rule_set_id     BIGINT         NOT NULL REFERENCES rule_sets(id),
+    test_date       DATE           NOT NULL,
+    signal_count    INTEGER        NOT NULL DEFAULT 0,
+    paper_trade_count INTEGER      NOT NULL DEFAULT 0,
+    daily_return    NUMERIC(10, 4),
+    cumulative_return NUMERIC(10, 4),
+    win_rate        NUMERIC(10, 4),
+    mdd             NUMERIC(10, 4),
+    vs_backtest_win_rate_diff NUMERIC(10, 4),  -- forward - backtest win rate
+    created_at      TIMESTAMPTZ    NOT NULL DEFAULT now(),
+    UNIQUE (rule_set_id, test_date)
+);
+```
+
+### quant_signals
+
+Individual signal events emitted by the Rule Engine.
+
+```sql
+CREATE TABLE quant_signals (
+    id           BIGSERIAL PRIMARY KEY,
+    rule_set_id  BIGINT      NOT NULL REFERENCES rule_sets(id),
+    stock_id     BIGINT      NOT NULL REFERENCES stocks(id),
+    direction    VARCHAR(10) NOT NULL, -- BUY | SELL | WATCH
+    signal_time  TIMESTAMPTZ NOT NULL,
+    mode         VARCHAR(20) NOT NULL, -- FORWARD_TEST | AUTO_TRADE | LIVE
+    result_json  JSONB,                -- post-signal price outcome (filled later)
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_quant_signals_ruleset_time ON quant_signals (rule_set_id, signal_time DESC);
+CREATE INDEX idx_quant_signals_stock        ON quant_signals (stock_id);
+```
+
+---
+
+### strategy_products
+
+Lists a ruleset on the Strategy Market.
+
+```sql
+CREATE TABLE strategy_products (
+    id               BIGSERIAL PRIMARY KEY,
+    rule_set_id      BIGINT       NOT NULL REFERENCES rule_sets(id) UNIQUE,
+    seller_id        BIGINT       NOT NULL REFERENCES users(id),
+    title            VARCHAR(200) NOT NULL,
+    summary          TEXT,              -- public description (no ruleset detail)
+    strategy_type    VARCHAR(50),       -- MOMENTUM | MEAN_REVERSION | BREAKOUT | ...
+    risk_level       VARCHAR(10),       -- LOW | MEDIUM | HIGH
+    price_type       VARCHAR(20)  NOT NULL, -- FREE | MONTHLY | ONE_TIME
+    price            NUMERIC(10, 2),
+    access_type      VARCHAR(20)  NOT NULL, -- SIGNAL_ONLY | PAPER_TRADE | TEMPLATE
+    disclosure_level VARCHAR(20)  NOT NULL DEFAULT 'SUMMARY',
+    -- SUMMARY (성과 요약만) | DESCRIPTION (전략 설명) | FULL (룰셋 공개)
+    review_status    VARCHAR(20)  NOT NULL DEFAULT 'DRAFT',
+    -- DRAFT | PENDING | APPROVED | REJECTED | SUSPENDED
+    compliance_agreed_at TIMESTAMPTZ,
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+```
+
+### strategy_subscriptions
+
+```sql
+CREATE TABLE strategy_subscriptions (
+    id           BIGSERIAL PRIMARY KEY,
+    buyer_id     BIGINT       NOT NULL REFERENCES users(id),
+    product_id   BIGINT       NOT NULL REFERENCES strategy_products(id),
+    access_level VARCHAR(20)  NOT NULL, -- SIGNAL_ONLY | PAPER_TRADE
+    started_at   TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    expires_at   TIMESTAMPTZ,           -- null = lifetime
+    UNIQUE (buyer_id, product_id)
+);
+```
+
+### strategy_badges
+
+```sql
+CREATE TABLE strategy_badges (
+    id           BIGSERIAL PRIMARY KEY,
+    product_id   BIGINT      NOT NULL REFERENCES strategy_products(id),
+    badge_type   VARCHAR(50) NOT NULL,
+    -- BACKTEST_VERIFIED | FORWARD_30D | FORWARD_90D | LOW_MDD | LOW_FREQ
+    -- COMMISSION_APPLIED | SLIPPAGE_APPLIED | OVER_OPTIMISED_WARNING
+    awarded_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+---
+
 ## Redis Key Schema
 
 ```
-stock:price:{market}:{symbol}           → latest price hash
-stock:candle:1m:{market}:{symbol}       → latest 1m candle
-stock:orderbook:{market}:{symbol}       → orderbook snapshot
-watchlist:prices:user:{userId}          → hash of stock prices for a user's watchlist
-news:dedup:{urlHash}                    → SET member for deduplication (TTL 7d)
-alert:cooldown:{ruleId}                 → key existence = in cooldown (TTL = cooldown seconds)
+stock:price:{market}:{symbol}           → latest price JSON (STRING)
+orderbook:{symbol}                      → KIS realtime orderbook JSON (STRING, TTL 30s)
+alert:cooldown:{ruleId}                 → cooldown flag (STRING, TTL 600s)
+signal:forward:{ruleSetId}:{date}       → daily forward test signal set (planned)
+news:dedup:{urlHash}                    → dedup flag (STRING, TTL 7d)
 stream:market:ticks                     → Redis Stream for tick events
 stream:events:detected                  → Redis Stream for detected stock_events
 ```
@@ -368,7 +559,15 @@ users
   ├── watchlist_groups → watchlist_items → stocks
   ├── alert_rules → alert_histories
   ├── portfolios → portfolio_positions → stocks
-  └── simulation_accounts → simulation_trades → stocks
+  ├── simulation_accounts → simulation_trades → stocks
+  └── rule_sets ──────────────────────────────────── Quant Lab
+        ├── rule_set_versions
+        ├── backtest_results
+        ├── forward_test_results
+        ├── quant_signals → stocks
+        └── strategy_products
+              ├── strategy_subscriptions ← users (buyer)
+              └── strategy_badges
 
 stocks
   ├── stock_aliases
@@ -377,5 +576,6 @@ stocks
   │                 ◄── disclosures
   │                 ◄── price_ticks (system generated)
   │                 ◄── user notes / simulation_trades
+  │                 ◄── quant_signals
   └── price_ticks / candles_* (TimescaleDB)
 ```

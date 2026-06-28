@@ -9,11 +9,24 @@ monticker is **event-centric**, not price-centric.
 ```
 External data sources
   → collectors / workers
-  → Redis (latest price) + TimescaleDB (ticks / candles)
+  → Redis (latest price / orderbook) + TimescaleDB (ticks / candles)
   → Event Detector
   → stock_events
   → REST / WebSocket API
   → chart timeline (web / mobile)
+```
+
+Quant Lab adds a second pipeline:
+
+```
+Market Data Event
+  → Indicator Engine (MA, RSI, MACD, Bollinger …)
+  → Rule Engine (evaluate user rulesets)
+  → Signal Event
+  → Portfolio / Risk Check
+  → Paper Trading Order (mock auto-trade)
+  → Matching Engine
+  → Execution Event → Strategy Performance Update
 ```
 
 Start as **Modular Monolith + async workers + Redis + TimescaleDB**. Do not introduce microservices until there is a concrete scaling reason.
@@ -51,8 +64,10 @@ Framework:   Spring Boot 3.5
 Pattern:     Modular Monolith
 API:         REST + WebSocket (STOMP over SockJS)
 ORM:         Spring Data JPA
-Migration:   Flyway (V1–V6)
+Migration:   Flyway (V1–V12)
 Batch:       Spring @Scheduled
+Resilience:  Resilience4j (Circuit Breaker)
+Observability: OpenTelemetry + Jaeger, Micrometer
 ```
 
 ### Frontend
@@ -62,9 +77,10 @@ Framework:   Next.js 15 (App Router)
 Language:    TypeScript
 Server state: TanStack Query
 Client state: Zustand
-Chart:       Lightweight Charts 4
-UI:          Tailwind CSS + shadcn/ui
+Chart:       Lightweight Charts 4   ← use addCandlestickSeries(), NOT addSeries()
+UI:          Tailwind CSS (Dracula dark theme)
 Realtime:    WebSocket (STOMP)
+Virtualisation: TanStack Virtual (screener, 500 rows → ~17 DOM nodes)
 ```
 
 ### Mobile
@@ -78,7 +94,7 @@ Push:        Expo Push Notifications
 
 ```
 Business data:    PostgreSQL 16
-Time-series:      TimescaleDB (candles_1m)
+Time-series:      TimescaleDB (candles_1m, candles_1d)
 Cache / Realtime: Redis 7
 ```
 
@@ -87,98 +103,84 @@ Cache / Realtime: Redis 7
 ```
 Local:      Docker Compose
 CI/CD:      GitHub Actions
+Tracing:    Jaeger (all-in-one)
 ```
 
 ---
 
 ## Backend Module Boundaries
 
-### Implemented Modules (MVP)
+### Implemented Modules
 
 | Module | Tables | Status |
 |--------|--------|--------|
-| Stock | `stocks` | Done |
+| Stock | `stocks`, `stock_aliases` | Done |
+| Auth | `users`, `refresh_tokens` | Done |
 | Watchlist | `watchlist_groups`, `watchlist_items` | Done |
-| Market Data | `candles_1m` | Done |
+| Market Data | `candles_1m`, `candles_1d_cagg` | Done |
 | Event Timeline | `stock_events` | Done |
 | Alert | `alert_rules`, `alert_histories` | Done |
+| Paper Trading | `paper_accounts`, `paper_orders`, `paper_holdings` | Done |
+| News | `news_articles`, `news_stock_mappings` | Done |
+| Screener | Redis-based ranking, JDBC queries | Done |
+| Order Book | KIS WebSocket → Redis / Yahoo Finance / Mock chain | Done |
+| VWAP | Computed from candles_1m | Done |
+| Latency Tracking | Micrometer Timer, `/api/latency` | Done |
 
-### Stock Module
+### Planned Modules (Quant Lab)
 
-Manages static stock metadata.
-
-Tables: `stocks`
-
-### Market Data Module
-
-Collects and caches price ticks and candles.
-
-Tables: `candles_1m` (TimescaleDB hypertable)
-
-```sql
-CREATE TABLE candles_1m (
-    stock_id    BIGINT         NOT NULL,
-    candle_time TIMESTAMPTZ    NOT NULL,
-    open        NUMERIC(18,4),
-    high        NUMERIC(18,4),
-    low         NUMERIC(18,4),
-    close       NUMERIC(18,4),
-    volume      BIGINT,
-    PRIMARY KEY (stock_id, candle_time)
-);
-SELECT create_hypertable('candles_1m', 'candle_time');
-```
-
-### Event Timeline Module
-
-**The most important module.** Centralizes all event types into a single queryable table for the chart timeline.
-
-Tables: `stock_events`
-
-Event types:
-```
-PRICE_SPIKE / PRICE_DROP
-VOLUME_SURGE
-```
-
-Duplicate prevention via unique index:
-```sql
-CREATE UNIQUE INDEX ON stock_events (stock_id, event_type, date_trunc('minute', event_time));
-```
-
-### Watchlist Module
-
-Tables: `watchlist_groups`, `watchlist_items`
-
-### Alert Module
-
-Tables: `alert_rules`, `alert_histories`
-
-Supported rule types: `PRICE_ABOVE`, `PRICE_BELOW`, `VOLUME_SURGE`
-
-10-minute cooldown: `alert:cooldown:{ruleId}` in Redis; also enforced via DB query on `alert_histories`.
+| Module | Responsibility |
+|--------|---------------|
+| **Rule Builder** | Ruleset CRUD, condition JSON, version management |
+| **Rule Engine** | Evaluate conditions against live indicators; emit signals |
+| **Indicator Engine** | MA, EMA, RSI, MACD, Bollinger, ATR from candle data |
+| **Backtest Engine** | Historical simulation, commission/slippage, reliability score |
+| **Forward Test Engine** | Live-market signal logging, vs-backtest comparison |
+| **Strategy Vault** | Encrypted ruleset storage, fingerprint, access control |
+| **Strategy Marketplace** | Listing, subscription, badge system, compliance checks |
+| **Quant Analytics** | Over-optimisation detection, phase-based performance, signal attribution |
 
 ---
 
-## Worker Pipeline
+## Worker Pipeline (current)
 
 ```
-MockPriceGenerator (@Scheduled 1s)
+MockPriceGenerator (@Scheduled 1s)   ← swaps to KisPriceProvider when KIS keys set
   │
   ├── RedisTickWriter
-  │     └── SET stock:price:{stockId} → latest price JSON
+  │     └── SET stock:price:{market}:{symbol}
   │
   ├── EventDetector
-  │     ├── PriceSpikeDetector  (EMA α=0.1, ratio threshold)
+  │     ├── PriceSpikeDetector  (EMA α=0.1)
   │     ├── VolumeSurgeDetector (EMA α=0.1, ≥3× ratio)
-  │     └── INSERT stock_events (dedup by minute index)
+  │     └── INSERT stock_events (dedup by minute window)
   │
   └── AlertEvaluator (@Scheduled 30s)
-        ├── Fetch active alert_rules
-        ├── Evaluate PRICE_ABOVE / PRICE_BELOW against candles_1m
-        ├── 10-minute cooldown check
-        └── INSERT alert_histories
+        ├── PRICE_ABOVE / PRICE_BELOW
+        ├── 10-minute cooldown (Redis key)
+        └── INSERT alert_histories → Expo push
 ```
+
+### KIS WebSocket (when KIS_APP_KEY + KIS_APP_SECRET set)
+
+```
+KisOrderBookSubscriber (@PostConstruct)
+  └── KisWebSocketClient → ws://ops.koreainvestment.com:21000
+        └── H0STASP0 (실시간 호가) → KisOrderBookHandler
+              └── SET orderbook:{symbol} (TTL 30s)
+```
+
+### Order Book Provider Chain (API)
+
+```
+GET /api/stocks/{id}/orderbook
+  └── OrderBookService
+        ├── KisOrderBookProvider   → Redis orderbook:{symbol}   (KIS realtime)
+        ├── YahooFinanceOrderBookProvider → v8/finance/chart API (15m delay, ORDERBOOK_PROVIDER=yahoo)
+        └── MockOrderBookProvider  → tick-based simulation      (fallback)
+```
+
+Response includes `source: KIS_REALTIME | YAHOO_FINANCE | MOCK`.
 
 ### EMA-based Anomaly Detection
 
@@ -196,22 +198,74 @@ VolumeSurgeDetector:
 
 ---
 
+## Quant Lab — Planned Architecture
+
+### Rule Engine
+
+```
+MarketDataEvent (from Redis/WebSocket tick)
+  → IndicatorEngine.compute(stockId, indicators=[MA20, RSI14, ...])
+  → RuleEvaluator.evaluate(ruleSet, indicators)   ← never sends ruleset to client
+  → Signal: { ruleSetId, stockId, direction, triggeredAt }
+  → SignalEvent published (Redis pub/sub or in-process)
+  → ForwardTestLogger.record(signal)
+  → PaperAutoTrader.execute(signal)  [if strategy in auto-trade mode]
+```
+
+### Backtest Engine
+
+```
+BacktestRequest { ruleSetId, startDate, endDate, universe }
+  → CandleLoader (TimescaleDB candles_1m / candles_1d)
+  → IndicatorEngine (batch compute)
+  → RuleEvaluator (iterate candles chronologically, no look-ahead)
+  → TradeSimulator (apply commission 0.015%, tax 0.2%, slippage 0.1%)
+  → MetricsCalculator:
+      totalReturn, annualReturn, mdd, winRate, profitFactor,
+      tradeCount, avgHoldingDays, benchmarkReturn (KOSPI/NASDAQ)
+  → ReliabilityScorer (A/B/C/D):
+      penalise: low trade count, high param change count,
+                survivorship bias, out-of-sample gap > 20%
+  → BacktestResult (saved to DB)
+```
+
+### Strategy Protection
+
+```
+Ruleset stored encrypted in DB: ruleDefinitionEncrypted
+Fingerprint: ruleSetFingerprint = SHA-256(normalize(ruleDefinition))
+
+GET /api/strategies/{id}/signal   (subscriber endpoint)
+  → server evaluates encrypted ruleset
+  → returns: { hasSignal: true, direction: BUY, stockCount: 3 }
+  → never returns: individual condition results or indicator values
+```
+
+---
+
 ## Flyway Migrations
 
 | Version | Description |
 |---------|-------------|
 | V1 | Create stocks table |
-| V2 | Create watchlist_groups, watchlist_items |
-| V3 | Create candles_1m (TimescaleDB hypertable) |
-| V4 | Create stock_events with dedup index |
-| V5 | Create alert_rules, alert_histories |
-| V6 | Seed sample stocks (Samsung, SK Hynix, NAVER, Kakao, Hyundai) |
+| V2 | Create users |
+| V3 | Create watchlists |
+| V4 | Create market data (candles) |
+| V5 | Create stock_events |
+| V6 | Create alerts |
+| V7 | Add refresh_tokens |
+| V8 | Create news_articles, news_stock_mappings |
+| V9 | Create device_tokens |
+| V10 | Create candle continuous aggregates |
+| V11 | Create paper trading tables |
+| V12 | Seed 202 stocks (KOSPI/KOSDAQ/NASDAQ/NYSE) |
+| V13 | *(planned)* Create Quant Lab tables |
 
 ---
 
 ## API Endpoints
 
-### REST
+### REST (implemented)
 
 ```http
 GET    /api/stocks/search?query=
@@ -219,6 +273,10 @@ GET    /api/stocks/{stockId}
 GET    /api/stocks/{stockId}/price
 GET    /api/stocks/{stockId}/candles?interval=1m&from=&to=
 GET    /api/stocks/{stockId}/events?from=&to=
+GET    /api/stocks/{stockId}/orderbook        ← source: KIS_REALTIME|YAHOO|MOCK
+GET    /api/stocks/{stockId}/vwap
+
+GET    /api/screener?tab=&market=&sort=&page=
 
 GET    /api/watchlists
 POST   /api/watchlists/groups
@@ -229,7 +287,36 @@ GET    /api/alerts/rules
 POST   /api/alerts/rules
 PATCH  /api/alerts/rules/{ruleId}
 DELETE /api/alerts/rules/{ruleId}
-GET    /api/alerts/histories
+
+POST   /api/auth/register
+POST   /api/auth/login
+POST   /api/auth/refresh
+
+GET    /api/paper/portfolio
+POST   /api/paper/orders
+GET    /api/paper/orders
+
+GET    /api/backtest/run
+GET    /api/latency
+```
+
+### REST (planned — Quant Lab)
+
+```http
+POST   /api/quant/rulesets                    # 룰셋 생성
+GET    /api/quant/rulesets/{id}               # 내 룰셋 조회
+PUT    /api/quant/rulesets/{id}               # 수정 (새 버전)
+DELETE /api/quant/rulesets/{id}
+
+POST   /api/quant/rulesets/{id}/backtest      # 백테스트 실행
+GET    /api/quant/rulesets/{id}/backtest/{runId}
+
+POST   /api/quant/rulesets/{id}/forward-test/start
+GET    /api/quant/rulesets/{id}/forward-test
+
+GET    /api/strategies/{id}/signal            # 신호 조회 (원문 비공개)
+GET    /api/strategy-market                   # 전략 마켓 목록
+POST   /api/strategy-market/{id}/subscribe
 ```
 
 ### WebSocket (STOMP)
@@ -240,120 +327,31 @@ Connect: `ws://localhost:8080/ws` (SockJS fallback)
 |-------|-------------|
 | `/topic/stocks/{stockId}` | 종목별 실시간 가격 |
 | `/topic/market` | 전체 시장 요약 |
-
-Price message:
-```json
-{
-  "type": "PRICE_UPDATED",
-  "stockId": 1,
-  "symbol": "005930",
-  "price": 71000,
-  "changeRate": 2.16,
-  "volume": 1839200,
-  "timestamp": "2026-06-18T10:30:00+09:00"
-}
-```
-
-Event message:
-```json
-{
-  "type": "EVENT_DETECTED",
-  "stockId": 1,
-  "eventType": "VOLUME_SURGE",
-  "title": "Volume spike detected",
-  "importanceScore": 87,
-  "timestamp": "2026-06-18T10:30:00+09:00"
-}
-```
+| `/topic/signals/{userId}` | *(planned)* 룰셋 신호 알림 |
 
 ---
 
 ## Redis Key Schema
 
 ```
-stock:price:{stockId}          # latest price JSON (STRING)
-alert:cooldown:{ruleId}        # cooldown flag (STRING, TTL 600s)
+stock:price:{market}:{symbol}      # latest price JSON (STRING)
+orderbook:{symbol}                 # KIS realtime orderbook (STRING, TTL 30s)
+alert:cooldown:{ruleId}            # cooldown flag (STRING, TTL 600s)
+signal:forward:{ruleSetId}:{date}  # (planned) forward test daily signal log
 ```
 
 ---
 
-## Mobile Push Notification Flow
+## Environment Variables
 
-```
-AlertEvaluator (Worker)
-  → INSERT alert_histories (delivery_status = PENDING)
-  → [future] AlertDispatcher reads PENDING rows
-  → Expo Push API → device FCM/APNs token
-  → delivery_status = DELIVERED / FAILED
-```
-
-Current MVP: alert is recorded in DB. Expo push dispatch is stubbed for EAS integration.
-
----
-
-## Realtime Data Pipeline
-
-```
-MockPriceGenerator (1s)
-  ├── Redis latest price cache
-  └── EventDetector → stock_events INSERT
-
-API WebSocket Broadcaster
-  └── @Scheduled 1s → reads Redis price → broadcast /topic/stocks/{id}
-```
-
----
-
-## Frontend Structure
-
-```
-apps/web/
-├── app/
-│   ├── page.tsx                 # Home — market overview
-│   ├── stocks/[symbol]/page.tsx # Stock detail + chart + events
-│   ├── watchlist/               # Watchlist groups
-│   └── alerts/                  # Alert rules management
-├── components/
-│   ├── chart/
-│   │   ├── StockChart.tsx       # Lightweight Charts wrapper
-│   │   ├── EventMarker.tsx      # Event overlay markers
-│   │   └── TimelinePanel.tsx    # Event timeline list
-│   └── common/
-├── hooks/
-│   ├── useStockPrice.ts
-│   ├── useStockEvents.ts
-│   ├── useWatchlist.ts
-│   └── useWebSocket.ts
-└── stores/
-    └── realtimeStore.ts
-```
-
-State management:
-- Server state → TanStack Query
-- Realtime state → Zustand
-- Chart state → component-local
-
----
-
-## Deployment — MVP
-
-```
-┌──────────────────────────┐
-│     Nginx (SSL/proxy)     │
-└────────────┬─────────────┘
-             │
-     ┌───────┴───────┐
-     ▼               ▼
- Next.js         Spring Boot
-   Web            API Server
-                     │
-         ┌───────────┼───────────┐
-         ▼           ▼           ▼
-    PostgreSQL     Redis      Worker
-    TimescaleDB                 App
-```
-
-Docker Compose services: `nginx`, `web`, `api`, `worker`, `postgres`, `redis`
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `KIS_APP_KEY` | — | KIS WebSocket 실시간 호가 활성화 |
+| `KIS_APP_SECRET` | — | KIS 인증 |
+| `ORDERBOOK_PROVIDER` | mock | `yahoo` = Yahoo Finance 15분 지연 |
+| `ANTHROPIC_API_KEY` | — | AI 뉴스 요약 |
+| `NAVER_CLIENT_ID` | — | 네이버 뉴스 수집 |
+| `DART_API_KEY` | — | 공시 수집 |
 
 ---
 
@@ -362,16 +360,19 @@ Docker Compose services: `nginx`, `web`, `api`, `worker`, `postgres`, `redis`
 | Stage | Change |
 |-------|--------|
 | 1 | Modular Monolith + single Worker (current) |
-| 2 | Split workers by domain (market / event / alert) |
-| 3 | Replace Redis Streams with Kafka |
-| 4 | Split into microservices only if traffic demands it |
+| 2 | Split workers by domain (market / event / alert / rule-engine) |
+| 3 | Rule Engine as dedicated service (CPU-intensive backtest isolation) |
+| 4 | Replace in-process pub/sub with Kafka for signal fanout |
+| 5 | Microservices only if traffic demands |
 
 ---
 
 ## Security
 
+- JWT (Access 15min + Refresh 7d), token rotation on refresh
+- BCryptPasswordEncoder
+- CORS restricted to `localhost:3000` / `*.monticker.io`
 - Rate limiting on public APIs
-- CORS restriction
-- Strict input validation
-- Encrypted external API keys
-- JWT auth planned (post-MVP)
+- Quant ruleset: never serialised to client — server-side evaluation only
+- Ruleset fingerprint (SHA-256) for tamper detection
+- Signal query rate-limited (reverse-engineering prevention)
