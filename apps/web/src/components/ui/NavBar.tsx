@@ -9,7 +9,7 @@ import AuthNav from "@/components/AuthNav";
 import SearchAutocomplete from "@/components/stock/SearchAutocomplete";
 
 const NAV_LINKS = [
-  { href: "/screener",   label: "스크리너" },
+  { href: "/",           label: "스크리너" },
   { href: "/backtest",   label: "백테스팅" },
   { href: "/portfolio",  label: "포트폴리오" },
   { href: "/watchlist",  label: "관심종목" },
