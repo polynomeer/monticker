@@ -10,7 +10,8 @@ import SearchAutocomplete from "@/components/stock/SearchAutocomplete";
 
 const NAV_LINKS = [
   { href: "/",           label: "스크리너" },
-  { href: "/backtest",   label: "백테스팅" },
+  { href: "/backtest",    label: "백테스팅" },
+  { href: "/quant-lab",  label: "Quant Lab" },
   { href: "/portfolio",  label: "포트폴리오" },
   { href: "/watchlist",  label: "관심종목" },
   { href: "/alerts",     label: "알림" },
