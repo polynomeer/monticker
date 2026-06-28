@@ -60,3 +60,10 @@ anthropic:
 otel:
   service:
     name: monticker-api
+
+# ── Order Book Provider ───────────────────────────────────────────────────────
+# KIS_REALTIME 우선 (worker Redis 캐시), 없으면 설정된 provider fallback
+# 값: yahoo  → Yahoo Finance 15분 지연 (계좌 불필요)
+#     (미설정) → Mock (순수 랜덤)
+orderbook:
+  provider: ${ORDERBOOK_PROVIDER:}
