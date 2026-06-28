@@ -26,8 +26,8 @@ class RateLimitFilter(private val redis: StringRedisTemplate) : OncePerRequestFi
         val path = req.requestURI
 
         val (key, limit) = when {
-            path.startsWith("/api/auth/") -> "auth:$ip" to 20
-            path.startsWith("/api/")      -> "api:$ip"  to 120
+            path.startsWith("/api/auth/") -> "auth:$ip" to 30
+            path.startsWith("/api/")      -> "api:$ip"  to 300
             else                          -> { chain.doFilter(req, res); return }
         }
 

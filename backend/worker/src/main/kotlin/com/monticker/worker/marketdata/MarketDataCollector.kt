@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component
 class MarketDataCollector(
     private val generator: MockPriceGenerator,
     private val writer: RedisTickWriter,
+    private val candleAggregator: CandleAggregator,
     private val eventDetector: EventDetector,
     private val latencyTracker: LatencyTracker,
 ) {
@@ -23,6 +24,7 @@ class MarketDataCollector(
             ticks.forEach { tick ->
                 latencyTracker.recordTickGenerated(tick.stockId, tick.generatedAt)
                 writer.write(tick)
+                candleAggregator.onTick(tick)
                 latencyTracker.recordRedisWrite(tick.stockId)
                 eventDetector.detect(tick)
                 latencyTracker.recordBroadcast(tick.stockId)

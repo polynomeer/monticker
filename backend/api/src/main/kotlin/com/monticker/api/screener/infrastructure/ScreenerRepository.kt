@@ -23,8 +23,8 @@ class ScreenerRepository(private val jdbc: JdbcTemplate) {
 
         val orderBy = when (sort) {
             "volume" -> "c.volume DESC"
-            "rise"   -> "change_rate DESC"
-            "fall"   -> "change_rate ASC"
+            "rise"   -> "(c.close - prev.close) / NULLIF(prev.close, 0) DESC NULLS LAST"
+            "fall"   -> "(c.close - prev.close) / NULLIF(prev.close, 0) ASC NULLS LAST"
             else     -> "(c.close * c.volume) DESC"
         }
 
@@ -35,13 +35,13 @@ class ScreenerRepository(private val jdbc: JdbcTemplate) {
                 s.name,
                 s.market,
                 s.sector,
-                c.close       AS price,
-                c.volume,
-                (c.close * c.volume) AS amount,
-                prev.close    AS prev_close
+                COALESCE(c.close, 0)              AS price,
+                COALESCE(c.volume, 0)             AS volume,
+                COALESCE(c.close * c.volume, 0)   AS amount,
+                prev.close                        AS prev_close
             FROM stocks s
-            JOIN LATERAL (
-                SELECT close, volume, candle_time
+            LEFT JOIN LATERAL (
+                SELECT close, volume
                 FROM candles_1m
                 WHERE stock_id = s.id
                 ORDER BY candle_time DESC
@@ -56,7 +56,7 @@ class ScreenerRepository(private val jdbc: JdbcTemplate) {
             ) prev ON true
             WHERE s.is_active = true
             $marketFilter
-            ORDER BY $orderBy
+            ORDER BY $orderBy NULLS LAST
             LIMIT ? OFFSET ?
         """.trimIndent()
 
