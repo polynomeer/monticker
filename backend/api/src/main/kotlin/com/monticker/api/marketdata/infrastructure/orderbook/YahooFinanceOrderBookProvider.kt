@@ -12,14 +12,20 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
 import java.time.Instant
+import kotlin.math.max
 import kotlin.random.Random
 
 /**
- * Yahoo Finance v8 API에서 현재가·최우선 호가를 가져오고
- * 2~10단계 호가 깊이는 현실적인 분포로 시뮬레이션한다.
+ * Yahoo Finance v8 chart API에서 현재가와 당일 고/저/거래량을 가져온다.
+ * KRX 종목은 Yahoo가 bid/ask를 제공하지 않으므로
+ * 현재가를 기준으로 호가 깊이를 시뮬레이션한다.
  *
- * 활성화: application.yml에 orderbook.provider=yahoo 설정
- * Yahoo Finance는 15분 지연 데이터를 무료로 제공한다.
+ * 제공 데이터:
+ *   regularMarketPrice  — 현재가 (실데이터, 15분 지연)
+ *   regularMarketDayHigh/Low — 당일 고/저 (변동성 추정에 사용)
+ *   regularMarketVolume — 당일 거래량 (잔량 스케일 보정)
+ *
+ * 활성화: ORDERBOOK_PROVIDER=yahoo 환경변수
  *
  * 심볼 매핑:
  *   KOSPI  → {symbol}.KS  (예: 005930 → 005930.KS)
@@ -42,33 +48,28 @@ class YahooFinanceOrderBookProvider : OrderBookProvider {
         val quote = fetchQuote(yahooSymbol) ?: return null
 
         val price = quote.regularMarketPrice ?: refPrice
-        val unit = priceUnit(price)
+        val unit  = priceUnit(price)
 
-        // 1단계: Yahoo에서 받은 실제 최우선 호가
-        val bestAsk = quote.ask?.takeIf { it > BigDecimal.ZERO }
-            ?: roundToUnit(price * BigDecimal("1.001"), unit)
-        val bestBid = quote.bid?.takeIf { it > BigDecimal.ZERO }
-            ?: roundToUnit(price * BigDecimal("0.999"), unit)
-        val bestAskQty = quote.askSize?.toLong()?.takeIf { it > 0 } ?: Random.nextLong(100, 1000)
-        val bestBidQty = quote.bidSize?.toLong()?.takeIf { it > 0 } ?: Random.nextLong(100, 1000)
+        // 당일 변동성으로 호가 단계 간격 조정
+        // 변동성이 크면 호가 간격을 넓게, 작으면 좁게
+        val dayRange = quote.dayHigh - quote.dayLow
+        val volatilityRatio = if (price > BigDecimal.ZERO) dayRange / price else BigDecimal("0.005")
+        val stepMultiplier  = max(1, (volatilityRatio * BigDecimal("200")).toInt())
 
-        // 2~10단계: 가격 간격 + 잔량 시뮬레이션 (호가 창 느낌 유지)
-        val asks = buildList {
-            add(OrderLevel(bestAsk, bestAskQty))
-            for (i in 2..10) {
-                val p = roundToUnit(bestAsk + unit * BigDecimal(i - 1), unit)
-                val q = ((11 - i) * Random.nextLong(50, 500))
-                add(OrderLevel(p, q))
-            }
+        // 당일 거래량 기반 잔량 스케일 (거래량이 많을수록 호가 잔량도 많다)
+        val volumeBase = max(100L, quote.dailyVolume / 1000)
+
+        val asks = (1..10).map { i ->
+            val p = roundToUnit(price + unit * BigDecimal(i * stepMultiplier), unit)
+            // 호가가 멀어질수록 잔량 감소 (실제 호가창 분포 모사)
+            val q = (11 - i) * Random.nextLong(volumeBase / 10, volumeBase)
+            OrderLevel(p, max(1L, q))
         }
-        val bids = buildList {
-            add(OrderLevel(bestBid, bestBidQty))
-            for (i in 2..10) {
-                val p = roundToUnit(bestBid - unit * BigDecimal(i - 1), unit)
-                val q = ((11 - i) * Random.nextLong(50, 500))
-                add(OrderLevel(p, q))
-            }
-        }
+        val bids = (1..10).map { i ->
+            val p = roundToUnit(price - unit * BigDecimal(i * stepMultiplier), unit)
+            val q = (11 - i) * Random.nextLong(volumeBase / 10, volumeBase)
+            OrderLevel(p, max(1L, q))
+        }.filter { it.price > BigDecimal.ZERO }
 
         return OrderBookSnapshot(asks, bids, Instant.now(), DataSource.YAHOO_FINANCE)
     }
@@ -84,18 +85,17 @@ class YahooFinanceOrderBookProvider : OrderBookProvider {
                 .build()
             val res = http.send(req, HttpResponse.BodyHandlers.ofString())
             if (res.statusCode() != 200) {
-                log.warn("Yahoo Finance returned {}: {}", res.statusCode(), yahooSymbol)
+                log.warn("Yahoo Finance {}: status={}", yahooSymbol, res.statusCode())
                 return null
             }
-            val root = mapper.readTree(res.body())
-            val meta = root["chart"]?.get("result")?.get(0)?.get("meta") ?: return null
+            val meta = mapper.readTree(res.body())
+                ?.get("chart")?.get("result")?.get(0)?.get("meta") ?: return null
 
             YahooQuote(
                 regularMarketPrice = meta["regularMarketPrice"]?.decimalValue(),
-                ask                = meta["ask"]?.decimalValue(),
-                bid                = meta["bid"]?.decimalValue(),
-                askSize            = meta["askSize"]?.intValue(),
-                bidSize            = meta["bidSize"]?.intValue(),
+                dayHigh            = meta["regularMarketDayHigh"]?.decimalValue() ?: BigDecimal.ZERO,
+                dayLow             = meta["regularMarketDayLow"]?.decimalValue()  ?: BigDecimal.ZERO,
+                dailyVolume        = meta["regularMarketVolume"]?.longValue()      ?: 0L,
             )
         } catch (e: Exception) {
             log.warn("Yahoo Finance fetch failed for {}: {}", yahooSymbol, e.message)
@@ -106,7 +106,7 @@ class YahooFinanceOrderBookProvider : OrderBookProvider {
     private fun toYahooSymbol(symbol: String, market: String): String = when (market.uppercase()) {
         "KOSPI"  -> "$symbol.KS"
         "KOSDAQ" -> "$symbol.KQ"
-        else     -> symbol  // NASDAQ, NYSE 등 그대로
+        else     -> symbol
     }
 
     private fun priceUnit(price: BigDecimal): BigDecimal = when {
@@ -126,12 +126,13 @@ class YahooFinanceOrderBookProvider : OrderBookProvider {
     private operator fun BigDecimal.plus(other: BigDecimal)  = this.add(other)
     private operator fun BigDecimal.minus(other: BigDecimal) = this.subtract(other)
     private operator fun BigDecimal.times(other: BigDecimal) = this.multiply(other)
+    private operator fun BigDecimal.div(other: BigDecimal)   =
+        if (other.signum() == 0) BigDecimal.ZERO else this.divide(other, 6, RoundingMode.HALF_UP)
 
     private data class YahooQuote(
         val regularMarketPrice: BigDecimal?,
-        val ask: BigDecimal?,
-        val bid: BigDecimal?,
-        val askSize: Int?,
-        val bidSize: Int?,
+        val dayHigh: BigDecimal,
+        val dayLow: BigDecimal,
+        val dailyVolume: Long,
     )
 }
