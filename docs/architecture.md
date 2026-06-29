@@ -137,6 +137,18 @@ Tracing:    Jaeger (all-in-one)
 | **Backtest Engine** | Historical simulation, commission/slippage, reliability score |
 | **Forward Test Engine** | Live-market signal logging, vs-backtest comparison |
 | **Strategy Vault** | Encrypted ruleset storage, fingerprint, access control |
+
+### Planned Modules (Investment Wallet)
+
+| Module | Responsibility |
+|--------|---------------|
+| **Ledger Service** | 원장 이벤트 기록·조회. 잔고 = 이벤트 replay 합산 |
+| **Wallet Service** | 현금·예약금·평가액·정산대기 상태 실시간 집계 |
+| **Order State Machine** | 주문접수 → 예약 → 부분체결 → 전량체결 → 정산 상태 전이 |
+| **Receipt Service** | 체결 후 영수증 생성 (체결금·수수료·정산 상태) |
+| **Emotion Tag Service** | 주문 감정 태그 저장 + 수익률 연계 분석 |
+| **Replay Service** | 하루 투자 이벤트 스트림 재구성 |
+| **Behavior Score Service** | 투자 행동 점수 / 생존 점수 계산 |
 | **Strategy Marketplace** | Listing, subscription, badge system, compliance checks |
 | **Quant Analytics** | Over-optimisation detection, phase-based performance, signal attribution |
 
@@ -259,7 +271,8 @@ GET /api/strategies/{id}/signal   (subscriber endpoint)
 | V10 | Create candle continuous aggregates |
 | V11 | Create paper trading tables |
 | V12 | Seed 202 stocks (KOSPI/KOSDAQ/NASDAQ/NYSE) |
-| V13 | *(planned)* Create Quant Lab tables |
+| V13 | Create Quant Lab tables (rule_sets, backtest_results, quant_signals) |
+| V14 | *(planned)* Create Investment Wallet tables (ledger, wallet_snapshots, emotion_tags) |
 
 ---
 
@@ -319,6 +332,24 @@ GET    /api/strategy-market                   # 전략 마켓 목록
 POST   /api/strategy-market/{id}/subscribe
 ```
 
+### REST (planned — Investment Wallet)
+
+```http
+GET    /api/wallet                            # 돈의 이동 지도 (현금/예약금/평가액/정산대기)
+GET    /api/wallet/ledger                     # 원장 이벤트 스트림
+GET    /api/wallet/timeline                   # 내 돈 이동 타임라인
+
+GET    /api/paper/orders/{id}/receipt         # 투자 영수증
+GET    /api/paper/replay?date=                # 주문 리플레이
+
+GET    /api/wallet/score                      # 투자 행동 점수
+GET    /api/wallet/survival-score             # 투자 생존 점수
+
+GET    /api/paper/orders/{id}/emotion-tags    # 감정 태그 조회
+POST   /api/paper/orders/{id}/emotion-tags    # 감정 태그 저장
+GET    /api/wallet/emotion-analysis           # 감정 태그 × 수익률 분석
+```
+
 ### WebSocket (STOMP)
 
 Connect: `ws://localhost:8080/ws` (SockJS fallback)
@@ -331,6 +362,57 @@ Connect: `ws://localhost:8080/ws` (SockJS fallback)
 
 ---
 
+## Investment Wallet — Planned Architecture
+
+### Order State Machine
+
+```
+PaperOrder
+  status: PENDING → RESERVED → PARTIALLY_FILLED → FILLED → SETTLED
+
+상태 전이 시 LedgerEvent 생성:
+  PENDING      → ORDER_PLACED      (잔고 변경 없음)
+  RESERVED     → CASH_RESERVED     (available_cash -= amount)
+  PARTIALLY_FILLED → PARTIAL_FILL  (reserved -= filled_amount, holdings += qty)
+  FILLED       → FULL_FILL         (reserved = 0)
+  SETTLED      → SETTLEMENT        (정산 완료, 최종 원장 확정)
+```
+
+### Ledger (원장) Pattern
+
+```
+잔고 계산 원칙: 잔고 = 모든 LedgerEvent를 시간순으로 replay한 합산
+잔고를 별도 컬럼으로 관리하지 않음 → 이벤트 소싱 패턴
+
+LedgerEvent types:
+  DEPOSIT          +현금
+  WITHDRAWAL       -현금
+  CASH_RESERVED    -available_cash, +reserved_cash
+  CASH_UNRESERVED  +available_cash, -reserved_cash
+  FILL             +holdings, -reserved_cash (체결가 차이는 수수료로)
+  FEE              -현금 (수수료)
+  SETTLEMENT       정산 완료 (settlement_pending → settled)
+```
+
+### Behavior Score Calculation
+
+```
+투자 행동 점수 (0~100):
+  +20  분할 매수 비율 > 50%
+  +15  손절가 설정 후 지킴
+  +15  급등 후 3분 이내 추격매수 없음
+  -20  급등 직후 5분 이내 매수 비율 > 30%
+  -15  동일 종목 당일 3회 이상 매수
+
+투자 생존 점수 (0~100):
+  -30  단일 종목 비중 > 70%
+  -20  현금 비중 < 5%
+  -15  1시간 내 주문 횟수 > 5
+  -10  급등주 비중 > 40%
+```
+
+---
+
 ## Redis Key Schema
 
 ```
@@ -338,6 +420,7 @@ stock:price:{market}:{symbol}      # latest price JSON (STRING)
 orderbook:{symbol}                 # KIS realtime orderbook (STRING, TTL 30s)
 alert:cooldown:{ruleId}            # cooldown flag (STRING, TTL 600s)
 signal:forward:{ruleSetId}:{date}  # (planned) forward test daily signal log
+wallet:snapshot:{userId}           # (planned) 최신 wallet 스냅샷 캐시 (TTL 30s)
 ```
 
 ---

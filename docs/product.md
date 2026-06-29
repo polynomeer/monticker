@@ -4,7 +4,7 @@
 
 ## Product Identity
 
-monticker is an **event-centric stock observation platform with a built-in quant strategy lab**.
+monticker is an **event-centric stock observation platform with a built-in quant strategy lab and investment wallet**.
 
 The original core value:
 
@@ -13,6 +13,10 @@ The original core value:
 Extended with Quant Lab:
 
 > Let users turn investment ideas into verifiable rules, backtest them against real history, validate them forward in a live paper environment, and optionally share or sell the strategy — without exposing the underlying ruleset.
+
+Extended with Investment Wallet:
+
+> 사용자가 투자 과정에서 자신의 현금·예약금·체결금·정산 대기금이 어떻게 이동하는지 실시간으로 이해할 수 있도록 원장 기반 타임라인을 설계했습니다. 주문 시점의 감정 태그와 체결 결과를 연결해 사용자가 자신의 투자 습관을 복기할 수 있는 기능을 제공합니다.
 
 **Conventional app:**
 ```
@@ -44,10 +48,16 @@ Monticker
 │   ├── 위험 집중도 분석
 │   └── 평균단가 차트 오버레이
 │
-├── Paper Trading
+├── Paper Trading + Investment Wallet
 │   ├── 모의 주문 / 체결 엔진
-│   ├── 체결 품질 분석
-│   └── 매매 습관 진단
+│   ├── 체결 순간 상태머신 (주문접수→예약→체결→정산)
+│   ├── 내 돈 이동 타임라인 (원장 기반)
+│   ├── 투자 영수증 (체결금·수수료·정산 상태)
+│   ├── 감정 태그 기반 투자 기록
+│   ├── 주문 리플레이 (하루 투자 복기)
+│   ├── 돈의 이동 지도 (현금/예약금/평가액/정산대기)
+│   ├── 투자 행동 점수
+│   └── 투자 생존 점수
 │
 ├── Quant Lab                          ← NEW
 │   ├── 룰셋 빌더 (코딩 없는 조건식 UI)
@@ -75,7 +85,8 @@ monticker
 ├── 3. News / disclosure / sentiment keyword mapping
 ├── 4. Anomaly detection (price spike, volume surge)
 ├── 5. Watchlist & portfolio observation
-├── 6. Review-oriented paper trading
+├── 6. Paper trading + Investment Wallet
+│       원장 기반 돈의 이동 타임라인, 투자 영수증, 감정 태그
 ├── 7. Quant Lab — ruleset builder + backtest + forward test   ← NEW
 └── 8. Strategy Market — share / sell verified strategies     ← NEW
 ```
@@ -216,6 +227,107 @@ Required gate before Strategy Market listing:
 
 ---
 
+## Investment Wallet — Concept
+
+### One-line definition
+
+> 단순 잔고 숫자가 아니라 **"내 돈이 어디에 어떤 상태로 있는지"**를 원장 기반으로 실시간 추적하는 투자 월렛.
+
+### Core features
+
+#### 1. 내 돈 이동 타임라인
+
+주문 시점부터 정산 완료까지 돈의 상태 전이를 원장 이벤트 스트림으로 보여준다.
+
+```
+100,000원 충전
+↓ (DEPOSITED)
+70,000원 매수 주문 예약
+↓ (RESERVED)
+35,000원 부분 체결
+↓ (PARTIALLY_FILLED)
+35,000원 예약 해제
+↓ (UNRESERVED)
+현재 사용 가능 금액 65,000원
+```
+
+백엔드 설계 포인트: 원장(ledger) 테이블, 주문 예약금 상태 머신, 이벤트 소싱 패턴.
+
+#### 2. 투자 영수증
+
+체결 직후 토스 스타일 영수증을 보여준다.
+
+```
+삼성전자 3주 매수 완료
+
+주문 금액:   210,000원
+체결 금액:   209,700원
+수수료:           300원
+남은 예약금:       0원
+체결 시간:    14:31:08
+결제 상태:  정산 완료
+```
+
+#### 3. 감정 태그 기반 투자 기록
+
+주문 시점에 감정을 선택하고 나중에 수익률과 연결해 보여준다.
+
+```
+매수 이유 선택: [확신] [불안] [따라삼] [뉴스보고] [급등놓칠까봐] [장기투자]
+
+→ 결과 분석
+'급등 놓칠까 봐' 태그로 산 종목의 평균 수익률: -3.2%
+'장기 투자' 태그로 산 종목의 평균 수익률:    +4.8%
+```
+
+#### 4. 돈의 이동 지도
+
+총 자산을 상태별로 분해해서 보여준다.
+
+```
+총 자산 1,000,000원
+
+사용 가능 현금:   200,000원
+주문 예약금:      150,000원
+보유 주식 평가액: 600,000원
+정산 대기 금액:    50,000원
+```
+
+#### 5. 주문 리플레이
+
+하루가 끝나면 투자 과정을 게임 로그처럼 복기할 수 있다.
+
+```
+09:10 카카오 5주 매수 주문
+09:11 2주 부분 체결
+09:13 나머지 3주 체결
+10:20 네이버 매도 (+4.2%)
+15:30 오늘 손익 +12,300원
+```
+
+#### 6. 체결 순간 상태 머신
+
+주문 상태 전이를 실시간으로 보여준다 (단순 "매수 완료" 대신).
+
+```
+주문 접수 → 금액 예약 완료 → 시장에 주문 전송 → 일부 체결 → 전량 체결 → 정산 완료
+```
+
+#### 7. 투자 행동 점수 & 생존 점수
+
+```
+오늘의 투자 습관 점수: 78점
+  좋았던 점: 분할 매수 비율 높음, 무리한 추가 매수 없음
+  주의할 점: 급등 직후 추격 매수 비율 높음
+
+투자 생존 점수: 64점
+  위험 요인: 한 종목 비중 72%, 현금 비중 3%
+```
+
+Note: 실제 투자 조언이 아닌 **교육용/모의투자 전용 피드백**으로 설계.
+
+---
+
 ## Strategy Market — Design Principles
 
 This feature must not resemble a stock-tip service or investment advisory:
@@ -294,6 +406,12 @@ Quant Lab (upcoming)
 ├── /quant-lab/forward-test
 ├── /quant-lab/vault
 └── /strategy-market
+
+Investment Wallet (upcoming)
+├── /wallet              — 돈의 이동 지도
+├── /wallet/timeline     — 내 돈 이동 타임라인
+├── /wallet/replay       — 주문 리플레이
+└── /paper/receipt/{id}  — 투자 영수증
 ```
 
 ---
@@ -325,6 +443,7 @@ Quant Lab 룰셋 빌더 UI
 Strategy Market
 AI 자동 매수/매도
 소셜 커뮤니티
+가상 투자 미션 / 친구 대결 리그
 ```
 
 ---
@@ -342,6 +461,9 @@ AI 자동 매수/매도
 | 7 | **Quant Lab Phase 2**: backtest engine, reliability score |
 | 8 | **Quant Lab Phase 3**: forward test + mock auto-trading |
 | 9 | **Strategy Market**: sharing, badges, ruleset protection |
+| 10 | **Investment Wallet Phase 1**: 원장 테이블, 돈의 이동 타임라인, 투자 영수증 |
+| 11 | **Investment Wallet Phase 2**: 감정 태그, 주문 리플레이, 투자 행동 점수 |
+| 12 | **Investment Wallet Phase 3**: 생존 점수, 가상 투자 미션, 친구 대결 리그 |
 
 ---
 
@@ -352,3 +474,5 @@ AI 자동 매수/매도
 3. **Backtest reliability score** is mandatory. Over-optimised strategies must be flagged before sharing.
 4. **Strategy Market ≠ investment advisory**. Positioned as "tool / simulation content", not "stock picks".
 5. **Order book provider chain**: KIS realtime → Yahoo Finance (15m delay) → Mock.
+6. **원장(ledger) 패턴**: Investment Wallet의 모든 잔고 변경은 이벤트 로그로 기록. 잔고는 이벤트를 replay해서 계산 가능해야 함.
+7. **감정 태그 ≠ 투자 조언**: 교육용 피드백으로만 제공. "이 종목을 팔아라" 형태의 추천 금지.

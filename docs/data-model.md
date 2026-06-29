@@ -311,6 +311,110 @@ CREATE TABLE simulation_trades (
 
 ---
 
+## Investment Wallet Tables (planned — V14)
+
+### ledger_events
+
+모든 잔고 변화의 원장. 잔고는 이벤트를 replay해서 계산한다.
+
+```sql
+CREATE TABLE ledger_events (
+    id           BIGSERIAL PRIMARY KEY,
+    user_id      BIGINT         NOT NULL REFERENCES users(id),
+    event_type   VARCHAR(30)    NOT NULL,
+    -- DEPOSIT | WITHDRAWAL | CASH_RESERVED | CASH_UNRESERVED
+    -- FILL | PARTIAL_FILL | FEE | SETTLEMENT
+    amount       NUMERIC(18, 4) NOT NULL,  -- 양수 = 증가, 음수 = 감소
+    balance_after NUMERIC(18,4),           -- 스냅샷 (replay 가속화용)
+    paper_order_id BIGINT       REFERENCES paper_orders(id),
+    stock_id     BIGINT         REFERENCES stocks(id),
+    description  TEXT,
+    metadata_json JSONB,
+    created_at   TIMESTAMPTZ    NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_ledger_events_user_time ON ledger_events (user_id, created_at DESC);
+CREATE INDEX idx_ledger_events_order     ON ledger_events (paper_order_id);
+```
+
+Event type flow per order:
+```
+매수 주문:  CASH_RESERVED → PARTIAL_FILL (여러 번 가능) → FILL → FEE → SETTLEMENT
+매도 주문:  FILL → FEE → CASH_UNRESERVED → SETTLEMENT
+취소:       CASH_UNRESERVED
+```
+
+### wallet_snapshots
+
+`ledger_events` replay 가속화를 위한 일별 스냅샷.
+
+```sql
+CREATE TABLE wallet_snapshots (
+    id                   BIGSERIAL PRIMARY KEY,
+    user_id              BIGINT         NOT NULL REFERENCES users(id),
+    snapshot_date        DATE           NOT NULL,
+    available_cash       NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    reserved_cash        NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    settlement_pending   NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    holdings_value       NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    total_assets         NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    created_at           TIMESTAMPTZ    NOT NULL DEFAULT now(),
+    UNIQUE (user_id, snapshot_date)
+);
+```
+
+### order_emotion_tags
+
+주문 시점의 감정 태그. 나중에 수익률과 연결해서 투자 습관 분석에 사용한다.
+
+```sql
+CREATE TABLE order_emotion_tags (
+    id             BIGSERIAL PRIMARY KEY,
+    paper_order_id BIGINT      NOT NULL REFERENCES paper_orders(id),
+    user_id        BIGINT      NOT NULL REFERENCES users(id),
+    emotion        VARCHAR(30) NOT NULL,
+    -- CONFIDENT | ANXIOUS | FOLLOWING | NEWS_BASED | FOMO | LONG_TERM
+    -- INTUITION | REBALANCING | AVERAGING_DOWN | OTHER
+    memo           TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_emotion_tags_user ON order_emotion_tags (user_id, created_at DESC);
+```
+
+Emotion types:
+```
+CONFIDENT      확신
+ANXIOUS        불안
+FOLLOWING      따라삼
+NEWS_BASED     뉴스 보고
+FOMO           급등 놓칠까 봐
+LONG_TERM      장기 투자
+INTUITION      직감
+REBALANCING    비중 조절
+AVERAGING_DOWN 물타기
+```
+
+### investment_behavior_scores
+
+투자 행동 점수와 생존 점수의 일별 기록.
+
+```sql
+CREATE TABLE investment_behavior_scores (
+    id                 BIGSERIAL PRIMARY KEY,
+    user_id            BIGINT    NOT NULL REFERENCES users(id),
+    score_date         DATE      NOT NULL,
+    behavior_score     INTEGER,  -- 0~100, 투자 습관 점수
+    survival_score     INTEGER,  -- 0~100, 리스크 관리 점수
+    score_breakdown    JSONB,    -- 항목별 점수 내역
+    feedback_json      JSONB,    -- 좋았던 점 / 주의할 점
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (user_id, score_date)
+);
+```
+
+---
+
 ## TimescaleDB Tables
 
 ### price_ticks
@@ -545,6 +649,7 @@ stock:price:{market}:{symbol}           → latest price JSON (STRING)
 orderbook:{symbol}                      → KIS realtime orderbook JSON (STRING, TTL 30s)
 alert:cooldown:{ruleId}                 → cooldown flag (STRING, TTL 600s)
 signal:forward:{ruleSetId}:{date}       → daily forward test signal set (planned)
+wallet:snapshot:{userId}                → 최신 wallet 스냅샷 캐시 (planned, TTL 30s)
 news:dedup:{urlHash}                    → dedup flag (STRING, TTL 7d)
 stream:market:ticks                     → Redis Stream for tick events
 stream:events:detected                  → Redis Stream for detected stock_events
@@ -560,14 +665,20 @@ users
   ├── alert_rules → alert_histories
   ├── portfolios → portfolio_positions → stocks
   ├── simulation_accounts → simulation_trades → stocks
-  └── rule_sets ──────────────────────────────────── Quant Lab
-        ├── rule_set_versions
-        ├── backtest_results
-        ├── forward_test_results
-        ├── quant_signals → stocks
-        └── strategy_products
-              ├── strategy_subscriptions ← users (buyer)
-              └── strategy_badges
+  ├── rule_sets ──────────────────────────────────── Quant Lab
+  │     ├── rule_set_versions
+  │     ├── backtest_results
+  │     ├── forward_test_results
+  │     ├── quant_signals → stocks
+  │     └── strategy_products
+  │           ├── strategy_subscriptions ← users (buyer)
+  │           └── strategy_badges
+  │
+  └── (Investment Wallet — planned V14) ────────────
+        ├── ledger_events → paper_orders → stocks
+        ├── wallet_snapshots
+        ├── investment_behavior_scores
+        └── paper_orders → order_emotion_tags
 
 stocks
   ├── stock_aliases
