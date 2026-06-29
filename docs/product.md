@@ -49,7 +49,8 @@ Monticker
 │   └── 평균단가 차트 오버레이
 │
 ├── Paper Trading + Investment Wallet
-│   ├── 모의 주문 / 체결 엔진
+│   ├── 체결 엔진 (CLOB — Order Book, 가격/시간 우선, 부분체결, 슬리피지)
+│   ├── 실시간 리스크 한도 시스템 (주문 전 VaR·집중도·일일손실 체크)
 │   ├── 체결 순간 상태머신 (주문접수→예약→체결→정산)
 │   ├── 내 돈 이동 타임라인 (원장 기반)
 │   ├── 투자 영수증 (체결금·수수료·정산 상태)
@@ -463,7 +464,9 @@ AI 자동 매수/매도
 | 9 | **Strategy Market**: sharing, badges, ruleset protection |
 | 10 | **Investment Wallet Phase 1**: 원장 테이블, 돈의 이동 타임라인, 투자 영수증 |
 | 11 | **Investment Wallet Phase 2**: 감정 태그, 주문 리플레이, 투자 행동 점수 |
-| 12 | **Investment Wallet Phase 3**: 생존 점수, 가상 투자 미션, 친구 대결 리그 |
+| 12 | **Matching Engine**: CLOB Order Book, 가격/시간 우선 체결, 부분체결, 슬리피지 |
+| 13 | **Risk Limit System**: 주문 전 리스크 게이트, VaR·집중도·일일손실 한도 |
+| 14 | **Investment Wallet Phase 3**: 생존 점수, 가상 투자 미션, 친구 대결 리그 |
 
 ---
 

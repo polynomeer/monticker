@@ -120,7 +120,9 @@ Tracing:    Jaeger (all-in-one)
 | Market Data | `candles_1m`, `candles_1d_cagg` | Done |
 | Event Timeline | `stock_events` | Done |
 | Alert | `alert_rules`, `alert_histories` | Done |
-| Paper Trading | `paper_accounts`, `paper_orders`, `paper_holdings` | Done |
+| Paper Trading | `paper_accounts`, `paper_trades` | Done (simple instant-fill) |
+| **Matching Engine** | `orders`, `fills`, `order_book_snapshots` | **Planned** |
+| **Risk Limit System** | `risk_limits`, `risk_check_logs` | **Planned** |
 | News | `news_articles`, `news_stock_mappings` | Done |
 | Screener | Redis-based ranking, JDBC queries | Done |
 | Order Book | KIS WebSocket → Redis / Yahoo Finance / Mock chain | Done |
@@ -332,6 +334,22 @@ GET    /api/strategy-market                   # 전략 마켓 목록
 POST   /api/strategy-market/{id}/subscribe
 ```
 
+### REST (planned — Matching Engine + Risk)
+
+```http
+# 주문 제출 (리스크 체크 → 체결 엔진)
+POST   /api/matching/orders                   # 주문 접수
+DELETE /api/matching/orders/{id}              # 주문 취소
+GET    /api/matching/orders                   # 내 미체결 주문
+GET    /api/matching/orders/{id}/fills        # 체결 내역
+
+# 리스크 한도
+GET    /api/risk/limits                       # 내 리스크 한도 조회
+PUT    /api/risk/limits                       # 한도 설정
+POST   /api/risk/check                        # 주문 전 리스크 시뮬레이션 (dry-run)
+GET    /api/risk/exposure                     # 현재 포트폴리오 리스크 노출도
+```
+
 ### REST (planned — Investment Wallet)
 
 ```http
@@ -359,6 +377,132 @@ Connect: `ws://localhost:8080/ws` (SockJS fallback)
 | `/topic/stocks/{stockId}` | 종목별 실시간 가격 |
 | `/topic/market` | 전체 시장 요약 |
 | `/topic/signals/{userId}` | *(planned)* 룰셋 신호 알림 |
+
+---
+
+## Matching Engine — Architecture
+
+### 설계 원칙
+
+실제 거래소의 Central Limit Order Book(CLOB) 구조를 모사한다.  
+모의투자이지만 체결 로직은 실거래소 규칙을 따른다.
+
+```
+주문 접수 (POST /api/matching/orders)
+  │
+  ├─► RiskChecker.preCheck()          ← 리스크 한도 초과 시 즉시 REJECTED
+  │
+  ├─► OrderBook.submit(order)
+  │     ├── MARKET order → 즉시 최우선 반대호가와 매칭
+  │     └── LIMIT order  → 호가 조건 미충족 시 Order Book에 등록 대기
+  │
+  ├─► MatchingEngine.match()
+  │     ├── 가격 우선: 매수는 높은 가격, 매도는 낮은 가격부터
+  │     └── 시간 우선: 동일 가격 내 먼저 접수된 주문 우선
+  │
+  ├─► FillEvent 발생
+  │     ├── LedgerService.recordFill()    ← 원장 기록
+  │     └── WebSocket broadcast          ← 실시간 체결 알림
+  │
+  └─► OrderStatus 전이
+        PENDING → PARTIALLY_FILLED → FILLED | CANCELLED
+```
+
+### Order Book 자료구조
+
+```kotlin
+// 매도호가: 낮은 가격 우선 (TreeMap ascending)
+// 매수호가: 높은 가격 우선 (TreeMap descending)
+class OrderBook(val stockId: Long) {
+    val asks: TreeMap<BigDecimal, ArrayDeque<Order>> = TreeMap()          // price → FIFO queue
+    val bids: TreeMap<BigDecimal, ArrayDeque<Order>> = TreeMap(reverseOrder())
+}
+```
+
+### 체결 우선순위
+
+```
+1. 가격 우선 (Price Priority)
+   매수: 더 높은 가격을 제시한 주문이 먼저 체결
+   매도: 더 낮은 가격을 제시한 주문이 먼저 체결
+
+2. 시간 우선 (Time Priority)
+   동일 가격 내에서는 먼저 접수된 주문이 먼저 체결
+
+3. MARKET 주문은 항상 LIMIT 주문보다 우선
+```
+
+### 슬리피지 시뮬레이션
+
+대량 주문은 여러 호가 레벨에 걸쳐 체결되어 평균 체결가가 불리해진다.
+
+```
+주문 수량 > 최우선 호가 잔량 → 다음 레벨로 넘어가며 체결
+체결가 = 각 레벨 가격 × 해당 레벨 체결 수량 의 가중평균
+
+예시:
+  매수 주문: 1000주 @ MARKET
+  매도 호가: 50,000원 × 300주, 50,100원 × 400주, 50,200원 × 500주
+  체결:      300주@50,000 + 400주@50,100 + 300주@50,200
+  평균 체결가: 50,090원  (단순 50,000원보다 불리)
+```
+
+---
+
+## Risk Limit System — Architecture
+
+### 설계 원칙
+
+주문이 체결되기 **전**에 동기적으로 실행되는 리스크 게이트.  
+한도 초과 주문은 `REJECTED` 상태로 즉시 반환되며 체결 엔진에 도달하지 않는다.
+
+```
+RiskChecker.preCheck(userId, order):
+  1. DailyLossLimitRule    → 오늘 실현 손실이 한도(기본 3%) 초과 여부
+  2. ConcentrationRule     → 주문 후 특정 종목 비중이 한도(기본 30%) 초과 여부
+  3. VaRLimitRule          → 95% VaR가 총 자산의 한도(기본 5%) 초과 여부
+  4. PositionCountRule     → 보유 종목 수가 한도(기본 10개) 초과 여부
+  5. TradingFrequencyRule  → 1시간 내 주문 횟수가 한도(기본 5회) 초과 여부
+
+모든 규칙 통과 → RiskCheckResult.APPROVED
+하나라도 실패 → RiskCheckResult.REJECTED(reason, severity)
+```
+
+### RiskCheckResult
+
+```kotlin
+data class RiskCheckResult(
+    val approved: Boolean,
+    val checks: List<RuleResult>,   // 각 규칙별 통과/실패 + 상세 수치
+    val blockedBy: String?,         // 거부 이유 (사용자에게 표시)
+    val severity: Severity,         // INFO | WARNING | BLOCKED
+)
+
+// 예시 응답
+{
+  "approved": false,
+  "blockedBy": "일일 손실 한도 초과",
+  "severity": "BLOCKED",
+  "checks": [
+    { "rule": "DAILY_LOSS", "passed": false,
+      "detail": "오늘 손실 -3.4% / 한도 -3.0%", "current": -3.4, "limit": -3.0 },
+    { "rule": "CONCENTRATION", "passed": true,
+      "detail": "삼성전자 비중 22.1% / 한도 30%", "current": 22.1, "limit": 30.0 }
+  ]
+}
+```
+
+### Dry-run API
+
+주문 실행 없이 리스크 체크 결과만 반환.  
+프론트엔드에서 "주문 전 리스크 확인" 버튼으로 호출.
+
+```http
+POST /api/risk/check
+{ "stockId": 1, "side": "BUY", "quantity": 100, "orderType": "MARKET" }
+
+→ RiskCheckResult (체결 없음)
+```
 
 ---
 

@@ -284,6 +284,102 @@ CREATE TABLE portfolio_positions (
 
 ---
 
+## Matching Engine Tables (planned — V15)
+
+### orders
+
+체결 엔진에 접수된 주문. LIMIT 주문은 체결 전까지 Order Book에 대기한다.
+
+```sql
+CREATE TABLE orders (
+    id           BIGSERIAL PRIMARY KEY,
+    user_id      BIGINT         NOT NULL REFERENCES users(id),
+    stock_id     BIGINT         NOT NULL REFERENCES stocks(id),
+    side         VARCHAR(4)     NOT NULL CHECK (side IN ('BUY','SELL')),
+    order_type   VARCHAR(10)    NOT NULL CHECK (order_type IN ('MARKET','LIMIT')),
+    quantity     INTEGER        NOT NULL CHECK (quantity > 0),
+    limit_price  NUMERIC(18,4),          -- MARKET 주문은 NULL
+    filled_qty   INTEGER        NOT NULL DEFAULT 0,
+    avg_fill_price NUMERIC(18,4),
+    status       VARCHAR(20)    NOT NULL DEFAULT 'PENDING',
+    -- PENDING | PARTIALLY_FILLED | FILLED | CANCELLED | REJECTED
+    reject_reason TEXT,
+    created_at   TIMESTAMPTZ    NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ    NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_orders_user_status ON orders (user_id, status, created_at DESC);
+CREATE INDEX idx_orders_stock_status ON orders (stock_id, status);
+```
+
+Order 상태 전이:
+```
+MARKET 주문: PENDING → FILLED (즉시, 슬리피지 반영)
+             PENDING → PARTIALLY_FILLED → FILLED
+LIMIT 주문:  PENDING → (Order Book 대기) → PARTIALLY_FILLED → FILLED
+             PENDING → CANCELLED (사용자 취소)
+             PENDING → REJECTED  (리스크 한도 초과)
+```
+
+### fills
+
+개별 체결 이벤트. 하나의 주문이 여러 번의 fills를 가질 수 있다(부분체결).
+
+```sql
+CREATE TABLE fills (
+    id           BIGSERIAL PRIMARY KEY,
+    order_id     BIGINT         NOT NULL REFERENCES orders(id),
+    user_id      BIGINT         NOT NULL REFERENCES users(id),
+    stock_id     BIGINT         NOT NULL REFERENCES stocks(id),
+    side         VARCHAR(4)     NOT NULL,
+    quantity     INTEGER        NOT NULL,
+    fill_price   NUMERIC(18,4)  NOT NULL,
+    amount       NUMERIC(18,4)  NOT NULL,  -- quantity × fill_price
+    fee          NUMERIC(18,4)  NOT NULL DEFAULT 0,
+    filled_at    TIMESTAMPTZ    NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_fills_order    ON fills (order_id);
+CREATE INDEX idx_fills_user     ON fills (user_id, filled_at DESC);
+```
+
+### risk_limits
+
+사용자별 리스크 한도 설정.
+
+```sql
+CREATE TABLE risk_limits (
+    id                      BIGSERIAL PRIMARY KEY,
+    user_id                 BIGINT         NOT NULL REFERENCES users(id) UNIQUE,
+    daily_loss_limit_pct    NUMERIC(5,2)   NOT NULL DEFAULT 3.00,   -- 일일 손실 한도 %
+    concentration_limit_pct NUMERIC(5,2)   NOT NULL DEFAULT 30.00,  -- 종목당 최대 비중 %
+    var_limit_pct           NUMERIC(5,2)   NOT NULL DEFAULT 5.00,   -- 95% VaR 한도 %
+    max_position_count      INTEGER        NOT NULL DEFAULT 10,      -- 최대 보유 종목 수
+    max_hourly_orders       INTEGER        NOT NULL DEFAULT 5,       -- 1시간 최대 주문 수
+    is_active               BOOLEAN        NOT NULL DEFAULT true,
+    updated_at              TIMESTAMPTZ    NOT NULL DEFAULT now()
+);
+```
+
+### risk_check_logs
+
+모든 리스크 체크 결과 기록. 거부된 주문의 사유 추적에 사용.
+
+```sql
+CREATE TABLE risk_check_logs (
+    id           BIGSERIAL PRIMARY KEY,
+    user_id      BIGINT      NOT NULL REFERENCES users(id),
+    stock_id     BIGINT      REFERENCES stocks(id),
+    side         VARCHAR(4),
+    quantity     INTEGER,
+    approved     BOOLEAN     NOT NULL,
+    blocked_by   VARCHAR(100),
+    checks_json  JSONB,      -- 각 규칙 통과/실패 상세
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_risk_check_logs_user ON risk_check_logs (user_id, created_at DESC);
+```
+
+---
+
 ### simulation_trades
 
 ```sql
@@ -665,6 +761,9 @@ users
   ├── alert_rules → alert_histories
   ├── portfolios → portfolio_positions → stocks
   ├── simulation_accounts → simulation_trades → stocks
+  ├── orders ──────────────────────────── Matching Engine (V15)
+  │     └── fills → stocks
+  └── risk_limits / risk_check_logs
   ├── rule_sets ──────────────────────────────────── Quant Lab
   │     ├── rule_set_versions
   │     ├── backtest_results
