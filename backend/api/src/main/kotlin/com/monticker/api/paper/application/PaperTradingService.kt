@@ -4,6 +4,7 @@ import com.monticker.api.paper.domain.PaperAccount
 import com.monticker.api.paper.domain.PaperTrade
 import com.monticker.api.paper.infrastructure.PaperAccountRepository
 import com.monticker.api.paper.infrastructure.PaperTradeRepository
+import com.monticker.api.wallet.application.LedgerService
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -17,6 +18,7 @@ class PaperTradingService(
     private val accountRepo: PaperAccountRepository,
     private val tradeRepo: PaperTradeRepository,
     private val jdbc: JdbcTemplate,
+    private val ledgerService: LedgerService,
 ) {
     private fun getOrCreateAccount(userId: Long): PaperAccount =
         accountRepo.findByUserId(userId).orElseGet {
@@ -70,8 +72,9 @@ class PaperTradingService(
         account.cash -= amount
         account.updatedAt = Instant.now()
         accountRepo.save(account)
-        tradeRepo.save(PaperTrade(userId=userId, stockId=stockId, side="BUY", quantity=quantity, price=price, amount=amount))
-        return TradeResultResponse("BUY", stockId, quantity, price, amount, account.cash)
+        val trade = tradeRepo.save(PaperTrade(userId=userId, stockId=stockId, side="BUY", quantity=quantity, price=price, amount=amount))
+        ledgerService.recordBuy(userId, trade.id, stockId, amount, account.cash)
+        return TradeResultResponse("BUY", stockId, quantity, price, amount, account.cash, trade.id)
     }
 
     fun sell(userId: Long, stockId: Long, quantity: Int): TradeResultResponse {
@@ -86,8 +89,9 @@ class PaperTradingService(
         account.cash += amount
         account.updatedAt = Instant.now()
         accountRepo.save(account)
-        tradeRepo.save(PaperTrade(userId=userId, stockId=stockId, side="SELL", quantity=quantity, price=price, amount=amount))
-        return TradeResultResponse("SELL", stockId, quantity, price, amount, account.cash)
+        val trade = tradeRepo.save(PaperTrade(userId=userId, stockId=stockId, side="SELL", quantity=quantity, price=price, amount=amount))
+        ledgerService.recordSell(userId, trade.id, stockId, amount, account.cash)
+        return TradeResultResponse("SELL", stockId, quantity, price, amount, account.cash, trade.id)
     }
 
     fun getHistory(userId: Long): List<TradeHistoryResponse> =
@@ -197,5 +201,5 @@ class PaperTradingService(
 
 data class PortfolioResponse(val cash: BigDecimal, val totalValue: BigDecimal, val totalPnl: BigDecimal, val totalPnlRate: Double, val holdings: List<HoldingResponse>)
 data class HoldingResponse(val stockId: Long, val symbol: String, val name: String, val quantity: Int, val avgPrice: BigDecimal, val currentPrice: BigDecimal, val value: BigDecimal, val pnl: BigDecimal, val pnlRate: Double)
-data class TradeResultResponse(val side: String, val stockId: Long, val quantity: Int, val price: BigDecimal, val amount: BigDecimal, val remainingCash: BigDecimal)
+data class TradeResultResponse(val side: String, val stockId: Long, val quantity: Int, val price: BigDecimal, val amount: BigDecimal, val remainingCash: BigDecimal, val tradeId: Long = 0)
 data class TradeHistoryResponse(val id: Long, val side: String, val stockId: Long, val symbol: String, val name: String, val quantity: Int, val price: BigDecimal, val amount: BigDecimal, val tradedAt: java.time.Instant)
