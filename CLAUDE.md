@@ -21,6 +21,7 @@ Once development begins, update this file with:
 - [docs/decisions/](docs/decisions/) — Architecture Decision Records (ADRs)
 - [docs/technical/](docs/technical/README.md) — implementation deep-dives (how it was built)
 - [docs/domain/](docs/domain/README.md) — product/business rationale (why it was designed this way)
+- [docs/manual/](docs/manual/README.md) — end-user manual (how to use each screen)
 
 ## Commit Convention
 
