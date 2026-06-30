@@ -14,6 +14,7 @@ const NAV_LINKS = [
   { href: "/quant-lab",  label: "Quant Lab" },
   { href: "/matching",   label: "체결엔진" },
   { href: "/risk",       label: "리스크" },
+  { href: "/analytics",  label: "Analytics" },
   { href: "/portfolio",  label: "포트폴리오" },
   { href: "/watchlist",  label: "관심종목" },
   { href: "/wallet",     label: "지갑" },
