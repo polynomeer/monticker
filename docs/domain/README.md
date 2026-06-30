@@ -2,8 +2,13 @@
 
 monticker의 기능 뒤에 있는 **제품·비즈니스 판단**을 다루는 문서입니다. 코드 구현은 [docs/technical/](../technical/README.md)을 참고하세요 — 이 디렉터리는 "어떻게 만들었는가"가 아니라 **"왜 이렇게 설계했는가"**에 집중합니다.
 
+## 처음 읽는다면
+
+[glossary-and-domain-knowledge.md](./glossary-and-domain-knowledge.md)부터 읽으세요. 증권/퀀트 도메인이 처음인 개발자를 위한 용어집과 외부 참고 링크를 모은 입문 문서입니다.
+
 | 문서 | 다루는 질문 |
 |------|-------------|
+| [glossary-and-domain-knowledge.md](./glossary-and-domain-knowledge.md) | 호가·체결·RSI·VaR·Kelly·과최적화 같은 용어가 무엇이고, 더 공부하려면 어디를 봐야 하는가? |
 | [quant-lab-positioning.md](./quant-lab-positioning.md) | Quant Lab은 왜 "전략 마켓"이 아니라 "전략 연구소"로 설계됐는가? 투자자문업 규제와의 경계는 어떻게 지키는가? |
 | [investment-wallet-ux-philosophy.md](./investment-wallet-ux-philosophy.md) | 감정 태그·투자 영수증·행동/생존 점수는 왜 존재하는가? 무엇을 측정하고 무엇을 측정하지 않는가? |
 | [risk-management-trust.md](./risk-management-trust.md) | 모의투자에 왜 리스크 한도가 필요한가? 사전 차단과 사후 경고는 왜 다른가? |
