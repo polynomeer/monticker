@@ -7,17 +7,37 @@ import io.mockk.every
 import io.mockk.justRun
 import io.mockk.mockk
 import org.junit.jupiter.api.Test
+import org.springframework.core.MethodParameter
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
+import org.springframework.web.bind.support.WebDataBinderFactory
+import org.springframework.web.context.request.NativeWebRequest
+import org.springframework.web.method.support.HandlerMethodArgumentResolver
+import org.springframework.web.method.support.ModelAndViewContainer
 
 class WatchlistControllerTest {
 
     private val watchlistService = mockk<WatchlistService>()
     private val controller = WatchlistController(watchlistService)
-    private val mockMvc: MockMvc = MockMvcBuilders.standaloneSetup(controller).build()
+
+    /** Stubs @AuthenticationPrincipal Long → fixed test user id (standalone MockMvc has no Spring Security filter chain). */
+    private val authPrincipalResolver = object : HandlerMethodArgumentResolver {
+        override fun supportsParameter(parameter: MethodParameter) =
+            parameter.parameterType == Long::class.java &&
+                parameter.hasParameterAnnotation(org.springframework.security.core.annotation.AuthenticationPrincipal::class.java)
+
+        override fun resolveArgument(
+            parameter: MethodParameter, mavContainer: ModelAndViewContainer?,
+            webRequest: NativeWebRequest, binderFactory: WebDataBinderFactory?,
+        ): Any = 1L
+    }
+
+    private val mockMvc: MockMvc = MockMvcBuilders.standaloneSetup(controller)
+        .setCustomArgumentResolvers(authPrincipalResolver)
+        .build()
     private val objectMapper = ObjectMapper()
 
     @Test
