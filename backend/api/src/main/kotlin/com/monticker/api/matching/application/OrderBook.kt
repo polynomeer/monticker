@@ -38,6 +38,6 @@ class OrderBook(val stockId: Long) {
         return false
     }
 
-    fun getBestAsk(): BigDecimal? = asks.firstKey().takeIf { asks.isNotEmpty() }
-    fun getBestBid(): BigDecimal? = bids.firstKey().takeIf { bids.isNotEmpty() }
+    fun getBestAsk(): BigDecimal? = if (asks.isEmpty()) null else asks.firstKey()
+    fun getBestBid(): BigDecimal? = if (bids.isEmpty()) null else bids.firstKey()
 }

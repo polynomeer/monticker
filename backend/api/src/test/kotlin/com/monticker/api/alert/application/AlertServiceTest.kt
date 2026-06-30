@@ -10,12 +10,14 @@ import io.mockk.verify
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
+import org.springframework.jdbc.core.JdbcTemplate
 import java.util.Optional
 
 class AlertServiceTest {
 
     private val repo = mockk<AlertRuleRepository>()
-    private val service = AlertService(repo, ObjectMapper())
+    private val jdbc = mockk<JdbcTemplate>()
+    private val service = AlertService(repo, ObjectMapper(), jdbc)
 
     @Test
     fun `createRule saves and returns rule`() {

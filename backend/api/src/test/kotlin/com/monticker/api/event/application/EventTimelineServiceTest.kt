@@ -7,12 +7,14 @@ import io.mockk.every
 import io.mockk.mockk
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.springframework.jdbc.core.JdbcTemplate
 import java.time.Instant
 
 class EventTimelineServiceTest {
 
     private val repository = mockk<StockEventRepository>()
-    private val service = EventTimelineService(repository)
+    private val jdbc = mockk<JdbcTemplate>()
+    private val service = EventTimelineService(repository, jdbc)
 
     @Test
     fun `getTimeline returns events ordered by time`() {
