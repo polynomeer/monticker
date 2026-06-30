@@ -13,7 +13,7 @@ interface RiskLimits {
   isActive: boolean;
 }
 
-interface ConcentrationItem { stockId: number; symbol: string; pct: number; }
+interface ConcentrationItem { stockId: number; symbol: string; valuePct: number; }
 
 interface RiskExposure {
   totalAssets: number;
@@ -146,7 +146,7 @@ export default function RiskPage() {
 
             {exposure.topConcentration && (
               <GaugeMeter label={`최대 집중도 (${exposure.topConcentration.symbol})`}
-                current={exposure.topConcentration.pct}
+                current={exposure.topConcentration.valuePct}
                 limit={exposure.limits.concentrationLimitPct}
                 invert />
             )}
