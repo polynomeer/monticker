@@ -16,6 +16,7 @@ monticker의 핵심 기술 구현에 대한 심층 기술 문서입니다.
 |------|------|-----------|
 | [realtime-price-architecture.md](./realtime-price-architecture.md) | 실시간 가격 아키텍처 | STOMP, WebSocket, React |
 | [request-deduplication.md](./request-deduplication.md) | TanStack Query Single Flight | React Query, 요청 중복 제거 |
+| [kafka-tick-pipeline.md](./kafka-tick-pipeline.md) | Kafka 기반 시세 파이프라인 | Kafka, Go, Netty, goroutine, EventLoopGroup |
 
 ## 보안 및 인증
 

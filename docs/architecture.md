@@ -106,6 +106,16 @@ CI/CD:      GitHub Actions
 Tracing:    Jaeger (all-in-one)
 ```
 
+### Realtime Pipeline (optional — `kafka` profile)
+
+```
+Ingestion:  Go (goroutine-per-stock tick generator/gateway)
+Bus:        Kafka (KRaft mode, single broker)
+Broadcast:  Netty (WebSocket server, bypasses Spring STOMP)
+```
+
+See [ADR-005](decisions/005-kafka-go-gateway-netty-broadcast.md) and [kafka-tick-pipeline.md](technical/kafka-tick-pipeline.md). Disabled by default — the in-process `MockPriceGenerator` path remains the default for local dev.
+
 ---
 
 ## Backend Module Boundaries
@@ -184,6 +194,20 @@ MockPriceGenerator (@Scheduled 1s)   ← swaps to KisPriceProvider when KIS keys
         ├── 10-minute cooldown (Redis key)
         └── INSERT alert_histories → Expo push
 ```
+
+### Kafka Ingestion Path (when `ingestion.source=kafka`, `kafka` profile)
+
+```
+Go Market Gateway (goroutine per stock, 1s tick loop)
+  └── produce → Kafka topic: market.ticks (key=stockId)
+        ├── TickKafkaConsumer (Worker, @KafkaListener)
+        │     └── RedisTickWriter / CandleAggregator / EventDetector
+        │           └── produce → Kafka topic: market.events (on detection)
+        └── Netty Broadcast Gateway (Kafka consumer)
+              └── WebSocket clients (ws://localhost:9090/ws)
+```
+
+Replaces the `MockPriceGenerator` polling loop with a push-based Kafka consumer. See [kafka-tick-pipeline.md](technical/kafka-tick-pipeline.md).
 
 ### KIS WebSocket (when KIS_APP_KEY + KIS_APP_SECRET set)
 
