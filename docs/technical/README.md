@@ -30,6 +30,12 @@ monticker의 핵심 기술 구현에 대한 심층 기술 문서입니다.
 | [backtesting-engine.md](./backtesting-engine.md) | 백테스팅 엔진 설계 | 전략 패턴, Sharpe/MDD/PF |
 | [portfolio-risk-metrics.md](./portfolio-risk-metrics.md) | 포트폴리오 리스크 지표 | Sharpe, Beta, VaR, 금융 수학 |
 | [paper-trading.md](./paper-trading.md) | 모의투자 시스템 설계 | TanStack Query Mutation, UX 설계 |
+| [matching-engine-clob.md](./matching-engine-clob.md) | 체결 엔진 — CLOB 기반 주문 매칭 | TreeMap, 가격/시간 우선, 슬리피지 |
+| [risk-limit-system.md](./risk-limit-system.md) | 리스크 한도 시스템 — 주문 전 동기 게이트 | VaR, 동시성, 감사 로그 |
+| [quant-rule-engine.md](./quant-rule-engine.md) | Quant Lab 룰 엔진 — 조건식 평가 | RSI/MACD/Bollinger, DSL 평가, 신뢰도 점수 |
+| [quant-analytics-algorithms.md](./quant-analytics-algorithms.md) | 포트폴리오 최적화·패턴 인식·국면 분류 | Gradient Descent, ZigZag, ADX |
+| [event-sourcing-ledger.md](./event-sourcing-ledger.md) | Investment Wallet 이벤트 소싱 원장 | 이벤트 소싱, 잔고 재구성 |
+| [backend-test-strategy.md](./backend-test-strategy.md) | 백엔드 테스트 전략 | MockK, JdbcTemplate 목킹, 311 tests |
 
 ## 성능 최적화
 

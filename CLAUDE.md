@@ -19,6 +19,8 @@ Once development begins, update this file with:
 - [docs/data-model.md](docs/data-model.md) — full DB schema (PostgreSQL, TimescaleDB, Redis key conventions)
 - [docs/external-apis.md](docs/external-apis.md) — stock price, news, disclosure, AI provider candidates and setup
 - [docs/decisions/](docs/decisions/) — Architecture Decision Records (ADRs)
+- [docs/technical/](docs/technical/README.md) — implementation deep-dives (how it was built)
+- [docs/domain/](docs/domain/README.md) — product/business rationale (why it was designed this way)
 
 ## Commit Convention
 
