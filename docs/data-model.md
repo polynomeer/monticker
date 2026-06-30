@@ -284,7 +284,7 @@ CREATE TABLE portfolio_positions (
 
 ---
 
-## Matching Engine Tables (planned — V15)
+## Matching Engine Tables (V15 — done)
 
 ### orders
 
@@ -407,7 +407,7 @@ CREATE TABLE simulation_trades (
 
 ---
 
-## Investment Wallet Tables (planned — V14)
+## Investment Wallet Tables (V14 — done)
 
 ### ledger_events
 
@@ -506,6 +506,83 @@ CREATE TABLE investment_behavior_scores (
     feedback_json      JSONB,    -- 좋았던 점 / 주의할 점
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (user_id, score_date)
+);
+```
+
+---
+
+## Quant Analytics Tables (planned — V16)
+
+### detected_patterns
+
+차트 패턴 인식 결과. `stock_events`와 별도로 패턴 상세 정보를 보존한다.
+
+```sql
+CREATE TABLE detected_patterns (
+    id              BIGSERIAL PRIMARY KEY,
+    stock_id        BIGINT       NOT NULL REFERENCES stocks(id),
+    pattern_type    VARCHAR(30)  NOT NULL,
+    -- HEAD_AND_SHOULDERS | DOUBLE_BOTTOM | DOUBLE_TOP | ASCENDING_TRIANGLE | DESCENDING_TRIANGLE
+    confidence_score INTEGER     NOT NULL,  -- 0~100, 패턴 완성도
+    swing_points_json JSONB      NOT NULL,  -- 패턴을 구성한 swing point 좌표
+    detected_at     TIMESTAMPTZ  NOT NULL,
+    candle_from     TIMESTAMPTZ  NOT NULL,  -- 패턴 시작 캔들 시각
+    candle_to       TIMESTAMPTZ  NOT NULL,  -- 패턴 완성 캔들 시각
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_detected_patterns_stock ON detected_patterns (stock_id, detected_at DESC);
+```
+
+### regime_history
+
+시장 국면 분류 이력. 일별로 종목/지수의 국면을 기록한다.
+
+```sql
+CREATE TABLE regime_history (
+    id           BIGSERIAL PRIMARY KEY,
+    stock_id     BIGINT      REFERENCES stocks(id),  -- null = 시장 전체(KOSPI/NASDAQ)
+    market       VARCHAR(20),                         -- stock_id가 null일 때 사용
+    regime_date  DATE        NOT NULL,
+    regime       VARCHAR(20) NOT NULL,  -- BULL | BEAR | SIDEWAYS | HIGH_VOL
+    adx          NUMERIC(8,4),
+    volatility   NUMERIC(8,4),
+    trend_slope  NUMERIC(10,6),
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (stock_id, market, regime_date)
+);
+```
+
+### tax_harvesting_logs
+
+세금 최적화 시뮬레이션 기록 (실제 신고용 아님, 교육용).
+
+```sql
+CREATE TABLE tax_harvesting_logs (
+    id                 BIGSERIAL PRIMARY KEY,
+    user_id            BIGINT         NOT NULL REFERENCES users(id),
+    simulated_at        TIMESTAMPTZ    NOT NULL DEFAULT now(),
+    realized_gain_ytd   NUMERIC(18,4)  NOT NULL,  -- 올해 실현 이익 합계
+    candidates_json     JSONB          NOT NULL,  -- 손실 매도 후보 종목 + 평가손실액
+    estimated_tax_saving NUMERIC(18,4),
+    tax_rate_assumed     NUMERIC(5,4)  NOT NULL DEFAULT 0.22
+);
+```
+
+### portfolio_optimizations
+
+포트폴리오 최적화 실행 기록.
+
+```sql
+CREATE TABLE portfolio_optimizations (
+    id              BIGSERIAL PRIMARY KEY,
+    user_id         BIGINT         NOT NULL REFERENCES users(id),
+    target_return   NUMERIC(8,4),
+    universe_json   JSONB          NOT NULL,  -- 최적화 대상 종목 ID 목록
+    weights_json    JSONB          NOT NULL,  -- 결과: stockId → weight
+    expected_return NUMERIC(8,4),
+    expected_risk   NUMERIC(8,4),
+    frontier_json   JSONB,                    -- 효율적 프론티어 전체 곡선
+    created_at      TIMESTAMPTZ    NOT NULL DEFAULT now()
 );
 ```
 

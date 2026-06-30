@@ -121,8 +121,8 @@ Tracing:    Jaeger (all-in-one)
 | Event Timeline | `stock_events` | Done |
 | Alert | `alert_rules`, `alert_histories` | Done |
 | Paper Trading | `paper_accounts`, `paper_trades` | Done (simple instant-fill) |
-| **Matching Engine** | `orders`, `fills`, `order_book_snapshots` | **Planned** |
-| **Risk Limit System** | `risk_limits`, `risk_check_logs` | **Planned** |
+| Matching Engine | `orders`, `fills` | Done (CLOB, price/time priority) |
+| Risk Limit System | `risk_limits`, `risk_check_logs` | Done (5 pre-trade rules) |
 | News | `news_articles`, `news_stock_mappings` | Done |
 | Screener | Redis-based ranking, JDBC queries | Done |
 | Order Book | KIS WebSocket → Redis / Yahoo Finance / Mock chain | Done |
@@ -139,6 +139,16 @@ Tracing:    Jaeger (all-in-one)
 | **Backtest Engine** | Historical simulation, commission/slippage, reliability score |
 | **Forward Test Engine** | Live-market signal logging, vs-backtest comparison |
 | **Strategy Vault** | Encrypted ruleset storage, fingerprint, access control |
+
+### Planned Modules (Quant Analytics)
+
+| Module | Responsibility |
+|--------|---------------|
+| **Portfolio Optimizer** | Markowitz mean-variance optimization, efficient frontier |
+| **Tax Optimizer** | Tax-loss harvesting candidates, 손익통산 시뮬레이션 |
+| **Position Sizer** | Kelly Criterion 기반 최적 베팅 비율 계산 |
+| **Pattern Recognizer** | 캔들 패턴 감지 (헤드앤숄더, 이중바닥, 삼각수렴) |
+| **Regime Detector** | 변동성·추세 기반 시장 국면 분류 (상승/하락/횡보) |
 
 ### Planned Modules (Investment Wallet)
 
@@ -274,7 +284,9 @@ GET /api/strategies/{id}/signal   (subscriber endpoint)
 | V11 | Create paper trading tables |
 | V12 | Seed 202 stocks (KOSPI/KOSDAQ/NASDAQ/NYSE) |
 | V13 | Create Quant Lab tables (rule_sets, backtest_results, quant_signals) |
-| V14 | *(planned)* Create Investment Wallet tables (ledger, wallet_snapshots, emotion_tags) |
+| V14 | Create Investment Wallet tables (ledger_events, order_emotion_tags, investment_behavior_scores) |
+| V15 | Create Matching Engine tables (orders, fills, risk_limits, risk_check_logs) |
+| V16 | *(planned)* Create Quant Analytics tables (detected_patterns, regime_history, harvesting_logs) |
 
 ---
 
@@ -332,6 +344,21 @@ GET    /api/quant/rulesets/{id}/forward-test
 GET    /api/strategies/{id}/signal            # 신호 조회 (원문 비공개)
 GET    /api/strategy-market                   # 전략 마켓 목록
 POST   /api/strategy-market/{id}/subscribe
+```
+
+### REST (planned — Quant Analytics)
+
+```http
+GET    /api/analytics/portfolio/optimize?targetReturn=    # 효율적 프론티어 + 추천 비중
+GET    /api/analytics/portfolio/frontier                  # 효율적 프론티어 전체 곡선
+
+GET    /api/analytics/tax/harvesting-candidates           # 손익통산 후보
+POST   /api/analytics/tax/simulate                        # 손실 매도 시뮬레이션
+
+GET    /api/analytics/position-size/kelly?ruleSetId=      # 켈리 비율 계산
+
+GET    /api/stocks/{id}/patterns                          # 감지된 차트 패턴
+GET    /api/stocks/{id}/regime                            # 현재 시장 국면
 ```
 
 ### REST (planned — Matching Engine + Risk)
@@ -502,6 +529,203 @@ POST /api/risk/check
 { "stockId": 1, "side": "BUY", "quantity": 100, "orderType": "MARKET" }
 
 → RiskCheckResult (체결 없음)
+```
+
+---
+
+## Portfolio Optimizer — Architecture
+
+### 설계 원칙
+
+Markowitz 평균-분산 최적화. 보유/관심 종목군의 과거 수익률 공분산 행렬을 계산하고,
+목표 수익률 대비 분산을 최소화하는 비중을 수치 최적화로 구한다.
+
+```
+PortfolioOptimizer.optimize(stockIds, targetReturn):
+  1. 각 종목의 일별 수익률 시계열 추출 (candles_1d, 최근 1년)
+  2. 평균 수익률 벡터(μ), 공분산 행렬(Σ) 계산
+  3. 이차계획법(QP)으로 최소분산 비중 탐색:
+       minimize   wᵀΣw
+       subject to wᵀμ = targetReturn, Σw = 1, w ≥ 0 (공매도 불가)
+  4. 효율적 프론티어: targetReturn을 스윕하며 (위험, 수익) 곡선 생성
+```
+
+### 수치 최적화 구현
+
+순수 QP 솔버 라이브러리 없이 **프로젝션 경사하강법(Projected Gradient Descent)** 으로 근사:
+
+```kotlin
+fun minimizeVariance(cov: Matrix, mu: Vector, targetReturn: Double): Vector {
+    var w = uniformWeights(n)               // 초기값: 균등 비중
+    repeat(maxIterations) {
+        val gradient = cov.times(w).times(2.0)
+        w = w.minus(gradient.times(learningRate))
+        w = projectToSimplex(w)              // Σw=1, w≥0 제약 투영
+        w = adjustForTargetReturn(w, mu, targetReturn)
+    }
+    return w
+}
+```
+
+### 효율적 프론티어 응답
+
+```json
+{
+  "frontier": [
+    { "expectedReturn": 0.04, "risk": 0.08, "weights": {"005930": 0.6, "AAPL": 0.4} },
+    { "expectedReturn": 0.08, "risk": 0.15, "weights": {"005930": 0.3, "AAPL": 0.7} }
+  ],
+  "currentPortfolio": { "expectedReturn": 0.05, "risk": 0.12 },
+  "suggestion": "현재 포트폴리오는 프론티어 아래에 있습니다. 비중 조정 시 동일 위험에서 +1.2%p 추가 수익 가능"
+}
+```
+
+---
+
+## Tax Optimizer — Architecture
+
+### 설계 원칙
+
+한국 주식 양도소득세·증권거래세 규칙을 단순화해 손익통산 시뮬레이션을 제공한다.
+**모의투자 전용 교육 기능**이며 실제 세무 신고에 사용할 수 없다는 고지를 항상 포함한다.
+
+```
+TaxOptimizer.findHarvestingCandidates(userId):
+  1. 현재 보유 종목 중 평가손실 종목 추출 (currentPrice < avgPrice)
+  2. 올해 실현된 손익 합계 조회 (paper_trades 기준)
+  3. 손실 종목 매도 시뮬레이션 → 손익통산 후 절세액 계산
+       절세액 = min(실현손실, 실현이익) × 세율(22%)
+  4. 후보 정렬: 절세 효과 높은 순
+```
+
+### 손익통산 시뮬레이션
+
+```
+보유 종목:
+  삼성전자  평가손실 -500,000원
+  NVDA      평가손실 -200,000원
+
+올해 실현이익: +1,200,000원 (이미 양도세 22% = 264,000원 부과 가정)
+
+손실 매도 시뮬레이션:
+  삼성전자 매도 → 손실 -500,000원 실현
+  → 통산 후 과세표준: 1,200,000 - 500,000 = 700,000원
+  → 절세액: (1,200,000 - 700,000) × 22% = 110,000원
+```
+
+---
+
+## Position Sizer — Architecture
+
+### Kelly Criterion
+
+백테스트 결과(승률, 평균 손익비)에서 파산 위험 없는 수학적 최적 베팅 비율을 계산한다.
+
+```
+f* = (bp - q) / b
+
+f* : 자본 대비 베팅 비율
+b  : 손익비 (평균 이익 / 평균 손실)
+p  : 승률
+q  : 패율 (1 - p)
+```
+
+```kotlin
+fun kellyFraction(winRate: Double, avgWin: Double, avgLoss: Double): Double {
+    val b = avgWin / avgLoss
+    val p = winRate
+    val q = 1 - p
+    val f = (b * p - q) / b
+    return f.coerceIn(0.0, 1.0)   // 음수면 베팅하지 않음
+}
+
+// 실무적으로 Full Kelly는 변동성이 매우 크므로 Half Kelly(f*/2) 권장
+fun recommendedFraction(kelly: Double): Double = kelly * 0.5
+```
+
+전략 백테스트 결과 화면에 자동으로 표시:
+```
+이 전략의 켈리 비율: 18.4%
+권장 비율 (Half Kelly): 9.2%
+→ 1회 매수 시 총 자본의 9.2%를 추천합니다 (현재 설정: 10%)
+```
+
+---
+
+## Pattern Recognizer — Architecture
+
+### 감지 대상 패턴
+
+```
+HEAD_AND_SHOULDERS   헤드앤숄더 (하락 반전)
+DOUBLE_BOTTOM        이중 바닥 (상승 반전)
+DOUBLE_TOP           이중 천장 (하락 반전)
+ASCENDING_TRIANGLE   상승 삼각수렴 (상승 지속)
+DESCENDING_TRIANGLE  하락 삼각수렴 (하락 지속)
+```
+
+### 알고리즘 — Local Extrema 기반
+
+```
+PatternRecognizer.detect(candles):
+  1. ZigZag 알고리즘으로 국소 고점/저점(swing points) 추출
+     (변동폭이 임계치 이상인 전환점만 채택, 노이즈 제거)
+  2. 최근 N개 swing point 시퀀스를 패턴 템플릿과 비교
+       이중바닥: [저점A, 고점, 저점B] where 저점A ≈ 저점B (±2%), 고점 > 저점×1.05
+       헤드앤숄더: [어깨1, 머리, 어깨2] where 머리 > 어깨1,2 and 어깨1≈어깨2
+  3. 패턴 완성도 점수(0~100) 계산 → 임계치(70) 이상만 신호 발생
+  4. stock_events에 PATTERN_DETECTED 이벤트로 기록
+```
+
+```kotlin
+data class SwingPoint(val index: Int, val price: BigDecimal, val type: SwingType) // HIGH | LOW
+
+fun zigZag(candles: List<DailyCandle>, thresholdPct: Double): List<SwingPoint>
+
+fun detectDoubleBottom(swings: List<SwingPoint>): PatternMatch? {
+    // 마지막 5개 swing에서 [LOW, HIGH, LOW] 시퀀스 탐색
+    // 두 저점 가격 차이 ≤ 2%, 중간 고점이 저점 대비 5% 이상 → 매치
+}
+```
+
+---
+
+## Regime Detector — Architecture
+
+### 시장 국면 분류
+
+```
+BULL        상승장 — 추세 강도 높음, 변동성 보통
+BEAR        하락장 — 하락 추세, 변동성 높음
+SIDEWAYS    횡보장 — 추세 강도 낮음, 변동성 낮음
+HIGH_VOL    고변동성 — 추세 무관, 변동성 매우 높음
+```
+
+### 분류 알고리즘
+
+```
+RegimeDetector.classify(candles, window=60):
+  1. 추세 강도: ADX(Average Directional Index) 14일
+  2. 변동성: 20일 연환산 표준편차
+  3. 방향: 60일 선형회귀 기울기 부호
+
+  분류 규칙:
+    ADX < 20                        → SIDEWAYS
+    변동성 > 과거 1년 80th 백분위    → HIGH_VOL
+    기울기 > 0 and ADX ≥ 20         → BULL
+    기울기 < 0 and ADX ≥ 20         → BEAR
+```
+
+### 백테스트 결과 연동
+
+```
+시장 국면별 성과 분해 (기존 backtest_results.phase_performance 필드 활용):
+
+  BULL 구간     (2023.01~2023.07): 수익률 +18.2%, MDD -4.1%
+  BEAR 구간     (2022.01~2022.10): 수익률  -8.4%, MDD -22.3%
+  SIDEWAYS 구간 (2024.03~2024.09): 수익률  +1.1%, MDD -6.7%
+
+  경고: 이 전략은 하락장에서 MDD가 5배 이상 확대됩니다.
 ```
 
 ---
