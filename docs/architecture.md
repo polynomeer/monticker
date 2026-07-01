@@ -139,40 +139,37 @@ See [ADR-005](decisions/005-kafka-go-gateway-netty-broadcast.md) and [kafka-tick
 | VWAP | Computed from candles_1m | Done |
 | Latency Tracking | Micrometer Timer, `/api/latency` | Done |
 
-### Planned Modules (Quant Lab)
+### Implemented Modules (Quant Lab — V13)
 
-| Module | Responsibility |
-|--------|---------------|
-| **Rule Builder** | Ruleset CRUD, condition JSON, version management |
-| **Rule Engine** | Evaluate conditions against live indicators; emit signals |
-| **Indicator Engine** | MA, EMA, RSI, MACD, Bollinger, ATR from candle data |
-| **Backtest Engine** | Historical simulation, commission/slippage, reliability score |
-| **Forward Test Engine** | Live-market signal logging, vs-backtest comparison |
-| **Strategy Vault** | Encrypted ruleset storage, fingerprint, access control |
+| Module | Tables | Status |
+|--------|--------|--------|
+| **Rule Builder** | `rule_sets` | Done — Ruleset CRUD, condition JSON, version management |
+| **Rule Engine** | `quant_signals` | Done — Evaluate conditions against live indicators; emit signals |
+| **Indicator Engine** | (in-memory) | Done — MA, EMA, RSI, MACD, Bollinger, ATR from candle data |
+| **Backtest Engine** | `backtest_results` | Done — Historical simulation, commission/slippage, reliability score |
+| **Forward Test Engine** | `quant_signals` | Done — Live-market signal logging, vs-backtest comparison |
+| **Strategy Vault** | `rule_sets.rule_set_fingerprint` | Done — SHA-256 fingerprint, server-side evaluation only |
 
-### Planned Modules (Quant Analytics)
+### Implemented Modules (Quant Analytics — V16)
 
-| Module | Responsibility |
-|--------|---------------|
-| **Portfolio Optimizer** | Markowitz mean-variance optimization, efficient frontier |
-| **Tax Optimizer** | Tax-loss harvesting candidates, 손익통산 시뮬레이션 |
-| **Position Sizer** | Kelly Criterion 기반 최적 베팅 비율 계산 |
-| **Pattern Recognizer** | 캔들 패턴 감지 (헤드앤숄더, 이중바닥, 삼각수렴) |
-| **Regime Detector** | 변동성·추세 기반 시장 국면 분류 (상승/하락/횡보) |
+| Module | Tables | Status |
+|--------|--------|--------|
+| **Portfolio Optimizer** | (in-memory) | Done — Markowitz, projected gradient descent, efficient frontier |
+| **Tax Optimizer** | `harvesting_logs` | Done — 손익통산 시뮬레이션, 절세 후보 추출 |
+| **Position Sizer** | (in-memory) | Done — Kelly Criterion, Half Kelly 권장 비율 |
+| **Pattern Recognizer** | `detected_patterns` | Done — ZigZag + 5개 차트 패턴, 완성도 점수 |
+| **Regime Detector** | `regime_history` | Done — ADX 기반 BULL/BEAR/SIDEWAYS/HIGH_VOL 분류 |
 
-### Planned Modules (Investment Wallet)
+### Implemented Modules (Investment Wallet — V14)
 
-| Module | Responsibility |
-|--------|---------------|
-| **Ledger Service** | 원장 이벤트 기록·조회. 잔고 = 이벤트 replay 합산 |
-| **Wallet Service** | 현금·예약금·평가액·정산대기 상태 실시간 집계 |
-| **Order State Machine** | 주문접수 → 예약 → 부분체결 → 전량체결 → 정산 상태 전이 |
-| **Receipt Service** | 체결 후 영수증 생성 (체결금·수수료·정산 상태) |
-| **Emotion Tag Service** | 주문 감정 태그 저장 + 수익률 연계 분석 |
-| **Replay Service** | 하루 투자 이벤트 스트림 재구성 |
-| **Behavior Score Service** | 투자 행동 점수 / 생존 점수 계산 |
-| **Strategy Marketplace** | Listing, subscription, badge system, compliance checks |
-| **Quant Analytics** | Over-optimisation detection, phase-based performance, signal attribution |
+| Module | Tables | Status |
+|--------|--------|--------|
+| **Ledger Service** | `ledger_events` | Done — 이벤트 소싱, 잔고 = 이벤트 replay 합산 |
+| **Wallet Service** | (ledger_events 집계) | Done — 현금·예약금·평가액·정산대기 상태 집계 |
+| **Receipt Service** | (paper_orders 기반) | Done — 체결 후 영수증 생성 (체결금·수수료·정산 상태) |
+| **Emotion Tag Service** | `order_emotion_tags` | Done — 주문 감정 태그 저장 + 수익률 연계 분석 |
+| **Replay Service** | (ledger_events 스트림) | Done — 하루 투자 이벤트 스트림 재구성 |
+| **Behavior Score Service** | `investment_behavior_scores` | Done — 투자 행동 점수 / 생존 점수 계산 |
 
 ---
 
@@ -246,7 +243,7 @@ VolumeSurgeDetector:
 
 ---
 
-## Quant Lab — Planned Architecture
+## Quant Lab — Architecture
 
 ### Rule Engine
 
@@ -310,7 +307,7 @@ GET /api/strategies/{id}/signal   (subscriber endpoint)
 | V13 | Create Quant Lab tables (rule_sets, backtest_results, quant_signals) |
 | V14 | Create Investment Wallet tables (ledger_events, order_emotion_tags, investment_behavior_scores) |
 | V15 | Create Matching Engine tables (orders, fills, risk_limits, risk_check_logs) |
-| V16 | *(planned)* Create Quant Analytics tables (detected_patterns, regime_history, harvesting_logs) |
+| V16 | Create Quant Analytics tables (detected_patterns, regime_history, harvesting_logs) |
 
 ---
 
@@ -349,71 +346,44 @@ GET    /api/paper/orders
 
 GET    /api/backtest/run
 GET    /api/latency
-```
 
-### REST (planned — Quant Lab)
-
-```http
+# Quant Lab
 POST   /api/quant/rulesets                    # 룰셋 생성
 GET    /api/quant/rulesets/{id}               # 내 룰셋 조회
 PUT    /api/quant/rulesets/{id}               # 수정 (새 버전)
 DELETE /api/quant/rulesets/{id}
-
 POST   /api/quant/rulesets/{id}/backtest      # 백테스트 실행
 GET    /api/quant/rulesets/{id}/backtest/{runId}
-
 POST   /api/quant/rulesets/{id}/forward-test/start
 GET    /api/quant/rulesets/{id}/forward-test
 
-GET    /api/strategies/{id}/signal            # 신호 조회 (원문 비공개)
-GET    /api/strategy-market                   # 전략 마켓 목록
-POST   /api/strategy-market/{id}/subscribe
-```
-
-### REST (planned — Quant Analytics)
-
-```http
+# Quant Analytics
 GET    /api/analytics/portfolio/optimize?targetReturn=    # 효율적 프론티어 + 추천 비중
 GET    /api/analytics/portfolio/frontier                  # 효율적 프론티어 전체 곡선
-
 GET    /api/analytics/tax/harvesting-candidates           # 손익통산 후보
 POST   /api/analytics/tax/simulate                        # 손실 매도 시뮬레이션
-
 GET    /api/analytics/position-size/kelly?ruleSetId=      # 켈리 비율 계산
-
 GET    /api/stocks/{id}/patterns                          # 감지된 차트 패턴
 GET    /api/stocks/{id}/regime                            # 현재 시장 국면
-```
 
-### REST (planned — Matching Engine + Risk)
-
-```http
-# 주문 제출 (리스크 체크 → 체결 엔진)
-POST   /api/matching/orders                   # 주문 접수
+# Matching Engine + Risk
+POST   /api/matching/orders                   # 주문 접수 (리스크 체크 → 체결 엔진)
 DELETE /api/matching/orders/{id}              # 주문 취소
 GET    /api/matching/orders                   # 내 미체결 주문
 GET    /api/matching/orders/{id}/fills        # 체결 내역
-
-# 리스크 한도
 GET    /api/risk/limits                       # 내 리스크 한도 조회
 PUT    /api/risk/limits                       # 한도 설정
 POST   /api/risk/check                        # 주문 전 리스크 시뮬레이션 (dry-run)
 GET    /api/risk/exposure                     # 현재 포트폴리오 리스크 노출도
-```
 
-### REST (planned — Investment Wallet)
-
-```http
+# Investment Wallet
 GET    /api/wallet                            # 돈의 이동 지도 (현금/예약금/평가액/정산대기)
 GET    /api/wallet/ledger                     # 원장 이벤트 스트림
 GET    /api/wallet/timeline                   # 내 돈 이동 타임라인
-
 GET    /api/paper/orders/{id}/receipt         # 투자 영수증
 GET    /api/paper/replay?date=                # 주문 리플레이
-
 GET    /api/wallet/score                      # 투자 행동 점수
 GET    /api/wallet/survival-score             # 투자 생존 점수
-
 GET    /api/paper/orders/{id}/emotion-tags    # 감정 태그 조회
 POST   /api/paper/orders/{id}/emotion-tags    # 감정 태그 저장
 GET    /api/wallet/emotion-analysis           # 감정 태그 × 수익률 분석
@@ -427,7 +397,7 @@ Connect: `ws://localhost:8080/ws` (SockJS fallback)
 |-------|-------------|
 | `/topic/stocks/{stockId}` | 종목별 실시간 가격 |
 | `/topic/market` | 전체 시장 요약 |
-| `/topic/signals/{userId}` | *(planned)* 룰셋 신호 알림 |
+| `/topic/signals/{userId}` | 룰셋 신호 알림 (Quant Lab) |
 
 ---
 
@@ -754,7 +724,7 @@ RegimeDetector.classify(candles, window=60):
 
 ---
 
-## Investment Wallet — Planned Architecture
+## Investment Wallet — Architecture
 
 ### Order State Machine
 
@@ -811,8 +781,8 @@ LedgerEvent types:
 stock:price:{market}:{symbol}      # latest price JSON (STRING)
 orderbook:{symbol}                 # KIS realtime orderbook (STRING, TTL 30s)
 alert:cooldown:{ruleId}            # cooldown flag (STRING, TTL 600s)
-signal:forward:{ruleSetId}:{date}  # (planned) forward test daily signal log
-wallet:snapshot:{userId}           # (planned) 최신 wallet 스냅샷 캐시 (TTL 30s)
+signal:forward:{ruleSetId}:{date}  # daily forward test signal set
+wallet:snapshot:{userId}           # 최신 wallet 스냅샷 캐시 (TTL 30s)
 ```
 
 ---

@@ -511,7 +511,7 @@ CREATE TABLE investment_behavior_scores (
 
 ---
 
-## Quant Analytics Tables (planned — V16)
+## Quant Analytics Tables (V16 — done)
 
 ### detected_patterns
 
@@ -623,7 +623,7 @@ SELECT create_hypertable('candles_1m', 'candle_time');
 
 ---
 
-## Quant Lab Tables (planned — V13)
+## Quant Lab Tables (V13 — done)
 
 ### rule_sets
 
@@ -821,8 +821,8 @@ CREATE TABLE strategy_badges (
 stock:price:{market}:{symbol}           → latest price JSON (STRING)
 orderbook:{symbol}                      → KIS realtime orderbook JSON (STRING, TTL 30s)
 alert:cooldown:{ruleId}                 → cooldown flag (STRING, TTL 600s)
-signal:forward:{ruleSetId}:{date}       → daily forward test signal set (planned)
-wallet:snapshot:{userId}                → 최신 wallet 스냅샷 캐시 (planned, TTL 30s)
+signal:forward:{ruleSetId}:{date}       → daily forward test signal set
+wallet:snapshot:{userId}                → 최신 wallet 스냅샷 캐시 (TTL 30s)
 news:dedup:{urlHash}                    → dedup flag (STRING, TTL 7d)
 stream:market:ticks                     → Redis Stream for tick events
 stream:events:detected                  → Redis Stream for detected stock_events
@@ -850,7 +850,7 @@ users
   │           ├── strategy_subscriptions ← users (buyer)
   │           └── strategy_badges
   │
-  └── (Investment Wallet — planned V14) ────────────
+  └── (Investment Wallet — V14) ────────────
         ├── ledger_events → paper_orders → stocks
         ├── wallet_snapshots
         ├── investment_behavior_scores
