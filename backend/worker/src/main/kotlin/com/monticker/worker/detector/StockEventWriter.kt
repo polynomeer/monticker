@@ -26,6 +26,8 @@ data class DetectedEvent(
 class StockEventWriter(
     private val jdbcTemplate: JdbcTemplate,
     private val pushSender: com.monticker.worker.push.ExpoPushSender,
+    // ingestion.source=internal일 때는 빈 ObjectProvider — 주입 없이도 동작 (ADR-005)
+    private val eventKafkaProducer: org.springframework.beans.factory.ObjectProvider<com.monticker.worker.kafka.EventKafkaProducer>,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val objectMapper = ObjectMapper()
@@ -68,6 +70,7 @@ class StockEventWriter(
         )
 
         log.info("Event created: {} {} score={}", event.eventType, event.stockId, event.importanceScore)
+        eventKafkaProducer.ifAvailable { it.publish(event) }
         sendEventPush(event)
         return true
     }

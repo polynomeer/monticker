@@ -56,3 +56,12 @@ anthropic:
 otel:
   service:
     name: monticker-worker
+
+# Kafka 기반 시세 파이프라인 (선택적, ADR-005)
+# internal(기본값) = 기존 MockPriceGenerator 폴링 경로
+# kafka            = Go market-gateway → Kafka → TickKafkaConsumer 경로
+ingestion:
+  source: ${INGESTION_SOURCE:internal}
+
+kafka:
+  brokers: ${KAFKA_BROKERS:localhost:9092}
