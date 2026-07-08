@@ -76,8 +76,11 @@ services:
       DART_API_KEY: ${DART_API_KEY:-}
       KIS_APP_KEY: ${KIS_APP_KEY:-}
       KIS_APP_SECRET: ${KIS_APP_SECRET:-}
+      # Stage 4: Kafka가 항상 활성화되므로 brokers를 명시한다.
+      # internal(기본) = MockPriceGenerator → Kafka → TickKafkaConsumer
+      # kafka          = Go market-gateway  → Kafka → TickKafkaConsumer
       INGESTION_SOURCE: ${INGESTION_SOURCE:-internal}
-      KAFKA_BROKERS: ${KAFKA_BROKERS:-}
+      KAFKA_BROKERS: kafka:9092
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       PINPOINT_ENABLE: ${PINPOINT_ENABLE:-false}
       PINPOINT_COLLECTOR_IP: pinpoint-collector
@@ -88,12 +91,15 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      kafka:
+        condition: service_healthy
     profiles:
       - full
 
-  # ── Kafka realtime pipeline (optional, see ADR-005) ──────────
-  # Bring up with: docker compose --profile kafka up
-  # MSA 모드에서도 필수 — docker compose --profile msa up 으로 함께 기동됨
+  # ── Kafka (Stage 4: full / kafka / msa 프로파일 공통 인프라) ────
+  # full  : make up-full 시 Kafka 포함. 모든 틱이 Kafka를 경유한다.
+  # kafka : Go market-gateway + Netty broadcast-gateway 포함 세트.
+  # msa   : 3분리 워커 + quant-engine 세트.
   kafka:
     image: apache/kafka:3.8.0
     container_name: monticker-kafka
@@ -119,6 +125,7 @@ services:
       timeout: 5s
       retries: 10
     profiles:
+      - full
       - kafka
       - msa
 

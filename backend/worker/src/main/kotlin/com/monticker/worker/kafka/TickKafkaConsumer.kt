@@ -1,6 +1,7 @@
 package com.monticker.worker.kafka
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.worker.alert.TickProcessedEvent
 import com.monticker.worker.detector.EventDetector
 import com.monticker.worker.marketdata.CandleAggregator
 import com.monticker.worker.marketdata.GeneratedTick
@@ -10,17 +11,26 @@ import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.stereotype.Component
 
 /**
- * Go market-gateway(또는 MarketTickScheduler)가 발행한 틱을 소비한다.
+ * market.ticks 토픽 컨슈머 — 시세 처리 파이프라인의 공통 진입점.
  *
- * role=all  : tick.consumer=legacy(기본값)일 때 활성화. in-process 처리 후 Spring Event 발행.
- * role=event: 항상 활성화. 처리 후 market.tick-processed 를 Kafka로 발행해 alert 워커에 전파.
+ * [Stage 4] 모든 틱 경로(내부 Mock/Go gateway)가 Kafka를 거친다.
+ * MarketDataCollector(인라인 처리)는 제거되었고, MarketTickScheduler가
+ * MockPriceGenerator 틱을 market.ticks로 발행한다.
  *
- * tick.consumer=integration 이면 TickPipelineConfig(Spring Integration EIP)가 대신 처리하므로
- * 이 Bean이 비활성화되어야 한다. role=event 에서는 integration 모드를 사용하지 않는다.
+ * role=all  : tick.consumer=legacy(기본값)일 때 활성화.
+ *             처리 후 Spring ApplicationEvent(TickProcessedEvent)를 발행해
+ *             AlertEvaluator(@EventListener)가 in-process로 수신한다.
+ * role=event: 항상 활성화.
+ *             처리 후 market.tick-processed 토픽으로 Kafka 발행해
+ *             alert 워커에 전파한다.
+ *
+ * tick.consumer=integration 이면 TickPipelineConfig(Spring Integration EIP)가
+ * 대신 처리하므로 이 Bean이 비활성화되어야 한다. role=event 에서는 integration 모드 미사용.
  */
 @Component
 @ConditionalOnExpression(
@@ -31,11 +41,13 @@ class TickKafkaConsumer(
     private val candleAggregator: CandleAggregator,
     private val eventDetector: EventDetector,
     private val latencyTracker: LatencyTracker,
+    private val eventPublisher: ApplicationEventPublisher,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val objectMapper = ObjectMapper().findAndRegisterModules()
 
-    // role=event 에서만 Bean이 존재한다. role=all 에서는 null — Spring Event가 대신 전파.
+    // role=event 에서만 Bean이 존재한다.
+    // role=all 에서는 null — Spring Event가 AlertEvaluator에 전파한다.
     @Autowired(required = false)
     private var tickProcessedProducer: TickProcessedKafkaProducer? = null
 
@@ -49,7 +61,10 @@ class TickKafkaConsumer(
             latencyTracker.recordRedisWrite(tick.stockId)
             eventDetector.detect(tick)
             latencyTracker.recordBroadcast(tick.stockId)
+            // role=event → Kafka market.tick-processed 발행 (alert 워커가 소비)
+            // role=all   → Spring Event 발행 (AlertEvaluator @EventListener가 in-process 수신)
             tickProcessedProducer?.publish(tick.stockId, tick.price)
+                ?: eventPublisher.publishEvent(TickProcessedEvent(tick.stockId, tick.price))
         } catch (e: Exception) {
             log.error("Kafka 틱 처리 실패 (key={}): {}", record.key(), e.message)
         }

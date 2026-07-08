@@ -70,9 +70,11 @@ otel:
   service:
     name: monticker-worker
 
-# Kafka 기반 시세 파이프라인 (선택적, ADR-005)
-# internal(기본값) = 기존 MockPriceGenerator 폴링 경로
-# kafka            = Go market-gateway → Kafka → TickKafkaConsumer 경로
+# 시세 수집 소스 (Stage 4: 두 경로 모두 Kafka를 경유한다)
+# internal(기본값) = MockPriceGenerator → Kafka market.ticks → TickKafkaConsumer
+# kafka            = Go market-gateway  → Kafka market.ticks → TickKafkaConsumer
+# 차이: internal 일 때 MarketTickScheduler(Spring)가 틱을 생성·발행.
+#       kafka    일 때 MarketTickScheduler를 비활성화하고 Go gateway가 발행.
 ingestion:
   source: ${INGESTION_SOURCE:internal}
 

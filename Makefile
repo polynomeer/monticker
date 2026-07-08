@@ -6,7 +6,8 @@
 up:
 	docker compose up -d postgres redis
 
-# 전체 스택 (api + worker + 모니터링)
+# 전체 스택 (api + worker + Kafka + 모니터링)
+# Stage 4: worker 틱이 Kafka를 경유한다 (MockPriceGenerator → market.ticks → TickKafkaConsumer)
 up-full:
 	docker compose --profile full up -d
 
