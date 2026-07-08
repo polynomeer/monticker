@@ -288,18 +288,83 @@ account.debit(amount)                                // Money 타입 불일치 �
 
 ---
 
-### ⑥ Aggregate 경계 명확화 (참고)
+### ⑥ Aggregate 경계 강화 + CQRS Read Model (Phase 4 구현 완료)
 
-현재 묵시적인 Aggregate 구조:
+#### 문제
 
-| Aggregate Root | Child Entity | 설명 |
-|----------------|--------------|------|
-| `Order` | `Fill` | Fill은 Order 없이 의미 없음 |
-| `PaperAccount` | `PaperTrade` | 계좌 잔고와 거래 내역이 하나의 일관성 경계 |
-| `RuleSet` | `QuantBacktestResult` | RuleSet이 변경되면 이전 백테스트 결과는 무효 |
-| `User` | `AlertRule`, `WatchlistGroup` | 사용자 집계 루트 |
+`FillRepository`가 두 가지 책임을 동시에 가졌다.
 
-현재 코드는 이 경계를 Repository 레이어에서만 간접적으로 강제한다. DDD를 강화한다면 `Fill`을 `OrderRepository`를 통해서만 접근하도록 제한하는 것이 올바르나, JPA 편의성과의 트레이드오프가 있다.
+```kotlin
+interface FillRepository : JpaRepository<Fill, Long> {
+    fun findAllByOrderId(orderId: Long): List<Fill>          // ✅ Order Aggregate 경계 내
+    fun findAllByUserIdOrderByFilledAtDesc(userId: Long): List<Fill>  // ❌ 경계 우회
+}
+```
+
+`userId`로 `Fill`을 직접 조회하는 것은 "Fill은 Order를 통해서만 접근해야 한다"는 Aggregate 규칙을 위반한다. 그러나 이를 엄격히 적용하면 사용자의 전체 체결 내역 조회 시 모든 Order를 불러와 Fill을 수집해야 하므로 N+1 문제가 발생한다.
+
+#### 해결: CQRS Read/Write 분리
+
+```
+Write Side (FillRepository)          Read Side (FillQueryService)
+──────────────────────────           ──────────────────────────────
+findAllByOrderId(orderId)   →  Order Aggregate 경계 내 접근
+                                     findByUserId(userId)  →  사용자 체결 내역
+                                     findByOrderId(orderId, userId)  →  주문별 체결 내역
+```
+
+**FillRepository (Write Side)** — Order Aggregate 경계 내 접근만 허용:
+
+```kotlin
+interface FillRepository : JpaRepository<Fill, Long> {
+    fun findAllByOrderId(orderId: Long): List<Fill>
+    // findAllByUserIdOrderByFilledAtDesc 제거
+}
+```
+
+**FillQueryService (Read Side)** — JDBC 기반 전용 조회:
+
+```kotlin
+@Service
+@Transactional(readOnly = true)
+class FillQueryService(private val jdbc: JdbcTemplate) {
+
+    fun findByUserId(userId: Long): List<FillDto> =
+        jdbc.query(
+            "SELECT ... FROM fills WHERE user_id = ? ORDER BY filled_at DESC",
+            { rs, _ -> FillDto(...) },
+            userId,
+        )
+
+    fun findByOrderId(orderId: Long, userId: Long): List<FillDto> =
+        jdbc.query(
+            """SELECT f.* FROM fills f
+               JOIN orders o ON o.id = f.order_id
+               WHERE f.order_id = ? AND o.user_id = ?""",
+            { rs, _ -> FillDto(...) },
+            orderId, userId,
+        )
+}
+```
+
+`findByOrderId`에서 `JOIN orders ON o.user_id = ?`로 소유권 검증을 SQL 레벨로 이동 — 서비스에서 별도로 Order를 조회할 필요가 없어진다.
+
+#### Write/Read 경로 분리 요약
+
+| 경로 | 사용 위치 | 저장소 |
+|------|-----------|--------|
+| **Write** | `MatchingService.submitOrder()` | `FillRepository.save()` |
+| **Read (Aggregate 내)** | `MatchingService.submitOrder()` 응답 구성 | `Fill.toDto()` (메모리) |
+| **Read (Query)** | `getOrderFills()`, `getMyFills()` | `FillQueryService` (JDBC) |
+
+#### 현재 Aggregate 구조
+
+| Aggregate Root | Child Entity | 경계 강화 상태 |
+|----------------|--------------|----------------|
+| `Order` | `Fill` | ✅ CQRS로 분리 완료 |
+| `PaperAccount` | `PaperTrade` | 📋 보류 (거래 내역 조회 패턴 동일) |
+| `RuleSet` | `QuantBacktestResult` | 📋 보류 |
+| `User` | `AlertRule`, `WatchlistGroup` | 📋 보류 |
 
 ---
 
@@ -310,9 +375,7 @@ account.debit(amount)                                // Money 타입 불일치 �
 | **Phase 1** | `Order.fill/cancel/reject`, `PaperAccount.debit/credit/reset` | ✅ 완료 |
 | **Phase 2** | `AlertRule.deactivate/activate`, `RuleSet.updateDefinition/markBacktested/publish` | ✅ 완료 |
 | **Phase 3** | `Money`/`Price` Value Object (JPA AttributeConverter) | ✅ 완료 |
-| **Phase 4** | Aggregate 경계 강화 (`Fill` → `OrderRepository`만 접근) | 📋 보류 |
-
-Phase 4는 `FillRepository`를 통한 직접 조회(`findAllByUserIdOrderByFilledAtDesc`)가 "내 체결 내역" 같은 사용자 기능에 필요하여, 집계 루트를 통한 접근만 허용하면 성능 문제가 발생한다. N+1 쿼리 없이 구현하려면 CQRS Read Model 분리가 선행되어야 한다.
+| **Phase 4** | Aggregate 경계 강화 + CQRS Read Model (`FillQueryService` 분리) | ✅ 완료 |
 
 ---
 
