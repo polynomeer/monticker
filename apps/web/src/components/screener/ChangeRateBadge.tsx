@@ -1,3 +1,7 @@
+"use client";
+
+import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
+
 interface Props { rate: number; amount: number; }
 
 function fmt(n: number) {
@@ -7,8 +11,9 @@ function fmt(n: number) {
 }
 
 export default function ChangeRateBadge({ rate, amount }: Props) {
-  const up   = rate >= 0;
-  const color = up ? "#ff5050" : "#0078ff";
+  const theme = useThemeStore((s) => CHART_THEMES[s.chartTheme]);
+  const up    = rate >= 0;
+  const color = up ? theme.upColor : theme.downColor;
   const sign  = up ? "+" : "";
   return (
     <div className="flex flex-col items-end gap-0.5">
