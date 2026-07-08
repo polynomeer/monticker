@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: market-gateway
+  namespace: monticker
+  labels:
+    app: market-gateway
+spec:
+  # 고루틴이 stock 당 1개씩 생성됨 — 동일 stock을 복수 Pod가 처리하면 Kafka 중복 tick 발생
+  # goroutine-per-stock 설계상 단일 인스턴스가 적합
+  replicas: 1
+  selector:
+    matchLabels:
+      app: market-gateway
+  template:
+    metadata:
+      labels:
+        app: market-gateway
+    spec:
+      containers:
+        - name: market-gateway
+          image: monticker/market-gateway:latest
+          envFrom:
+            - configMapRef:
+                name: market-gateway-config
+          # Go 서비스는 HTTP health endpoint 없음 — 프로세스 생존 여부로 판단
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "kill -0 1"]
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"

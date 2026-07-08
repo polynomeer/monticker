@@ -4,12 +4,28 @@ set -e
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 RED='\033[0;31m'; YELLOW='\033[1;33m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; NC='\033[0m'
 
+# ── 옵션 파싱 ─────────────────────────────────────────────────
+WITH_PINPOINT=false
+for arg in "$@"; do
+  case "$arg" in
+    --pinpoint) WITH_PINPOINT=true ;;
+    --help|-h)
+      echo "Usage: ./dev.sh [--pinpoint]"
+      echo "  --pinpoint   Pinpoint APM 포함 기동 (HBase 초기화 2~3분 소요)"
+      exit 0 ;;
+  esac
+done
+
 # ── cleanup on Ctrl-C ─────────────────────────────────────────
 cleanup() {
   echo ""
   echo "Stopping..."
   kill "$API_PID" "$WORKER_PID" "$WEB_PID" 2>/dev/null
-  docker compose stop 2>/dev/null
+  if [ "$WITH_PINPOINT" = true ]; then
+    docker compose --profile pinpoint stop 2>/dev/null
+  else
+    docker compose stop 2>/dev/null
+  fi
   wait 2>/dev/null
   echo "Done."
   exit 0
@@ -92,11 +108,26 @@ sleep 1
 
 # ── 1. infra ─────────────────────────────────────────────────
 echo ""
-echo "1/4  Starting infra (postgres + redis + jaeger)..."
-docker compose up -d postgres redis jaeger 2>&1 | grep -v "^$" || true
+if [ "$WITH_PINPOINT" = true ]; then
+  echo "1/4  Starting infra (postgres + redis + jaeger + pinpoint)..."
+  docker compose up -d postgres redis jaeger 2>&1 | grep -v "^$" || true
+  docker compose --profile pinpoint up -d 2>&1 | grep -v "^$" || true
+else
+  echo "1/4  Starting infra (postgres + redis + jaeger)..."
+  docker compose up -d postgres redis jaeger 2>&1 | grep -v "^$" || true
+fi
 
 postgres_ready() { docker compose exec postgres pg_isready -U monticker -q 2>/dev/null; }
 wait_for "postgres" "/dev/null" postgres_ready "" 60
+
+if [ "$WITH_PINPOINT" = true ]; then
+  pinpoint_ready() {
+    docker compose ps pinpoint-web 2>/dev/null | grep -q "healthy"
+  }
+  echo ""
+  echo "  Waiting for Pinpoint (HBase 초기화 중, 최대 3분)..."
+  wait_for "Pinpoint" "/dev/null" pinpoint_ready "" 180
+fi
 
 # ── 2. api ───────────────────────────────────────────────────
 echo ""
@@ -104,6 +135,7 @@ echo "2/4  Starting API (port 8080)..."
 mkdir -p "$ROOT/logs"
 cd "$ROOT/backend/api"
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+PINPOINT_ENABLE=${WITH_PINPOINT} \
   ./gradlew bootRun --console=plain -q > "$ROOT/logs/api.log" 2>&1 &
 API_PID=$!
 
@@ -118,6 +150,7 @@ echo ""
 echo "3/4  Starting Worker..."
 cd "$ROOT/backend/worker"
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+PINPOINT_ENABLE=${WITH_PINPOINT} \
   ./gradlew bootRun --console=plain -q > "$ROOT/logs/worker.log" 2>&1 &
 WORKER_PID=$!
 
@@ -144,6 +177,9 @@ echo "  monticker is running"
 echo "  Web    → http://localhost:3000"
 echo "  API    → http://localhost:8080"
 echo "  Jaeger → http://localhost:16686"
+if [ "$WITH_PINPOINT" = true ]; then
+echo "  Pinpoint → http://localhost:18080"
+fi
 echo -e "========================================${NC}"
 echo ""
 echo "로그 실시간 보기:"

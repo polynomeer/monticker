@@ -1,0 +1,156 @@
+{
+  "title": "monticker — Tick Pipeline & Cache",
+  "uid": "monticker-tick-pipeline",
+  "schemaVersion": 38,
+  "refresh": "5s",
+  "time": { "from": "now-30m", "to": "now" },
+  "tags": ["monticker", "worker", "cache"],
+  "panels": [
+    {
+      "id": 1,
+      "title": "틱 파이프라인 레이턴시 p99 (ms)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, rate(tick_latency_redis_write_seconds_bucket{job=\"monticker-worker\"}[1m])) * 1000",
+          "legendFormat": "Redis write p99"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(tick_latency_broadcast_seconds_bucket{job=\"monticker-worker\"}[1m])) * 1000",
+          "legendFormat": "broadcast p99"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(tick_latency_total_pipeline_seconds_bucket{job=\"monticker-worker\"}[1m])) * 1000",
+          "legendFormat": "total pipeline p99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ms" },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "total pipeline p99" },
+            "properties": [{ "id": "custom.lineWidth", "value": 2 }] }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "title": "틱 처리량 (ticks/s)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(tick_latency_total_pipeline_seconds_count{job=\"monticker-worker\"}[1m])",
+          "legendFormat": "ticks/s"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 3,
+      "title": "캐시 히트율 (%)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(cache_gets_total{job=\"monticker-api\",result=\"hit\"}[1m]) / rate(cache_gets_total{job=\"monticker-api\"}[1m]) * 100",
+          "legendFormat": "{{name}} hit rate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "min": 0, "max": 100 },
+        "overrides": [
+          { "matcher": { "id": "byRegexp", "options": "screener.*" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] }
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "title": "캐시별 히트 / 미스 (건수/min)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(cache_gets_total{job=\"monticker-api\",result=\"hit\"}[1m]) * 60",
+          "legendFormat": "HIT {{name}}"
+        },
+        {
+          "expr": "rate(cache_gets_total{job=\"monticker-api\",result=\"miss\"}[1m]) * 60",
+          "legendFormat": "MISS {{name}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "이벤트 탐지 건수 (건/min)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(stock_events_written_total{job=\"monticker-worker\"}[1m]) * 60",
+          "legendFormat": "{{event_type}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "CircuitBreaker 상태",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "resilience4j_circuitbreaker_state{job=\"monticker-worker\"}",
+          "legendFormat": "{{name}}"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "CLOSED", "color": "green" } } },
+            { "type": "value", "options": { "1": { "text": "OPEN", "color": "red" } } },
+            { "type": "value", "options": { "2": { "text": "HALF_OPEN", "color": "yellow" } } }
+          ]
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "알림 전송 처리 시간 p99 (ms)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, rate(alert_dispatch_seconds_bucket{job=\"monticker-worker\"}[5m])) * 1000",
+          "legendFormat": "dispatch p99"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "id": 8,
+      "title": "Health Check 상태",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "health_status{job=~\"monticker-.*\"}",
+          "legendFormat": "{{job}} {{component}}"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "UP", "color": "green" } } },
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" } } }
+          ]
+        }
+      }
+    }
+  ]
+}

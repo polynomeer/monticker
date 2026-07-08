@@ -1,0 +1,137 @@
+{
+  "title": "monticker — API Overview",
+  "uid": "monticker-api-overview",
+  "schemaVersion": 38,
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "tags": ["monticker", "api"],
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTP 요청 처리율 (req/s)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(http_server_requests_seconds_count{job=\"monticker-api\"}[1m])",
+          "legendFormat": "{{method}} {{uri}} {{status}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 2,
+      "title": "HTTP 응답 레이턴시 p99 (ms)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, rate(http_server_requests_seconds_bucket{job=\"monticker-api\"}[1m])) * 1000",
+          "legendFormat": "p99 {{uri}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(http_server_requests_seconds_bucket{job=\"monticker-api\"}[1m])) * 1000",
+          "legendFormat": "p95 {{uri}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "id": 3,
+      "title": "HTTP 4xx / 5xx 에러율",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(http_server_requests_seconds_count{job=\"monticker-api\",status=~\"4..\"}[1m])",
+          "legendFormat": "4xx"
+        },
+        {
+          "expr": "rate(http_server_requests_seconds_count{job=\"monticker-api\",status=~\"5..\"}[1m])",
+          "legendFormat": "5xx"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 4,
+      "title": "주문 체결 처리 시간 p99 (ms)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, rate(matching_submit_order_seconds_bucket{job=\"monticker-api\"}[1m])) * 1000",
+          "legendFormat": "submit_order p99"
+        },
+        {
+          "expr": "histogram_quantile(0.50, rate(matching_submit_order_seconds_bucket{job=\"monticker-api\"}[1m])) * 1000",
+          "legendFormat": "submit_order p50"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "id": 5,
+      "title": "주문 상태 전이 (건수/min)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(order_state_transition_total{job=\"monticker-api\"}[1m]) * 60",
+          "legendFormat": "{{from}} → {{to}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 6,
+      "title": "JVM Heap 사용량",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "jvm_memory_used_bytes{job=\"monticker-api\",area=\"heap\"}",
+          "legendFormat": "used"
+        },
+        {
+          "expr": "jvm_memory_max_bytes{job=\"monticker-api\",area=\"heap\"}",
+          "legendFormat": "max"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    },
+    {
+      "id": 7,
+      "title": "HikariCP 커넥션 풀",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "hikaricp_connections_active{job=\"monticker-api\"}",
+          "legendFormat": "active"
+        },
+        {
+          "expr": "hikaricp_connections_idle{job=\"monticker-api\"}",
+          "legendFormat": "idle"
+        },
+        {
+          "expr": "hikaricp_connections_pending{job=\"monticker-api\"}",
+          "legendFormat": "pending"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "백테스트 실행 레이턴시 p99 (ms)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, rate(quant_backtest_seconds_bucket{job=\"monticker-api\"}[5m])) * 1000",
+          "legendFormat": "backtest p99"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    }
+  ]
+}

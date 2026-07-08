@@ -1,0 +1,29 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Spring Boot API
+  - job_name: monticker-api
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['api:8080']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: monticker-api
+
+  # Spring Boot Worker
+  - job_name: monticker-worker
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['worker:8081']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: monticker-worker
+
+  # Prometheus self-monitoring
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']

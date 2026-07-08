@@ -43,6 +43,12 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      # Pinpoint agent 활성화 (--profile pinpoint 와 함께 사용)
+      PINPOINT_ENABLE: ${PINPOINT_ENABLE:-false}
+      PINPOINT_COLLECTOR_IP: pinpoint-collector
+      PINPOINT_AGENT_ID: ${PINPOINT_API_AGENT_ID:-monticker-api-1}
+      PINPOINT_APP_NAME: monticker-api
     depends_on:
       postgres:
         condition: service_healthy
@@ -70,6 +76,11 @@ services:
       KIS_APP_SECRET: ${KIS_APP_SECRET:-}
       INGESTION_SOURCE: ${INGESTION_SOURCE:-internal}
       KAFKA_BROKERS: ${KAFKA_BROKERS:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      PINPOINT_ENABLE: ${PINPOINT_ENABLE:-false}
+      PINPOINT_COLLECTOR_IP: pinpoint-collector
+      PINPOINT_AGENT_ID: ${PINPOINT_WORKER_AGENT_ID:-monticker-worker-1}
+      PINPOINT_APP_NAME: monticker-worker
     depends_on:
       postgres:
         condition: service_healthy
@@ -139,6 +150,47 @@ services:
       - kafka
 
   # ── Observability ─────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: monticker-prometheus
+    ports:
+      - "9091:9090"   # 9090은 broadcast-gateway와 충돌 — 호스트 포트만 변경
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9090/-/healthy || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: monticker-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: monticker
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/api-overview.json
+    volumes:
+      - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   jaeger:
     image: jaegertracing/all-in-one:1.57
     container_name: monticker-jaeger
@@ -165,6 +217,83 @@ services:
     profiles:
       - full
 
+  # ── Pinpoint APM (optional) ───────────────────────────────────
+  # Bring up with: docker compose --profile pinpoint up
+  # UI: http://localhost:18080  (초기 기동 2~3분 소요 — HBase 스키마 초기화)
+  #
+  # 에이전트 활성화 방법 (api / worker 서비스에 환경변수 추가):
+  #   PINPOINT_ENABLE: "true"
+  #   PINPOINT_COLLECTOR_IP: pinpoint-collector
+  #   PINPOINT_AGENT_ID: monticker-api-1     (인스턴스마다 고유값)
+  #   PINPOINT_APP_NAME: monticker-api
+  pinpoint-hbase:
+    image: pinpointdocker/pinpoint-hbase:2.5.4
+    container_name: monticker-pinpoint-hbase
+    environment:
+      HBASE_MASTER_PORT: 16000
+      HBASE_MASTER_INFO_PORT: 16010
+      HBASE_REGIONSERVER_PORT: 16020
+      HBASE_REGIONSERVER_INFO_PORT: 16030
+    volumes:
+      - pinpoint_hbase_data:/home/pinpoint/hbase
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'status' | hbase shell 2>/dev/null | grep -q '0 servers' && exit 1 || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    profiles:
+      - pinpoint
+
+  pinpoint-collector:
+    image: pinpointdocker/pinpoint-collector:3.1.0
+    container_name: monticker-pinpoint-collector
+    ports:
+      - "9991:9991"   # gRPC agent channel
+      - "9992:9992"   # gRPC stat channel
+      - "9993:9993"   # gRPC span channel
+    environment:
+      SPRING_PROFILES_ACTIVE: release
+      PINPOINT_ZOOKEEPER_ADDRESS: pinpoint-hbase
+      COLLECTOR_RECEIVER_GRPC_AGENT_PORT: 9991
+      COLLECTOR_RECEIVER_GRPC_STAT_PORT: 9992
+      COLLECTOR_RECEIVER_GRPC_SPAN_PORT: 9993
+    depends_on:
+      pinpoint-hbase:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9990/actuator/health 2>/dev/null | grep -q UP || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    profiles:
+      - pinpoint
+
+  pinpoint-web:
+    image: pinpointdocker/pinpoint-web:3.1.0
+    container_name: monticker-pinpoint-web
+    ports:
+      - "18080:8080"   # Pinpoint UI (8080은 api 서비스와 충돌 — 호스트 포트 변경)
+    environment:
+      SPRING_PROFILES_ACTIVE: release
+      PINPOINT_ZOOKEEPER_ADDRESS: pinpoint-hbase
+      CLUSTER_ENABLE: "true"
+    depends_on:
+      pinpoint-hbase:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health 2>/dev/null | grep -q UP || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    profiles:
+      - pinpoint
+
 volumes:
   postgres_data:
   redis_data:
+  prometheus_data:
+  grafana_data:
+  pinpoint_hbase_data:
