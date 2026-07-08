@@ -48,6 +48,13 @@ monticker의 핵심 기술 구현에 대한 심층 기술 문서입니다.
 | [screener-virtualization.md](./screener-virtualization.md) | 스크리너 목록 가상화 | TanStack Virtual, DOM 최적화 |
 | [chart-adapter-pattern.md](./chart-adapter-pattern.md) | 차트 라이브러리 어댑터 패턴 | Apache ECharts, 의존성 역전 |
 
+## 아키텍처 패턴
+
+| 문서 | 주제 | 핵심 기술 |
+|------|------|-----------|
+| [eda-event-driven-architecture.md](./eda-event-driven-architecture.md) | EDA 적용 사례 전체 — 도입 배경·설계·트레이드오프 | Spring ApplicationEvent, Modulith, @TransactionalEventListener |
+| [ddd-domain-driven-design.md](./ddd-domain-driven-design.md) | DDD 적용 검토 — Anemic Model 진단·Rich Model 전환 로드맵 | 상태 전이 메서드, Aggregate Root, Value Object |
+
 ## 신뢰성 및 관측가능성
 
 | 문서 | 주제 | 핵심 기술 |
