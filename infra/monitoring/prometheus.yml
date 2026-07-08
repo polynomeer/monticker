@@ -13,7 +13,7 @@ scrape_configs:
         target_label: instance
         replacement: monticker-api
 
-  # Spring Boot Worker
+  # Spring Boot Worker (monolith, profile=full)
   - job_name: monticker-worker
     metrics_path: /actuator/prometheus
     static_configs:
@@ -22,6 +22,58 @@ scrape_configs:
       - source_labels: [__address__]
         target_label: instance
         replacement: monticker-worker
+
+  # ── MSA services (profile=msa) ──────────────────────────────
+
+  # quant-engine
+  - job_name: monticker-quant-engine
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['quant-engine:8082']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: monticker-quant-engine
+
+  # trading-service
+  - job_name: monticker-trading-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['trading-service:8083']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: monticker-trading-service
+
+  # worker-market (WORKER_ROLE=market)
+  - job_name: monticker-worker-market
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['worker-market:8081']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: monticker-worker-market
+
+  # worker-event (WORKER_ROLE=event)
+  - job_name: monticker-worker-event
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['worker-event:8081']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: monticker-worker-event
+
+  # worker-alert (WORKER_ROLE=alert)
+  - job_name: monticker-worker-alert
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['worker-alert:8081']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: monticker-worker-alert
 
   # Prometheus self-monitoring
   - job_name: prometheus
