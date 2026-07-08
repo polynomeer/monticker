@@ -29,11 +29,13 @@ Market Data Event
   → Execution Event → Strategy Performance Update
 ```
 
-Start as **Modular Monolith + async workers + Redis + TimescaleDB**. Do not introduce microservices until there is a concrete scaling reason.
+Start as **Modular Monolith + async workers + Redis + TimescaleDB**. Microservices are enabled via `docker compose --profile msa up` (see [MSA Architecture](#msa-architecture) below).
 
 ---
 
 ## System Overview
+
+### Monolith mode (`make up-full`)
 
 ```
 ┌─────────────┐   WebSocket/REST   ┌─────────────────┐
@@ -46,10 +48,50 @@ Start as **Modular Monolith + async workers + Redis + TimescaleDB**. Do not intr
 │(apps/mobile)│                    │  (PostgreSQL 16)  │
 └─────────────┘                    └────────▲─────────┘
                                             │ JDBC
-                                   ┌────────┴─────────┐
-                                   │  Spring Worker   │
-                                   │ (backend/worker) │
-                                   └──────────────────┘
+                              ┌─────────────┴────────────────┐
+                              │  Spring Worker (role=all)    │
+                              │  MockPriceGenerator → Kafka  │
+                              │  → TickKafkaConsumer         │
+                              └──────────────────────────────┘
+```
+
+### MSA mode (`make up-msa`)
+
+```
+[Next.js :3000]  [Expo Mobile]
+        │  REST / WebSocket
+        ▼
+┌─────────────────────────────────────┐
+│       backend/api  :8080            │
+│  JWT Auth · Strangler-fig proxy     │
+│  QUANT_ENGINE_URL → quant-engine    │
+│  TRADING_SERVICE_URL → trading-svc  │
+└──────┬──────────────────┬───────────┘
+       │ HTTP proxy        │ HTTP proxy
+       ▼                   ▼
+┌─────────────┐   ┌────────────────────┐
+│quant-engine │   │  trading-service   │
+│  :8082      │   │  :8083             │
+│ analytics   │   │  paper · matching  │
+│ quant       │   │  wallet · batch    │
+│ backtest    │   │  @AFTER_COMMIT →   │
+└──────▲──────┘   └────────┬───────────┘
+       │CONSUME             │PRODUCE
+       ╔══════════════════════════════════════════════════════╗
+       ║       Apache Kafka  :9092 / :29092                   ║
+       ║  market.ticks │ tick-processed │ order-filled │ ...  ║
+       ╚═╦═══════╦════╦════════════════════════════╦══════════╝
+         │       │    │                            │
+       PUB     SUB  PUB SUB                      SUB
+         │       │    │    │                       │
+  ┌──────┴──┐ ┌──▼────┴──┐ ┌──▼──────┐ ┌────────────────┐ ┌──────────────────┐
+  │worker-  │ │worker-   │ │worker- │ │market-gateway │ │broadcast-gateway │
+  │market   │ │event     │ │alert   │ │(Go)           │ │(Netty :9090)     │
+  └─────────┘ └──────────┘ └────────┘ └───────────────┘ └──────────────────┘
+                 │ JDBC + Redis (shared)
+        ┌────────┴──────────────────┐
+        │  TimescaleDB :5432        │   Redis :6379
+        └───────────────────────────┘
 ```
 
 ---
@@ -802,13 +844,60 @@ wallet:snapshot:{userId}           # 최신 wallet 스냅샷 캐시 (TTL 30s)
 
 ## Scaling Roadmap
 
-| Stage | Change |
-|-------|--------|
-| 1 | Modular Monolith + single Worker (current) |
-| 2 | Split workers by domain (market / event / alert / rule-engine) |
-| 3 | Rule Engine as dedicated service (CPU-intensive backtest isolation) |
-| 4 | Replace in-process pub/sub with Kafka for signal fanout |
-| 5 | Microservices only if traffic demands |
+| Stage | Change | Status |
+|-------|--------|--------|
+| 1 | Modular Monolith + single Worker | ✅ baseline |
+| 2 | Split Worker by role (`WORKER_ROLE=market/event/alert`) | ✅ implemented |
+| 3 | Extract `quant-engine` as standalone service (:8082) | ✅ implemented |
+| 4 | Kafka always-on — all ticks route through `market.ticks` | ✅ implemented |
+| 5 | Extract `trading-service` (:8083), distributed tx via `@AFTER_COMMIT` | ✅ implemented |
+
+---
+
+## MSA Architecture
+
+Full diagram: see [MSA Architecture Diagram (Artifact)](https://claude.ai/code/artifact/afddd890-919c-46cb-8d4a-37547d5e18fc)
+
+### Deployment
+
+```bash
+# MSA 전체 기동 (Kafka + quant-engine + trading-service + 3 workers)
+make up-msa
+
+# 단일 프로세스 모드 (Kafka + api + worker(role=all))
+make up-full
+```
+
+### Service Ports
+
+| Service | Port | Docker Profile | Role |
+|---------|------|---------------|------|
+| `backend/api` | 8080 | `full` / `msa` | API gateway, JWT auth, strangler-fig proxy |
+| `quant-engine` | 8082 | `msa` | analytics, quant, backtest |
+| `trading-service` | 8083 | `msa` | paper trading, matching, wallet |
+| `broadcast-gateway` | 9090 | `kafka` | Netty WebSocket fan-out |
+| `kafka` | 9092 / 29092 | `full` / `kafka` / `msa` | event bus |
+| `postgres` (TimescaleDB) | 5432 | always | shared DB |
+| `redis` | 6379 | always | tick cache, candle, orderbook |
+| `grafana` | 3001 | — | observability dashboard |
+| `jaeger` | 16686 | — | distributed tracing |
+
+### Kafka Topics
+
+| Topic | Producer | Consumer |
+|-------|----------|----------|
+| `market.ticks` | `worker-market`, `market-gateway` (Go) | `worker-event`, `broadcast-gateway` |
+| `market.tick-processed` | `worker-event` | `worker-alert` |
+| `market.events` | `worker-event` | — |
+| `trading.order-filled` | `trading-service` (`@AFTER_COMMIT`) | `quant-engine` (`QUANT_TRADING_EVENTS_ENABLED=true`) |
+| `trading.order-cancelled` | `trading-service` (`@AFTER_COMMIT`) | — |
+
+### MSA Key Design Decisions
+
+- **Strangler-fig proxy**: `QuantEngineClient` / `TradingServiceClient` in `backend/api` return `null` when URL env vars are unset → local service handles the request. Set `QUANT_ENGINE_URL` / `TRADING_SERVICE_URL` to route to standalone services.
+- **Distributed transaction safety**: `OrderEventKafkaPublisher` in `trading-service` uses `@TransactionalEventListener(AFTER_COMMIT)` — Kafka publish only fires after the matching transaction commits, preventing phantom order events on rollback.
+- **Worker role activation**: `@ConditionalOnExpression("'${worker.role:all}'.matches('market|all')")` activates components per role. The `all` default keeps the monolith worker behaviour.
+- **Tick ingestion dual-path**: `ingestion.source=internal` (default) → `MockPriceGenerator` → Kafka. `ingestion.source=kafka` → Go `market-gateway` → Kafka. Both paths converge at `market.ticks`.
 
 ---
 
