@@ -1,0 +1,69 @@
+# quant-engine: analytics / quant / backtest 전용 서비스 (MSA Stage 3)
+# api의 QUANT_ENGINE_URL 환경변수가 설정되면 요청이 이 서비스로 위임된다.
+# trading-service가 발행한 trading.order-filled 를 Kafka로 소비한다.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quant-engine
+  namespace: monticker
+  labels:
+    app: quant-engine
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: quant-engine
+  template:
+    metadata:
+      labels:
+        app: quant-engine
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8082"
+    spec:
+      containers:
+        - name: quant-engine
+          image: monticker/quant-engine:latest
+          ports:
+            - containerPort: 8082
+          envFrom:
+            - configMapRef:
+                name: monticker-config
+            - secretRef:
+                name: monticker-secrets
+          env:
+            - name: QUANT_TRADING_EVENTS_ENABLED
+              value: "true"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8082
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8082
+            initialDelaySeconds: 60
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: "500m"      # backtest는 CPU 집약적
+              memory: "768Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quant-engine
+  namespace: monticker
+spec:
+  selector:
+    app: quant-engine
+  ports:
+    - port: 8082
+      targetPort: 8082

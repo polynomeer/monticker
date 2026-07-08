@@ -11,5 +11,10 @@ resources:
   - worker.yaml
   - web.yaml
   - market-gateway.yaml
+  - quant-engine.yaml
+  - trading-service.yaml
+  - worker-market.yaml
+  - worker-event.yaml
+  - worker-alert.yaml
   - jaeger.yaml
   - ingress.yaml

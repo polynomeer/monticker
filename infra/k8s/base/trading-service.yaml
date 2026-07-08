@@ -1,0 +1,67 @@
+# trading-service: paper / matching / wallet 전용 서비스 (MSA Stage 5)
+# api의 TRADING_SERVICE_URL 환경변수가 설정되면 요청이 이 서비스로 위임된다.
+# 체결/취소 이벤트를 @TransactionalEventListener(AFTER_COMMIT) 로 Kafka에 발행한다.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trading-service
+  namespace: monticker
+  labels:
+    app: trading-service
+spec:
+  # 매칭 엔진은 동시성 제어(낙관적 락)가 있으므로 수평 확장 가능
+  replicas: 2
+  selector:
+    matchLabels:
+      app: trading-service
+  template:
+    metadata:
+      labels:
+        app: trading-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8083"
+    spec:
+      containers:
+        - name: trading-service
+          image: monticker/trading-service:latest
+          ports:
+            - containerPort: 8083
+          envFrom:
+            - configMapRef:
+                name: monticker-config
+            - secretRef:
+                name: monticker-secrets
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8083
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8083
+            initialDelaySeconds: 60
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trading-service
+  namespace: monticker
+spec:
+  selector:
+    app: trading-service
+  ports:
+    - port: 8083
+      targetPort: 8083
