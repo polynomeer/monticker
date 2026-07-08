@@ -1,13 +1,25 @@
 package com.monticker.api.screener.application
 
+import com.monticker.api.common.cache.CacheConfig
 import com.monticker.api.common.tracing.Tracing
 import com.monticker.api.screener.domain.ScreenerItem
 import com.monticker.api.screener.infrastructure.ScreenerRepository
+import org.springframework.cache.annotation.CacheEvict
+import org.springframework.cache.annotation.Cacheable
+import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 
 @Service
 class ScreenerService(private val repo: ScreenerRepository) {
 
+    /**
+     * 스크리너 결과를 5초간 캐싱한다.
+     * key에 모든 파라미터를 포함해 탭/정렬/페이지 조합별로 독립 캐시 엔트리를 유지한다.
+     */
+    @Cacheable(
+        cacheNames = [CacheConfig.SCREENER],
+        key = "#tab + ':' + #market + ':' + #sort + ':' + #limit + ':' + #offset",
+    )
     fun getItems(
         tab: String    = "realtime",
         market: String = "all",

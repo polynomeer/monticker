@@ -3,6 +3,9 @@ package com.monticker.api.analytics.application
 import com.monticker.api.analytics.domain.RegimeHistory
 import com.monticker.api.analytics.infrastructure.RegimeHistoryRepository
 import com.monticker.api.backtest.domain.DailyCandle
+import com.monticker.api.common.cache.CacheConfig
+import org.springframework.cache.annotation.CacheEvict
+import org.springframework.cache.annotation.Cacheable
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -25,6 +28,7 @@ class RegimeDetectorService(
     private val jdbc: JdbcTemplate,
     private val regimeHistoryRepository: RegimeHistoryRepository,
 ) {
+    @Cacheable(cacheNames = [CacheConfig.REGIME], key = "'stock:' + #stockId")
     @Transactional
     fun classifyRegime(stockId: Long): RegimeResult {
         val to = LocalDate.now()
@@ -59,6 +63,7 @@ class RegimeDetectorService(
         return result
     }
 
+    @Cacheable(cacheNames = [CacheConfig.REGIME], key = "'market:' + #market")
     @Transactional
     fun classifyMarketRegime(market: String): RegimeResult {
         // Use a representative stock for the market (first stock matching market code) as a proxy.

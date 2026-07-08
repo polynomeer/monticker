@@ -6,6 +6,13 @@ plugins {
 	kotlin("plugin.jpa") version "1.9.25"
 }
 
+// Spring Modulith BOM
+dependencyManagement {
+	imports {
+		mavenBom("org.springframework.modulith:spring-modulith-bom:1.3.4")
+	}
+}
+
 group = "com.monticker"
 version = "0.0.1-SNAPSHOT"
 
@@ -21,13 +28,23 @@ repositories {
 
 dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
+	// Spring Modulith
+	implementation("org.springframework.modulith:spring-modulith-starter-core")
+	implementation("org.springframework.modulith:spring-modulith-starter-jpa")
+	implementation("org.springframework.modulith:spring-modulith-events-api")
+	testImplementation("org.springframework.modulith:spring-modulith-starter-test")
+	// Spring State Machine
+	implementation("org.springframework.statemachine:spring-statemachine-starter:4.0.0")
 	implementation("io.micrometer:micrometer-tracing-bridge-otel")
 	implementation("io.opentelemetry:opentelemetry-api")
 	implementation("io.micrometer:micrometer-registry-prometheus")
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+	implementation("org.springframework.boot:spring-boot-starter-cache")
 	implementation("org.springframework.boot:spring-boot-starter-data-redis")
 	implementation("org.springframework.boot:spring-boot-starter-security")
 	implementation("org.springframework.boot:spring-boot-starter-validation")
+	implementation("org.springframework.boot:spring-boot-starter-aop")
+	implementation("org.springframework.boot:spring-boot-starter-batch")
 	implementation("org.springframework.boot:spring-boot-starter-web")
 	implementation("org.springframework.boot:spring-boot-starter-websocket")
 	implementation("com.fasterxml.jackson.module:jackson-module-kotlin")

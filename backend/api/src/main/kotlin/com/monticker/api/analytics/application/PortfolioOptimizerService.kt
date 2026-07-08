@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.api.analytics.domain.PortfolioOptimization
 import com.monticker.api.analytics.infrastructure.PortfolioOptimizationRepository
 import com.monticker.api.backtest.domain.DailyCandle
+import com.monticker.api.common.cache.CacheConfig
+import org.springframework.cache.annotation.Cacheable
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -37,6 +39,10 @@ class PortfolioOptimizerService(
 ) {
     private val tradingDaysPerYear = 252.0
 
+    @Cacheable(
+        cacheNames = [CacheConfig.PORTFOLIO_OPTIMIZER],
+        key = "#userId + ':' + T(java.util.Arrays).toString(#stockIds.toArray()) + ':' + #targetReturn",
+    )
     @Transactional
     fun optimize(userId: Long, stockIds: List<Long>, targetReturn: Double?): OptimizationResult {
         if (stockIds.size < 2) {

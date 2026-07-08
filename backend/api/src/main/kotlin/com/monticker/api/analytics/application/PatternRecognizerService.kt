@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.api.analytics.domain.DetectedPattern
 import com.monticker.api.analytics.infrastructure.DetectedPatternRepository
 import com.monticker.api.backtest.domain.DailyCandle
+import com.monticker.api.common.cache.CacheConfig
+import org.springframework.cache.annotation.Cacheable
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -36,6 +38,7 @@ class PatternRecognizerService(
     private val objectMapper: ObjectMapper,
     private val detectedPatternRepository: DetectedPatternRepository,
 ) {
+    @Cacheable(cacheNames = [CacheConfig.PATTERN], key = "#stockId + ':' + #lookbackDays")
     @Transactional
     fun detectPatterns(stockId: Long, lookbackDays: Int = 90): List<PatternMatch> {
         val to = LocalDate.now()

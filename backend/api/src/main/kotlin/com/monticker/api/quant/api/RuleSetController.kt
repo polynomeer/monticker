@@ -1,5 +1,7 @@
 package com.monticker.api.quant.api
 
+import com.monticker.api.common.aop.RateLimited
+import com.monticker.api.common.aop.Timed
 import com.monticker.api.quant.application.*
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
@@ -49,6 +51,8 @@ class RuleSetController(private val service: RuleSetService) {
     }
 
     @PostMapping("/{id}/backtest")
+    @Timed("quant.backtest", tags = ["module=quant"])
+    @RateLimited(limit = 10, windowSec = 3600, keyPrefix = "quant.backtest")
     fun runBacktest(
         @PathVariable id: Long,
         @RequestBody req: QuantBacktestRequest,

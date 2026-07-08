@@ -22,6 +22,7 @@ repositories {
 dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
 	implementation("io.micrometer:micrometer-tracing-bridge-otel")
+	implementation("io.micrometer:micrometer-registry-prometheus")
 	implementation("io.opentelemetry:opentelemetry-api")
 	implementation("io.github.resilience4j:resilience4j-kotlin:2.2.0")
 	implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.2.0")
@@ -29,6 +30,8 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-data-redis")
 	implementation("org.springframework.boot:spring-boot-starter-validation")
 	implementation("org.springframework.kafka:spring-kafka")
+	implementation("org.springframework.integration:spring-integration-core")
+	implementation("org.springframework.integration:spring-integration-kafka")
 	implementation("org.flywaydb:flyway-core")
 	implementation("org.flywaydb:flyway-database-postgresql")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
