@@ -183,18 +183,108 @@ fun publish() {
 
 ---
 
-### ⑤ Value Object 추출 (우선순위: 낮음 — 현재 스케일에서 과잉)
+### ⑤ Value Object — Money / Price (Phase 3 구현 완료)
 
-현재 코드 곳곳에서 `BigDecimal`을 금액, 가격, 비율에 무분별하게 사용한다.
+#### 도입 배경
 
-| 현재 | Value Object 후보 | 설명 |
-|------|-------------------|------|
-| `BigDecimal` (금액) | `Money` | 통화 단위, 음수 방지, 연산 메서드 |
-| `BigDecimal` (가격) | `Price` | 0보다 커야 하는 불변식 |
-| `conditionJson: String` | `AlertCondition` | JSON 파싱 + 검증 캡슐화 |
-| `ruleDefinition: String` | `RuleDefinition` | JSON DSL + fingerprint 포함 |
+`BigDecimal`이 금액(잔고·거래금액)과 가격(호가·체결가)에 동일하게 사용되어 타입 시스템이 두 개념을 구분하지 못했다.
 
-**현재 권고:** YAGNI 원칙에 따라 스케일이 커지거나 `BigDecimal` 타입 혼동 버그가 발생할 때 도입.
+```kotlin
+// 도입 전 — price와 amount가 모두 BigDecimal, 혼용 가능
+val amount = price.multiply(BigDecimal(quantity))   // price * qty → amount
+account.cash -= amount                               // BigDecimal 직접 연산
+```
+
+실수로 `Price`를 `Money`가 기대되는 자리에 넘겨도 컴파일 오류가 없어서 런타임에서야 발견된다.
+
+#### 설계
+
+```kotlin
+// common/domain/Money.kt
+data class Money(val amount: BigDecimal) : Comparable<Money> {
+    init { require(amount >= BigDecimal.ZERO) { "금액은 0 이상이어야 합니다" } }
+
+    operator fun plus(other: Money) = Money(amount + other.amount)
+    operator fun minus(other: Money) = Money((amount - other.amount).also {
+        require(it >= BigDecimal.ZERO) { "잔액 부족" }
+    })
+    operator fun times(qty: Int) = Money(amount.multiply(BigDecimal(qty)))
+
+    companion object {
+        val ZERO = Money(BigDecimal.ZERO)
+        val INITIAL_BALANCE = Money(BigDecimal("10000000"))
+        fun of(amount: BigDecimal) = Money(amount)
+        fun of(amount: String) = Money(BigDecimal(amount))
+    }
+}
+
+// common/domain/Price.kt
+data class Price(val amount: BigDecimal) : Comparable<Price> {
+    init { require(amount > BigDecimal.ZERO) { "가격은 0보다 커야 합니다" } }
+
+    fun toMoney(qty: Int): Money = Money(amount.multiply(BigDecimal(qty)))
+}
+```
+
+**핵심 설계 원칙:**
+- `Money`에서 `minus()`는 음수 결과 시 즉시 예외 → 잔고 부족이 연산 시점에 발견됨
+- `Price.toMoney(qty)` → 수량과의 곱이 항상 `Money`를 반환, `Price * Price` 같은 무의미한 연산 불가
+- `Money`와 `Price`는 서로 직접 연산 불가 (타입 불일치 컴파일 오류)
+
+#### JPA 통합 — AttributeConverter
+
+DB 스키마 변경 없이 기존 `NUMERIC(18,4)` 컬럼을 그대로 유지한다.
+
+```kotlin
+@Converter
+class MoneyConverter : AttributeConverter<Money?, BigDecimal?> {
+    override fun convertToDatabaseColumn(money: Money?) = money?.amount
+    override fun convertToEntityAttribute(col: BigDecimal?) = col?.let { Money(it) }
+}
+
+// 엔티티에서
+@Convert(converter = MoneyConverter::class)
+@Column(nullable = false)
+var cash: Money = Money.INITIAL_BALANCE
+```
+
+`@Embeddable`/`@AttributeOverride` 방식 대신 `AttributeConverter`를 선택한 이유:
+- 컬럼명이 그대로 유지됨 (`cash`, `fill_price` 등 — 마이그레이션 불필요)
+- nullable 필드(`limitPrice: Price?`)를 자연스럽게 지원
+- 엔티티 생성자 시그니처 변경이 최소화됨
+
+#### 적용 범위
+
+| 엔티티 | 필드 | 타입 변경 |
+|--------|------|-----------|
+| `PaperAccount` | `cash` | `BigDecimal` → `Money` |
+| `Order` | `limitPrice` | `BigDecimal?` → `Price?` |
+| `Order` | `avgFillPrice` | `BigDecimal?` → `Price?` |
+| `Fill` | `fillPrice` | `BigDecimal` → `Price` |
+| `Fill` | `amount`, `fee` | `BigDecimal` → `Money` |
+
+#### 서비스 변경 예시
+
+```kotlin
+// 도입 전
+val amount = price.multiply(BigDecimal(quantity))   // BigDecimal * Int → BigDecimal
+require(account.cash >= amount) { "잔고 부족" }
+account.cash -= amount
+
+// 도입 후
+val amount = price.toMoney(quantity)                 // Price.toMoney(Int) → Money
+account.debit(amount)                                // Money 타입 불일치 시 컴파일 오류
+```
+
+#### 트레이드오프
+
+| 장점 | 단점 |
+|------|------|
+| `Money`/`Price` 혼용 컴파일 타임 방지 | DTO 직렬화 시 `.amount` 언래핑 필요 |
+| 불변식(≥0, >0)이 생성 시점에 보장 | `JdbcTemplate` 직접 쿼리는 여전히 `BigDecimal` |
+| 연산 의미가 명확 (`toMoney`, `debit`, `credit`) | `@Embeddable` 대비 집계 쿼리 어려움 |
+
+**미도입 항목:** `AlertCondition`(JSON String), `RuleDefinition`(JSON String) — 현재 스케일에서 파싱 오버헤드 대비 이점이 적어 보류.
 
 ---
 
@@ -215,21 +305,14 @@ fun publish() {
 
 ## 적용 로드맵
 
-```
-Phase 1 (추천 — 즉시 적용 가능, 저위험)
-  ① Order.fill() / cancel() / reject()
-  ② PaperAccount.debit() / credit() / reset()
+| Phase | 대상 | 상태 |
+|-------|------|------|
+| **Phase 1** | `Order.fill/cancel/reject`, `PaperAccount.debit/credit/reset` | ✅ 완료 |
+| **Phase 2** | `AlertRule.deactivate/activate`, `RuleSet.updateDefinition/markBacktested/publish` | ✅ 완료 |
+| **Phase 3** | `Money`/`Price` Value Object (JPA AttributeConverter) | ✅ 완료 |
+| **Phase 4** | Aggregate 경계 강화 (`Fill` → `OrderRepository`만 접근) | 📋 보류 |
 
-Phase 2 (선택적)
-  ③ AlertRule.deactivate() / activate()
-  ④ RuleSet.updateDefinition() / markBacktested() / publish()
-
-Phase 3 (규모 성장 후)
-  ⑤ Money/Price Value Object
-  ⑥ Aggregate 경계 강화
-```
-
-Phase 1만 적용해도 `MatchingService`와 `PaperTradingService`의 핵심 복잡도가 줄고, 잘못된 상태 전이를 도메인 레이어에서 차단할 수 있다.
+Phase 4는 `FillRepository`를 통한 직접 조회(`findAllByUserIdOrderByFilledAtDesc`)가 "내 체결 내역" 같은 사용자 기능에 필요하여, 집계 루트를 통한 접근만 허용하면 성능 문제가 발생한다. N+1 쿼리 없이 구현하려면 CQRS Read Model 분리가 선행되어야 한다.
 
 ---
 
