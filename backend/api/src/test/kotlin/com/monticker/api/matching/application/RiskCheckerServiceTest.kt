@@ -18,7 +18,8 @@ class RiskCheckerServiceTest {
     private val riskLimitRepo = mockk<RiskLimitRepository>()
     private val jdbc = mockk<JdbcTemplate>(relaxed = true)
     private val objectMapper = ObjectMapper()
-    private val service = RiskCheckerService(riskLimitRepo, jdbc, objectMapper)
+    private val riskRuleQueryService = RiskRuleQueryService(jdbc)
+    private val service = RiskCheckerService(riskLimitRepo, riskRuleQueryService, jdbc, objectMapper)
 
     private val userId = 1L
     private val stockId = 100L
