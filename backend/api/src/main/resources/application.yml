@@ -73,3 +73,10 @@ otel:
 #     (미설정) → Mock (순수 랜덤)
 orderbook:
   provider: ${ORDERBOOK_PROVIDER:}
+
+# ── Quant Engine (MSA 분리 시 사용) ─────────────────────────────────────────
+# 설정 시 analytics/quant/backtest 요청을 quant-engine 서비스로 위임한다.
+# 비워두면(기본값) 단일 프로세스 모드로 로컬 서비스를 직접 호출한다.
+quant:
+  engine:
+    url: ${QUANT_ENGINE_URL:}
