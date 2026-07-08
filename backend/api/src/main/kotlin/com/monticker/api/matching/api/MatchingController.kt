@@ -16,7 +16,17 @@ class MatchingController(private val matchingService: MatchingService) {
     @PostMapping("/orders")
     fun submitOrder(@RequestBody req: SubmitOrderRequest): ResponseEntity<*> {
         return try {
-            ResponseEntity.ok(matchingService.submitOrder(tempUserId, req))
+            ResponseEntity.ok(matchingService.submitOrderChecked(
+                userId         = tempUserId,
+                stockId        = req.stockId,
+                side           = req.side,
+                quantity       = req.quantity,
+                estimatedPrice = req.limitPrice ?: java.math.BigDecimal.ZERO,
+                req            = req,
+            ))
+        } catch (e: com.monticker.api.common.aop.RiskLimitException) {
+            ResponseEntity.status(org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(mapOf("error" to e.message))
         } catch (e: IllegalArgumentException) {
             ResponseEntity.badRequest().body(mapOf("error" to e.message))
         } catch (e: IllegalStateException) {

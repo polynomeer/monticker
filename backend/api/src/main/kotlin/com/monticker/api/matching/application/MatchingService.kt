@@ -1,14 +1,20 @@
 package com.monticker.api.matching.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.api.common.aop.RiskChecked
+import com.monticker.api.common.aop.Timed
 import com.monticker.api.matching.domain.*
+import com.monticker.api.matching.events.OrderCancelledEvent
+import com.monticker.api.matching.events.OrderFilledEvent
 import com.monticker.api.matching.infrastructure.FillRepository
 import com.monticker.api.matching.infrastructure.OrderRepository
+import com.monticker.api.matching.statemachine.OrderEvents
+import com.monticker.api.matching.statemachine.OrderStateMachineService
+import com.monticker.api.matching.statemachine.OrderStates
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
-import java.math.RoundingMode
 import java.time.Instant
 
 data class SubmitOrderRequest(
@@ -59,7 +65,8 @@ class MatchingService(
     private val orderBookService: MatchingOrderBookService,
     private val riskChecker: RiskCheckerService,
     private val jdbc: JdbcTemplate,
-    private val objectMapper: ObjectMapper,
+    private val stateMachineService: OrderStateMachineService,
+    private val eventPublisher: ApplicationEventPublisher,
 ) {
     private fun getCurrentPrice(stockId: Long): BigDecimal =
         jdbc.queryForObject(
@@ -88,18 +95,21 @@ class MatchingService(
         )
     }
 
-    private fun recordLedger(userId: Long, fillId: Long, stockId: Long, amount: BigDecimal, side: String) {
-        val eventType = if (side == "BUY") "FILL" else "SETTLEMENT"
-        val ledgerAmount = if (side == "BUY") amount.negate() else amount
-        val balanceAfter = getAccountCash(userId)
-        jdbc.update(
-            """INSERT INTO ledger_events (user_id, event_type, amount, balance_after, paper_trade_id, stock_id, description)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            userId, eventType, ledgerAmount, balanceAfter, fillId, stockId,
-            if (side == "BUY") "매수 체결" else "매도 체결"
-        )
-    }
+    /**
+     * AOP 리스크 체크 진입점 — 파라미터명으로 stockId/side/quantity/estimatedPrice를 추출.
+     * Aspect 통과 후 submitOrder로 위임한다.
+     */
+    @RiskChecked
+    fun submitOrderChecked(
+        userId: Long,
+        stockId: Long,
+        side: String,
+        quantity: Int,
+        estimatedPrice: BigDecimal,
+        req: SubmitOrderRequest,
+    ): SubmitOrderResponse = submitOrder(userId, req)
 
+    @Timed("matching.submit_order", tags = ["module=matching"])
     fun submitOrder(userId: Long, req: SubmitOrderRequest): SubmitOrderResponse {
         require(req.quantity > 0) { "수량은 1 이상이어야 합니다" }
         require(req.side in listOf("BUY", "SELL")) { "side는 BUY 또는 SELL이어야 합니다" }
@@ -115,26 +125,6 @@ class MatchingService(
 
         val currentPrice = getCurrentPrice(req.stockId)
         val estimatedPrice = if (req.orderType == "LIMIT") req.limitPrice!! else currentPrice
-
-        // Risk check
-        val riskResult = riskChecker.check(userId, req.stockId, req.side, req.quantity, estimatedPrice)
-        if (!riskResult.approved) {
-            val rejected = orderRepo.save(Order(
-                userId = userId,
-                stockId = req.stockId,
-                side = OrderSide.valueOf(req.side),
-                orderType = OrderType.valueOf(req.orderType),
-                quantity = req.quantity,
-                limitPrice = req.limitPrice,
-                status = OrderStatus.REJECTED,
-                rejectReason = "Risk check blocked by: ${riskResult.blockedBy}",
-            ))
-            return SubmitOrderResponse(
-                order = rejected.toDto(),
-                fills = emptyList(),
-                message = "주문 거부: ${riskResult.blockedBy}",
-            )
-        }
 
         // For BUY, reserve cash upfront
         if (req.side == "BUY") {
@@ -180,24 +170,36 @@ class MatchingService(
             ))
             fills.add(fill.toDto())
 
-            order.filledQty = fillQty
-            order.avgFillPrice = fillPrice
-            order.status = OrderStatus.FILLED
-            order.updatedAt = Instant.now()
+            // StateMachine으로 상태 전이 — PENDING → FILLED
+            stateMachineService.transition(
+                orderId      = order.id,
+                currentState = OrderStates.PENDING,
+                event        = OrderEvents.COMPLETE_FILL,
+            )
+            order.fill(fillQty, fillPrice)
             orderRepo.save(order)
 
             if (req.side == "BUY") {
-                // Refund difference between estimated reserve and actual cost
                 val reserved = estimatedPrice.multiply(BigDecimal(req.quantity))
                 val refund = reserved - fillAmount
-                if (refund > BigDecimal.ZERO) {
-                    adjustCash(userId, refund)
-                }
+                if (refund > BigDecimal.ZERO) adjustCash(userId, refund)
             } else {
-                // SELL: add proceeds to cash
                 adjustCash(userId, fillAmount)
             }
-            recordLedger(userId, fill.id, req.stockId, fillAmount, req.side)
+
+            // wallet/quant 모듈에 체결 이벤트 발행 — AFTER_COMMIT 리스너가 원장 기록
+            eventPublisher.publishEvent(
+                OrderFilledEvent(
+                    orderId   = order.id,
+                    userId    = userId,
+                    stockId   = req.stockId,
+                    fillId    = fill.id,
+                    side      = req.side,
+                    quantity  = fillQty,
+                    fillPrice = fillPrice,
+                    amount    = fillAmount,
+                )
+            )
         } else {
             // LIMIT order that doesn't fill immediately — add to order book
             orderBookService.submit(order)
@@ -213,22 +215,36 @@ class MatchingService(
     fun cancelOrder(userId: Long, orderId: Long): OrderDto {
         val order = orderRepo.findById(orderId).orElseThrow { NoSuchElementException("주문 없음: $orderId") }
         require(order.userId == userId) { "본인의 주문만 취소할 수 있습니다" }
-        require(order.status in listOf(OrderStatus.PENDING, OrderStatus.PARTIALLY_FILLED)) {
-            "취소 불가 상태: ${order.status}"
-        }
 
         orderBookService.cancel(order.stockId, orderId, order.side)
 
-        // Unreserve remaining cash for BUY orders
+        var refundAmount = BigDecimal.ZERO
         if (order.side == OrderSide.BUY) {
             val refundPrice = order.limitPrice ?: BigDecimal.ZERO
-            val refund = refundPrice.multiply(BigDecimal(order.remainingQty))
-            if (refund > BigDecimal.ZERO) adjustCash(userId, refund)
+            refundAmount = refundPrice.multiply(BigDecimal(order.remainingQty))
+            if (refundAmount > BigDecimal.ZERO) adjustCash(userId, refundAmount)
         }
 
-        order.status = OrderStatus.CANCELLED
-        order.updatedAt = Instant.now()
-        return orderRepo.save(order).toDto()
+        // StateMachine으로 상태 전이
+        stateMachineService.transition(
+            orderId      = order.id,
+            currentState = OrderStates.valueOf(order.status.name),
+            event        = OrderEvents.CANCEL,
+        )
+        order.cancel()
+        val saved = orderRepo.save(order)
+
+        // wallet 모듈에 취소 이벤트 발행 (환불 원장 기록)
+        eventPublisher.publishEvent(
+            OrderCancelledEvent(
+                orderId      = order.id,
+                userId       = userId,
+                stockId      = order.stockId,
+                side         = order.side.name,
+                refundAmount = refundAmount,
+            )
+        )
+        return saved.toDto()
     }
 
     @Transactional(readOnly = true)
