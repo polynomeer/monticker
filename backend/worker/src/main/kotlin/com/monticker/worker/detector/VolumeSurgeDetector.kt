@@ -68,4 +68,13 @@ class VolumeSurgeDetector(
 
         writer.write(event)
     }
+
+    /** 이벤트 기록 없이 서지 여부만 반환한다 (Spring Integration Router 전용). */
+    fun detectWithResult(tick: GeneratedTick): Boolean {
+        val emaKey = "detector:volume:ema:${tick.symbol}"
+        val rawEma = redisTemplate.opsForValue().get(emaKey) ?: return false
+        val ema    = rawEma.toDouble()
+        val ratio  = if (ema > 0) tick.volume.toDouble() / ema else 1.0
+        return ratio >= 3.0
+    }
 }

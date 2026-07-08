@@ -83,4 +83,19 @@ class PriceSpikeDetector(
 
         writer.write(event)
     }
+
+    /** 이벤트 기록 없이 스파이크 여부만 반환한다 (Spring Integration Router 전용). */
+    fun detectWithResult(tick: GeneratedTick): Boolean {
+        val prevKey = "detector:price:prev:${tick.symbol}"
+        val emaKey  = "detector:price:ema:${tick.symbol}"
+        val rawPrev = redisTemplate.opsForValue().get(prevKey) ?: return false
+        val rawEma  = redisTemplate.opsForValue().get(emaKey)  ?: return false
+        val prev    = java.math.BigDecimal(rawPrev)
+        val change  = tick.price.subtract(prev).abs()
+        val changePct = if (prev > java.math.BigDecimal.ZERO)
+            change.divide(prev, 6, java.math.RoundingMode.HALF_UP).toDouble() * 100 else 0.0
+        val ema   = rawEma.toDouble()
+        val ratio = if (ema > 0.001) changePct / ema else 0.0
+        return ratio >= 3.0
+    }
 }

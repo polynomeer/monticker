@@ -13,12 +13,16 @@ import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.stereotype.Component
 
 /**
- * Go market-gateway가 발행한 틱을 소비한다. 기존 MarketDataCollector의
- * "1초 폴링" 대신 "메시지 도착 시 즉시 처리"로 바뀌는 것이 핵심 차이다.
+ * Go market-gateway가 발행한 틱을 소비한다 (@KafkaListener 방식).
+ *
+ * tick.consumer=legacy (기본값) 일 때 활성화.
+ * tick.consumer=integration 으로 설정하면 TickPipelineConfig (Spring Integration EIP)가 대신 처리.
+ * 두 구현 중 하나만 활성화해 동일 토픽을 중복 소비하지 않는다.
+ *
  * 자세한 설계 배경은 docs/technical/kafka-tick-pipeline.md 참고.
  */
 @Component
-@ConditionalOnProperty(name = ["ingestion.source"], havingValue = "kafka")
+@ConditionalOnProperty(name = ["tick.consumer"], havingValue = "legacy", matchIfMissing = true)
 class TickKafkaConsumer(
     private val redisTickWriter: RedisTickWriter,
     private val candleAggregator: CandleAggregator,

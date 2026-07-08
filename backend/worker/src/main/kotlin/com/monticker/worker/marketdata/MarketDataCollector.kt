@@ -1,8 +1,10 @@
 package com.monticker.worker.marketdata
 
+import com.monticker.worker.alert.TickProcessedEvent
 import com.monticker.worker.detector.EventDetector
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.scheduling.annotation.EnableScheduling
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
@@ -15,6 +17,7 @@ class MarketDataCollector(
     private val candleAggregator: CandleAggregator,
     private val eventDetector: EventDetector,
     private val latencyTracker: LatencyTracker,
+    private val eventPublisher: ApplicationEventPublisher,
     @Value("\${ingestion.source:internal}") private val ingestionSource: String,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -33,6 +36,8 @@ class MarketDataCollector(
                 latencyTracker.recordRedisWrite(tick.stockId)
                 eventDetector.detect(tick)
                 latencyTracker.recordBroadcast(tick.stockId)
+                // EDA: 틱 처리 완료 이벤트 발행 → AlertEvaluator가 실시간으로 규칙 평가
+                eventPublisher.publishEvent(TickProcessedEvent(tick.stockId, tick.price))
             }
             log.debug("Published {} ticks", ticks.size)
         } catch (e: Exception) {

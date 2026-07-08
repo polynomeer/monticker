@@ -5,8 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.worker.push.ExpoPushSender
 import com.monticker.worker.push.PushMessage
 import org.slf4j.LoggerFactory
+import org.springframework.context.event.EventListener
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.scheduling.annotation.Scheduled
+import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Component
 import java.math.BigDecimal
 import java.time.Instant
@@ -19,44 +20,58 @@ data class AlertRuleRow(
     val conditionJson: String,
 )
 
+/**
+ * 가격 알림 규칙 평가기.
+ *
+ * [Before] @Scheduled(fixedDelay=5000): 전체 alert_rules 폴링 → 각 종목 현재가 DB 재조회
+ * [After]  @EventListener(TickProcessedEvent): 틱마다 해당 stockId 규칙만 평가,
+ *          틱의 price를 그대로 사용하므로 DB 가격 재조회 불필요.
+ *
+ * 효과:
+ *  - 5초 지연 → 실시간 (틱 단위)
+ *  - 전체 룰 스캔 → stockId 필터 쿼리
+ *  - DB price 재조회 제거 → 쿼리 수 감소
+ *  - self-injection 해킹 제거
+ */
 @Component
 class AlertEvaluator(
     private val jdbc: JdbcTemplate,
     private val pushSender: ExpoPushSender,
 ) {
-    private val log = LoggerFactory.getLogger(AlertEvaluator::class.java)
+    private val log = LoggerFactory.getLogger(javaClass)
     private val objectMapper = ObjectMapper()
 
-    @Scheduled(fixedDelay = 5000)
-    fun evaluate() {
+    @EventListener
+    @Async("alertDispatchExecutor")
+    fun onTickProcessed(event: TickProcessedEvent) {
         try {
-            val rules = fetchActiveRules()
-            for (rule in rules) evaluateRule(rule)
+            val rules = fetchRulesForStock(event.stockId)
+            for (rule in rules) evaluateRule(rule, event.price)
         } catch (e: Exception) {
-            log.error("Alert evaluation error", e)
+            log.error("[AlertEvaluator] stockId={} 평가 오류: {}", event.stockId, e.message)
         }
     }
 
-    private fun fetchActiveRules(): List<AlertRuleRow> =
+    private fun fetchRulesForStock(stockId: Long): List<AlertRuleRow> =
         jdbc.query(
-            "SELECT id, user_id, stock_id, rule_type, condition_json FROM alert_rules WHERE is_active = true",
-        ) { rs, _ ->
-            AlertRuleRow(
-                id            = rs.getLong("id"),
-                userId        = rs.getLong("user_id"),
-                stockId       = rs.getLong("stock_id"),
-                ruleType      = rs.getString("rule_type"),
-                conditionJson = rs.getString("condition_json"),
-            )
-        }
+            "SELECT id, user_id, stock_id, rule_type, condition_json FROM alert_rules WHERE stock_id = ? AND is_active = true",
+            { rs, _ ->
+                AlertRuleRow(
+                    id            = rs.getLong("id"),
+                    userId        = rs.getLong("user_id"),
+                    stockId       = rs.getLong("stock_id"),
+                    ruleType      = rs.getString("rule_type"),
+                    conditionJson = rs.getString("condition_json"),
+                )
+            },
+            stockId,
+        )
 
-    private fun evaluateRule(rule: AlertRuleRow) {
+    private fun evaluateRule(rule: AlertRuleRow, currentPrice: BigDecimal) {
         val condition: Map<String, Any> = objectMapper.readValue(
             rule.conditionJson,
-            object : TypeReference<Map<String, Any>>() {}
+            object : TypeReference<Map<String, Any>>() {},
         )
-        val currentPrice = fetchCurrentPrice(rule.stockId) ?: return
-
         val triggered = when (rule.ruleType) {
             "PRICE_ABOVE" -> {
                 val threshold = (condition["threshold"] as? Number)?.toDouble() ?: return
@@ -68,17 +83,8 @@ class AlertEvaluator(
             }
             else -> false
         }
-
         if (triggered) dispatchAlert(rule, currentPrice)
     }
-
-    private fun fetchCurrentPrice(stockId: Long): BigDecimal? = try {
-        jdbc.queryForObject(
-            "SELECT close FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1",
-            BigDecimal::class.java,
-            stockId,
-        )
-    } catch (e: Exception) { null }
 
     private fun dispatchAlert(rule: AlertRuleRow, currentPrice: BigDecimal) {
         val alreadyFired = jdbc.queryForObject(
@@ -97,48 +103,35 @@ class AlertEvaluator(
             RETURNING id
             """,
             Long::class.java,
-            rule.id,
-            rule.stockId,
+            rule.id, rule.stockId,
             java.sql.Timestamp.from(Instant.now()),
             message,
         ) ?: return
 
-        log.info("Alert triggered: ruleId={} userId={} message={}", rule.id, rule.userId, message)
+        log.info("[AlertEvaluator] triggered: ruleId={} userId={} price={}", rule.id, rule.userId, currentPrice)
 
         val tokens = jdbc.queryForList(
             "SELECT token FROM device_tokens WHERE user_id = ? AND is_active = true",
             String::class.java,
             rule.userId,
         )
+        if (tokens.isEmpty()) return
 
-        if (tokens.isEmpty()) {
-            log.debug("No device tokens for userId={}", rule.userId)
-            return
-        }
-
-        val pushMessages = tokens.map { token ->
+        val results = pushSender.send(tokens.map { token ->
             PushMessage(
                 to    = token,
                 title = "monticker 알림",
                 body  = message,
                 data  = mapOf("stockId" to rule.stockId, "ruleId" to rule.id),
             )
-        }
+        })
 
-        val results = pushSender.send(pushMessages)
-        val allOk = results.all { it.status == "ok" }
-        val newStatus = if (allOk) "SENT" else "FAILED"
-
-        jdbc.update(
-            "UPDATE alert_histories SET delivery_status = ? WHERE id = ?",
-            newStatus,
-            historyId,
-        )
-
-        log.info("Push sent: userId={} tokens={} status={}", rule.userId, tokens.size, newStatus)
+        val status = if (results.all { it.status == "ok" }) "SENT" else "FAILED"
+        jdbc.update("UPDATE alert_histories SET delivery_status = ? WHERE id = ?", status, historyId)
+        log.info("[AlertEvaluator] push sent: userId={} status={}", rule.userId, status)
     }
 
-    private fun buildMessage(rule: AlertRuleRow, price: BigDecimal): String = when (rule.ruleType) {
+    private fun buildMessage(rule: AlertRuleRow, price: BigDecimal) = when (rule.ruleType) {
         "PRICE_ABOVE" -> "가격이 ₩${price.toLong().formatKR()} 이상이 되었습니다"
         "PRICE_BELOW" -> "가격이 ₩${price.toLong().formatKR()} 이하가 되었습니다"
         else          -> "알림 조건 충족: ${rule.ruleType}"
