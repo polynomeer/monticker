@@ -54,4 +54,30 @@ class Order(
     var updatedAt: Instant = Instant.now(),
 ) {
     val remainingQty: Int get() = quantity - filledQty
+
+    fun fill(qty: Int, price: BigDecimal) {
+        require(status == OrderStatus.PENDING || status == OrderStatus.PARTIALLY_FILLED) {
+            "체결 불가 상태: $status"
+        }
+        require(qty > 0 && qty <= remainingQty) { "유효하지 않은 체결 수량: $qty (잔여: $remainingQty)" }
+        filledQty += qty
+        avgFillPrice = price
+        status = if (remainingQty == 0) OrderStatus.FILLED else OrderStatus.PARTIALLY_FILLED
+        updatedAt = Instant.now()
+    }
+
+    fun cancel() {
+        require(status == OrderStatus.PENDING || status == OrderStatus.PARTIALLY_FILLED) {
+            "취소 불가 상태: $status"
+        }
+        status = OrderStatus.CANCELLED
+        updatedAt = Instant.now()
+    }
+
+    fun reject(reason: String) {
+        require(status == OrderStatus.PENDING) { "거절 불가 상태: $status" }
+        status = OrderStatus.REJECTED
+        rejectReason = reason
+        updatedAt = Instant.now()
+    }
 }

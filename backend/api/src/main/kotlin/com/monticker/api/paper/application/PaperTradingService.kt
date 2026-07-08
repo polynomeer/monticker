@@ -10,7 +10,6 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.math.RoundingMode
-import java.time.Instant
 
 @Service
 @Transactional
@@ -68,9 +67,7 @@ class PaperTradingService(
         val account = getOrCreateAccount(userId)
         val price   = getCurrentPrice(stockId)
         val amount  = price.multiply(BigDecimal(quantity))
-        require(account.cash >= amount) { "잔고 부족: 필요 ${amount}, 보유 ${account.cash}" }
-        account.cash -= amount
-        account.updatedAt = Instant.now()
+        account.debit(amount)
         accountRepo.save(account)
         val trade = tradeRepo.save(PaperTrade(userId=userId, stockId=stockId, side="BUY", quantity=quantity, price=price, amount=amount))
         ledgerService.recordBuy(userId, trade.id, stockId, amount, account.cash)
@@ -86,8 +83,7 @@ class PaperTradingService(
         val account = getOrCreateAccount(userId)
         val price   = getCurrentPrice(stockId)
         val amount  = price.multiply(BigDecimal(quantity))
-        account.cash += amount
-        account.updatedAt = Instant.now()
+        account.credit(amount)
         accountRepo.save(account)
         val trade = tradeRepo.save(PaperTrade(userId=userId, stockId=stockId, side="SELL", quantity=quantity, price=price, amount=amount))
         ledgerService.recordSell(userId, trade.id, stockId, amount, account.cash)
@@ -103,8 +99,7 @@ class PaperTradingService(
 
     fun reset(userId: Long) {
         val account = getOrCreateAccount(userId)
-        account.cash = BigDecimal("10000000")
-        account.updatedAt = Instant.now()
+        account.reset()
         accountRepo.save(account)
         jdbc.update("DELETE FROM paper_trades WHERE user_id = ?", userId)
     }

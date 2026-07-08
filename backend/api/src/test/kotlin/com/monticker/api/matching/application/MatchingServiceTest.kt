@@ -1,12 +1,12 @@
 package com.monticker.api.matching.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.api.matching.domain.Order
 import com.monticker.api.matching.domain.OrderSide
 import com.monticker.api.matching.domain.OrderStatus
 import com.monticker.api.matching.domain.OrderType
 import com.monticker.api.matching.infrastructure.FillRepository
 import com.monticker.api.matching.infrastructure.OrderRepository
+import com.monticker.api.matching.statemachine.OrderStateMachineService
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -14,6 +14,7 @@ import io.mockk.verify
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.jdbc.core.JdbcTemplate
 import java.math.BigDecimal
 import java.util.Optional
@@ -25,9 +26,10 @@ class MatchingServiceTest {
     private val orderBookService = mockk<MatchingOrderBookService>(relaxed = true)
     private val riskChecker = mockk<RiskCheckerService>()
     private val jdbc = mockk<JdbcTemplate>(relaxed = true)
-    private val objectMapper = ObjectMapper()
+    private val stateMachineService = mockk<OrderStateMachineService>(relaxed = true)
+    private val eventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
 
-    private val service = MatchingService(orderRepo, fillRepo, orderBookService, riskChecker, jdbc, objectMapper)
+    private val service = MatchingService(orderRepo, fillRepo, orderBookService, riskChecker, jdbc, stateMachineService, eventPublisher)
 
     private val userId = 1L
     private val stockId = 100L
@@ -55,25 +57,7 @@ class MatchingServiceTest {
 
     private fun savedOrderSlot(): io.mockk.MockKMatcherScope.() -> Order = { any() }
 
-    @Test
-    fun `submitOrder saves order as REJECTED when risk check is blocked and does not submit to order book`() {
-        stubStockExistsAndPrice()
-        every { riskChecker.check(userId, stockId, "BUY", 10, currentPrice) } returns blockedRiskResult("DailyLossRule")
-
-        val savedSlot = slot<Order>()
-        every { orderRepo.save(capture(savedSlot)) } answers { savedSlot.captured }
-
-        val response = service.submitOrder(
-            userId,
-            SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10)
-        )
-
-        assertThat(response.order.status).isEqualTo("REJECTED")
-        assertThat(response.order.rejectReason).contains("DailyLossRule")
-        assertThat(response.fills).isEmpty()
-        verify(exactly = 0) { orderBookService.submit(any()) }
-        verify(exactly = 1) { orderRepo.save(any()) }
-    }
+    // REJECTED 케이스는 RiskCheckedAspect 에서 처리 — RiskCheckedAspectTest 참고
 
     @Test
     fun `submitOrder fully fills a MARKET order when risk check passes`() {
@@ -109,7 +93,7 @@ class MatchingServiceTest {
         assertThat(response.fills).hasSize(1)
         assertThat(response.fills[0].fillPrice).isEqualByComparingTo(currentPrice)
         verify { fillRepo.save(any()) }
-        verify(atLeast = 1) { jdbc.update(match<String> { it.contains("ledger_events") }, *anyVararg()) }
+        verify { eventPublisher.publishEvent(any<com.monticker.api.matching.events.OrderFilledEvent>()) }
     }
 
     @Test
