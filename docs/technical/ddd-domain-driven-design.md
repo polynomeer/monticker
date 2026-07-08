@@ -368,7 +368,112 @@ class FillQueryService(private val jdbc: JdbcTemplate) {
 
 ---
 
+## ⑦ CQRS 서비스 레이어 분리 (Phase 5–6 구현 완료)
+
+DDD 도메인 모델 개선(Phase 1–4)과는 별개로, 애플리케이션 서비스 레이어에서
+`@Cacheable @Transactional` 공존 문제와 N+1 쿼리를 해결하기 위해 서비스 클래스를
+**Query(읽기 전용)** 와 **Command(쓰기)** 로 분리했다.
+
+### 문제
+
+```kotlin
+@Cacheable(cacheNames = ["pattern"], key = "#stockId")
+@Transactional          // 캐시 히트 시에도 불필요한 쓰기 트랜잭션이 열림
+fun detectPatterns(stockId: Long): List<PatternMatch> {
+    val candles = loadDailyCandles(...)        // 읽기
+    val matches = runDetectors(candles)         // 순수 계산
+    matches.filter { it.confidenceScore >= 70 }
+        .forEach { detectedPatternRepository.save(it) }  // 쓰기
+    return matches
+}
+```
+
+- `@Cacheable` 히트 → 캐시 인터셉터가 먼저 반환 → `@Transactional` 인터셉터는 실행되지 않음 ✓
+- `@Cacheable` 미스 → 쓰기 트랜잭션 오픈 → 읽기+저장이 하나의 write 트랜잭션에서 실행
+  → Hibernate dirty-check 비활성화 불가, readOnly 최적화 불가
+
+### 해결 패턴
+
+```
+QueryService (@Transactional(readOnly=true))     CommandService (@Transactional)
+────────────────────────────────────────         ──────────────────────────────
+순수 계산·읽기 전담                               QueryService 호출 후 저장 전담
+캐시는 CommandService에 배치 (저장과 함께)        컨트롤러·배치가 직접 주입 가능
+```
+
+### Phase 5 — matching / paper / wallet 모듈 (완료)
+
+| 원본 Service | 신규 QueryService | 주요 분리 내용 |
+|---|---|---|
+| `RiskCheckerService` | `RiskRuleQueryService` | 5가지 리스크 룰 평가 로직 이전 |
+| `PaperTradingService` | `PaperPortfolioQueryService` | 포트폴리오·히스토리 조회 + N+1 제거 |
+| `BehaviorScoreService` | `BehaviorScoreQueryService` | 캐시 히트 경로를 읽기 전용으로 분리 |
+
+**N+1 제거 예시 (PaperPortfolioQueryService):**
+
+```kotlin
+// 이전: holding 루프 안에서 각 종목별 쿼리 → N+1
+for (holding in holdings) {
+    val price = jdbc.queryForObject("SELECT close FROM candles_1m WHERE stock_id = ?", ...)
+}
+
+// 이후: DISTINCT ON 배치 쿼리 → 1 query
+jdbc.query("""
+    SELECT DISTINCT ON (stock_id) stock_id, close
+    FROM candles_1m WHERE stock_id IN ($placeholders)
+    ORDER BY stock_id, candle_time DESC
+""", ...)
+```
+
+### Phase 6 — analytics 모듈 (완료)
+
+| 원본 Service | 신규 QueryService | 주요 분리 내용 |
+|---|---|---|
+| `PatternRecognizerService` | `PatternRecognizerQueryService` | zigZag·패턴 감지 알고리즘 전체 이전 |
+| `RegimeDetectorService` | `RegimeDetectorQueryService` | ADX·변동성·추세 계산 + `@Cacheable` 이전 |
+| `PortfolioOptimizerService` | `PortfolioOptimizerQueryService` | 최적화·효율적 프론티어 계산 이전; `getEfficientFrontier` `@Transactional` 누락 버그 수정 |
+| `TaxOptimizerService` | `TaxHarvestingQueryService` | 후보 계산 이전 + N+1 제거 |
+
+**`RegimeResult`에 `detectedAt: LocalDate?` 추가:**
+QueryService가 캔들 마지막 날짜를 반환하여 CommandService가 별도 조회 없이
+`regimeHistoryRepository.findByStockIdAndRegimeDate()` 호출에 활용한다.
+
+**TaxHarvestingQueryService N+1 제거:**
+
+```kotlin
+// 이전: holding마다 가격·종목정보 각 1 query → 2N queries
+holdingRows.forEach { row ->
+    val price = jdbc.queryForObject("SELECT close FROM candles_1m WHERE stock_id = ?", ...)
+    val info  = jdbc.queryForMap("SELECT symbol, name FROM stocks WHERE id = ?", ...)
+}
+
+// 이후: 손실 종목만 필터링 후 배치 조회 → 최대 2 queries
+val priceMap = jdbc.queryForList(
+    "SELECT DISTINCT ON (stock_id) stock_id, close FROM candles_1m WHERE stock_id IN (...)",
+    ...
+)
+val stockInfoMap = jdbc.queryForList(
+    "SELECT id, symbol, name FROM stocks WHERE id IN (...)",
+    ...
+)
+```
+
+### 컨트롤러 변경 패턴
+
+읽기 엔드포인트는 QueryService를, 쓰기 엔드포인트는 CommandService를 직접 주입.
+
+```kotlin
+class PaperController(
+    private val tradingService: PaperTradingService,           // 쓰기: buy/sell/reset
+    private val portfolioQueryService: PaperPortfolioQueryService, // 읽기: portfolio/history/risk
+)
+```
+
+---
+
 ## 적용 로드맵
+
+### DDD 도메인 모델
 
 | Phase | 대상 | 상태 |
 |-------|------|------|
@@ -377,14 +482,24 @@ class FillQueryService(private val jdbc: JdbcTemplate) {
 | **Phase 3** | `Money`/`Price` Value Object (JPA AttributeConverter) | ✅ 완료 |
 | **Phase 4** | Aggregate 경계 강화 + CQRS Read Model (`FillQueryService` 분리) | ✅ 완료 |
 
+### CQRS 서비스 레이어
+
+| Phase | 대상 모듈 | 주요 변경 | 상태 |
+|-------|-----------|-----------|------|
+| **Phase 5** | `matching`, `paper`, `wallet` | RiskRule·PaperPortfolio·BehaviorScore QueryService 분리, N+1 제거 | ✅ 완료 |
+| **Phase 6** | `analytics` | Pattern·Regime·Portfolio·Tax QueryService 분리, N+1 제거, EfficientFrontier 트랜잭션 버그 수정 | ✅ 완료 |
+
 ---
 
-## 적용하지 않을 영역
+## DDD 도메인 모델 미적용 영역
 
-| 모듈 | 이유 |
-|------|------|
-| `analytics/` | 계산 전용 서비스 — 엔티티가 상태를 가지지 않음 |
-| `screener/` | 읽기 전용 쿼리 모델 — CQRS Read Side |
+> 아래 영역은 **도메인 엔티티 상태 전이 메서드(DDD)** 는 적용하지 않지만,
+> 서비스 레이어 CQRS 분리는 별도로 완료됐다 (analytics).
+
+| 모듈 | DDD 미적용 이유 |
+|------|----------------|
+| `analytics/` | 계산 전용 서비스 — 엔티티 자체가 상태를 가지지 않음. CQRS 서비스 분리는 Phase 6에서 완료 |
+| `screener/` | 읽기 전용 쿼리 모델 — 상태 전이 없음 |
 | `news/`, `event/` | 외부 데이터 수집 모델 — 도메인 로직 없음 |
 | `marketdata/` | 시계열 데이터 — 불변 레코드 |
 | `backtest/domain/strategies/` | 이미 전략 패턴으로 도메인 로직이 잘 분리됨 |
