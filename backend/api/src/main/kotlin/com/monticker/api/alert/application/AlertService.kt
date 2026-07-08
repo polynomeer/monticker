@@ -7,7 +7,6 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.time.Instant
 
 @Service
 @Transactional
@@ -40,8 +39,7 @@ class AlertService(
             NoSuchElementException("Alert rule not found: $ruleId")
         }
         require(rule.userId == userId) { "Access denied" }
-        rule.isActive = false
-        rule.updatedAt = Instant.now()
+        rule.deactivate()
         alertRuleRepository.save(rule)
     }
 

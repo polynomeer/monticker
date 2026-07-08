@@ -9,7 +9,6 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.security.MessageDigest
-import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -49,15 +48,12 @@ class RuleSetService(
     fun update(id: Long, userId: Long, req: UpdateRuleSetRequest): RuleSetResponse {
         val entity = ruleSetRepository.findByIdAndUserId(id, userId)
             .orElseThrow { NoSuchElementException("RuleSet $id not found") }
-        req.name?.let { entity.name = it }
-        req.description?.let { entity.description = it }
+        req.name?.let { entity.rename(it) }
+        req.description?.let { entity.updateDescription(it) }
         req.ruleDefinition?.let {
-            val json       = objectMapper.writeValueAsString(it)
-            entity.ruleDefinition     = json
-            entity.ruleSetFingerprint = sha256(json)
-            entity.version           += 1
+            val json = objectMapper.writeValueAsString(it)
+            entity.updateDefinition(json, sha256(json))
         }
-        entity.updatedAt = Instant.now()
         return ruleSetRepository.save(entity).toResponse()
     }
 
@@ -121,8 +117,7 @@ class RuleSetService(
         val saved = backtestResultRepository.save(entity)
 
         // Update ruleSet status
-        ruleSet.status   = RuleSetStatus.BACKTESTED
-        ruleSet.updatedAt = Instant.now()
+        ruleSet.markBacktested()
         ruleSetRepository.save(ruleSet)
 
         return saved.toResponse()

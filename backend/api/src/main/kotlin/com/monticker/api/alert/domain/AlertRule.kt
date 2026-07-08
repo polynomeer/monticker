@@ -30,7 +30,17 @@ class AlertRule(
 
     @Column(nullable = false)
     var updatedAt: Instant = Instant.now(),
-)
+) {
+    fun deactivate() {
+        isActive = false
+        updatedAt = Instant.now()
+    }
+
+    fun activate() {
+        isActive = true
+        updatedAt = Instant.now()
+    }
+}
 
 enum class AlertRuleType {
     PRICE_ABOVE, PRICE_BELOW, VOLUME_SURGE, NEWS_PUBLISHED, DISCLOSURE_PUBLISHED
