@@ -19,7 +19,8 @@ class PortfolioOptimizerServiceTest {
     private val jdbc = mockk<JdbcTemplate>()
     private val objectMapper = ObjectMapper()
     private val optimizationRepo = mockk<PortfolioOptimizationRepository>()
-    private val service = PortfolioOptimizerService(jdbc, objectMapper, optimizationRepo)
+    private val queryService = PortfolioOptimizerQueryService(jdbc)
+    private val service = PortfolioOptimizerService(queryService, objectMapper, optimizationRepo)
 
     /** Synthesises a `minLen`-day candle series whose daily returns equal `dailyReturn` every day. */
     private fun stubCandles(stockId: Long, minLen: Int, startPrice: Double, dailyReturn: Double) {
@@ -137,7 +138,7 @@ class PortfolioOptimizerServiceTest {
 
     @Test
     fun `projectToSimplex renormalises weights to sum to one`() {
-        val result = service.projectToSimplex(doubleArrayOf(2.0, 2.0, 4.0))
+        val result = queryService.projectToSimplex(doubleArrayOf(2.0, 2.0, 4.0))
 
         assertThat(result.sum()).isCloseTo(1.0, within(0.0001))
         assertThat(result.toList()).containsExactly(0.25, 0.25, 0.5)
@@ -145,7 +146,7 @@ class PortfolioOptimizerServiceTest {
 
     @Test
     fun `projectToSimplex clips negative weights to zero before renormalising`() {
-        val result = service.projectToSimplex(doubleArrayOf(-1.0, 3.0))
+        val result = queryService.projectToSimplex(doubleArrayOf(-1.0, 3.0))
 
         assertThat(result[0]).isEqualTo(0.0)
         assertThat(result[1]).isCloseTo(1.0, within(0.0001))
@@ -153,7 +154,7 @@ class PortfolioOptimizerServiceTest {
 
     @Test
     fun `projectToSimplex falls back to uniform weights when all inputs are non-positive`() {
-        val result = service.projectToSimplex(doubleArrayOf(-1.0, -2.0, -3.0))
+        val result = queryService.projectToSimplex(doubleArrayOf(-1.0, -2.0, -3.0))
 
         assertThat(result.toList()).allMatch { it == 1.0 / 3 }
     }
@@ -167,7 +168,7 @@ class PortfolioOptimizerServiceTest {
         )
         val mu = doubleArrayOf(0.001, 0.001)
 
-        val weights = service.minimizeVariance(cov, mu, targetReturn = 0.001)
+        val weights = queryService.minimizeVariance(cov, mu, targetReturn = 0.001)
 
         assertThat(weights[1]).isGreaterThan(weights[0])
     }
@@ -180,7 +181,7 @@ class PortfolioOptimizerServiceTest {
         )
         val mu = doubleArrayOf(0.0005, 0.0008)
 
-        val weights = service.minimizeVariance(cov, mu, targetReturn = 0.0006)
+        val weights = queryService.minimizeVariance(cov, mu, targetReturn = 0.0006)
 
         assertThat(weights.sum()).isCloseTo(1.0, within(0.001))
     }

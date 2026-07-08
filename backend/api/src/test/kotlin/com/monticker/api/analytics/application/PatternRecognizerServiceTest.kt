@@ -18,7 +18,8 @@ class PatternRecognizerServiceTest {
     private val jdbc = mockk<JdbcTemplate>()
     private val objectMapper = ObjectMapper().registerModule(JavaTimeModule())
     private val detectedPatternRepository = mockk<DetectedPatternRepository>()
-    private val service = PatternRecognizerService(jdbc, objectMapper, detectedPatternRepository)
+    private val queryService = PatternRecognizerQueryService(jdbc)
+    private val service = PatternRecognizerService(queryService, objectMapper, detectedPatternRepository)
 
     private fun swing(index: Int, day: Int, price: Double, type: SwingType) =
         SwingPoint(index, LocalDate.of(2026, 1, 1).plusDays(day.toLong()), BigDecimal.valueOf(price), type)
@@ -33,7 +34,7 @@ class PatternRecognizerServiceTest {
 
     @Test
     fun `zigZag returns an empty list for an empty candle series`() {
-        assertThat(service.zigZag(emptyList())).isEmpty()
+        assertThat(queryService.zigZag(emptyList())).isEmpty()
     }
 
     @Test
@@ -41,7 +42,7 @@ class PatternRecognizerServiceTest {
         // small wiggle of 1% stays below the default 3% threshold
         val candles = listOf(100.0, 100.5, 100.2, 100.8, 100.3).mapIndexed { i, c -> candle(i, c) }
 
-        val swings = service.zigZag(candles, thresholdPct = 3.0)
+        val swings = queryService.zigZag(candles, thresholdPct = 3.0)
 
         // No swing reversal recorded mid-series; only the trailing extreme is appended
         assertThat(swings).hasSizeLessThanOrEqualTo(1)
@@ -52,7 +53,7 @@ class PatternRecognizerServiceTest {
         // up to 110 (+10%), down to 95 (-13.6%), up to 120 (+26%)
         val candles = listOf(100.0, 110.0, 95.0, 120.0).mapIndexed { i, c -> candle(i, c) }
 
-        val swings = service.zigZag(candles, thresholdPct = 3.0)
+        val swings = queryService.zigZag(candles, thresholdPct = 3.0)
 
         assertThat(swings.map { it.type }).containsExactly(SwingType.HIGH, SwingType.LOW, SwingType.HIGH)
         assertThat(swings.map { it.price.toDouble() }).containsExactly(110.0, 95.0, 120.0)
@@ -68,7 +69,7 @@ class PatternRecognizerServiceTest {
             swing(2, 10, 101.0, SwingType.LOW),
         )
 
-        val match = service.detectDoubleBottom(swings)
+        val match = queryService.detectDoubleBottom(swings)
 
         assertThat(match).isNotNull()
         assertThat(match!!.patternType).isEqualTo("DOUBLE_BOTTOM")
@@ -83,7 +84,7 @@ class PatternRecognizerServiceTest {
             swing(2, 10, 110.0, SwingType.LOW), // 10% different from first low
         )
 
-        assertThat(service.detectDoubleBottom(swings)).isNull()
+        assertThat(queryService.detectDoubleBottom(swings)).isNull()
     }
 
     @Test
@@ -94,7 +95,7 @@ class PatternRecognizerServiceTest {
             swing(2, 10, 100.5, SwingType.LOW),
         )
 
-        assertThat(service.detectDoubleBottom(swings)).isNull()
+        assertThat(queryService.detectDoubleBottom(swings)).isNull()
     }
 
     @Test
@@ -105,12 +106,12 @@ class PatternRecognizerServiceTest {
             swing(2, 10, 101.0, SwingType.HIGH),
         )
 
-        assertThat(service.detectDoubleBottom(swings)).isNull()
+        assertThat(queryService.detectDoubleBottom(swings)).isNull()
     }
 
     @Test
     fun `detectDoubleBottom returns null with fewer than 3 swing points`() {
-        assertThat(service.detectDoubleBottom(listOf(swing(0, 0, 100.0, SwingType.LOW)))).isNull()
+        assertThat(queryService.detectDoubleBottom(listOf(swing(0, 0, 100.0, SwingType.LOW)))).isNull()
     }
 
     // ── detectDoubleTop ──────────────────────────────────────────────────────────
@@ -123,7 +124,7 @@ class PatternRecognizerServiceTest {
             swing(2, 10, 109.0, SwingType.HIGH),
         )
 
-        val match = service.detectDoubleTop(swings)
+        val match = queryService.detectDoubleTop(swings)
 
         assertThat(match).isNotNull()
         assertThat(match!!.patternType).isEqualTo("DOUBLE_TOP")
@@ -137,7 +138,7 @@ class PatternRecognizerServiceTest {
             swing(2, 10, 109.0, SwingType.HIGH),
         )
 
-        assertThat(service.detectDoubleTop(swings)).isNull()
+        assertThat(queryService.detectDoubleTop(swings)).isNull()
     }
 
     // ── detectHeadAndShoulders ───────────────────────────────────────────────────
@@ -152,7 +153,7 @@ class PatternRecognizerServiceTest {
             swing(4, 20, 101.0, SwingType.HIGH), // shoulder 2
         )
 
-        val match = service.detectHeadAndShoulders(swings)
+        val match = queryService.detectHeadAndShoulders(swings)
 
         assertThat(match).isNotNull()
         assertThat(match!!.patternType).isEqualTo("HEAD_AND_SHOULDERS")
@@ -168,7 +169,7 @@ class PatternRecognizerServiceTest {
             swing(4, 20, 101.0, SwingType.HIGH),
         )
 
-        assertThat(service.detectHeadAndShoulders(swings)).isNull()
+        assertThat(queryService.detectHeadAndShoulders(swings)).isNull()
     }
 
     @Test
@@ -181,7 +182,7 @@ class PatternRecognizerServiceTest {
             swing(4, 20, 110.0, SwingType.HIGH), // 10% different from shoulder1
         )
 
-        assertThat(service.detectHeadAndShoulders(swings)).isNull()
+        assertThat(queryService.detectHeadAndShoulders(swings)).isNull()
     }
 
     @Test
@@ -194,7 +195,7 @@ class PatternRecognizerServiceTest {
             swing(4, 20, 101.0, SwingType.HIGH),
         )
 
-        assertThat(service.detectHeadAndShoulders(swings)).isNull()
+        assertThat(queryService.detectHeadAndShoulders(swings)).isNull()
     }
 
     // ── detectAscendingTriangle ──────────────────────────────────────────────────
@@ -208,7 +209,7 @@ class PatternRecognizerServiceTest {
             swing(3, 9, 110.5, SwingType.HIGH),
         )
 
-        val match = service.detectAscendingTriangle(swings)
+        val match = queryService.detectAscendingTriangle(swings)
 
         assertThat(match).isNotNull()
         assertThat(match!!.patternType).isEqualTo("ASCENDING_TRIANGLE")
@@ -223,7 +224,7 @@ class PatternRecognizerServiceTest {
             swing(3, 9, 110.5, SwingType.HIGH),
         )
 
-        assertThat(service.detectAscendingTriangle(swings)).isNull()
+        assertThat(queryService.detectAscendingTriangle(swings)).isNull()
     }
 
     @Test
@@ -235,7 +236,7 @@ class PatternRecognizerServiceTest {
             swing(3, 9, 115.0, SwingType.HIGH), // 15% higher than first high
         )
 
-        assertThat(service.detectAscendingTriangle(swings)).isNull()
+        assertThat(queryService.detectAscendingTriangle(swings)).isNull()
     }
 
     // ── detectDescendingTriangle ─────────────────────────────────────────────────
@@ -249,7 +250,7 @@ class PatternRecognizerServiceTest {
             swing(3, 9, 94.5, SwingType.LOW),
         )
 
-        val match = service.detectDescendingTriangle(swings)
+        val match = queryService.detectDescendingTriangle(swings)
 
         assertThat(match).isNotNull()
         assertThat(match!!.patternType).isEqualTo("DESCENDING_TRIANGLE")
@@ -264,7 +265,7 @@ class PatternRecognizerServiceTest {
             swing(3, 9, 94.5, SwingType.LOW),
         )
 
-        assertThat(service.detectDescendingTriangle(swings)).isNull()
+        assertThat(queryService.detectDescendingTriangle(swings)).isNull()
     }
 
     // ── detectPatterns (integration with jdbc) ──────────────────────────────────

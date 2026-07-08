@@ -17,7 +17,8 @@ class RegimeDetectorServiceTest {
 
     private val jdbc = mockk<JdbcTemplate>()
     private val regimeHistoryRepository = mockk<RegimeHistoryRepository>()
-    private val service = RegimeDetectorService(jdbc, regimeHistoryRepository)
+    private val queryService = RegimeDetectorQueryService(jdbc)
+    private val service = RegimeDetectorService(queryService, regimeHistoryRepository)
 
     private fun candle(day: Int, close: Double, high: Double = close, low: Double = close) = DailyCandle(
         date = LocalDate.of(2026, 1, 1).plusDays(day.toLong()),
@@ -30,20 +31,20 @@ class RegimeDetectorServiceTest {
     @Test
     fun `calculateADX returns zero when fewer than 2x the period candles are available`() {
         val candles = (0..20).map { candle(it, 100.0) }
-        assertThat(service.calculateADX(candles, period = 14)).isEqualTo(0.0)
+        assertThat(queryService.calculateADX(candles, period = 14)).isEqualTo(0.0)
     }
 
     @Test
     fun `calculateADX is low for a flat, directionless price series`() {
         val candles = (0..60).map { candle(it, 100.0, high = 100.5, low = 99.5) }
-        val adx = service.calculateADX(candles, period = 14)
+        val adx = queryService.calculateADX(candles, period = 14)
         assertThat(adx).isLessThan(20.0)
     }
 
     @Test
     fun `calculateADX is elevated for a consistently trending price series`() {
         val candles = (0..60).map { i -> candle(i, 100.0 + i * 2, high = 100.0 + i * 2 + 1, low = 100.0 + i * 2 - 1) }
-        val adx = service.calculateADX(candles, period = 14)
+        val adx = queryService.calculateADX(candles, period = 14)
         assertThat(adx).isGreaterThan(20.0)
     }
 
@@ -52,7 +53,7 @@ class RegimeDetectorServiceTest {
     @Test
     fun `calculateVolatility is zero for a perfectly flat price series`() {
         val candles = (0..25).map { candle(it, 100.0) }
-        assertThat(service.calculateVolatility(candles, period = 20)).isEqualTo(0.0)
+        assertThat(queryService.calculateVolatility(candles, period = 20)).isEqualTo(0.0)
     }
 
     @Test
@@ -60,15 +61,15 @@ class RegimeDetectorServiceTest {
         val calmCandles = (0..25).map { candle(it, 100.0 + (it % 2)) }
         val volatileCandles = (0..25).map { candle(it, if (it % 2 == 0) 80.0 else 120.0) }
 
-        val calmVol = service.calculateVolatility(calmCandles, period = 20)
-        val volatileVol = service.calculateVolatility(volatileCandles, period = 20)
+        val calmVol = queryService.calculateVolatility(calmCandles, period = 20)
+        val volatileVol = queryService.calculateVolatility(volatileCandles, period = 20)
 
         assertThat(volatileVol).isGreaterThan(calmVol)
     }
 
     @Test
     fun `calculateVolatility returns zero when fewer than 2 candles are available`() {
-        assertThat(service.calculateVolatility(listOf(candle(0, 100.0)), period = 20)).isEqualTo(0.0)
+        assertThat(queryService.calculateVolatility(listOf(candle(0, 100.0)), period = 20)).isEqualTo(0.0)
     }
 
     // ── calculateTrendSlope ──────────────────────────────────────────────────────
@@ -76,46 +77,46 @@ class RegimeDetectorServiceTest {
     @Test
     fun `calculateTrendSlope is positive for a rising price series`() {
         val candles = (0..60).map { candle(it, 100.0 + it) }
-        assertThat(service.calculateTrendSlope(candles, period = 60)).isGreaterThan(0.0)
+        assertThat(queryService.calculateTrendSlope(candles, period = 60)).isGreaterThan(0.0)
     }
 
     @Test
     fun `calculateTrendSlope is negative for a falling price series`() {
         val candles = (0..60).map { candle(it, 200.0 - it) }
-        assertThat(service.calculateTrendSlope(candles, period = 60)).isLessThan(0.0)
+        assertThat(queryService.calculateTrendSlope(candles, period = 60)).isLessThan(0.0)
     }
 
     @Test
     fun `calculateTrendSlope is approximately zero for a flat price series`() {
         val candles = (0..60).map { candle(it, 100.0) }
-        assertThat(service.calculateTrendSlope(candles, period = 60)).isCloseTo(0.0, within(0.0001))
+        assertThat(queryService.calculateTrendSlope(candles, period = 60)).isCloseTo(0.0, within(0.0001))
     }
 
     @Test
     fun `calculateTrendSlope returns zero when fewer than 2 candles are available`() {
-        assertThat(service.calculateTrendSlope(listOf(candle(0, 100.0)), period = 60)).isEqualTo(0.0)
+        assertThat(queryService.calculateTrendSlope(listOf(candle(0, 100.0)), period = 60)).isEqualTo(0.0)
     }
 
     // ── classify ─────────────────────────────────────────────────────────────────
 
     @Test
     fun `classify returns HIGH_VOL when volatility exceeds the 80th percentile threshold`() {
-        assertThat(service.classify(adx = 30.0, volatility = 0.5, volatilityPercentile80 = 0.3, slope = 0.01)).isEqualTo("HIGH_VOL")
+        assertThat(queryService.classify(adx = 30.0, volatility = 0.5, volatilityPercentile80 = 0.3, slope = 0.01)).isEqualTo("HIGH_VOL")
     }
 
     @Test
     fun `classify returns SIDEWAYS when ADX is below 20 and volatility is in range`() {
-        assertThat(service.classify(adx = 15.0, volatility = 0.1, volatilityPercentile80 = 0.3, slope = 0.01)).isEqualTo("SIDEWAYS")
+        assertThat(queryService.classify(adx = 15.0, volatility = 0.1, volatilityPercentile80 = 0.3, slope = 0.01)).isEqualTo("SIDEWAYS")
     }
 
     @Test
     fun `classify returns BULL when ADX is at or above 20 with a positive slope`() {
-        assertThat(service.classify(adx = 25.0, volatility = 0.1, volatilityPercentile80 = 0.3, slope = 0.01)).isEqualTo("BULL")
+        assertThat(queryService.classify(adx = 25.0, volatility = 0.1, volatilityPercentile80 = 0.3, slope = 0.01)).isEqualTo("BULL")
     }
 
     @Test
     fun `classify returns BEAR when ADX is at or above 20 with a non-positive slope`() {
-        assertThat(service.classify(adx = 25.0, volatility = 0.1, volatilityPercentile80 = 0.3, slope = -0.01)).isEqualTo("BEAR")
+        assertThat(queryService.classify(adx = 25.0, volatility = 0.1, volatilityPercentile80 = 0.3, slope = -0.01)).isEqualTo("BEAR")
     }
 
     // ── classifyRegime (integration) ─────────────────────────────────────────────
