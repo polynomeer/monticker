@@ -1,7 +1,7 @@
 .PHONY: up up-full up-pinpoint up-msa down logs ps k8s-dev k8s-prod k8s-down k8s-build \
         monitoring-up monitoring-down monitoring-status \
         pinpoint-up pinpoint-down \
-        quant-build quant-run
+        quant-build quant-run trading-build trading-run
 
 up:
 	docker compose up -d postgres redis
@@ -24,16 +24,25 @@ logs:
 ps:
 	docker compose ps
 
-# MSA 모드 전체 스택 (Kafka + quant-engine + worker-market/event/alert)
-# api의 QUANT_ENGINE_URL=http://quant-engine:8082 로 quant 요청이 위임된다.
+# MSA 모드 전체 스택:
+#   Kafka + quant-engine(8082) + trading-service(8083) + worker-market/event/alert
+#   api가 QUANT_ENGINE_URL / TRADING_SERVICE_URL 로 요청을 위임한다.
 up-msa:
-	QUANT_ENGINE_URL=http://quant-engine:8082 docker compose --profile msa up -d
+	QUANT_ENGINE_URL=http://quant-engine:8082 \
+	TRADING_SERVICE_URL=http://trading-service:8083 \
+	docker compose --profile msa up -d
 
 quant-build:
 	cd backend/quant-engine && ./gradlew bootJar
 
 quant-run:
 	cd backend/quant-engine && ./gradlew bootRun
+
+trading-build:
+	cd backend/trading-service && ./gradlew bootJar
+
+trading-run:
+	cd backend/trading-service && ./gradlew bootRun
 
 api-test:
 	cd backend/api && ./gradlew test

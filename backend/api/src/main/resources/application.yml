@@ -80,3 +80,9 @@ orderbook:
 quant:
   engine:
     url: ${QUANT_ENGINE_URL:}
+
+# ── Trading Service (MSA 분리 시 사용) ──────────────────────────────────────
+# 설정 시 paper/matching/wallet 요청을 trading-service로 위임한다.
+trading:
+  service:
+    url: ${TRADING_SERVICE_URL:}

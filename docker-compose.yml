@@ -49,8 +49,9 @@ services:
       PINPOINT_COLLECTOR_IP: pinpoint-collector
       PINPOINT_AGENT_ID: ${PINPOINT_API_AGENT_ID:-monticker-api-1}
       PINPOINT_APP_NAME: monticker-api
-      # MSA 모드에서 quant-engine으로 위임. 비우면 단일 프로세스(기본값).
+      # MSA 모드에서 quant-engine / trading-service로 위임. 비우면 단일 프로세스(기본값).
       QUANT_ENGINE_URL: ${QUANT_ENGINE_URL:-}
+      TRADING_SERVICE_URL: ${TRADING_SERVICE_URL:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -177,11 +178,44 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      KAFKA_BROKERS: kafka:9092
+      QUANT_TRADING_EVENTS_ENABLED: "true"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    profiles:
+      - msa
+
+  # ── Trading Service (paper / matching / wallet 전용 서비스) ─────
+  # docker compose --profile msa up 으로 기동.
+  # api 서비스의 TRADING_SERVICE_URL을 설정하면 api가 이 서비스로 요청을 위임한다.
+  # quant-engine은 QUANT_TRADING_EVENTS_ENABLED=true 로 Kafka 이벤트를 구독한다.
+  trading-service:
+    build:
+      context: ./backend/trading-service
+      dockerfile: Dockerfile
+    container_name: monticker-trading-service
+    ports:
+      - "8083:8083"
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/monticker
+      DB_USER: monticker
+      DB_PASSWORD: monticker
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      KAFKA_BROKERS: kafka:9092
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     profiles:
       - msa

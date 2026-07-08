@@ -1,14 +1,14 @@
 spring:
   application:
-    name: monticker-quant-engine
+    name: monticker-trading-service
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/monticker}
     username: ${DB_USER:monticker}
     password: ${DB_PASSWORD:monticker}
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 10
-      minimum-idle: 2
+      maximum-pool-size: 20
+      minimum-idle: 5
       connection-timeout: 3000
   jpa:
     hibernate:
@@ -22,9 +22,12 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+  batch:
+    job:
+      enabled: false  # 스케줄러가 직접 트리거 — 시작 시 자동 실행 방지
 
 server:
-  port: 8082
+  port: 8083
 
 management:
   endpoints:
@@ -39,7 +42,7 @@ management:
       prometheus:
         enabled: true
     tags:
-      application: monticker-quant-engine
+      application: monticker-trading-service
   tracing:
     sampling:
       probability: 1.0
@@ -47,20 +50,5 @@ management:
     tracing:
       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
 
-anthropic:
-  api-key: ${ANTHROPIC_API_KEY:}
-
 kafka:
   brokers: ${KAFKA_BROKERS:localhost:9092}
-  # MSA 모드에서 trading-service Kafka 이벤트 수신 여부
-  bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
-
-spring:
-  kafka:
-    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
-
-quant:
-  # true: trading-service Kafka 이벤트 구독 (MSA 모드)
-  # false: Spring Event 방식 (단일 프로세스 api 내 동작, 기본값)
-  trading-events:
-    enabled: ${QUANT_TRADING_EVENTS_ENABLED:false}

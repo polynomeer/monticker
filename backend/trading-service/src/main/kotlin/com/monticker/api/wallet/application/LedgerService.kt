@@ -1,0 +1,92 @@
+package com.monticker.api.wallet.application
+
+import com.monticker.api.wallet.domain.LedgerEvent
+import com.monticker.api.wallet.domain.LedgerEventType
+import com.monticker.api.wallet.infrastructure.LedgerEventRepository
+import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import java.math.BigDecimal
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+
+data class LedgerEventDto(
+    val id: Long,
+    val eventType: String,
+    val amount: BigDecimal,
+    val balanceAfter: BigDecimal?,
+    val paperTradeId: Long?,
+    val stockId: Long?,
+    val description: String?,
+    val createdAt: Instant,
+)
+
+@Service
+@Transactional
+class LedgerService(
+    private val ledgerRepo: LedgerEventRepository,
+) {
+
+    fun recordBuy(userId: Long, tradeId: Long, stockId: Long, amount: BigDecimal, balanceAfter: BigDecimal) {
+        ledgerRepo.save(
+            LedgerEvent(
+                userId = userId,
+                eventType = LedgerEventType.FILL,
+                amount = amount.negate(),
+                balanceAfter = balanceAfter,
+                paperTradeId = tradeId,
+                stockId = stockId,
+                description = "매수 체결",
+            )
+        )
+    }
+
+    fun recordSell(userId: Long, tradeId: Long, stockId: Long, amount: BigDecimal, balanceAfter: BigDecimal) {
+        ledgerRepo.save(
+            LedgerEvent(
+                userId = userId,
+                eventType = LedgerEventType.SETTLEMENT,
+                amount = amount,
+                balanceAfter = balanceAfter,
+                paperTradeId = tradeId,
+                stockId = stockId,
+                description = "매도 체결",
+            )
+        )
+    }
+
+    fun recordDeposit(userId: Long, amount: BigDecimal, balanceAfter: BigDecimal) {
+        ledgerRepo.save(
+            LedgerEvent(
+                userId = userId,
+                eventType = LedgerEventType.DEPOSIT,
+                amount = amount,
+                balanceAfter = balanceAfter,
+                description = "입금",
+            )
+        )
+    }
+
+    @Transactional(readOnly = true)
+    fun getLedger(userId: Long): List<LedgerEventDto> =
+        ledgerRepo.findAllByUserIdOrderByCreatedAtDesc(userId).map { it.toDto() }
+
+    @Transactional(readOnly = true)
+    fun getLedgerForDate(userId: Long, date: LocalDate): List<LedgerEventDto> {
+        val zone = ZoneId.of("Asia/Seoul")
+        val from = date.atStartOfDay(zone).toInstant()
+        val to = date.plusDays(1).atStartOfDay(zone).toInstant()
+        return ledgerRepo.findAllByUserIdAndCreatedAtBetweenOrderByCreatedAtDesc(userId, from, to).map { it.toDto() }
+    }
+
+    private fun LedgerEvent.toDto() = LedgerEventDto(
+        id = id,
+        eventType = eventType.name,
+        amount = amount,
+        balanceAfter = balanceAfter,
+        paperTradeId = paperTradeId,
+        stockId = stockId,
+        description = description,
+        createdAt = createdAt,
+    )
+}
