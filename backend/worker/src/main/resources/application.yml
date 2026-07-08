@@ -78,3 +78,8 @@ ingestion:
 
 kafka:
   brokers: ${KAFKA_BROKERS:localhost:9092}
+
+worker:
+  # 역할: all(단일 프로세스, 기본값) | market | event | alert
+  # MSA 모드에서는 WORKER_ROLE 환경변수로 각 컨테이너에 역할을 지정한다.
+  role: ${WORKER_ROLE:all}

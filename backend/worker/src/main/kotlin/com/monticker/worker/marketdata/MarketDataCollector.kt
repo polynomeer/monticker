@@ -4,13 +4,16 @@ import com.monticker.worker.alert.TickProcessedEvent
 import com.monticker.worker.detector.EventDetector
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.scheduling.annotation.EnableScheduling
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 
+// role=market では MarketTickScheduler が代わりに Kafka へ発行するため無効化する
 @Component
 @EnableScheduling
+@ConditionalOnExpression("'\${worker.role:all}' == 'all'")
 class MarketDataCollector(
     private val generator: MockPriceGenerator,
     private val writer: RedisTickWriter,

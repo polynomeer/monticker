@@ -43,12 +43,15 @@ class AlertEvaluator(
 
     @EventListener
     @Async("alertDispatchExecutor")
-    fun onTickProcessed(event: TickProcessedEvent) {
+    fun onTickProcessed(event: TickProcessedEvent) = processAlert(event.stockId, event.price)
+
+    // AlertKafkaConsumer(role=alert)에서도 직접 호출한다
+    fun processAlert(stockId: Long, price: java.math.BigDecimal) {
         try {
-            val rules = fetchRulesForStock(event.stockId)
-            for (rule in rules) evaluateRule(rule, event.price)
+            val rules = fetchRulesForStock(stockId)
+            for (rule in rules) evaluateRule(rule, price)
         } catch (e: Exception) {
-            log.error("[AlertEvaluator] stockId={} 평가 오류: {}", event.stockId, e.message)
+            log.error("[AlertEvaluator] stockId={} 평가 오류: {}", stockId, e.message)
         }
     }
 

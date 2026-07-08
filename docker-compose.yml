@@ -91,6 +91,7 @@ services:
 
   # ── Kafka realtime pipeline (optional, see ADR-005) ──────────
   # Bring up with: docker compose --profile kafka up
+  # MSA 모드에서도 필수 — docker compose --profile msa up 으로 함께 기동됨
   kafka:
     image: apache/kafka:3.8.0
     container_name: monticker-kafka
@@ -117,6 +118,7 @@ services:
       retries: 10
     profiles:
       - kafka
+      - msa
 
   market-gateway:
     build:
@@ -148,6 +150,80 @@ services:
         condition: service_healthy
     profiles:
       - kafka
+
+  # ── MSA Worker 분리 (WORKER_ROLE별 독립 컨테이너) ─────────────
+  # 기동: docker compose --profile msa up
+  # worker(단일 프로세스, role=all)와 동시에 올리지 않는다.
+  worker-market:
+    build:
+      context: ./backend/worker
+      dockerfile: Dockerfile
+    container_name: monticker-worker-market
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/monticker
+      DB_USER: monticker
+      DB_PASSWORD: monticker
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      KAFKA_BROKERS: kafka:9092
+      WORKER_ROLE: market
+      KIS_APP_KEY: ${KIS_APP_KEY:-}
+      KIS_APP_SECRET: ${KIS_APP_SECRET:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    profiles:
+      - msa
+
+  worker-event:
+    build:
+      context: ./backend/worker
+      dockerfile: Dockerfile
+    container_name: monticker-worker-event
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/monticker
+      DB_USER: monticker
+      DB_PASSWORD: monticker
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      KAFKA_BROKERS: kafka:9092
+      WORKER_ROLE: event
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    profiles:
+      - msa
+
+  worker-alert:
+    build:
+      context: ./backend/worker
+      dockerfile: Dockerfile
+    container_name: monticker-worker-alert
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/monticker
+      DB_USER: monticker
+      DB_PASSWORD: monticker
+      KAFKA_BROKERS: kafka:9092
+      WORKER_ROLE: alert
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    profiles:
+      - msa
 
   # ── Observability ─────────────────────────────────────────
   prometheus:
@@ -237,11 +313,11 @@ services:
     volumes:
       - pinpoint_hbase_data:/home/pinpoint/hbase
     healthcheck:
-      test: ["CMD-SHELL", "echo 'status' | hbase shell 2>/dev/null | grep -q '0 servers' && exit 1 || exit 0"]
-      interval: 30s
+      test: ["CMD-SHELL", "echo ruok | hbase zkcli -server localhost:2181 2>/dev/null | grep -q imok"]
+      interval: 15s
       timeout: 10s
-      retries: 10
-      start_period: 60s
+      retries: 20
+      start_period: 90s
     profiles:
       - pinpoint
 
@@ -265,8 +341,8 @@ services:
       test: ["CMD-SHELL", "wget -qO- http://localhost:9990/actuator/health 2>/dev/null | grep -q UP || exit 1"]
       interval: 15s
       timeout: 5s
-      retries: 10
-      start_period: 30s
+      retries: 20
+      start_period: 60s
     profiles:
       - pinpoint
 
