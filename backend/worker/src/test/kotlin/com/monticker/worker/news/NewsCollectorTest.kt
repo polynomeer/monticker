@@ -9,7 +9,8 @@ class NewsCollectorTest {
 
     private val jdbc = mockk<JdbcTemplate>(relaxed = true)
     private val naverClient = mockk<NaverNewsClient>()
-    private val collector = NewsCollector(naverClient, jdbc)
+    private val sentimentAnalyzer = mockk<NewsSentimentAnalyzer>(relaxed = true)
+    private val collector = NewsCollector(naverClient, jdbc, sentimentAnalyzer)
 
     @Test
     fun `uses mock generator when naver not configured`() {
