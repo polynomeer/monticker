@@ -1,5 +1,6 @@
 package com.monticker.api.matching.application
 
+import com.monticker.api.common.domain.Price
 import com.monticker.api.matching.domain.Order
 import com.monticker.api.matching.domain.OrderSide
 import com.monticker.api.matching.domain.OrderType
@@ -23,7 +24,7 @@ class OrderBookTest {
         side = side,
         orderType = OrderType.LIMIT,
         quantity = qty,
-        limitPrice = price,
+        limitPrice = Price.of(price),
     )
 
     @Test

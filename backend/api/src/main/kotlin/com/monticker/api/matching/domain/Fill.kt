@@ -1,7 +1,10 @@
 package com.monticker.api.matching.domain
 
+import com.monticker.api.common.domain.Money
+import com.monticker.api.common.domain.MoneyConverter
+import com.monticker.api.common.domain.Price
+import com.monticker.api.common.domain.PriceConverter
 import jakarta.persistence.*
-import java.math.BigDecimal
 import java.time.Instant
 
 @Entity
@@ -25,14 +28,17 @@ class Fill(
     @Column(nullable = false)
     val quantity: Int,
 
+    @Convert(converter = PriceConverter::class)
     @Column(name = "fill_price", nullable = false, precision = 18, scale = 4)
-    val fillPrice: BigDecimal,
+    val fillPrice: Price,
 
+    @Convert(converter = MoneyConverter::class)
     @Column(nullable = false, precision = 18, scale = 4)
-    val amount: BigDecimal,
+    val amount: Money,
 
+    @Convert(converter = MoneyConverter::class)
     @Column(nullable = false, precision = 18, scale = 4)
-    val fee: BigDecimal = BigDecimal.ZERO,
+    val fee: Money = Money.ZERO,
 
     @Column(name = "filled_at", nullable = false)
     val filledAt: Instant = Instant.now(),

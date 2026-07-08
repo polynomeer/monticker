@@ -2,6 +2,8 @@ package com.monticker.api.matching.application
 
 import com.monticker.api.common.aop.RiskChecked
 import com.monticker.api.common.aop.Timed
+import com.monticker.api.common.domain.Money
+import com.monticker.api.common.domain.Price
 import com.monticker.api.matching.domain.*
 import com.monticker.api.matching.events.OrderCancelledEvent
 import com.monticker.api.matching.events.OrderFilledEvent
@@ -68,23 +70,22 @@ class MatchingService(
     private val stateMachineService: OrderStateMachineService,
     private val eventPublisher: ApplicationEventPublisher,
 ) {
-    private fun getCurrentPrice(stockId: Long): BigDecimal =
+    private fun getCurrentPrice(stockId: Long): Price =
         jdbc.queryForObject(
             "SELECT close FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1",
             BigDecimal::class.java, stockId
-        ) ?: throw IllegalStateException("현재가 조회 불가: stockId=$stockId")
+        )?.let { Price.of(it) } ?: throw IllegalStateException("현재가 조회 불가: stockId=$stockId")
 
-    private fun getAccountCash(userId: Long): BigDecimal {
+    private fun getAccountCash(userId: Long): Money {
         return jdbc.queryForObject(
             "SELECT cash FROM paper_accounts WHERE user_id = ?",
             BigDecimal::class.java, userId
-        ) ?: run {
-            // Create account if not exists
+        )?.let { Money.of(it) } ?: run {
             jdbc.update(
                 "INSERT INTO paper_accounts (user_id, cash, created_at, updated_at) VALUES (?, 10000000, now(), now()) ON CONFLICT (user_id) DO NOTHING",
                 userId
             )
-            BigDecimal("10000000")
+            Money.INITIAL_BALANCE
         }
     }
 
@@ -95,10 +96,6 @@ class MatchingService(
         )
     }
 
-    /**
-     * AOP 리스크 체크 진입점 — 파라미터명으로 stockId/side/quantity/estimatedPrice를 추출.
-     * Aspect 통과 후 submitOrder로 위임한다.
-     */
     @RiskChecked
     fun submitOrderChecked(
         userId: Long,
@@ -114,24 +111,23 @@ class MatchingService(
         require(req.quantity > 0) { "수량은 1 이상이어야 합니다" }
         require(req.side in listOf("BUY", "SELL")) { "side는 BUY 또는 SELL이어야 합니다" }
         require(req.orderType in listOf("MARKET", "LIMIT")) { "orderType은 MARKET 또는 LIMIT이어야 합니다" }
+
+        val limitPrice = req.limitPrice?.let { Price.of(it) }
         if (req.orderType == "LIMIT") {
-            require(req.limitPrice != null && req.limitPrice > BigDecimal.ZERO) {
-                "LIMIT 주문에는 limit_price가 필요합니다"
-            }
+            require(limitPrice != null) { "LIMIT 주문에는 limit_price가 필요합니다" }
         }
 
         val stockExists = jdbc.queryForObject("SELECT COUNT(*) FROM stocks WHERE id = ?", Long::class.java, req.stockId) ?: 0L
         require(stockExists > 0) { "존재하지 않는 종목: stockId=${req.stockId}" }
 
         val currentPrice = getCurrentPrice(req.stockId)
-        val estimatedPrice = if (req.orderType == "LIMIT") req.limitPrice!! else currentPrice
+        val estimatedPrice = limitPrice ?: currentPrice
 
-        // For BUY, reserve cash upfront
         if (req.side == "BUY") {
             val cash = getAccountCash(userId)
-            val reserveAmount = estimatedPrice.multiply(BigDecimal(req.quantity))
+            val reserveAmount = estimatedPrice.toMoney(req.quantity)
             require(cash >= reserveAmount) { "잔고 부족: 필요 $reserveAmount, 보유 $cash" }
-            adjustCash(userId, reserveAmount.negate())
+            adjustCash(userId, reserveAmount.amount.negate())
         }
 
         val order = orderRepo.save(Order(
@@ -140,15 +136,14 @@ class MatchingService(
             side = OrderSide.valueOf(req.side),
             orderType = OrderType.valueOf(req.orderType),
             quantity = req.quantity,
-            limitPrice = req.limitPrice,
+            limitPrice = limitPrice,
             status = OrderStatus.PENDING,
         ))
 
-        // Determine fill price for mock environment
-        val fillPrice: BigDecimal? = when {
+        val fillPrice: Price? = when {
             req.orderType == "MARKET" -> currentPrice
-            req.side == "BUY" && req.limitPrice!! >= currentPrice -> currentPrice
-            req.side == "SELL" && req.limitPrice!! <= currentPrice -> currentPrice
+            req.side == "BUY" && limitPrice!! >= currentPrice -> currentPrice
+            req.side == "SELL" && limitPrice!! <= currentPrice -> currentPrice
             else -> null
         }
 
@@ -156,7 +151,7 @@ class MatchingService(
 
         if (fillPrice != null) {
             val fillQty = req.quantity
-            val fillAmount = fillPrice.multiply(BigDecimal(fillQty))
+            val fillAmount = fillPrice.toMoney(fillQty)
 
             val fill = fillRepo.save(Fill(
                 orderId = order.id,
@@ -166,11 +161,10 @@ class MatchingService(
                 quantity = fillQty,
                 fillPrice = fillPrice,
                 amount = fillAmount,
-                fee = BigDecimal.ZERO,
+                fee = Money.ZERO,
             ))
             fills.add(fill.toDto())
 
-            // StateMachine으로 상태 전이 — PENDING → FILLED
             stateMachineService.transition(
                 orderId      = order.id,
                 currentState = OrderStates.PENDING,
@@ -180,14 +174,13 @@ class MatchingService(
             orderRepo.save(order)
 
             if (req.side == "BUY") {
-                val reserved = estimatedPrice.multiply(BigDecimal(req.quantity))
-                val refund = reserved - fillAmount
+                val reserved = estimatedPrice.toMoney(req.quantity)
+                val refund = reserved.amount - fillAmount.amount
                 if (refund > BigDecimal.ZERO) adjustCash(userId, refund)
             } else {
-                adjustCash(userId, fillAmount)
+                adjustCash(userId, fillAmount.amount)
             }
 
-            // wallet/quant 모듈에 체결 이벤트 발행 — AFTER_COMMIT 리스너가 원장 기록
             eventPublisher.publishEvent(
                 OrderFilledEvent(
                     orderId   = order.id,
@@ -196,12 +189,11 @@ class MatchingService(
                     fillId    = fill.id,
                     side      = req.side,
                     quantity  = fillQty,
-                    fillPrice = fillPrice,
-                    amount    = fillAmount,
+                    fillPrice = fillPrice.amount,
+                    amount    = fillAmount.amount,
                 )
             )
         } else {
-            // LIMIT order that doesn't fill immediately — add to order book
             orderBookService.submit(order)
         }
 
@@ -218,14 +210,12 @@ class MatchingService(
 
         orderBookService.cancel(order.stockId, orderId, order.side)
 
-        var refundAmount = BigDecimal.ZERO
-        if (order.side == OrderSide.BUY) {
-            val refundPrice = order.limitPrice ?: BigDecimal.ZERO
-            refundAmount = refundPrice.multiply(BigDecimal(order.remainingQty))
-            if (refundAmount > BigDecimal.ZERO) adjustCash(userId, refundAmount)
-        }
+        val refundAmount = if (order.side == OrderSide.BUY) {
+            order.limitPrice?.toMoney(order.remainingQty) ?: Money.ZERO
+        } else Money.ZERO
 
-        // StateMachine으로 상태 전이
+        if (refundAmount > Money.ZERO) adjustCash(userId, refundAmount.amount)
+
         stateMachineService.transition(
             orderId      = order.id,
             currentState = OrderStates.valueOf(order.status.name),
@@ -234,14 +224,13 @@ class MatchingService(
         order.cancel()
         val saved = orderRepo.save(order)
 
-        // wallet 모듈에 취소 이벤트 발행 (환불 원장 기록)
         eventPublisher.publishEvent(
             OrderCancelledEvent(
                 orderId      = order.id,
                 userId       = userId,
                 stockId      = order.stockId,
                 side         = order.side.name,
-                refundAmount = refundAmount,
+                refundAmount = refundAmount.amount,
             )
         )
         return saved.toDto()
@@ -270,9 +259,9 @@ class MatchingService(
         side = side.name,
         orderType = orderType.name,
         quantity = quantity,
-        limitPrice = limitPrice,
+        limitPrice = limitPrice?.amount,
         filledQty = filledQty,
-        avgFillPrice = avgFillPrice,
+        avgFillPrice = avgFillPrice?.amount,
         status = status.name,
         rejectReason = rejectReason,
         createdAt = createdAt,
@@ -284,9 +273,9 @@ class MatchingService(
         stockId = stockId,
         side = side,
         quantity = quantity,
-        fillPrice = fillPrice,
-        amount = amount,
-        fee = fee,
+        fillPrice = fillPrice.amount,
+        amount = amount.amount,
+        fee = fee.amount,
         filledAt = filledAt,
     )
 }

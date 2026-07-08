@@ -1,7 +1,8 @@
 package com.monticker.api.matching.domain
 
+import com.monticker.api.common.domain.Price
+import com.monticker.api.common.domain.PriceConverter
 import jakarta.persistence.*
-import java.math.BigDecimal
 import java.time.Instant
 
 enum class OrderSide { BUY, SELL }
@@ -31,14 +32,16 @@ class Order(
     @Column(nullable = false)
     val quantity: Int,
 
+    @Convert(converter = PriceConverter::class)
     @Column(name = "limit_price", precision = 18, scale = 4)
-    val limitPrice: BigDecimal? = null,
+    val limitPrice: Price? = null,
 
     @Column(name = "filled_qty", nullable = false)
     var filledQty: Int = 0,
 
+    @Convert(converter = PriceConverter::class)
     @Column(name = "avg_fill_price", precision = 18, scale = 4)
-    var avgFillPrice: BigDecimal? = null,
+    var avgFillPrice: Price? = null,
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -55,7 +58,7 @@ class Order(
 ) {
     val remainingQty: Int get() = quantity - filledQty
 
-    fun fill(qty: Int, price: BigDecimal) {
+    fun fill(qty: Int, price: Price) {
         require(status == OrderStatus.PENDING || status == OrderStatus.PARTIALLY_FILLED) {
             "체결 불가 상태: $status"
         }

@@ -1,5 +1,6 @@
 package com.monticker.api.matching.application
 
+import com.monticker.api.common.domain.Price
 import com.monticker.api.matching.domain.Order
 import com.monticker.api.matching.domain.OrderSide
 import com.monticker.api.matching.domain.OrderStatus
@@ -152,7 +153,7 @@ class MatchingServiceTest {
         val order = Order(
             id = 1L, userId = userId, stockId = stockId,
             side = OrderSide.BUY, orderType = OrderType.LIMIT,
-            quantity = 10, limitPrice = BigDecimal("900"),
+            quantity = 10, limitPrice = Price.of("900"),
             status = OrderStatus.PENDING,
         )
         every { orderRepo.findById(1L) } returns Optional.of(order)
@@ -170,7 +171,7 @@ class MatchingServiceTest {
         val order = Order(
             id = 1L, userId = 999L, stockId = stockId,
             side = OrderSide.BUY, orderType = OrderType.LIMIT,
-            quantity = 10, limitPrice = BigDecimal("900"),
+            quantity = 10, limitPrice = Price.of("900"),
             status = OrderStatus.PENDING,
         )
         every { orderRepo.findById(1L) } returns Optional.of(order)
@@ -184,7 +185,7 @@ class MatchingServiceTest {
         val order = Order(
             id = 1L, userId = userId, stockId = stockId,
             side = OrderSide.BUY, orderType = OrderType.LIMIT,
-            quantity = 10, limitPrice = BigDecimal("900"),
+            quantity = 10, limitPrice = Price.of("900"),
             status = OrderStatus.FILLED,
         )
         every { orderRepo.findById(1L) } returns Optional.of(order)

@@ -1,5 +1,7 @@
 package com.monticker.api.paper.application
 
+import com.monticker.api.common.domain.Money
+import com.monticker.api.common.domain.Price
 import com.monticker.api.paper.domain.PaperAccount
 import com.monticker.api.paper.domain.PaperTrade
 import com.monticker.api.paper.infrastructure.PaperAccountRepository
@@ -24,22 +26,22 @@ class PaperTradingService(
             accountRepo.save(PaperAccount(userId = userId))
         }
 
-    private fun getCurrentPrice(stockId: Long): BigDecimal =
+    private fun getCurrentPrice(stockId: Long): Price =
         jdbc.queryForObject(
             "SELECT close FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1",
             BigDecimal::class.java, stockId
-        ) ?: throw IllegalStateException("현재가 조회 불가: stockId=$stockId")
+        )?.let { Price.of(it) } ?: throw IllegalStateException("현재가 조회 불가: stockId=$stockId")
 
     fun getPortfolio(userId: Long): PortfolioResponse {
         val account  = getOrCreateAccount(userId)
         val holdings = buildHoldings(userId)
         val evalValue = holdings.fold(BigDecimal.ZERO) { acc, h -> acc + h.value }
-        val totalValue = account.cash + evalValue
+        val totalValue = account.cash.amount + evalValue
         val invested   = holdings.fold(BigDecimal.ZERO) { acc, h -> acc + h.avgPrice.multiply(BigDecimal(h.quantity)) }
         val pnl        = evalValue - invested
         val pnlRate    = if (invested > BigDecimal.ZERO)
             pnl.divide(invested, 6, RoundingMode.HALF_UP).multiply(BigDecimal("100")).toDouble() else 0.0
-        return PortfolioResponse(account.cash, totalValue, pnl, pnlRate, holdings)
+        return PortfolioResponse(account.cash.amount, totalValue, pnl, pnlRate, holdings)
     }
 
     private fun buildHoldings(userId: Long): List<HoldingResponse> {
@@ -48,7 +50,7 @@ class PaperTradingService(
             val stockId  = (row[0] as Number).toLong()
             val qty      = (row[1] as Number).toInt()
             val avgPrice = row[2] as? BigDecimal ?: return@mapNotNull null
-            val cur = runCatching { getCurrentPrice(stockId) }.getOrNull() ?: return@mapNotNull null
+            val cur = runCatching { getCurrentPrice(stockId).amount }.getOrNull() ?: return@mapNotNull null
             val info = jdbc.queryForMap("SELECT symbol, name FROM stocks WHERE id = ?", stockId)
             val value = cur.multiply(BigDecimal(qty))
             val cost  = avgPrice.multiply(BigDecimal(qty))
@@ -66,12 +68,12 @@ class PaperTradingService(
         require(quantity > 0) { "수량은 1 이상이어야 합니다" }
         val account = getOrCreateAccount(userId)
         val price   = getCurrentPrice(stockId)
-        val amount  = price.multiply(BigDecimal(quantity))
+        val amount  = price.toMoney(quantity)
         account.debit(amount)
         accountRepo.save(account)
-        val trade = tradeRepo.save(PaperTrade(userId=userId, stockId=stockId, side="BUY", quantity=quantity, price=price, amount=amount))
-        ledgerService.recordBuy(userId, trade.id, stockId, amount, account.cash)
-        return TradeResultResponse("BUY", stockId, quantity, price, amount, account.cash, trade.id)
+        val trade = tradeRepo.save(PaperTrade(userId=userId, stockId=stockId, side="BUY", quantity=quantity, price=price.amount, amount=amount.amount))
+        ledgerService.recordBuy(userId, trade.id, stockId, amount.amount, account.cash.amount)
+        return TradeResultResponse("BUY", stockId, quantity, price.amount, amount.amount, account.cash.amount, trade.id)
     }
 
     fun sell(userId: Long, stockId: Long, quantity: Int): TradeResultResponse {
@@ -82,12 +84,12 @@ class PaperTradingService(
         require(holding.quantity >= quantity) { "보유 수량 부족: 보유 ${holding.quantity}, 요청 $quantity" }
         val account = getOrCreateAccount(userId)
         val price   = getCurrentPrice(stockId)
-        val amount  = price.multiply(BigDecimal(quantity))
+        val amount  = price.toMoney(quantity)
         account.credit(amount)
         accountRepo.save(account)
-        val trade = tradeRepo.save(PaperTrade(userId=userId, stockId=stockId, side="SELL", quantity=quantity, price=price, amount=amount))
-        ledgerService.recordSell(userId, trade.id, stockId, amount, account.cash)
-        return TradeResultResponse("SELL", stockId, quantity, price, amount, account.cash, trade.id)
+        val trade = tradeRepo.save(PaperTrade(userId=userId, stockId=stockId, side="SELL", quantity=quantity, price=price.amount, amount=amount.amount))
+        ledgerService.recordSell(userId, trade.id, stockId, amount.amount, account.cash.amount)
+        return TradeResultResponse("SELL", stockId, quantity, price.amount, amount.amount, account.cash.amount, trade.id)
     }
 
     fun getHistory(userId: Long): List<TradeHistoryResponse> =
@@ -154,7 +156,7 @@ class PaperTradingService(
         val portfolioReturns = portfolioPrices.zipWithNext { a, b -> if (a == 0.0) 0.0 else (b - a) / a }
 
         // 포트폴리오 가치 곡선
-        val initial = account.cash.toDouble() + holdings.sumOf { it.value.toDouble() }.coerceAtLeast(account.cash.toDouble())
+        val initial = account.cash.amount.toDouble() + holdings.sumOf { it.value.toDouble() }.coerceAtLeast(account.cash.amount.toDouble())
         var equity  = initial
         val equityCurve = mutableListOf(initial)
         portfolioReturns.forEach { r -> equity *= (1 + r); equityCurve.add(equity) }

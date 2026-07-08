@@ -19,11 +19,11 @@ class OrderBook(val stockId: Long) {
     val bids = TreeMap<BigDecimal, ArrayDeque<Order>>(reverseOrder())
 
     fun addAsk(order: Order) {
-        asks.getOrPut(order.limitPrice!!) { ArrayDeque() }.addLast(order)
+        asks.getOrPut(order.limitPrice!!.amount) { ArrayDeque() }.addLast(order)
     }
 
     fun addBid(order: Order) {
-        bids.getOrPut(order.limitPrice!!) { ArrayDeque() }.addLast(order)
+        bids.getOrPut(order.limitPrice!!.amount) { ArrayDeque() }.addLast(order)
     }
 
     fun removeOrder(orderId: Long, side: OrderSide): Boolean {

@@ -30,11 +30,11 @@ class WalletService(
         }
 
         val holdingsValue = calcHoldingsValue(userId)
-        val totalAssets = account.cash + holdingsValue
+        val totalAssets = account.cash.amount + holdingsValue
         val recentLedger = ledgerService.getLedger(userId).take(10)
 
         return WalletMapResponse(
-            availableCash = account.cash,
+            availableCash = account.cash.amount,
             reservedCash = BigDecimal.ZERO,
             holdingsValue = holdingsValue,
             settlementPending = BigDecimal.ZERO,

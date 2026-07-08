@@ -40,7 +40,7 @@ class MatchingOrderBookService {
     }
 
     private fun matchLimit(book: OrderBook, taker: Order, results: MutableList<MatchResult>) {
-        val limitPrice = taker.limitPrice!!
+        val limitPrice = taker.limitPrice!!.amount
         val counterBook = if (taker.side == OrderSide.BUY) book.asks else book.bids
 
         val priceFilter: (BigDecimal) -> Boolean = if (taker.side == OrderSide.BUY) {

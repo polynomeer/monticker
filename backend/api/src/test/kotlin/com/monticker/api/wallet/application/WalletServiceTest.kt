@@ -1,5 +1,6 @@
 package com.monticker.api.wallet.application
 
+import com.monticker.api.common.domain.Money
 import com.monticker.api.paper.domain.PaperAccount
 import com.monticker.api.paper.infrastructure.PaperAccountRepository
 import io.mockk.every
@@ -19,7 +20,7 @@ class WalletServiceTest {
 
     @Test
     fun `getWalletMap sums available cash and holdings value into total assets`() {
-        val account = PaperAccount(userId = 1L, cash = BigDecimal("5000000"))
+        val account = PaperAccount(userId = 1L, cash = Money.of("5000000"))
         every { accountRepo.findByUserId(1L) } returns Optional.of(account)
         every {
             jdbc.queryForList(match<String> { it.contains("GROUP BY stock_id") }, any<Long>())
@@ -39,7 +40,7 @@ class WalletServiceTest {
 
     @Test
     fun `getWalletMap reports zero reserved cash and zero settlement pending in the mock environment`() {
-        val account = PaperAccount(userId = 1L, cash = BigDecimal("1000000"))
+        val account = PaperAccount(userId = 1L, cash = Money.of("1000000"))
         every { accountRepo.findByUserId(1L) } returns Optional.of(account)
         every { jdbc.queryForList(any<String>(), any<Long>()) } returns emptyList()
         every { ledgerService.getLedger(1L) } returns emptyList()
@@ -64,7 +65,7 @@ class WalletServiceTest {
 
     @Test
     fun `getWalletMap skips holdings whose current price cannot be resolved`() {
-        val account = PaperAccount(userId = 1L, cash = BigDecimal("1000000"))
+        val account = PaperAccount(userId = 1L, cash = Money.of("1000000"))
         every { accountRepo.findByUserId(1L) } returns Optional.of(account)
         every {
             jdbc.queryForList(match<String> { it.contains("GROUP BY stock_id") }, any<Long>())
@@ -82,7 +83,7 @@ class WalletServiceTest {
 
     @Test
     fun `getWalletMap returns only the most recent 10 ledger events`() {
-        val account = PaperAccount(userId = 1L, cash = BigDecimal("1000000"))
+        val account = PaperAccount(userId = 1L, cash = Money.of("1000000"))
         every { accountRepo.findByUserId(1L) } returns Optional.of(account)
         every { jdbc.queryForList(any<String>(), any<Long>()) } returns emptyList()
         val manyEvents = (1..15).map {
