@@ -10,21 +10,26 @@ import org.springframework.web.bind.annotation.*
 @RequestMapping("/api/quant/rulesets")
 class RuleSetController(private val service: RuleSetService) {
 
-    // TODO: replace hardcoded userId with JWT principal after auth is wired up
-    private val tempUserId = 1L
+    private fun userId(): Long {
+        val attrs = org.springframework.web.context.request.RequestContextHolder.currentRequestAttributes()
+            as org.springframework.web.context.request.ServletRequestAttributes
+        return attrs.request.getHeader("X-User-Id")?.toLong()
+            ?: throw org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.UNAUTHORIZED, "X-User-Id header required")
+    }
 
     @PostMapping
     fun create(@RequestBody req: CreateRuleSetRequest): ResponseEntity<RuleSetResponse> =
-        ResponseEntity.ok(service.create(tempUserId, req))
+        ResponseEntity.ok(service.create(userId(), req))
 
     @GetMapping
     fun list(): ResponseEntity<List<RuleSetResponse>> =
-        ResponseEntity.ok(service.findByUser(tempUserId))
+        ResponseEntity.ok(service.findByUser(userId()))
 
     @GetMapping("/{id}")
     fun getById(@PathVariable id: Long): ResponseEntity<*> =
         try {
-            ResponseEntity.ok(service.findById(id, tempUserId))
+            ResponseEntity.ok(service.findById(id, userId()))
         } catch (e: NoSuchElementException) {
             ResponseEntity.notFound().build<Unit>()
         }
@@ -35,7 +40,7 @@ class RuleSetController(private val service: RuleSetService) {
         @RequestBody req: UpdateRuleSetRequest,
     ): ResponseEntity<*> =
         try {
-            ResponseEntity.ok(service.update(id, tempUserId, req))
+            ResponseEntity.ok(service.update(id, userId(), req))
         } catch (e: NoSuchElementException) {
             ResponseEntity.notFound().build<Unit>()
         }
@@ -43,7 +48,7 @@ class RuleSetController(private val service: RuleSetService) {
     @DeleteMapping("/{id}")
     fun delete(@PathVariable id: Long): ResponseEntity<Void> {
         return try {
-            service.delete(id, tempUserId)
+            service.delete(id, userId())
             ResponseEntity.noContent().build()
         } catch (e: NoSuchElementException) {
             ResponseEntity.notFound().build()
@@ -58,7 +63,7 @@ class RuleSetController(private val service: RuleSetService) {
         @RequestBody req: QuantBacktestRequest,
     ): ResponseEntity<*> =
         try {
-            ResponseEntity.ok(service.runBacktest(id, tempUserId, req))
+            ResponseEntity.ok(service.runBacktest(id, userId(), req))
         } catch (e: NoSuchElementException) {
             ResponseEntity.notFound().build<Unit>()
         } catch (e: IllegalArgumentException) {
@@ -68,7 +73,7 @@ class RuleSetController(private val service: RuleSetService) {
     @GetMapping("/{id}/backtest")
     fun listBacktests(@PathVariable id: Long): ResponseEntity<*> =
         try {
-            ResponseEntity.ok(service.listBacktestResults(id, tempUserId))
+            ResponseEntity.ok(service.listBacktestResults(id, userId()))
         } catch (e: NoSuchElementException) {
             ResponseEntity.notFound().build<Unit>()
         }

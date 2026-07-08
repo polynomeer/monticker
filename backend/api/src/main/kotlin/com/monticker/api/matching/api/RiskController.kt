@@ -8,6 +8,7 @@ import com.monticker.api.matching.infrastructure.RiskLimitRepository
 import com.monticker.api.matching.domain.OrderStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.web.bind.annotation.*
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -63,21 +64,20 @@ class RiskController(
     private val orderRepo: OrderRepository,
     private val jdbc: JdbcTemplate,
 ) {
-    // TODO: replace with JWT principal
-    private val tempUserId = 1L
+    private fun userId(): Long = SecurityContextHolder.getContext().authentication.principal as Long
 
     @GetMapping("/limits")
     fun getRiskLimits(): ResponseEntity<RiskLimitsDto> {
-        val limits = riskLimitRepo.findByUserId(tempUserId).orElseGet {
-            riskLimitRepo.save(RiskLimit(userId = tempUserId))
+        val limits = riskLimitRepo.findByUserId(userId()).orElseGet {
+            riskLimitRepo.save(RiskLimit(userId = userId()))
         }
         return ResponseEntity.ok(limits.toDto())
     }
 
     @PutMapping("/limits")
     fun updateRiskLimits(@RequestBody req: UpdateRiskLimitsRequest): ResponseEntity<RiskLimitsDto> {
-        val limits = riskLimitRepo.findByUserId(tempUserId).orElseGet {
-            riskLimitRepo.save(RiskLimit(userId = tempUserId))
+        val limits = riskLimitRepo.findByUserId(userId()).orElseGet {
+            riskLimitRepo.save(RiskLimit(userId = userId()))
         }
         req.dailyLossLimitPct?.let { limits.dailyLossLimitPct = it }
         req.concentrationLimitPct?.let { limits.concentrationLimitPct = it }
@@ -90,19 +90,19 @@ class RiskController(
 
     @PostMapping("/check")
     fun dryRunCheck(@RequestBody req: DryRunCheckRequest): ResponseEntity<RiskCheckResult> {
-        val result = riskChecker.check(tempUserId, req.stockId, req.side, req.quantity, req.estimatedPrice)
+        val result = riskChecker.check(userId(), req.stockId, req.side, req.quantity, req.estimatedPrice)
         return ResponseEntity.ok(result)
     }
 
     @GetMapping("/exposure")
     fun getCurrentExposure(): ResponseEntity<RiskExposureResponse> {
-        val limits = riskLimitRepo.findByUserId(tempUserId).orElseGet {
-            riskLimitRepo.save(RiskLimit(userId = tempUserId))
+        val limits = riskLimitRepo.findByUserId(userId()).orElseGet {
+            riskLimitRepo.save(RiskLimit(userId = userId()))
         }
 
         val cash = jdbc.queryForObject(
             "SELECT COALESCE(cash, 0) FROM paper_accounts WHERE user_id = ?",
-            BigDecimal::class.java, tempUserId
+            BigDecimal::class.java, userId()
         ) ?: BigDecimal("10000000")
 
         // Holdings
@@ -111,7 +111,7 @@ class RiskController(
             """SELECT stock_id, SUM(CASE WHEN side='BUY' THEN quantity ELSE -quantity END) as qty
                FROM paper_trades WHERE user_id = ? GROUP BY stock_id
                HAVING SUM(CASE WHEN side='BUY' THEN quantity ELSE -quantity END) > 0""",
-            tempUserId
+            userId()
         )
         val holdings = holdingRows.mapNotNull { row ->
             val stockId = (row["stock_id"] as Number).toLong()
@@ -134,7 +134,7 @@ class RiskController(
         val dailyPnl = jdbc.queryForObject(
             """SELECT COALESCE(SUM(CASE WHEN side='SELL' THEN amount ELSE -amount END), 0)
                FROM fills WHERE user_id = ? AND filled_at >= current_date""",
-            BigDecimal::class.java, tempUserId
+            BigDecimal::class.java, userId()
         ) ?: BigDecimal.ZERO
         val dailyPnlPct = if (totalAssets > BigDecimal.ZERO)
             dailyPnl.divide(totalAssets, 6, RoundingMode.HALF_UP).multiply(BigDecimal("100")).toDouble()
@@ -181,10 +181,10 @@ class RiskController(
 
         // Active and hourly orders
         val activeOrderCount = orderRepo.findByUserIdAndStatusIn(
-            tempUserId, listOf(OrderStatus.PENDING, OrderStatus.PARTIALLY_FILLED)
+            userId(), listOf(OrderStatus.PENDING, OrderStatus.PARTIALLY_FILLED)
         ).size
         val oneHourAgo = Instant.now().minusSeconds(3600)
-        val hourlyOrderCount = orderRepo.countByUserIdAndCreatedAtAfter(tempUserId, oneHourAgo).toInt()
+        val hourlyOrderCount = orderRepo.countByUserIdAndCreatedAtAfter(userId(), oneHourAgo).toInt()
 
         return ResponseEntity.ok(RiskExposureResponse(
             totalAssets = totalAssets,

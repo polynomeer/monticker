@@ -10,14 +10,19 @@ import java.math.BigDecimal
 @RequestMapping("/api/matching")
 class MatchingController(private val matchingService: MatchingService) {
 
-    // TODO: replace with JWT principal after auth is implemented
-    private val tempUserId = 1L
+    private fun userId(): Long {
+        val attrs = org.springframework.web.context.request.RequestContextHolder.currentRequestAttributes()
+            as org.springframework.web.context.request.ServletRequestAttributes
+        return attrs.request.getHeader("X-User-Id")?.toLong()
+            ?: throw org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.UNAUTHORIZED, "X-User-Id header required")
+    }
 
     @PostMapping("/orders")
     fun submitOrder(@RequestBody req: SubmitOrderRequest): ResponseEntity<*> {
         return try {
             ResponseEntity.ok(matchingService.submitOrderChecked(
-                userId         = tempUserId,
+                userId         = userId(),
                 stockId        = req.stockId,
                 side           = req.side,
                 quantity       = req.quantity,
@@ -37,7 +42,7 @@ class MatchingController(private val matchingService: MatchingService) {
     @DeleteMapping("/orders/{id}")
     fun cancelOrder(@PathVariable id: Long): ResponseEntity<*> {
         return try {
-            ResponseEntity.ok(matchingService.cancelOrder(tempUserId, id))
+            ResponseEntity.ok(matchingService.cancelOrder(userId(), id))
         } catch (e: IllegalArgumentException) {
             ResponseEntity.badRequest().body(mapOf("error" to e.message))
         } catch (e: NoSuchElementException) {
@@ -47,12 +52,12 @@ class MatchingController(private val matchingService: MatchingService) {
 
     @GetMapping("/orders")
     fun getActiveOrders(): ResponseEntity<*> =
-        ResponseEntity.ok(matchingService.getActiveOrders(tempUserId))
+        ResponseEntity.ok(matchingService.getActiveOrders(userId()))
 
     @GetMapping("/orders/{id}/fills")
     fun getOrderFills(@PathVariable id: Long): ResponseEntity<*> {
         return try {
-            ResponseEntity.ok(matchingService.getOrderFills(tempUserId, id))
+            ResponseEntity.ok(matchingService.getOrderFills(userId(), id))
         } catch (e: NoSuchElementException) {
             ResponseEntity.notFound().build<Unit>()
         }
@@ -60,5 +65,5 @@ class MatchingController(private val matchingService: MatchingService) {
 
     @GetMapping("/fills")
     fun getMyFills(): ResponseEntity<*> =
-        ResponseEntity.ok(matchingService.getMyFills(tempUserId))
+        ResponseEntity.ok(matchingService.getMyFills(userId()))
 }

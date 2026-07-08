@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.web.client.RestTemplateBuilder
 import org.springframework.core.ParameterizedTypeReference
 import org.springframework.http.HttpEntity
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestTemplate
@@ -16,6 +17,9 @@ import java.time.Duration
  * trading.service.url 이 설정된 경우 외부 trading-service로 포워딩하고,
  * 설정되지 않은 경우(단일 프로세스 모드)에는 null을 반환해
  * 컨트롤러가 로컬 MatchingService를 직접 호출한다.
+ *
+ * userId는 X-User-Id 헤더로 trading-service에 전달한다.
+ * trading-service는 JWT 없이 내부 호출만 받으므로 헤더로 신원을 전파한다.
  */
 @Component
 class TradingServiceClient(
@@ -31,33 +35,37 @@ class TradingServiceClient(
 
     val isEnabled get() = baseUrl.isNotBlank()
 
-    fun <T> post(path: String, body: Any, responseType: Class<T>): T? {
+    fun <T> post(path: String, body: Any, responseType: Class<T>, userId: Long? = null): T? {
         if (!isEnabled) return null
         return try {
-            restTemplate.postForObject("$baseUrl$path", body, responseType)
+            restTemplate.postForObject("$baseUrl$path", HttpEntity(body, headers(userId)), responseType)
         } catch (e: Exception) {
             log.error("[TradingServiceClient] POST {} 실패: {}", path, e.message)
             null
         }
     }
 
-    fun <T> get(path: String, responseType: ParameterizedTypeReference<T>): T? {
+    fun <T> get(path: String, responseType: ParameterizedTypeReference<T>, userId: Long? = null): T? {
         if (!isEnabled) return null
         return try {
-            restTemplate.exchange("$baseUrl$path", HttpMethod.GET, null, responseType).body
+            restTemplate.exchange("$baseUrl$path", HttpMethod.GET, HttpEntity<Unit>(headers(userId)), responseType).body
         } catch (e: Exception) {
             log.error("[TradingServiceClient] GET {} 실패: {}", path, e.message)
             null
         }
     }
 
-    fun <T> delete(path: String, responseType: Class<T>): T? {
+    fun <T> delete(path: String, responseType: Class<T>, userId: Long? = null): T? {
         if (!isEnabled) return null
         return try {
-            restTemplate.exchange("$baseUrl$path", HttpMethod.DELETE, HttpEntity.EMPTY, responseType).body
+            restTemplate.exchange("$baseUrl$path", HttpMethod.DELETE, HttpEntity<Unit>(headers(userId)), responseType).body
         } catch (e: Exception) {
             log.error("[TradingServiceClient] DELETE {} 실패: {}", path, e.message)
             null
         }
+    }
+
+    private fun headers(userId: Long?): HttpHeaders = HttpHeaders().apply {
+        userId?.let { set("X-User-Id", it.toString()) }
     }
 }

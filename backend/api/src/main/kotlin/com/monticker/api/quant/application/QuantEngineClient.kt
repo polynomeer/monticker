@@ -4,6 +4,8 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.web.client.RestTemplateBuilder
 import org.springframework.core.ParameterizedTypeReference
+import org.springframework.http.HttpEntity
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestTemplate
@@ -30,23 +32,47 @@ class QuantEngineClient(
 
     val isEnabled get() = baseUrl.isNotBlank()
 
-    fun <T> get(path: String, responseType: ParameterizedTypeReference<T>): T? {
+    fun <T> get(path: String, responseType: ParameterizedTypeReference<T>, userId: Long? = null): T? {
         if (!isEnabled) return null
         return try {
-            restTemplate.exchange("$baseUrl$path", HttpMethod.GET, null, responseType).body
+            restTemplate.exchange("$baseUrl$path", HttpMethod.GET, HttpEntity<Unit>(headers(userId)), responseType).body
         } catch (e: Exception) {
             log.error("[QuantEngineClient] GET {} 실패: {}", path, e.message)
             null
         }
     }
 
-    fun <T> get(path: String, responseType: Class<T>): T? {
+    fun <T> get(path: String, responseType: Class<T>, userId: Long? = null): T? {
         if (!isEnabled) return null
         return try {
-            restTemplate.getForObject("$baseUrl$path", responseType)
+            restTemplate.exchange("$baseUrl$path", HttpMethod.GET, HttpEntity<Unit>(headers(userId)), responseType).body
         } catch (e: Exception) {
             log.error("[QuantEngineClient] GET {} 실패: {}", path, e.message)
             null
         }
+    }
+
+    fun <T> post(path: String, body: Any, responseType: Class<T>, userId: Long? = null): T? {
+        if (!isEnabled) return null
+        return try {
+            restTemplate.postForObject("$baseUrl$path", HttpEntity(body, headers(userId)), responseType)
+        } catch (e: Exception) {
+            log.error("[QuantEngineClient] POST {} 실패: {}", path, e.message)
+            null
+        }
+    }
+
+    fun <T> delete(path: String, responseType: Class<T>, userId: Long? = null): T? {
+        if (!isEnabled) return null
+        return try {
+            restTemplate.exchange("$baseUrl$path", HttpMethod.DELETE, HttpEntity<Unit>(headers(userId)), responseType).body
+        } catch (e: Exception) {
+            log.error("[QuantEngineClient] DELETE {} 실패: {}", path, e.message)
+            null
+        }
+    }
+
+    private fun headers(userId: Long?): HttpHeaders = HttpHeaders().apply {
+        userId?.let { set("X-User-Id", it.toString()) }
     }
 }
