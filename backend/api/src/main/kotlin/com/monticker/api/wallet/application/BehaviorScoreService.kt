@@ -1,23 +1,29 @@
 package com.monticker.api.wallet.application
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.api.wallet.domain.BehaviorGrade
 import com.monticker.api.wallet.domain.BehaviorScore
 import com.monticker.api.wallet.domain.EmotionType
+import com.monticker.api.wallet.events.GradeChangedEvent
 import com.monticker.api.wallet.infrastructure.BehaviorScoreRepository
 import com.monticker.api.wallet.infrastructure.EmotionTagRepository
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.util.concurrent.CompletableFuture
 
 data class BehaviorScoreResponse(
     val userId: Long,
     val scoreDate: LocalDate,
     val behaviorScore: Int,
     val survivalScore: Int,
+    val grade: BehaviorGrade,
     val feedback: List<String>,
     val reliabilityNotes: Map<String, Any?>,
 )
@@ -29,7 +35,33 @@ class BehaviorScoreService(
     private val emotionTagRepo: EmotionTagRepository,
     private val jdbc: JdbcTemplate,
     private val objectMapper: ObjectMapper,
+    private val eventPublisher: ApplicationEventPublisher,
 ) {
+
+    fun recalculate(userId: Long, date: LocalDate): BehaviorScoreResponse =
+        calculateAndSave(userId, date)
+
+    /**
+     * BehaviorScore를 비동기로 계산한다.
+     * Batch Job / API 호출 모두 이 메서드를 통해 논블로킹으로 처리한다.
+     *
+     * @return CompletableFuture — 호출자는 결과가 필요할 때만 .get() 또는 .thenAccept()로 처리
+     */
+    @Async("behaviorScoreExecutor")
+    fun recalculateAsync(userId: Long, date: LocalDate): CompletableFuture<BehaviorScoreResponse> =
+        CompletableFuture.completedFuture(calculateAndSave(userId, date))
+
+    /**
+     * 여러 유저의 BehaviorScore를 병렬로 계산하고 모든 결과를 기다린다.
+     * Batch Partitioner가 분할한 userId 목록을 받아 병렬 집계한다.
+     */
+    @Transactional
+    fun recalculateBatchAsync(userIds: List<Long>, date: LocalDate): List<BehaviorScoreResponse> {
+        val futures = userIds.map { recalculateAsync(it, date) }
+        return CompletableFuture.allOf(*futures.toTypedArray())
+            .thenApply { futures.map { it.join() } }
+            .join()
+    }
 
     fun getOrCalculateScore(userId: Long, date: LocalDate): BehaviorScoreResponse {
         val existing = scoreRepo.findByUserIdAndScoreDate(userId, date)
@@ -46,6 +78,7 @@ class BehaviorScoreService(
                 scoreDate = date,
                 behaviorScore = s.behaviorScore ?: 70,
                 survivalScore = s.survivalScore ?: 80,
+                grade = s.grade ?: BehaviorGrade.fromScore(s.behaviorScore ?: 70),
                 feedback = feedback,
                 reliabilityNotes = breakdown,
             )
@@ -54,7 +87,7 @@ class BehaviorScoreService(
         return calculateAndSave(userId, date)
     }
 
-    private fun calculateAndSave(userId: Long, date: LocalDate): BehaviorScoreResponse {
+    internal fun calculateAndSave(userId: Long, date: LocalDate): BehaviorScoreResponse {
         val zone = ZoneId.of("Asia/Seoul")
         val dayStart = date.atStartOfDay(zone).toInstant()
         val dayEnd = date.plusDays(1).atStartOfDay(zone).toInstant()
@@ -206,6 +239,11 @@ class BehaviorScoreService(
             "totalAssets" to totalAssets,
         )
 
+        val previousGrade = scoreRepo.findByUserIdAndScoreDate(userId, date.minusDays(1))
+            .map { it.grade }
+            .orElse(null)
+        val newGrade = BehaviorGrade.fromScore(behaviorScore)
+
         scoreRepo.save(
             BehaviorScore(
                 userId = userId,
@@ -214,14 +252,29 @@ class BehaviorScoreService(
                 survivalScore = survivalScore,
                 scoreBreakdown = objectMapper.writeValueAsString(reliabilityNotes),
                 feedbackJson = objectMapper.writeValueAsString(allFeedback),
+                grade = newGrade,
             )
         )
+
+        // EDA: 등급이 변경된 경우에만 이벤트 발행 → GradeChangedEventListener가 푸시 발송
+        if (previousGrade != newGrade) {
+            eventPublisher.publishEvent(
+                GradeChangedEvent(
+                    userId        = userId,
+                    scoreDate     = date,
+                    previousGrade = previousGrade,
+                    newGrade      = newGrade,
+                    behaviorScore = behaviorScore,
+                )
+            )
+        }
 
         return BehaviorScoreResponse(
             userId = userId,
             scoreDate = date,
             behaviorScore = behaviorScore,
             survivalScore = survivalScore,
+            grade = newGrade,
             feedback = allFeedback,
             reliabilityNotes = reliabilityNotes,
         )

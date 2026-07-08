@@ -28,6 +28,10 @@ class BehaviorScore(
     @Column(name = "feedback_json", columnDefinition = "jsonb")
     val feedbackJson: String? = null,
 
+    @Column(name = "grade", length = 20)
+    @Enumerated(EnumType.STRING)
+    val grade: BehaviorGrade? = null,
+
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant = Instant.now(),
 )

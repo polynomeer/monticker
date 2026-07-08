@@ -12,6 +12,7 @@ import io.mockk.slot
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.EmptyResultDataAccessException
 import org.springframework.jdbc.core.JdbcTemplate
 import java.math.BigDecimal
@@ -25,14 +26,15 @@ class BehaviorScoreServiceTest {
     private val emotionTagRepo = mockk<EmotionTagRepository>()
     private val jdbc = mockk<JdbcTemplate>()
     private val objectMapper = ObjectMapper()
-    private val service = BehaviorScoreService(scoreRepo, emotionTagRepo, jdbc, objectMapper)
+    private val eventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
+    private val service = BehaviorScoreService(scoreRepo, emotionTagRepo, jdbc, objectMapper, eventPublisher)
 
     private val userId = 1L
     private val date: LocalDate = LocalDate.of(2026, 6, 30)
 
     @BeforeEach
     fun setUp() {
-        every { scoreRepo.findByUserIdAndScoreDate(userId, date) } returns Optional.empty()
+        every { scoreRepo.findByUserIdAndScoreDate(userId, any()) } returns Optional.empty()
         every { scoreRepo.save(any()) } answers { firstArg() }
 
         // No trades today by default
