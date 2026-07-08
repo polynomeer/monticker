@@ -64,6 +64,7 @@ data class SubmitOrderResponse(
 class MatchingService(
     private val orderRepo: OrderRepository,
     private val fillRepo: FillRepository,
+    private val fillQueryService: FillQueryService,
     private val orderBookService: MatchingOrderBookService,
     private val riskChecker: RiskCheckerService,
     private val jdbc: JdbcTemplate,
@@ -243,15 +244,12 @@ class MatchingService(
         ).map { it.toDto() }
 
     @Transactional(readOnly = true)
-    fun getOrderFills(userId: Long, orderId: Long): List<FillDto> {
-        val order = orderRepo.findById(orderId).orElseThrow { NoSuchElementException("주문 없음: $orderId") }
-        require(order.userId == userId) { "접근 권한 없음" }
-        return fillRepo.findAllByOrderId(orderId).map { it.toDto() }
-    }
+    fun getOrderFills(userId: Long, orderId: Long): List<FillDto> =
+        fillQueryService.findByOrderId(orderId, userId)
 
     @Transactional(readOnly = true)
     fun getMyFills(userId: Long): List<FillDto> =
-        fillRepo.findAllByUserIdOrderByFilledAtDesc(userId).map { it.toDto() }
+        fillQueryService.findByUserId(userId)
 
     private fun Order.toDto() = OrderDto(
         id = id,

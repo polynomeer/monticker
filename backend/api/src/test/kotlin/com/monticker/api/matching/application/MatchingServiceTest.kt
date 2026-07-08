@@ -24,13 +24,14 @@ class MatchingServiceTest {
 
     private val orderRepo = mockk<OrderRepository>()
     private val fillRepo = mockk<FillRepository>()
+    private val fillQueryService = mockk<FillQueryService>(relaxed = true)
     private val orderBookService = mockk<MatchingOrderBookService>(relaxed = true)
     private val riskChecker = mockk<RiskCheckerService>()
     private val jdbc = mockk<JdbcTemplate>(relaxed = true)
     private val stateMachineService = mockk<OrderStateMachineService>(relaxed = true)
     private val eventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
 
-    private val service = MatchingService(orderRepo, fillRepo, orderBookService, riskChecker, jdbc, stateMachineService, eventPublisher)
+    private val service = MatchingService(orderRepo, fillRepo, fillQueryService, orderBookService, riskChecker, jdbc, stateMachineService, eventPublisher)
 
     private val userId = 1L
     private val stockId = 100L
