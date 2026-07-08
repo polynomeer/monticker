@@ -27,7 +27,8 @@ class BehaviorScoreServiceTest {
     private val jdbc = mockk<JdbcTemplate>()
     private val objectMapper = ObjectMapper()
     private val eventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
-    private val service = BehaviorScoreService(scoreRepo, emotionTagRepo, jdbc, objectMapper, eventPublisher)
+    private val scoreQueryService = BehaviorScoreQueryService(scoreRepo, objectMapper)
+    private val service = BehaviorScoreService(scoreQueryService, scoreRepo, emotionTagRepo, jdbc, objectMapper, eventPublisher)
 
     private val userId = 1L
     private val date: LocalDate = LocalDate.of(2026, 6, 30)

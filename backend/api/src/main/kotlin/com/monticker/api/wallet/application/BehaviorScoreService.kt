@@ -31,6 +31,7 @@ data class BehaviorScoreResponse(
 @Service
 @Transactional
 class BehaviorScoreService(
+    private val scoreQueryService: BehaviorScoreQueryService,
     private val scoreRepo: BehaviorScoreRepository,
     private val emotionTagRepo: EmotionTagRepository,
     private val jdbc: JdbcTemplate,
@@ -63,29 +64,8 @@ class BehaviorScoreService(
             .join()
     }
 
-    fun getOrCalculateScore(userId: Long, date: LocalDate): BehaviorScoreResponse {
-        val existing = scoreRepo.findByUserIdAndScoreDate(userId, date)
-        if (existing.isPresent) {
-            val s = existing.get()
-            val breakdown = s.scoreBreakdown?.let {
-                objectMapper.readValue(it, Map::class.java) as Map<String, Any?>
-            } ?: emptyMap()
-            val feedback = s.feedbackJson?.let {
-                objectMapper.readValue(it, List::class.java) as List<String>
-            } ?: emptyList()
-            return BehaviorScoreResponse(
-                userId = userId,
-                scoreDate = date,
-                behaviorScore = s.behaviorScore ?: 70,
-                survivalScore = s.survivalScore ?: 80,
-                grade = s.grade ?: BehaviorGrade.fromScore(s.behaviorScore ?: 70),
-                feedback = feedback,
-                reliabilityNotes = breakdown,
-            )
-        }
-
-        return calculateAndSave(userId, date)
-    }
+    fun getOrCalculateScore(userId: Long, date: LocalDate): BehaviorScoreResponse =
+        scoreQueryService.findCached(userId, date) ?: calculateAndSave(userId, date)
 
     internal fun calculateAndSave(userId: Long, date: LocalDate): BehaviorScoreResponse {
         val zone = ZoneId.of("Asia/Seoul")
