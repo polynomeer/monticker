@@ -21,14 +21,12 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
 
 server:
   port: 8081
   shutdown: graceful
-
-spring:
-  lifecycle:
-    timeout-per-shutdown-phase: 30s
 
 management:
   endpoints:
@@ -78,8 +76,6 @@ otel:
 # 시세 수집 소스 (Stage 4: 두 경로 모두 Kafka를 경유한다)
 # internal(기본값) = MockPriceGenerator → Kafka market.ticks → TickKafkaConsumer
 # kafka            = Go market-gateway  → Kafka market.ticks → TickKafkaConsumer
-# 차이: internal 일 때 MarketTickScheduler(Spring)가 틱을 생성·발행.
-#       kafka    일 때 MarketTickScheduler를 비활성화하고 Go gateway가 발행.
 ingestion:
   source: ${INGESTION_SOURCE:internal}
 
@@ -88,5 +84,4 @@ kafka:
 
 worker:
   # 역할: all(단일 프로세스, 기본값) | market | event | alert
-  # MSA 모드에서는 WORKER_ROLE 환경변수로 각 컨테이너에 역할을 지정한다.
   role: ${WORKER_ROLE:all}

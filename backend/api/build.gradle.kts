@@ -28,10 +28,13 @@ repositories {
 
 dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
-	// Spring Modulith
+	// Spring Modulith (Outbox Pattern: JPA 발행 스토어 + Kafka 외부화)
 	implementation("org.springframework.modulith:spring-modulith-starter-core")
 	implementation("org.springframework.modulith:spring-modulith-starter-jpa")
 	implementation("org.springframework.modulith:spring-modulith-events-api")
+	implementation("org.springframework.modulith:spring-modulith-events-kafka")
+	implementation("org.springframework.kafka:spring-kafka")
+	implementation("org.springframework.retry:spring-retry")
 	testImplementation("org.springframework.modulith:spring-modulith-starter-test")
 	// Spring State Machine
 	implementation("org.springframework.statemachine:spring-statemachine-starter:4.0.0")

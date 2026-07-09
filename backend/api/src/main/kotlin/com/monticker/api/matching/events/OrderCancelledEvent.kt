@@ -4,7 +4,7 @@ import org.springframework.modulith.events.Externalized
 import java.math.BigDecimal
 import java.time.Instant
 
-@Externalized
+@Externalized("trading.order-cancelled::#{#this.userId}")
 data class OrderCancelledEvent(
     val orderId:      Long,
     val userId:       Long,

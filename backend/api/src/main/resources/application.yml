@@ -30,14 +30,21 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all           # 모든 ISR 확인 후 ACK — 유실 방지
+      retries: 3
+      properties:
+        enable.idempotence: true   # 프로듀서 멱등성 (중복 발행 방지)
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
 
 server:
   port: 8080
   shutdown: graceful
-
-spring:
-  lifecycle:
-    timeout-per-shutdown-phase: 30s
 
 management:
   endpoints:
@@ -73,21 +80,15 @@ otel:
     name: monticker-api
 
 # ── Order Book Provider ───────────────────────────────────────────────────────
-# KIS_REALTIME 우선 (worker Redis 캐시), 없으면 설정된 provider fallback
-# 값: yahoo  → Yahoo Finance 15분 지연 (계좌 불필요)
-#     (미설정) → Mock (순수 랜덤)
 orderbook:
   provider: ${ORDERBOOK_PROVIDER:}
 
 # ── Quant Engine (MSA 분리 시 사용) ─────────────────────────────────────────
-# 설정 시 analytics/quant/backtest 요청을 quant-engine 서비스로 위임한다.
-# 비워두면(기본값) 단일 프로세스 모드로 로컬 서비스를 직접 호출한다.
 quant:
   engine:
     url: ${QUANT_ENGINE_URL:}
 
 # ── Trading Service (MSA 분리 시 사용) ──────────────────────────────────────
-# 설정 시 paper/matching/wallet 요청을 trading-service로 위임한다.
 trading:
   service:
     url: ${TRADING_SERVICE_URL:}

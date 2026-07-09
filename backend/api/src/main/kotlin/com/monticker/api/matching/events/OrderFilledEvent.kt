@@ -8,10 +8,12 @@ import java.time.Instant
  * 주문 체결 완료 이벤트.
  * matching 모듈이 발행 → wallet(원장), quant(전략 성과) 모듈이 구독.
  *
- * @Externalized: Spring Modulith 이벤트 퍼블리케이션 스토어에 기록.
- * 트랜잭션 커밋 후 비동기/동기 리스너에게 전달.
+ * @Externalized("topic::keyExpr"):
+ *   - event_publication 테이블에 트랜잭션 내 INSERT (Outbox)
+ *   - 커밋 후 spring-modulith-events-kafka가 trading.order-filled 토픽에 발행
+ *   - 미발행 이벤트는 OutboxResubmissionConfig가 5분마다 재전송
  */
-@Externalized
+@Externalized("trading.order-filled::#{#this.userId}")
 data class OrderFilledEvent(
     val orderId:   Long,
     val userId:    Long,

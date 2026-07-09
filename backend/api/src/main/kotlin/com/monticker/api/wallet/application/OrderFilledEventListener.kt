@@ -9,18 +9,14 @@ import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.modulith.events.ApplicationModuleListener
 import org.springframework.stereotype.Component
-import org.springframework.transaction.event.TransactionPhase
-import org.springframework.transaction.event.TransactionalEventListener
 import java.math.BigDecimal
 
 /**
  * matching 모듈 이벤트를 구독해 원장(ledger)을 기록하는 리스너.
  *
- * @TransactionalEventListener(AFTER_COMMIT): 체결 트랜잭션이 커밋된 후에만 실행.
- * 체결이 롤백되면 원장 기록도 일어나지 않는다.
- *
- * wallet 모듈이 matching 모듈을 직접 import하지 않아도 되도록
- * Spring Modulith 이벤트 채널(ApplicationEventPublisher)을 사용한다.
+ * @ApplicationModuleListener: Modulith 이벤트 스토어에서 실행 — 체결 트랜잭션 커밋 후에만
+ * 호출되며, 실패 시 재시도가 보장된다. 기존 @TransactionalEventListener(AFTER_COMMIT)과
+ * 동일한 의미이나 Modulith 스토어 기반이므로 앱 재시작 후에도 재처리된다.
  */
 @Component
 class OrderFilledEventListener(
@@ -30,7 +26,6 @@ class OrderFilledEventListener(
     private val log = LoggerFactory.getLogger(javaClass)
 
     @ApplicationModuleListener
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun onOrderFilled(event: OrderFilledEvent) {
         log.info("[Wallet] OrderFilledEvent received: orderId={} userId={} side={} amount={}",
             event.orderId, event.userId, event.side, event.amount)
@@ -53,7 +48,6 @@ class OrderFilledEventListener(
     }
 
     @ApplicationModuleListener
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun onOrderCancelled(event: OrderCancelledEvent) {
         log.info("[Wallet] OrderCancelledEvent received: orderId={} userId={} refund={}",
             event.orderId, event.userId, event.refundAmount)
