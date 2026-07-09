@@ -1263,3 +1263,22 @@ portfolio_positions (
     PRIMARY KEY (user_id, stock_id)
 )
 ```
+
+---
+
+## Architecture Decision Records (ADRs)
+
+| ADR | 제목 | 상태 |
+|-----|------|------|
+| [ADR-001](decisions/001-modular-monolith.md) | Start with Modular Monolith, not Microservices | Accepted |
+| [ADR-002](decisions/002-timescaledb.md) | Use TimescaleDB for Time-Series Market Data | Accepted |
+| [ADR-003](decisions/003-stock-events-central.md) | Centralize Stock Event Detection in Worker | Accepted |
+| [ADR-004](decisions/004-redis-streams-over-kafka.md) | Redis Streams over Kafka for MVP | Accepted (superseded by ADR-005) |
+| [ADR-005](decisions/005-kafka-go-gateway-netty-broadcast.md) | Introduce Kafka, Go Ingestion Gateway, Netty Broadcast | Accepted |
+| [ADR-006](decisions/006-kafka-dlt-retry-strategy.md) | @RetryableTopic + Dead Letter Topic for Kafka Fault Isolation | Accepted |
+| [ADR-007](decisions/007-idempotency-key-filter.md) | Idempotency Key Filter for Mutating Order Endpoints | Accepted |
+| [ADR-008](decisions/008-outbox-pattern-spring-modulith.md) | Outbox Pattern via Spring Modulith Events Kafka | Accepted |
+| [ADR-009](decisions/009-kubernetes-service-discovery-nginx-gateway.md) | K8s DNS as Service Discovery + NGINX Ingress as API Gateway | Accepted |
+| [ADR-010](decisions/010-bloom-filter-news-deduplication.md) | Guava Bloom Filter for News URL Deduplication | Accepted |
+| [ADR-011](decisions/011-order-saga-orchestration.md) | Orchestration-based Saga for Order Processing | Accepted |
+| [ADR-012](decisions/012-cqrs-portfolio-positions-read-model.md) | CQRS Read Model Table for Portfolio Positions | Accepted |
