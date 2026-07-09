@@ -1,5 +1,6 @@
 package com.monticker.api.paper.api
 
+import com.monticker.api.common.aop.RateLimited
 import com.monticker.api.paper.application.PaperPortfolioQueryService
 import com.monticker.api.paper.application.PaperTradingService
 import org.springframework.http.ResponseEntity
@@ -19,6 +20,7 @@ class PaperController(
     fun getPortfolio() = ResponseEntity.ok(portfolioQueryService.getPortfolio(userId()))
 
     @PostMapping("/buy")
+    @RateLimited(limit = 60, windowSec = 60, keyPrefix = "paper.buy")
     fun buy(@RequestBody req: TradeRequest): ResponseEntity<*> {
         return try {
             ResponseEntity.ok(tradingService.buy(userId(), req.stockId, req.quantity))
@@ -32,6 +34,7 @@ class PaperController(
     }
 
     @PostMapping("/sell")
+    @RateLimited(limit = 60, windowSec = 60, keyPrefix = "paper.sell")
     fun sell(@RequestBody req: TradeRequest): ResponseEntity<*> {
         return try {
             ResponseEntity.ok(tradingService.sell(userId(), req.stockId, req.quantity))
@@ -48,6 +51,7 @@ class PaperController(
     fun getHistory() = ResponseEntity.ok(portfolioQueryService.getHistory(userId()))
 
     @PostMapping("/reset")
+    @RateLimited(limit = 3, windowSec = 86400, keyPrefix = "paper.reset")
     fun reset(): ResponseEntity<Void> {
         tradingService.reset(userId())
         return ResponseEntity.noContent().build()

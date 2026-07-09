@@ -1,5 +1,6 @@
 package com.monticker.api.matching.api
 
+import com.monticker.api.common.aop.RateLimited
 import com.monticker.api.matching.application.MatchingService
 import com.monticker.api.matching.application.SubmitOrderRequest
 import org.springframework.http.ResponseEntity
@@ -14,6 +15,7 @@ class MatchingController(private val matchingService: MatchingService) {
     private fun userId(): Long = SecurityContextHolder.getContext().authentication.principal as Long
 
     @PostMapping("/orders")
+    @RateLimited(limit = 30, windowSec = 60, keyPrefix = "matching.order")
     fun submitOrder(@RequestBody req: SubmitOrderRequest): ResponseEntity<*> {
         return try {
             ResponseEntity.ok(matchingService.submitOrderChecked(
@@ -35,6 +37,7 @@ class MatchingController(private val matchingService: MatchingService) {
     }
 
     @DeleteMapping("/orders/{id}")
+    @RateLimited(limit = 30, windowSec = 60, keyPrefix = "matching.cancel")
     fun cancelOrder(@PathVariable id: Long): ResponseEntity<*> {
         return try {
             ResponseEntity.ok(matchingService.cancelOrder(userId(), id))

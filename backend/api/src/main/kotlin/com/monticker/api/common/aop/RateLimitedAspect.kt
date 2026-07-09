@@ -14,9 +14,11 @@ import java.time.Duration
  * @RateLimited: userId 기반 메서드 레벨 Rate Limiting.
  * 기존 RateLimitFilter(IP 기반, 전역)를 보완한다.
  *
- * Redis 키: ratelimit:{keyPrefix}:{userId}
- * userId는 Long 타입 첫 번째 파라미터에서 추출한다.
- * userId 파라미터가 없으면 IP 기반으로 폴백한다.
+ * Redis 키: ratelimit:{keyPrefix}:{subject}
+ * subject 추출 우선순위:
+ *   1. 파라미터명이 "userId"인 Long 파라미터
+ *   2. SecurityContextHolder — 인증된 요청에서 Long principal 추출
+ *   3. "anon" — 미인증 또는 추출 실패 시 (인증 엔드포인트는 RateLimitFilter IP 기반으로 처리)
  */
 @Aspect
 @Component
@@ -29,7 +31,7 @@ class RateLimitedAspect(private val redis: StringRedisTemplate) {
             "${sig.declaringType.simpleName}.${sig.name}"
         }
 
-        val subject = extractUserId(sig.parameterNames, pjp.args)?.toString() ?: "anon"
+        val subject  = extractSubject(sig.parameterNames, pjp.args)
         val redisKey = "ratelimit:$keyPrefix:$subject"
 
         val count = redis.opsForValue().increment(redisKey) ?: 1L
@@ -47,8 +49,18 @@ class RateLimitedAspect(private val redis: StringRedisTemplate) {
         return pjp.proceed()
     }
 
-    private fun extractUserId(names: Array<String>, args: Array<Any?>): Long? {
+    private fun extractSubject(names: Array<String>, args: Array<Any?>): String {
+        // 1. 명시적 userId 파라미터
         val idx = names.indexOf("userId")
-        return if (idx >= 0) args[idx] as? Long else args.firstOrNull { it is Long } as? Long
+        if (idx >= 0) {
+            (args[idx] as? Long)?.let { return it.toString() }
+        }
+        // 2. SecurityContextHolder — 컨트롤러 메서드가 내부적으로 userId()를 호출하는 경우
+        runCatching {
+            val principal = org.springframework.security.core.context.SecurityContextHolder
+                .getContext().authentication?.principal
+            if (principal is Long) return principal.toString()
+        }
+        return "anon"
     }
 }

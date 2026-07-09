@@ -25,13 +25,18 @@ class RateLimitFilter(private val redis: StringRedisTemplate) : OncePerRequestFi
         val ip   = req.remoteAddr
         val path = req.requestURI
 
-        val (key, limit) = when {
-            path.startsWith("/api/auth/") -> "auth:$ip" to 30
-            path.startsWith("/api/")      -> "api:$ip"  to 300
-            else                          -> { chain.doFilter(req, res); return }
+        // 엔드포인트별 IP 기반 제한. 인증 엔드포인트는 브루트포스 방어를 위해 더 엄격히 적용한다.
+        data class Limit(val key: String, val max: Int, val window: Duration)
+        val limit = when {
+            path == "/api/auth/login"      -> Limit("auth.login:$ip",   10, Duration.ofMinutes(1))
+            path == "/api/auth/signup"     -> Limit("auth.signup:$ip",   5, Duration.ofMinutes(10))
+            path == "/api/auth/refresh"    -> Limit("auth.refresh:$ip", 20, Duration.ofMinutes(1))
+            path.startsWith("/api/auth/")  -> Limit("auth:$ip",         30, Duration.ofMinutes(1))
+            path.startsWith("/api/")       -> Limit("api:$ip",         300, Duration.ofMinutes(1))
+            else                           -> { chain.doFilter(req, res); return }
         }
 
-        if (isRateLimited(key, limit, Duration.ofMinutes(1))) {
+        if (isRateLimited(limit.key, limit.max, limit.window)) {
             res.sendError(429, "Too Many Requests")
             return
         }

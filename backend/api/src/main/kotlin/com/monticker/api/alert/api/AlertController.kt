@@ -2,6 +2,7 @@ package com.monticker.api.alert.api
 
 import com.monticker.api.alert.application.AlertService
 import com.monticker.api.alert.domain.AlertRuleType
+import com.monticker.api.common.aop.RateLimited
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.web.bind.annotation.*
@@ -18,6 +19,7 @@ class AlertController(private val alertService: AlertService) {
         ResponseEntity.ok(alertService.getRules(userId()).map { AlertRuleResponse.from(it) })
 
     @PostMapping("/rules")
+    @RateLimited(limit = 20, windowSec = 3600, keyPrefix = "alert.create")
     fun createRule(@RequestBody request: CreateAlertRuleRequest): ResponseEntity<AlertRuleResponse> {
         val ruleType = try {
             AlertRuleType.valueOf(request.ruleType)

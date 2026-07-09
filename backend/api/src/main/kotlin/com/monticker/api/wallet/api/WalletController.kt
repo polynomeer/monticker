@@ -1,5 +1,6 @@
 package com.monticker.api.wallet.api
 
+import com.monticker.api.common.aop.RateLimited
 import com.monticker.api.wallet.application.BehaviorScoreService
 import com.monticker.api.wallet.application.EmotionTagService
 import com.monticker.api.wallet.application.LedgerService
@@ -42,6 +43,7 @@ class WalletController(
     )
 
     @GetMapping("/emotion-analysis")
+    @RateLimited(limit = 10, windowSec = 3600, keyPrefix = "wallet.emotion")
     fun getEmotionAnalysis() = ResponseEntity.ok(emotionTagService.getAnalysis(userId()))
 }
 

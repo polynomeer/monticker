@@ -938,7 +938,39 @@ make up-full
 - JWT (Access 15min + Refresh 7d), token rotation on refresh
 - BCryptPasswordEncoder
 - CORS restricted to `localhost:3000` / `*.monticker.io`
-- Rate limiting on public APIs
+- Rate limiting — 2-tier 구조 (아래 참조)
 - Quant ruleset: never serialised to client — server-side evaluation only
 - Ruleset fingerprint (SHA-256) for tamper detection
 - Signal query rate-limited (reverse-engineering prevention)
+
+### Rate Limiting — 2-tier
+
+**Tier 1: `RateLimitFilter` (IP 기반, 인증 전 처리)**
+
+서블릿 필터 레이어에서 IP 주소를 기준으로 전역 제한을 적용한다.
+
+| 경로 | 한도 | 창 | 목적 |
+|------|------|----|------|
+| `POST /api/auth/login` | IP당 10회 | 1분 | 브루트포스 방어 |
+| `POST /api/auth/signup` | IP당 5회 | 10분 | 계정 생성 스팸 방지 |
+| `POST /api/auth/refresh` | IP당 20회 | 1분 | 토큰 갱신 남용 방지 |
+| `/api/auth/**` (기타) | IP당 30회 | 1분 | 인증 전반 보호 |
+| `/api/**` | IP당 300회 | 1분 | 전체 API 보호 |
+
+**Tier 2: `@RateLimited` (userId 기반, 메서드 레벨)**
+
+AOP로 인증된 사용자별 제한을 적용한다. Redis 키: `ratelimit:{prefix}:{userId}`.
+userId는 SecurityContextHolder에서 추출하므로 컨트롤러 메서드 시그니처 변경 불필요.
+
+| 엔드포인트 | 한도 | 창 | keyPrefix |
+|-----------|------|----|-----------|
+| `POST /api/paper/buy` | 60회 | 1분 | `paper.buy` |
+| `POST /api/paper/sell` | 60회 | 1분 | `paper.sell` |
+| `POST /api/paper/reset` | 3회 | 24시간 | `paper.reset` |
+| `POST /api/matching/orders` | 30회 | 1분 | `matching.order` |
+| `DELETE /api/matching/orders/{id}` | 30회 | 1분 | `matching.cancel` |
+| `POST /api/alerts/rules` | 20회 | 1시간 | `alert.create` |
+| `GET /api/stocks/{id}/summary` | 30회 | 1시간 | `ai.summary` |
+| `GET /api/wallet/emotion-analysis` | 10회 | 1시간 | `wallet.emotion` |
+| `POST /api/quant/rulesets/{id}/backtest` | 10회 | 1시간 | `quant.backtest` |
+| `POST /api/batch/jobs/candle-backfill` | 5회 | 1시간 | `batch.candle_backfill` |
