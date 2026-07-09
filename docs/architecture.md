@@ -1174,3 +1174,92 @@ ConfigMap에 축약형(`http://trading-service:8083`)으로 설정된다. 네임
 
 K8s Readiness Probe(`/actuator/health/readiness`)가 Pod가 트래픽을 받을 준비가 됐는지 판단한다.
 Readiness 실패 시 K8s Service의 엔드포인트 목록에서 제거되어 트래픽이 라우팅되지 않는다. 이것이 K8s 환경의 동적 Service Discovery 메커니즘이다.
+
+---
+
+## 확장성 패턴
+
+### Bloom Filter — 뉴스 URL 중복 제거
+
+| 항목 | 값 |
+|------|----|
+| 위치 | `backend/worker` — `NewsBloomFilter` |
+| 구현 | Guava `BloomFilter<String>`, in-memory |
+| 용량 | 2,000,000 URL (종목 5,000 × URL 400) |
+| FPP | 1% (False Positive = 뉴스 누락, 데이터 손실 없음) |
+| 초기화 | `@PostConstruct` — 최근 90일 URL을 DB에서 로드 |
+| 흐름 | `mightContain()` → true: DB 조회 건너뜀 / false: INSERT 시도 → 성공 시 `put()` |
+| 통계 | `hits`(중복 판정 수) / `misses`(신규 판정 수) 카운터, 로그에 주기 출력 |
+
+레플리카 다중화 시 Redis `BF.ADD`/`BF.EXISTS`로 교체 가능하다. 현재는 `@DistributedLock`으로 단일 인스턴스 보장.
+
+---
+
+## 데이터 일관성 패턴
+
+### Saga — 주문 처리 오케스트레이터
+
+분산 트랜잭션 없이 보상 트랜잭션(Compensation)으로 일관성을 보장한다.
+
+#### 단계 (정방향)
+
+```
+INIT → VALIDATED → CASH_RESERVED → ORDER_CREATED → ORDER_FILLED → CASH_SETTLED → COMPLETED
+```
+
+#### 보상 단계 (실패 시 역순)
+
+| 실패 단계 | 보상 액션 |
+|-----------|-----------|
+| ORDER_FILLED 이후 | 미체결 주문 취소 (OrderBook에서 제거) |
+| ORDER_CREATED | 주문 상태 CANCELLED 처리 |
+| CASH_RESERVED | `reserved_amount` 환불 (cash + reserved_amount) |
+
+#### 사가 상태
+
+```
+STARTED → COMPLETED
+        ↘ COMPENSATING → COMPENSATED
+                        ↘ FAILED  (보상도 실패 — 수동 검토)
+```
+
+#### 영속성
+
+`order_sagas` 테이블에 `(id, user_id, current_step, status, reserved_amount, started_at)` 기록.
+기동 후 5분 이상 STARTED/COMPENSATING 상태인 사가를 `recoverIncomplete()` 스케줄러(5분 주기)가 자동 보상 재시도.
+
+---
+
+### CQRS 읽기모델 — portfolio_positions
+
+`paper_trades` 집계를 요청마다 재계산하는 대신, 사전에 집계된 읽기 전용 테이블을 유지한다.
+
+#### 쓰기 측 (Write Model)
+
+- `PaperTradingService.buy()` → `PortfolioPositionProjection.onBuy()` — net_qty 증가, avg_buy_price/total_cost 갱신
+- `PaperTradingService.sell()` → `PortfolioPositionProjection.onSell()` — net_qty 감소, 0이 되면 행 삭제
+- `PaperTradingService.reset()` → `PortfolioPositionProjection.onReset()` — 해당 유저 포지션 전체 삭제
+
+#### 읽기 측 (Read Model)
+
+| 기존 쿼리 | 읽기모델 쿼리 |
+|-----------|---------------|
+| `paper_trades` 전체 집계 (`GROUP BY`, `HAVING`) | `portfolio_positions WHERE user_id = ?` |
+| N개 종목 × 개별 최신가 조회 | `LATERAL JOIN candles_1m` 단일 쿼리 |
+
+- `PaperPortfolioQueryService.buildHoldings()` — `portfolio_positions` 직접 SELECT
+- `WalletService.calcHoldingsValue()` — `portfolio_positions + LATERAL JOIN candles_1m` 단일 쿼리
+
+#### 테이블 구조
+
+```sql
+portfolio_positions (
+    user_id       BIGINT,
+    stock_id      BIGINT,
+    net_qty       INTEGER,       -- 보유 수량
+    avg_buy_price NUMERIC(18,4), -- 평균 매수가
+    total_cost    NUMERIC(18,4), -- 총 매수 금액 (avg_buy_price 갱신에 사용)
+    updated_at    TIMESTAMPTZ,
+    PRIMARY KEY (user_id, stock_id)
+)
+```
