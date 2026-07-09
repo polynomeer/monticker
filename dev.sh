@@ -6,11 +6,23 @@ RED='\033[0;31m'; YELLOW='\033[1;33m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; NC
 
 # ── 옵션 파싱 ─────────────────────────────────────────────────
 WITH_PINPOINT=false
+WITH_KAFKA=false
+WITH_MSA=false
+
 for arg in "$@"; do
   case "$arg" in
     --pinpoint) WITH_PINPOINT=true ;;
+    --kafka)    WITH_KAFKA=true ;;
+    --msa)      WITH_MSA=true; WITH_KAFKA=true ;;  # MSA는 Kafka 필요
     --help|-h)
-      echo "Usage: ./dev.sh [--pinpoint]"
+      echo "Usage: ./dev.sh [options]"
+      echo ""
+      echo "Options:"
+      echo "  (없음)       기본 모드 — API + Worker (MockPriceGenerator) + Web"
+      echo "  --kafka      Kafka 모드 — Kafka + market-gateway + broadcast-gateway 추가"
+      echo "               Worker가 실제 시세 파이프라인(Go→Kafka→Worker)으로 동작"
+      echo "  --msa        MSA 모드  — --kafka + quant-engine + trading-service 컨테이너 추가"
+      echo "               API가 로컬 서비스 대신 MSA 서비스로 위임"
       echo "  --pinpoint   Pinpoint APM 포함 기동 (HBase 초기화 2~3분 소요)"
       exit 0 ;;
   esac
@@ -20,13 +32,18 @@ done
 cleanup() {
   echo ""
   echo "Stopping..."
-  kill "$API_PID" "$WORKER_PID" "$WEB_PID" 2>/dev/null
-  if [ "$WITH_PINPOINT" = true ]; then
-    docker compose --profile pinpoint stop 2>/dev/null
+  kill "$API_PID" "$WORKER_PID" "$WEB_PID" 2>/dev/null || true
+  if [ "$WITH_MSA" = true ]; then
+    docker compose --profile msa stop 2>/dev/null || true
+  elif [ "$WITH_KAFKA" = true ]; then
+    docker compose --profile kafka stop 2>/dev/null || true
+    docker compose stop postgres redis jaeger 2>/dev/null || true
+  elif [ "$WITH_PINPOINT" = true ]; then
+    docker compose --profile pinpoint stop 2>/dev/null || true
   else
-    docker compose stop 2>/dev/null
+    docker compose stop 2>/dev/null || true
   fi
-  wait 2>/dev/null
+  wait 2>/dev/null || true
   echo "Done."
   exit 0
 }
@@ -44,7 +61,6 @@ die() {
     echo -e "${YELLOW}────────────────────────────────${NC}"
     echo "전체 로그: $logfile"
   fi
-  # 남은 프로세스 정리
   kill "$API_PID" "$WORKER_PID" "$WEB_PID" 2>/dev/null || true
   exit 1
 }
@@ -54,7 +70,7 @@ die() {
 wait_for() {
   local name="$1"
   local logfile="$2"
-  local check_fn="$3"   # 함수명: 성공 시 return 0
+  local check_fn="$3"
   local pid="$4"
   local timeout="${5:-90}"
   local elapsed=0
@@ -65,21 +81,17 @@ wait_for() {
     sleep 2
     elapsed=$((elapsed + 2))
 
-    # 성공 확인
     if $check_fn 2>/dev/null; then
-      echo -e "  ${GREEN}${name} OK${NC}  (${elapsed}s, log: ${logfile})"
+      echo -e "  ${GREEN}${name} OK${NC}  (${elapsed}s)"
       return 0
     fi
 
-    # 프로세스 죽었는지 확인
     if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
       die "${name} 프로세스가 예기치 않게 종료되었습니다 (${elapsed}s 경과)" "$logfile"
     fi
 
-    # 10초마다 진행 상황 표시
     if [ $((elapsed % 10)) -eq 0 ]; then
       echo -e "  ${YELLOW}  still waiting... ${elapsed}s / ${timeout}s${NC}"
-      # 오류 키워드가 로그에 있으면 즉시 실패
       if grep -qiE "BUILD FAILED|Exception|ERROR.*Application run failed" "$logfile" 2>/dev/null; then
         die "${name} 시작 중 오류 감지" "$logfile"
       fi
@@ -101,17 +113,31 @@ if ! docker info > /dev/null 2>&1; then
 fi
 
 # ── 포트 정리 ────────────────────────────────────────────────
-echo "Clearing ports 3000, 4318 and 8080..."
+echo "Clearing ports 3000, 8080, 8081..."
 lsof -ti :3000 | xargs kill -9 2>/dev/null || true
 lsof -ti :8080 | xargs kill -9 2>/dev/null || true
+lsof -ti :8081 | xargs kill -9 2>/dev/null || true
 sleep 1
 
 # ── 1. infra ─────────────────────────────────────────────────
+mkdir -p "$ROOT/logs"
 echo ""
-if [ "$WITH_PINPOINT" = true ]; then
+
+if [ "$WITH_MSA" = true ]; then
+  echo "1/4  Starting infra (MSA 모드: postgres + redis + jaeger + kafka + quant-engine + trading-service)..."
+  docker compose up -d postgres redis jaeger 2>&1 | grep -v "^$" || true
+  docker compose --profile msa up -d 2>&1 | grep -v "^$" || true
+
+elif [ "$WITH_KAFKA" = true ]; then
+  echo "1/4  Starting infra (Kafka 모드: postgres + redis + jaeger + kafka + market-gateway + broadcast-gateway)..."
+  docker compose up -d postgres redis jaeger 2>&1 | grep -v "^$" || true
+  docker compose --profile kafka up -d 2>&1 | grep -v "^$" || true
+
+elif [ "$WITH_PINPOINT" = true ]; then
   echo "1/4  Starting infra (postgres + redis + jaeger + pinpoint)..."
   docker compose up -d postgres redis jaeger 2>&1 | grep -v "^$" || true
   docker compose --profile pinpoint up -d 2>&1 | grep -v "^$" || true
+
 else
   echo "1/4  Starting infra (postgres + redis + jaeger)..."
   docker compose up -d postgres redis jaeger 2>&1 | grep -v "^$" || true
@@ -120,23 +146,43 @@ fi
 postgres_ready() { docker compose exec postgres pg_isready -U monticker -q 2>/dev/null; }
 wait_for "postgres" "/dev/null" postgres_ready "" 60
 
-if [ "$WITH_PINPOINT" = true ]; then
-  pinpoint_ready() {
-    docker compose ps pinpoint-web 2>/dev/null | grep -q "healthy"
+if [ "$WITH_KAFKA" = true ]; then
+  kafka_ready() {
+    docker compose exec kafka kafka-topics.sh --bootstrap-server localhost:9092 --list > /dev/null 2>&1
   }
+  wait_for "kafka" "/dev/null" kafka_ready "" 60
+fi
+
+if [ "$WITH_PINPOINT" = true ]; then
+  pinpoint_ready() { docker compose ps pinpoint-web 2>/dev/null | grep -q "healthy"; }
   echo ""
   echo "  Waiting for Pinpoint (HBase 초기화 중, 최대 3분)..."
   wait_for "Pinpoint" "/dev/null" pinpoint_ready "" 180
 fi
 
+if [ "$WITH_MSA" = true ]; then
+  quant_ready()   { /usr/bin/curl -sf http://localhost:8082/actuator/health > /dev/null 2>&1; }
+  trading_ready() { /usr/bin/curl -sf http://localhost:8083/actuator/health > /dev/null 2>&1; }
+  wait_for "quant-engine"    "/dev/null" quant_ready   "" 60
+  wait_for "trading-service" "/dev/null" trading_ready "" 60
+fi
+
 # ── 2. api ───────────────────────────────────────────────────
 echo ""
 echo "2/4  Starting API (port 8080)..."
-mkdir -p "$ROOT/logs"
 cd "$ROOT/backend/api"
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
-PINPOINT_ENABLE=${WITH_PINPOINT} \
-  ./gradlew bootRun --console=plain -q > "$ROOT/logs/api.log" 2>&1 &
+
+# MSA 모드: TRADING_SERVICE_URL / QUANT_ENGINE_URL 활성화
+# Kafka 모드: KAFKA_BROKERS 설정 (Outbox 발행 정상화)
+API_ENV="OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 PINPOINT_ENABLE=${WITH_PINPOINT}"
+if [ "$WITH_MSA" = true ]; then
+  API_ENV="$API_ENV TRADING_SERVICE_URL=http://localhost:8083 QUANT_ENGINE_URL=http://localhost:8082"
+fi
+if [ "$WITH_KAFKA" = true ]; then
+  API_ENV="$API_ENV KAFKA_BROKERS=localhost:9092"
+fi
+
+eval "$API_ENV ./gradlew bootRun --console=plain -q" > "$ROOT/logs/api.log" 2>&1 &
 API_PID=$!
 
 api_ready() {
@@ -147,14 +193,21 @@ wait_for "API" "$ROOT/logs/api.log" api_ready "$API_PID" 120
 
 # ── 3. worker ────────────────────────────────────────────────
 echo ""
-echo "3/4  Starting Worker..."
+echo "3/4  Starting Worker (port 8081)..."
 cd "$ROOT/backend/worker"
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
-PINPOINT_ENABLE=${WITH_PINPOINT} \
-  ./gradlew bootRun --console=plain -q > "$ROOT/logs/worker.log" 2>&1 &
+
+# Kafka 모드: INGESTION_SOURCE=kafka (Go market-gateway → Kafka → Worker)
+# 기본 모드: INGESTION_SOURCE=internal (MockPriceGenerator)
+WORKER_ENV="OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 PINPOINT_ENABLE=${WITH_PINPOINT}"
+if [ "$WITH_KAFKA" = true ]; then
+  WORKER_ENV="$WORKER_ENV INGESTION_SOURCE=kafka KAFKA_BROKERS=localhost:9092"
+fi
+
+eval "$WORKER_ENV ./gradlew bootRun --console=plain -q" > "$ROOT/logs/worker.log" 2>&1 &
 WORKER_PID=$!
 
 worker_ready() {
+  /usr/bin/curl -sf http://localhost:8081/actuator/health > /dev/null 2>&1 ||
   grep -q "Started WorkerApplication" "$ROOT/logs/worker.log" 2>/dev/null
 }
 wait_for "Worker" "$ROOT/logs/worker.log" worker_ready "$WORKER_PID" 90
@@ -174,11 +227,31 @@ wait_for "Web" "$ROOT/logs/web.log" web_ready "$WEB_PID" 60
 echo ""
 echo -e "${GREEN}========================================"
 echo "  monticker is running"
+echo ""
 echo "  Web    → http://localhost:3000"
 echo "  API    → http://localhost:8080"
+echo "  Worker → http://localhost:8081"
 echo "  Jaeger → http://localhost:16686"
+if [ "$WITH_KAFKA" = true ]; then
+echo "  Kafka  → localhost:9092"
+echo "  Broadcast-GW → ws://localhost:9090/ws"
+fi
+if [ "$WITH_MSA" = true ]; then
+echo "  quant-engine    → http://localhost:8082"
+echo "  trading-service → http://localhost:8083"
+fi
 if [ "$WITH_PINPOINT" = true ]; then
 echo "  Pinpoint → http://localhost:18080"
+fi
+echo ""
+
+if [ "$WITH_KAFKA" = true ]; then
+echo "  시세 파이프라인: Go market-gateway → Kafka → Worker"
+elif [ "$WITH_MSA" = true ]; then
+echo "  시세 파이프라인: Go market-gateway → Kafka → Worker"
+else
+echo "  시세 파이프라인: MockPriceGenerator (내부)"
+echo "  [참고] Kafka Outbox는 --kafka 또는 --msa 옵션 시 정상 동작"
 fi
 echo -e "========================================${NC}"
 echo ""
