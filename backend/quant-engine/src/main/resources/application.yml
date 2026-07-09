@@ -22,6 +22,8 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
 
 server:
   port: 8082
@@ -49,15 +51,6 @@ management:
 
 anthropic:
   api-key: ${ANTHROPIC_API_KEY:}
-
-kafka:
-  brokers: ${KAFKA_BROKERS:localhost:9092}
-  # MSA 모드에서 trading-service Kafka 이벤트 수신 여부
-  bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
-
-spring:
-  kafka:
-    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
 
 quant:
   # true: trading-service Kafka 이벤트 구독 (MSA 모드)
