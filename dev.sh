@@ -125,25 +125,17 @@ echo ""
 
 if [ "$WITH_MSA" = true ]; then
   echo "1/4  Starting infra (MSA 모드: postgres + redis + jaeger + kafka + quant-engine + trading-service)..."
-  # MSA 이미지 사전 빌드 확인
-  if ! docker image inspect monticker-quant-engine > /dev/null 2>&1 || \
-     ! docker image inspect monticker-trading-service > /dev/null 2>&1; then
-    echo ""
-    echo -e "${YELLOW}[INFO] MSA 서비스 이미지가 없습니다. 먼저 빌드를 실행합니다 (최초 1회)...${NC}"
-    echo "       (이후 실행에서는 캐시를 사용하므로 빠릅니다)"
-    echo ""
-    docker compose --profile msa build 2>&1 | grep -E "^#|building|DONE|ERROR" || true
-    echo ""
-  fi
+  echo -e "  ${CYAN}Building MSA service images (변경 없으면 캐시 사용)...${NC}"
+  docker compose --profile msa build --quiet 2>&1 || {
+    echo -e "${YELLOW}[WARN] 일부 이미지 빌드 실패. 계속 진행합니다.${NC}"
+  }
   docker compose up -d postgres redis jaeger 2>&1 | grep -v "^$" || true
   docker compose --profile msa up -d --no-build 2>&1 | grep -v "^$" || true
 
 elif [ "$WITH_KAFKA" = true ]; then
   echo "1/4  Starting infra (Kafka 모드: postgres + redis + jaeger + kafka + market-gateway + broadcast-gateway)..."
-  if ! docker image inspect monticker-market-gateway > /dev/null 2>&1; then
-    echo -e "${YELLOW}[INFO] market-gateway 이미지 없음. 빌드 중 (최초 1회)...${NC}"
-    docker compose --profile kafka build market-gateway broadcast-gateway 2>&1 | grep -E "^#|building|DONE|ERROR" || true
-  fi
+  echo -e "  ${CYAN}Building kafka service images (변경 없으면 캐시 사용)...${NC}"
+  docker compose --profile kafka build --quiet 2>&1 || true
   docker compose up -d postgres redis jaeger 2>&1 | grep -v "^$" || true
   docker compose --profile kafka up -d --no-build 2>&1 | grep -v "^$" || true
 
@@ -176,10 +168,11 @@ if [ "$WITH_PINPOINT" = true ]; then
 fi
 
 if [ "$WITH_MSA" = true ]; then
+  # MSA 서비스는 Kafka healthy 이후 Spring Boot 기동까지 포함해 최대 3분
   quant_ready()   { /usr/bin/curl -sf http://localhost:8082/actuator/health > /dev/null 2>&1; }
   trading_ready() { /usr/bin/curl -sf http://localhost:8083/actuator/health > /dev/null 2>&1; }
-  wait_for "quant-engine"    "/dev/null" quant_ready   "" 60
-  wait_for "trading-service" "/dev/null" trading_ready "" 60
+  wait_for "quant-engine"    "/dev/null" quant_ready   "" 180
+  wait_for "trading-service" "/dev/null" trading_ready "" 180
 fi
 
 # ── 2. api ───────────────────────────────────────────────────
