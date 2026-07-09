@@ -901,6 +901,38 @@ make up-full
 
 ---
 
+## Error Handling
+
+### GlobalExceptionHandler (`api/common/exception/GlobalExceptionHandler.kt`)
+
+`@RestControllerAdvice`로 전체 API 모듈의 예외를 일관된 JSON 형식으로 변환한다.
+
+```json
+{
+  "status": 400,
+  "message": "입력값이 올바르지 않습니다",
+  "detail": "price: 0 이상이어야 합니다",
+  "timestamp": "2024-01-15T09:00:00Z"
+}
+```
+
+| 예외 | HTTP 상태 | 처리 |
+|------|-----------|------|
+| `MethodArgumentNotValidException` | 400 | field errors 직렬화 |
+| `HttpMessageNotReadableException` | 400 | JSON 파싱 실패 |
+| `IllegalArgumentException` | 400 | 비즈니스 입력 오류 |
+| `NoSuchElementException` | 404 | 리소스 없음 |
+| `BadCredentialsException` | 401 | 인증 실패 |
+| `AccessDeniedException` | 403 | 권한 없음 |
+| `RiskLimitException` | 422 | 리스크 한도 초과 |
+| `IllegalStateException` (비즈니스) | 409 | 현재가 없음, 잔고 부족 등 |
+| `IllegalStateException` (서버) | 500 | 내부 컴포넌트 오류 (로그 포함) |
+| `ResponseStatusException` | 해당 상태 | MSA 내부 서비스 전파 |
+| `Exception` (catch-all) | 500 | 로그 + 일반 메시지 반환 |
+
+비즈니스 규칙 위반(`현재가`, `보유`, `잔고`, `불가`, `없음` 포함 메시지)은 409로,
+그 외 `IllegalStateException`은 서버 오류(500)로 분류한다.
+
 ## Security
 
 - JWT (Access 15min + Refresh 7d), token rotation on refresh

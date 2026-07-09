@@ -1,10 +1,13 @@
 package com.monticker.worker.push
 
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
+import io.mockk.mockk
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 
 class ExpoPushSenderTest {
-    private val sender = ExpoPushSender()
+    private val cbRegistry: CircuitBreakerRegistry = mockk(relaxed = true)
+    private val sender = ExpoPushSender(cbRegistry)
 
     @Test
     fun `PushMessage has correct defaults`() {

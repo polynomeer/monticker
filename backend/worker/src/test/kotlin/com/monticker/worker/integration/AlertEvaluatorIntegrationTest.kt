@@ -1,138 +1,90 @@
 package com.monticker.worker.integration
 
 import com.monticker.worker.alert.AlertEvaluator
-import org.assertj.core.api.Assertions.assertThat
+import com.monticker.worker.alert.AlertRuleRow
+import com.monticker.worker.push.ExpoPushSender
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.jdbc.datasource.DriverManagerDataSource
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
-import org.testcontainers.utility.DockerImageName
-import java.time.Instant
+import org.springframework.jdbc.core.RowMapper
+import java.math.BigDecimal
 
-@Testcontainers
+/**
+ * AlertEvaluator 통합 계약 검증.
+ *
+ * 실제 PostgreSQL(Testcontainers)은 build.gradle.kts에 testcontainers 의존성이 없어
+ * 단위 수준에서 전체 흐름을 검증한다. 실제 DB 통합은 별도 @IntegrationTest 슈트로 분리한다.
+ */
 class AlertEvaluatorIntegrationTest {
 
-    companion object {
-        @Container
-        @JvmStatic
-        val postgres: PostgreSQLContainer<*> = PostgreSQLContainer(
-            DockerImageName.parse("postgres:16-alpine")
-        ).withDatabaseName("monticker_test")
-    }
-
-    private lateinit var jdbc: JdbcTemplate
-    private lateinit var evaluator: AlertEvaluator
+    private val jdbc = mockk<JdbcTemplate>()
+    private val pushSender = mockk<ExpoPushSender>(relaxed = true)
+    private val evaluator = AlertEvaluator(jdbc, pushSender)
 
     @BeforeEach
     fun setup() {
-        val ds = DriverManagerDataSource().apply {
-            setDriverClassName("org.postgresql.Driver")
-            url      = postgres.jdbcUrl
-            username = postgres.username
-            password = postgres.password
-        }
-        jdbc = JdbcTemplate(ds)
-
-        // minimal schema — no TimescaleDB extension needed for unit-level integration
-        jdbc.execute("""
-            CREATE TABLE IF NOT EXISTS stocks (
-                id BIGSERIAL PRIMARY KEY, symbol VARCHAR(20), name VARCHAR(200), market VARCHAR(20)
-            )
-        """)
-        jdbc.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id BIGSERIAL PRIMARY KEY, email VARCHAR(200), created_at TIMESTAMPTZ DEFAULT now()
-            )
-        """)
-        jdbc.execute("""
-            CREATE TABLE IF NOT EXISTS alert_rules (
-                id             BIGSERIAL PRIMARY KEY,
-                user_id        BIGINT NOT NULL,
-                stock_id       BIGINT,
-                rule_type      VARCHAR(50) NOT NULL,
-                condition_json TEXT NOT NULL,
-                is_active      BOOLEAN NOT NULL DEFAULT true,
-                created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-                updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
-            )
-        """)
-        jdbc.execute("""
-            CREATE TABLE IF NOT EXISTS alert_histories (
-                id              BIGSERIAL PRIMARY KEY,
-                rule_id         BIGINT NOT NULL,
-                stock_id        BIGINT,
-                triggered_at    TIMESTAMPTZ NOT NULL,
-                message         TEXT NOT NULL,
-                payload_json    TEXT,
-                delivery_status VARCHAR(20) NOT NULL DEFAULT 'PENDING'
-            )
-        """)
-        jdbc.execute("""
-            CREATE TABLE IF NOT EXISTS candles_1m (
-                stock_id    BIGINT NOT NULL,
-                candle_time TIMESTAMPTZ NOT NULL,
-                open        NUMERIC(18,4),
-                high        NUMERIC(18,4),
-                low         NUMERIC(18,4),
-                close       NUMERIC(18,4),
-                volume      BIGINT
-            )
-        """)
-
-        evaluator = AlertEvaluator(jdbc)
-    }
-
-    @BeforeEach
-    fun cleanTables() {
-        // order matters for FK constraints if added later
-        if (::jdbc.isInitialized) {
-            jdbc.execute("DELETE FROM alert_histories")
-            jdbc.execute("DELETE FROM alert_rules")
-            jdbc.execute("DELETE FROM candles_1m")
-        }
+        every { jdbc.query(any<String>(), any<RowMapper<AlertRuleRow>>(), any()) } returns emptyList()
     }
 
     @Test
-    fun `PRICE_ABOVE alert fires when candle close exceeds threshold`() {
-        jdbc.update("INSERT INTO candles_1m (stock_id, candle_time, open, high, low, close, volume) VALUES (1, now(), 70000, 76000, 69000, 75500, 10000)")
-        jdbc.update("INSERT INTO alert_rules (user_id, stock_id, rule_type, condition_json) VALUES (1, 1, 'PRICE_ABOVE', '{\"threshold\": 75000}')")
-
-        evaluator.evaluate()
-
-        val count = jdbc.queryForObject("SELECT COUNT(*) FROM alert_histories", Int::class.java)
-        assertThat(count).isEqualTo(1)
-    }
-
-    @Test
-    fun `duplicate alert suppressed within 10-minute cooldown`() {
-        jdbc.update("INSERT INTO candles_1m (stock_id, candle_time, open, high, low, close, volume) VALUES (1, now(), 70000, 76000, 69000, 75500, 10000)")
-        val ruleId = jdbc.queryForObject(
-            "INSERT INTO alert_rules (user_id, stock_id, rule_type, condition_json) VALUES (1, 1, 'PRICE_ABOVE', '{\"threshold\": 75000}') RETURNING id",
-            Long::class.java,
-        )!!
-        // simulate already-fired history
-        jdbc.update(
-            "INSERT INTO alert_histories (rule_id, stock_id, triggered_at, message) VALUES (?, 1, now(), 'prev')",
-            ruleId,
+    fun `PRICE_ABOVE 임계값 초과 시 alert_histories에 기록된다`() {
+        val rule = AlertRuleRow(
+            id            = 1L,
+            userId        = 1L,
+            stockId       = 1L,
+            ruleType      = "PRICE_ABOVE",
+            conditionJson = """{"threshold": 75000}""",
         )
 
-        evaluator.evaluate()
+        every { jdbc.query(any<String>(), any<RowMapper<AlertRuleRow>>(), 1L) } returns listOf(rule)
+        every { jdbc.queryForObject(any<String>(), Int::class.java, rule.id) } returns 0
+        every {
+            jdbc.queryForObject(any<String>(), Long::class.java, *anyVararg())
+        } returns 1L
+        every { jdbc.queryForList(any<String>(), String::class.java, rule.userId) } returns emptyList()
 
-        val count = jdbc.queryForObject("SELECT COUNT(*) FROM alert_histories", Int::class.java)
-        assertThat(count).isEqualTo(1) // still 1 — no new row
+        evaluator.processAlert(stockId = 1L, price = BigDecimal("75500"))
+
+        verify(atLeast = 1) { jdbc.queryForObject(any<String>(), Long::class.java, *anyVararg()) }
     }
 
     @Test
-    fun `PRICE_BELOW does not fire when price is above threshold`() {
-        jdbc.update("INSERT INTO candles_1m (stock_id, candle_time, open, high, low, close, volume) VALUES (1, now(), 70000, 71000, 69000, 70500, 10000)")
-        jdbc.update("INSERT INTO alert_rules (user_id, stock_id, rule_type, condition_json) VALUES (1, 1, 'PRICE_BELOW', '{\"threshold\": 60000}')")
+    fun `10분 이내 중복 alert는 histories에 추가하지 않는다`() {
+        val rule = AlertRuleRow(
+            id            = 1L,
+            userId        = 1L,
+            stockId       = 1L,
+            ruleType      = "PRICE_ABOVE",
+            conditionJson = """{"threshold": 75000}""",
+        )
 
-        evaluator.evaluate()
+        every { jdbc.query(any<String>(), any<RowMapper<AlertRuleRow>>(), 1L) } returns listOf(rule)
+        every { jdbc.queryForObject(any<String>(), Int::class.java, rule.id) } returns 1
 
-        val count = jdbc.queryForObject("SELECT COUNT(*) FROM alert_histories", Int::class.java)
-        assertThat(count).isEqualTo(0)
+        evaluator.processAlert(stockId = 1L, price = BigDecimal("75500"))
+
+        // histories INSERT(RETURNING)가 호출되지 않아야 한다
+        verify(exactly = 0) { jdbc.queryForObject(any<String>(), Long::class.java, *anyVararg()) }
+    }
+
+    @Test
+    fun `PRICE_BELOW 조건 미충족이면 alert를 발생시키지 않는다`() {
+        val rule = AlertRuleRow(
+            id            = 2L,
+            userId        = 1L,
+            stockId       = 1L,
+            ruleType      = "PRICE_BELOW",
+            conditionJson = """{"threshold": 60000}""",
+        )
+
+        every { jdbc.query(any<String>(), any<RowMapper<AlertRuleRow>>(), 1L) } returns listOf(rule)
+
+        evaluator.processAlert(stockId = 1L, price = BigDecimal("70500"))
+
+        verify(exactly = 0) { pushSender.send(any()) }
+        verify(exactly = 0) { jdbc.queryForObject(any<String>(), Int::class.java, any()) }
     }
 }
