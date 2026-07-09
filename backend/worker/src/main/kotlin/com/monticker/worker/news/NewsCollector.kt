@@ -13,10 +13,10 @@ class NewsCollector(
     private val naverClient: NaverNewsClient,
     private val jdbc: JdbcTemplate,
     private val sentimentAnalyzer: NewsSentimentAnalyzer,
+    private val bloomFilter: NewsBloomFilter,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    // 30분마다 활성 종목 전체 뉴스 수집
     @Scheduled(fixedDelay = 1_800_000)
     @DistributedLock(name = "news-collector", ttlSeconds = 1_500)
     fun collect() {
@@ -24,21 +24,22 @@ class NewsCollector(
         if (stocks.isEmpty()) return
 
         var total = 0
+        var skipped = 0
         for ((stockId, stockName) in stocks) {
             val items = fetchNews(stockName)
             for (item in items) {
+                if (bloomFilter.mightContain(item.link)) { skipped++; continue }
                 if (persist(stockId, item)) total++
             }
         }
-        log.info("News sync done: stocks={} inserted={} source={}",
-            stocks.size, total, if (naverClient.isConfigured) "naver" else "mock")
+        log.info("News sync done: stocks={} inserted={} bloom_skipped={} bf_stats=[{}] source={}",
+            stocks.size, total, skipped, bloomFilter.stats(), if (naverClient.isConfigured) "naver" else "mock")
     }
 
-    /**
-     * 단일 뉴스 아이템을 영구 저장한다.
-     * ON CONFLICT (url) DO NOTHING — 중복 삽입은 무시.
-     */
-    fun collectForStock(stockId: Long, item: NewsItem): Boolean = persist(stockId, item)
+    fun collectForStock(stockId: Long, item: NewsItem): Boolean {
+        if (bloomFilter.mightContain(item.link)) return false
+        return persist(stockId, item)
+    }
 
     private fun fetchActiveStocks(): List<Pair<Long, String>> =
         jdbc.query(
@@ -89,6 +90,7 @@ class NewsCollector(
         )
 
         if (inserted > 0) {
+            bloomFilter.put(item.link)
             log.debug("Saved news stockId={} title={} sentiment={}", stockId, item.title.take(60), sentiment)
         }
         return inserted > 0
