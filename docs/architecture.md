@@ -1058,3 +1058,50 @@ K8s 레플리카 2개 이상에서 동일 수집 작업이 중복 실행되는 �
 - `X-Request-Id` 헤더가 있으면 재사용, 없으면 UUID 생성.
 - MDC에 `requestId`로 등록 → 모든 로그에 자동 포함.
 - 응답 헤더 `X-Request-Id`로 클라이언트에 반환.
+
+## Outbox Pattern
+
+Spring Modulith Events를 활용해 이벤트 유실 없는 at-least-once Kafka 발행을 보장한다.
+
+### 동작 흐름
+
+```
+MatchingService.submitOrder()  [트랜잭션 시작]
+  ├─ fills 테이블 INSERT
+  ├─ paper_accounts 잔고 UPDATE
+  └─ event_publication 테이블 INSERT  ← 같은 트랜잭션 (Outbox)
+                                          [트랜잭션 커밋]
+                                              │
+                                    Modulith EventPublisher
+                                              │
+                             ┌────────────────┴──────────────────┐
+                             ▼                                   ▼
+                  Kafka 발행                          In-process listeners
+              trading.order-filled              OrderFilledEventListener (원장)
+              trading.order-cancelled           OrderFilledStrategyListener (quant)
+                             │
+                    completion_date 기록
+                    (event_publication UPDATE)
+```
+
+### 유실 방지 메커니즘
+
+| 상황 | 처리 |
+|------|------|
+| 커밋 전 앱 크래시 | 트랜잭션 롤백 → event_publication도 롤백 → 이벤트 없음 (정상) |
+| 커밋 후 Kafka 장애 | event_publication에 `completion_date = NULL` 유지 |
+| 앱 재시작 | 기동 시 미완료 이벤트 자동 재전송 |
+| Kafka 간헐적 오류 | `OutboxResubmissionConfig`가 5분마다 1분 이상 미완료 이벤트 재전송 |
+
+### 외부화 대상 이벤트
+
+| 이벤트 | Kafka 토픽 | 키 |
+|-------|------------|-----|
+| `OrderFilledEvent` | `trading.order-filled` | `userId` |
+| `OrderCancelledEvent` | `trading.order-cancelled` | `userId` |
+
+### 프로듀서 설정
+
+- `acks=all` — 모든 ISR replica 확인 후 ACK
+- `enable.idempotence=true` — 네트워크 재시도로 인한 중복 발행 방지
+- `retries=3` — 일시 장애 시 자동 재시도
