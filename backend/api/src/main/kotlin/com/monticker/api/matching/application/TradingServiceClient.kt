@@ -1,5 +1,7 @@
 package com.monticker.api.matching.application
 
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.web.client.RestTemplateBuilder
@@ -18,15 +20,17 @@ import java.time.Duration
  * 설정되지 않은 경우(단일 프로세스 모드)에는 null을 반환해
  * 컨트롤러가 로컬 MatchingService를 직접 호출한다.
  *
- * userId는 X-User-Id 헤더로 trading-service에 전달한다.
- * trading-service는 JWT 없이 내부 호출만 받으므로 헤더로 신원을 전파한다.
+ * Circuit Breaker "tradingService": OPEN 시 즉시 null 반환 → 로컬 폴백.
+ * 타임아웃 누적으로 인한 api 쓰레드 풀 고갈을 방지한다.
  */
 @Component
 class TradingServiceClient(
     @Value("\${trading.service.url:}") private val baseUrl: String,
     restTemplateBuilder: RestTemplateBuilder,
+    cbRegistry: CircuitBreakerRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+    private val cb = cbRegistry.circuitBreaker("tradingService")
 
     private val restTemplate: RestTemplate = restTemplateBuilder
         .connectTimeout(Duration.ofSeconds(3))
@@ -37,33 +41,35 @@ class TradingServiceClient(
 
     fun <T> post(path: String, body: Any, responseType: Class<T>, userId: Long? = null): T? {
         if (!isEnabled) return null
-        return try {
+        return execute("[TradingServiceClient] POST $path") {
             restTemplate.postForObject("$baseUrl$path", HttpEntity(body, headers(userId)), responseType)
-        } catch (e: Exception) {
-            log.error("[TradingServiceClient] POST {} 실패: {}", path, e.message)
-            null
         }
     }
 
     fun <T> get(path: String, responseType: ParameterizedTypeReference<T>, userId: Long? = null): T? {
         if (!isEnabled) return null
-        return try {
+        return execute("[TradingServiceClient] GET $path") {
             restTemplate.exchange("$baseUrl$path", HttpMethod.GET, HttpEntity<Unit>(headers(userId)), responseType).body
-        } catch (e: Exception) {
-            log.error("[TradingServiceClient] GET {} 실패: {}", path, e.message)
-            null
         }
     }
 
     fun <T> delete(path: String, responseType: Class<T>, userId: Long? = null): T? {
         if (!isEnabled) return null
-        return try {
+        return execute("[TradingServiceClient] DELETE $path") {
             restTemplate.exchange("$baseUrl$path", HttpMethod.DELETE, HttpEntity<Unit>(headers(userId)), responseType).body
-        } catch (e: Exception) {
-            log.error("[TradingServiceClient] DELETE {} 실패: {}", path, e.message)
-            null
         }
     }
+
+    private fun <T> execute(label: String, block: () -> T?): T? =
+        try {
+            cb.executeCallable { block() }
+        } catch (e: CallNotPermittedException) {
+            log.warn("{} 차단됨 (Circuit OPEN)", label)
+            null
+        } catch (e: Exception) {
+            log.error("{} 실패: {}", label, e.message)
+            null
+        }
 
     private fun headers(userId: Long?): HttpHeaders = HttpHeaders().apply {
         userId?.let { set("X-User-Id", it.toString()) }

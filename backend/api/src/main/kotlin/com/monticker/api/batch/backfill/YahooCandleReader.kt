@@ -2,6 +2,8 @@ package com.monticker.api.batch.backfill
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException
+import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import org.slf4j.LoggerFactory
 import org.springframework.batch.item.ExecutionContext
 import org.springframework.batch.item.ItemStreamReader
@@ -14,7 +16,7 @@ import java.time.ZoneId
 
 /**
  * Yahoo Finance v8 chart API (비공식, 지연 데이터)로 일봉 OHLCV를 읽는다.
- * API가 실패하면 MockCandleGenerator로 폴백한다.
+ * API가 실패하거나 CB가 OPEN 상태이면 MockCandleGenerator로 폴백한다.
  */
 open class YahooCandleReader(
     private val symbol: String,
@@ -23,6 +25,7 @@ open class YahooCandleReader(
     private val toDate: LocalDate,
     private val restTemplate: RestTemplate,
     private val objectMapper: ObjectMapper,
+    private val circuitBreaker: CircuitBreaker,
 ) : ItemStreamReader<CandleOhlcv> {
 
     private val log = LoggerFactory.getLogger(javaClass)
@@ -41,17 +44,25 @@ open class YahooCandleReader(
     override fun update(executionContext: ExecutionContext) {}
     override fun close() {}
 
-    private fun tryFetchFromYahoo(): List<CandleOhlcv>? = runCatching {
+    private fun tryFetchFromYahoo(): List<CandleOhlcv>? =
+        try {
+            circuitBreaker.executeCallable { fetchFromYahoo() }
+        } catch (e: CallNotPermittedException) {
+            log.warn("[CircuitBreaker:yahooFinance] OPEN — 캔들 백필 Mock으로 폴백 ({})", symbol)
+            null
+        } catch (e: Exception) {
+            log.warn("Yahoo Finance 조회 실패 symbol={}: {}", symbol, e.message)
+            null
+        }
+
+    private fun fetchFromYahoo(): List<CandleOhlcv>? {
         val from = fromDate.atStartOfDay(zone).toEpochSecond()
         val to   = toDate.plusDays(1).atStartOfDay(zone).toEpochSecond()
         val url  = "https://query1.finance.yahoo.com/v8/finance/chart/$symbol" +
                    "?interval=1d&period1=$from&period2=$to"
 
         val json = restTemplate.getForObject(url, String::class.java) ?: return null
-        parseYahooResponse(objectMapper.readTree(json))
-    }.getOrElse { e ->
-        log.warn("Yahoo Finance 조회 실패 symbol={}: {}", symbol, e.message)
-        null
+        return parseYahooResponse(objectMapper.readTree(json))
     }
 
     private fun parseYahooResponse(root: JsonNode): List<CandleOhlcv>? {

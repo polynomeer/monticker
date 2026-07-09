@@ -901,6 +901,34 @@ make up-full
 
 ---
 
+## Circuit Breaker
+
+Resilience4j Circuit Breaker를 외부 HTTP 호출 지점마다 적용한다.
+OPEN 상태에서는 즉시 `null`을 반환해 **로컬 폴백** 경로로 전환되므로 타임아웃 누적으로 인한 쓰레드 풀 고갈을 막는다.
+
+### Worker — `CircuitBreakerConfiguration` (worker 모듈)
+
+| CB 이름 | 대상 | 실패율 임계 | 창 | OPEN 대기 | 폴백 |
+|---------|------|-----------|-----|---------|------|
+| `kisApi` | `KisClient` (KIS 실시세) | 50% | 10회 | 30초 | `MockPriceGenerator` |
+| `expoPush` | `ExpoPushSender` (Expo Push) | 60% | 5회 | 60초 | 빈 결과 반환 |
+| `naverNews` | `NaverNewsClient` (뉴스 API) | 50% | 4회 | 5분 | `MockNewsGenerator` |
+| `dartApi` | `DartClient` (DART 공시 API) | 50% | 4회 | **10분** | 빈 리스트 반환 |
+
+### API — `CircuitBreakerConfiguration` (api 모듈)
+
+api 모듈에 `resilience4j-circuitbreaker:2.2.0` 의존성을 추가하고 별도 Bean을 등록했다.
+
+| CB 이름 | 대상 | 실패율 임계 | 창 | OPEN 대기 | 폴백 |
+|---------|------|-----------|-----|---------|------|
+| `tradingService` | `TradingServiceClient` (MSA 프록시) | 50% | 6회 | 20초 | `null` → 로컬 `MatchingService` 직접 호출 |
+| `quantEngine` | `QuantEngineClient` (MSA 프록시) | 50% | 4회 | 30초 | `null` → 로컬 quant 서비스 직접 호출 |
+| `yahooFinance` | `YahooFinanceOrderBookProvider`, `YahooCandleReader` | 60% | 5회 | 2분 | 호가: `null`, 캔들: `MockCandleGenerator` |
+
+> **MSA 프록시 CB 설계 의도**: `TradingServiceClient`/`QuantEngineClient`는 strangler-fig 패턴으로 URL이 설정되지 않으면 로컬 서비스로 폴백한다. CB가 OPEN이 되면 URL이 설정되어 있어도 같은 경로로 빠지므로 api 쓰레드 풀이 보호된다.
+
+---
+
 ## Error Handling
 
 ### GlobalExceptionHandler (`api/common/exception/GlobalExceptionHandler.kt`)

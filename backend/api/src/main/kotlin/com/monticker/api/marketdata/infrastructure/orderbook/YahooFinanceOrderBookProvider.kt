@@ -1,6 +1,8 @@
 package com.monticker.api.marketdata.infrastructure.orderbook
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.stereotype.Component
@@ -34,9 +36,12 @@ import kotlin.random.Random
  */
 @Component
 @ConditionalOnProperty(name = ["orderbook.provider"], havingValue = "yahoo")
-class YahooFinanceOrderBookProvider : OrderBookProvider {
+class YahooFinanceOrderBookProvider(
+    cbRegistry: CircuitBreakerRegistry,
+) : OrderBookProvider {
 
     private val log = LoggerFactory.getLogger(javaClass)
+    private val cb = cbRegistry.circuitBreaker("yahooFinance")
     private val http = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(5))
         .followRedirects(HttpClient.Redirect.NORMAL)
@@ -74,33 +79,39 @@ class YahooFinanceOrderBookProvider : OrderBookProvider {
         return OrderBookSnapshot(asks, bids, Instant.now(), DataSource.YAHOO_FINANCE)
     }
 
-    private fun fetchQuote(yahooSymbol: String): YahooQuote? {
-        return try {
-            val url = "https://query2.finance.yahoo.com/v8/finance/chart/$yahooSymbol?interval=1m&range=1d"
-            val req = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .header("User-Agent", "Mozilla/5.0")
-                .timeout(Duration.ofSeconds(5))
-                .GET()
-                .build()
-            val res = http.send(req, HttpResponse.BodyHandlers.ofString())
-            if (res.statusCode() != 200) {
-                log.warn("Yahoo Finance {}: status={}", yahooSymbol, res.statusCode())
-                return null
-            }
-            val meta = mapper.readTree(res.body())
-                ?.get("chart")?.get("result")?.get(0)?.get("meta") ?: return null
-
-            YahooQuote(
-                regularMarketPrice = meta["regularMarketPrice"]?.decimalValue(),
-                dayHigh            = meta["regularMarketDayHigh"]?.decimalValue() ?: BigDecimal.ZERO,
-                dayLow             = meta["regularMarketDayLow"]?.decimalValue()  ?: BigDecimal.ZERO,
-                dailyVolume        = meta["regularMarketVolume"]?.longValue()      ?: 0L,
-            )
+    private fun fetchQuote(yahooSymbol: String): YahooQuote? =
+        try {
+            cb.executeCallable { fetchQuoteInternal(yahooSymbol) }
+        } catch (e: CallNotPermittedException) {
+            log.warn("[CircuitBreaker:yahooFinance] 요청 차단됨 — 호가 조회 건너뜀 ({})", yahooSymbol)
+            null
         } catch (e: Exception) {
             log.warn("Yahoo Finance fetch failed for {}: {}", yahooSymbol, e.message)
             null
         }
+
+    private fun fetchQuoteInternal(yahooSymbol: String): YahooQuote? {
+        val url = "https://query2.finance.yahoo.com/v8/finance/chart/$yahooSymbol?interval=1m&range=1d"
+        val req = HttpRequest.newBuilder()
+            .uri(URI.create(url))
+            .header("User-Agent", "Mozilla/5.0")
+            .timeout(Duration.ofSeconds(5))
+            .GET()
+            .build()
+        val res = http.send(req, HttpResponse.BodyHandlers.ofString())
+        if (res.statusCode() != 200) {
+            log.warn("Yahoo Finance {}: status={}", yahooSymbol, res.statusCode())
+            return null
+        }
+        val meta = mapper.readTree(res.body())
+            ?.get("chart")?.get("result")?.get(0)?.get("meta") ?: return null
+
+        return YahooQuote(
+            regularMarketPrice = meta["regularMarketPrice"]?.decimalValue(),
+            dayHigh            = meta["regularMarketDayHigh"]?.decimalValue() ?: BigDecimal.ZERO,
+            dayLow             = meta["regularMarketDayLow"]?.decimalValue()  ?: BigDecimal.ZERO,
+            dailyVolume        = meta["regularMarketVolume"]?.longValue()      ?: 0L,
+        )
     }
 
     private fun toYahooSymbol(symbol: String, market: String): String = when (market.uppercase()) {

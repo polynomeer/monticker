@@ -1,6 +1,7 @@
 package com.monticker.api.batch.backfill
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.batch.core.Job
 import org.springframework.batch.core.Step
@@ -25,6 +26,7 @@ class CandleBackfillJobConfig(
     private val dataSource: DataSource,
     private val jdbc: JdbcTemplate,
     private val objectMapper: ObjectMapper,
+    private val cbRegistry: CircuitBreakerRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -91,12 +93,13 @@ class CandleBackfillJobConfig(
     ): YahooCandleReader {
         val symbol = jdbc.queryForObject("SELECT symbol FROM stocks WHERE id = ?", String::class.java, stockId) ?: "UNKNOWN"
         return YahooCandleReader(
-            symbol      = symbol,
-            stockId     = stockId,
-            fromDate    = LocalDate.parse(fromDate),
-            toDate      = LocalDate.parse(toDate),
-            restTemplate = candleBackfillRestTemplate(),
-            objectMapper = objectMapper,
+            symbol         = symbol,
+            stockId        = stockId,
+            fromDate       = LocalDate.parse(fromDate),
+            toDate         = LocalDate.parse(toDate),
+            restTemplate   = candleBackfillRestTemplate(),
+            objectMapper   = objectMapper,
+            circuitBreaker = cbRegistry.circuitBreaker("yahooFinance"),
         )
     }
 }

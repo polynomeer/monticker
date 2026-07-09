@@ -1,6 +1,5 @@
-package com.monticker.worker.resilience
+package com.monticker.api.common.resilience
 
-import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import org.slf4j.LoggerFactory
@@ -17,52 +16,43 @@ class CircuitBreakerConfiguration {
     fun circuitBreakerRegistry(): CircuitBreakerRegistry {
         val registry = CircuitBreakerRegistry.ofDefaults()
 
-        // KIS API — 실 시세 연동. 실패 시 Mock으로 폴백.
-        registry.circuitBreaker("kisApi",
+        // MSA 내부 프록시 — trading-service
+        // 다운 시 api 쓰레드 풀 고갈을 막는 것이 목적. 빠르게 OPEN 후 단일 프로세스(로컬) 폴백.
+        registry.circuitBreaker("tradingService",
             CircuitBreakerConfig.custom()
-                .failureRateThreshold(50f)          // 실패율 50% 초과 시 OPEN
-                .slidingWindowSize(10)               // 최근 10회 기준
-                .waitDurationInOpenState(Duration.ofSeconds(30))  // 30초 후 HALF_OPEN
-                .permittedNumberOfCallsInHalfOpenState(3)
-                .recordExceptions(Exception::class.java)
-                .build()
-        )
-
-        // Expo Push API — 실패해도 비치명적. 더 관대하게 설정.
-        registry.circuitBreaker("expoPush",
-            CircuitBreakerConfig.custom()
-                .failureRateThreshold(60f)
-                .slidingWindowSize(5)
-                .waitDurationInOpenState(Duration.ofSeconds(60))
+                .failureRateThreshold(50f)
+                .slidingWindowSize(6)
+                .waitDurationInOpenState(Duration.ofSeconds(20))
                 .permittedNumberOfCallsInHalfOpenState(2)
                 .recordExceptions(Exception::class.java)
                 .build()
         )
 
-        // Naver News API — 5분 주기 수집. 실패 시 Mock 사용.
-        registry.circuitBreaker("naverNews",
+        // MSA 내부 프록시 — quant-engine
+        // backtest는 30초 타임아웃을 허용하므로 창을 더 보수적으로 설정.
+        registry.circuitBreaker("quantEngine",
             CircuitBreakerConfig.custom()
                 .failureRateThreshold(50f)
                 .slidingWindowSize(4)
-                .waitDurationInOpenState(Duration.ofMinutes(5))
+                .waitDurationInOpenState(Duration.ofSeconds(30))
                 .permittedNumberOfCallsInHalfOpenState(1)
                 .recordExceptions(Exception::class.java)
                 .build()
         )
 
-        // DART 공시 API — 10분마다 수집. API 서버 점검 대응으로 대기 시간 길게 설정.
-        registry.circuitBreaker("dartApi",
+        // Yahoo Finance 호가/캔들 API — 비공식, rate-limit 빈번
+        registry.circuitBreaker("yahooFinance",
             CircuitBreakerConfig.custom()
-                .failureRateThreshold(50f)
-                .slidingWindowSize(4)
-                .waitDurationInOpenState(Duration.ofMinutes(10))
+                .failureRateThreshold(60f)
+                .slidingWindowSize(5)
+                .waitDurationInOpenState(Duration.ofMinutes(2))
                 .permittedNumberOfCallsInHalfOpenState(1)
                 .recordExceptions(Exception::class.java)
                 .build()
         )
 
         // 상태 전이 이벤트 로깅
-        listOf("kisApi", "expoPush", "naverNews", "dartApi").forEach { name ->
+        listOf("tradingService", "quantEngine", "yahooFinance").forEach { name ->
             registry.circuitBreaker(name).eventPublisher
                 .onStateTransition { e ->
                     log.warn("[CircuitBreaker:{}] {} → {}",
@@ -70,7 +60,7 @@ class CircuitBreakerConfiguration {
                         e.stateTransition.fromState,
                         e.stateTransition.toState)
                 }
-                .onCallNotPermitted { _ ->
+                .onCallNotPermitted {
                     log.debug("[CircuitBreaker:{}] 요청 차단됨 (OPEN 상태)", name)
                 }
         }
