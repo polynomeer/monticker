@@ -12,7 +12,11 @@ import java.util.concurrent.Executor
 /**
  * @Async 전역 설정.
  *
- * 두 개의 전용 스레드풀을 선언한다:
+ * 세 개의 전용 스레드풀을 선언한다 (Bulkhead 패턴 — 서로 격리):
+ *
+ * backtestExecutor
+ *   core=2, max=4, queue=20 — CPU-heavy 백테스트 전용.
+ *   queue 초과 시 RejectedExecutionException → BacktestController가 429로 변환.
  *
  * behaviorScoreExecutor
  *   core=4, max=8, queue=200 — BehaviorScore 계산 (CPU 집약적 통계 연산)
@@ -29,6 +33,17 @@ import java.util.concurrent.Executor
 class AsyncConfig : AsyncConfigurer {
 
     private val log = LoggerFactory.getLogger(javaClass)
+
+    @Bean("backtestExecutor")
+    fun backtestExecutor(): Executor = ThreadPoolTaskExecutor().apply {
+        corePoolSize    = 2
+        maxPoolSize     = 4
+        queueCapacity   = 20
+        setThreadNamePrefix("backtest-")
+        setWaitForTasksToCompleteOnShutdown(true)
+        setAwaitTerminationSeconds(60)
+        initialize()
+    }
 
     @Bean("behaviorScoreExecutor")
     fun behaviorScoreExecutor(): Executor = ThreadPoolTaskExecutor().apply {

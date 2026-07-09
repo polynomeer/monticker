@@ -1002,3 +1002,59 @@ userId는 SecurityContextHolder에서 추출하므로 컨트롤러 메서드 시
 | `GET /api/wallet/emotion-analysis` | 10회 | 1시간 | `wallet.emotion` |
 | `POST /api/quant/rulesets/{id}/backtest` | 10회 | 1시간 | `quant.backtest` |
 | `POST /api/batch/jobs/candle-backfill` | 5회 | 1시간 | `batch.candle_backfill` |
+
+## Graceful Shutdown
+
+`server.shutdown: graceful` + `spring.lifecycle.timeout-per-shutdown-phase: 30s`가 api, worker 모두에 설정된다.
+
+K8s가 `SIGTERM`을 보내면:
+1. Tomcat이 새 요청 수락을 중단한다.
+2. 최대 30초간 진행 중인 요청이 완료되길 기다린다.
+3. `@Async` 스레드풀(`backtestExecutor.awaitTermination=60s`, `alertDispatchExecutor.awaitTermination=10s`)도 graceful하게 종료된다.
+
+## Kafka Dead Letter Topic (DLT)
+
+Spring Kafka `@RetryableTopic`을 사용해 소비 실패 시 자동 재시도 후 DLT로 이동한다.
+
+| 토픽 | 재시도 횟수 | 백오프 | DLT 토픽 |
+|------|------------|--------|----------|
+| `market.ticks` | 3회 | 2s × 2 배 | `market.ticks-dlt` |
+| `market.tick-processed` | 3회 | 1s × 2 배 | `market.tick-processed-dlt` |
+| `trading.order-filled` | 4회 | 3s × 2 배 | `trading.order-filled-dlt` |
+
+DLT 핸들러(`@DltHandler`)는 ERROR 레벨 로그를 남긴다. 재처리는 수동 검토 후 DLT 토픽에서 재발행한다.
+
+## Idempotency Key
+
+`X-Idempotency-Key` 헤더로 멱등성을 보장한다. 중복 주문(네트워크 재시도)을 방지한다.
+
+| 엔드포인트 | 적용 | TTL |
+|-----------|------|-----|
+| `POST /api/paper/buy` | ✅ | 24시간 |
+| `POST /api/paper/sell` | ✅ | 24시간 |
+| `POST /api/matching/orders` | ✅ | 24시간 |
+
+Redis 키: `idempotency:{userId}:{X-Idempotency-Key}`. 2xx 응답만 캐싱한다.
+
+## Bulkhead — Backtest 격리
+
+`BacktestController`는 `backtestExecutor`(core=2, max=4, queue=20) 전용 스레드풀로 실행된다.
+CPU-heavy 백테스트 급증이 주문 처리 API 스레드풀에 영향을 주지 않는다.
+queue 초과 시 `RejectedExecutionException` → HTTP 429 반환.
+
+## Distributed Lock — 스케줄러 중복 실행 방지
+
+Redis `SETNX` 기반 `@DistributedLock` AOP를 스케줄러에 적용한다.
+K8s 레플리카 2개 이상에서 동일 수집 작업이 중복 실행되는 것을 방지한다.
+
+| 스케줄러 | 락 이름 | TTL |
+|---------|---------|-----|
+| `NewsCollector.collect` | `news-collector` | 1,500s |
+| `DisclosureCollector.collect` | `disclosure-collector` | 540s |
+
+## Request ID (Correlation ID)
+
+`RequestIdFilter`(Order=1)가 모든 요청에 실행된다.
+- `X-Request-Id` 헤더가 있으면 재사용, 없으면 UUID 생성.
+- MDC에 `requestId`로 등록 → 모든 로그에 자동 포함.
+- 응답 헤더 `X-Request-Id`로 클라이언트에 반환.

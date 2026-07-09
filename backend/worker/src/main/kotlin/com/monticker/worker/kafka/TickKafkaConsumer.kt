@@ -12,7 +12,11 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.kafka.annotation.DltHandler
 import org.springframework.kafka.annotation.KafkaListener
+import org.springframework.kafka.annotation.RetryableTopic
+import org.springframework.kafka.retrytopic.TopicSuffixingStrategy
+import org.springframework.retry.annotation.Backoff
 import org.springframework.stereotype.Component
 
 /**
@@ -51,22 +55,34 @@ class TickKafkaConsumer(
     @Autowired(required = false)
     private var tickProcessedProducer: TickProcessedKafkaProducer? = null
 
+    @RetryableTopic(
+        attempts = "3",
+        backoff = Backoff(delay = 2_000, multiplier = 2.0),
+        topicSuffixingStrategy = TopicSuffixingStrategy.SUFFIX_WITH_INDEX_VALUE,
+        dltTopicSuffix = "-dlt",
+        autoCreateTopics = "false",
+    )
     @KafkaListener(topics = ["market.ticks"], groupId = "monticker-worker")
     fun onTick(record: ConsumerRecord<String, String>) {
-        try {
-            val tick = objectMapper.readValue(record.value(), GeneratedTick::class.java)
-            latencyTracker.recordTickGenerated(tick.stockId, tick.generatedAt)
-            redisTickWriter.write(tick)
-            candleAggregator.onTick(tick)
-            latencyTracker.recordRedisWrite(tick.stockId)
-            eventDetector.detect(tick)
-            latencyTracker.recordBroadcast(tick.stockId)
-            // role=event → Kafka market.tick-processed 발행 (alert 워커가 소비)
-            // role=all   → Spring Event 발행 (AlertEvaluator @EventListener가 in-process 수신)
-            tickProcessedProducer?.publish(tick.stockId, tick.price)
-                ?: eventPublisher.publishEvent(TickProcessedEvent(tick.stockId, tick.price))
-        } catch (e: Exception) {
-            log.error("Kafka 틱 처리 실패 (key={}): {}", record.key(), e.message)
-        }
+        val tick = objectMapper.readValue(record.value(), GeneratedTick::class.java)
+        latencyTracker.recordTickGenerated(tick.stockId, tick.generatedAt)
+        redisTickWriter.write(tick)
+        candleAggregator.onTick(tick)
+        latencyTracker.recordRedisWrite(tick.stockId)
+        eventDetector.detect(tick)
+        latencyTracker.recordBroadcast(tick.stockId)
+        // role=event → Kafka market.tick-processed 발행 (alert 워커가 소비)
+        // role=all   → Spring Event 발행 (AlertEvaluator @EventListener가 in-process 수신)
+        tickProcessedProducer?.publish(tick.stockId, tick.price)
+            ?: eventPublisher.publishEvent(TickProcessedEvent(tick.stockId, tick.price))
+    }
+
+    @DltHandler
+    fun onTickDlt(record: ConsumerRecord<String, String>) {
+        log.error(
+            "[DLT] market.ticks 최종 실패 — 수동 검토 필요. " +
+            "topic={} partition={} offset={} key={}",
+            record.topic(), record.partition(), record.offset(), record.key(),
+        )
     }
 }

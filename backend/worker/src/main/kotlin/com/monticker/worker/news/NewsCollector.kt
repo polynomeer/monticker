@@ -1,5 +1,6 @@
 package com.monticker.worker.news
 
+import com.monticker.worker.common.DistributedLock
 import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Scheduled
@@ -17,6 +18,7 @@ class NewsCollector(
 
     // 30분마다 활성 종목 전체 뉴스 수집
     @Scheduled(fixedDelay = 1_800_000)
+    @DistributedLock(name = "news-collector", ttlSeconds = 1_500)
     fun collect() {
         val stocks = fetchActiveStocks()
         if (stocks.isEmpty()) return

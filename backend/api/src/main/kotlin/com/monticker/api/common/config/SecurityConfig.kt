@@ -2,6 +2,7 @@ package com.monticker.api.common.config
 
 import com.monticker.api.auth.infrastructure.JwtAuthenticationFilter
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
+import com.monticker.api.common.idempotency.IdempotencyFilter
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.HttpMethod
@@ -18,7 +19,10 @@ import org.springframework.web.cors.CorsConfigurationSource
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource
 
 @Configuration
-class SecurityConfig(private val jwtTokenProvider: JwtTokenProvider) {
+class SecurityConfig(
+    private val jwtTokenProvider: JwtTokenProvider,
+    private val idempotencyFilter: IdempotencyFilter,
+) {
 
     @Bean
     fun passwordEncoder(): PasswordEncoder = BCryptPasswordEncoder()
@@ -47,6 +51,10 @@ class SecurityConfig(private val jwtTokenProvider: JwtTokenProvider) {
             .addFilterBefore(
                 JwtAuthenticationFilter(jwtTokenProvider),
                 UsernamePasswordAuthenticationFilter::class.java,
+            )
+            .addFilterAfter(
+                idempotencyFilter,
+                JwtAuthenticationFilter::class.java,
             )
         return http.build()
     }

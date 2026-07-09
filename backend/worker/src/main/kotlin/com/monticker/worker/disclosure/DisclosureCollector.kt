@@ -1,6 +1,7 @@
 package com.monticker.worker.disclosure
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.worker.common.DistributedLock
 import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Scheduled
@@ -21,6 +22,7 @@ class DisclosureCollector(
     private val dateFmt = DateTimeFormatter.ofPattern("yyyyMMdd")
 
     @Scheduled(fixedDelay = 600_000) // 10분마다
+    @DistributedLock(name = "disclosure-collector", ttlSeconds = 540)
     fun collect() {
         val disclosures = if (dartClient.isConfigured) {
             dartClient.fetchRecent(days = 1)
