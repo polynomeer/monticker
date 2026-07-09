@@ -147,10 +147,11 @@ postgres_ready() { docker compose exec postgres pg_isready -U monticker -q 2>/de
 wait_for "postgres" "/dev/null" postgres_ready "" 60
 
 if [ "$WITH_KAFKA" = true ]; then
+  # healthcheck 통과 여부로 확인 (이미지별 bin 경로 차이 회피)
   kafka_ready() {
-    docker compose exec kafka kafka-topics.sh --bootstrap-server localhost:9092 --list > /dev/null 2>&1
+    docker compose ps kafka 2>/dev/null | grep -q "healthy"
   }
-  wait_for "kafka" "/dev/null" kafka_ready "" 60
+  wait_for "kafka" "/dev/null" kafka_ready "" 90
 fi
 
 if [ "$WITH_PINPOINT" = true ]; then
