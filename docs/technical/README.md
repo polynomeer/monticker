@@ -53,12 +53,17 @@ monticker의 핵심 기술 구현에 대한 심층 기술 문서입니다.
 | 문서 | 주제 | 핵심 기술 |
 |------|------|-----------|
 | [eda-event-driven-architecture.md](./eda-event-driven-architecture.md) | EDA 적용 사례 전체 — 도입 배경·설계·트레이드오프 | Spring ApplicationEvent, Modulith, @TransactionalEventListener |
+| [outbox-pattern.md](./outbox-pattern.md) | Outbox Pattern — Spring Modulith Events Kafka | @Externalized, event_publication, at-least-once |
+| [order-saga.md](./order-saga.md) | Order Saga — 주문 처리 분산 트랜잭션 | 보상 트랜잭션, 복구 스케줄러, REQUIRES_NEW |
 | [ddd-domain-driven-design.md](./ddd-domain-driven-design.md) | DDD 적용 검토 — Anemic Model 진단·Rich Model 전환 로드맵 | 상태 전이 메서드, Aggregate Root, Value Object |
+| [cqrs-portfolio-positions.md](./cqrs-portfolio-positions.md) | CQRS 읽기모델 — portfolio_positions | 동기 프로젝션, LATERAL JOIN, N+1 제거 |
 
 ## 신뢰성 및 관측가능성
 
 | 문서 | 주제 | 핵심 기술 |
 |------|------|-----------|
+| [resilience-patterns.md](./resilience-patterns.md) | 신뢰성 패턴 모음 — DLT·Idempotency·Bulkhead·DistributedLock·RequestID | @RetryableTopic, Redis SETNX, MDC, Graceful Shutdown |
+| [bloom-filter-deduplication.md](./bloom-filter-deduplication.md) | Bloom Filter — 뉴스 URL 중복 제거 | Guava BloomFilter, 2M/1%FPP, @PostConstruct 시드 |
 | [circuit-breaker.md](./circuit-breaker.md) | Circuit Breaker 장애 격리 | Resilience4j, 상태 머신 |
 | [opentelemetry-tracing.md](./opentelemetry-tracing.md) | OpenTelemetry 분산 추적 | Jaeger, Micrometer, OTLP |
 | [benchmark-debugging.md](./benchmark-debugging.md) | API 벤치마크 디버깅 포스트모템 | k6, Rate Limiter, SQL Alias |

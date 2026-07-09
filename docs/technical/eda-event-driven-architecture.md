@@ -347,21 +347,51 @@ ALTER TABLE investment_behavior_scores
 
 ---
 
-## 5. 공통 설계 원칙
+## 5. Outbox Pattern — Kafka 외부 발행
 
-### 5-1. 인-프로세스 vs. Kafka 이벤트 선택 기준
+Spring Modulith `@Externalized`를 이용해 인-프로세스 이벤트를 Kafka로 원자적으로 발행한다.
+
+### 5-1. 왜 단순 Kafka publish가 아닌가
+
+DB 커밋 전 Kafka 발행 → DB 롤백 시 이미 발행된 이벤트를 되돌릴 수 없다.  
+Outbox Pattern은 **이벤트를 DB에 먼저 쓰고(같은 트랜잭션)** → 커밋 후 Kafka로 전달한다.
+
+### 5-2. 이벤트 라우팅
+
+```kotlin
+@Externalized("trading.order-filled::#{#this.userId}")
+data class OrderFilledEvent(...)
+
+@Externalized("trading.order-cancelled::#{#this.userId}")
+data class OrderCancelledEvent(...)
+```
+
+- `"trading.order-filled"` — Kafka 토픽
+- `"::#{#this.userId}"` — 파티션 키 (userId 기준 순서 보장)
+
+### 5-3. 발행 흐름
+
+```
+submitOrder() 트랜잭션
+  ├─ orders/fills/paper_accounts 쓰기
+  ├─ publishEvent(OrderFilledEvent) → event_publication INSERT (completion_date = NULL)
+  └─ COMMIT → Spring Modulith가 Kafka 발행 → completion_date = now()
+```
+
+Kafka 발행 실패 시 `completion_date`가 NULL로 남아 재처리 대상이 된다.  
+`OutboxResubmissionConfig`가 5분마다 1분 이상 미완료인 레코드를 재시도한다.
+
+### 5-4. 공통 설계 원칙 — 인-프로세스 vs. Kafka
 
 monticker의 이벤트는 두 종류다:
 
 | 구분 | 방식 | 예시 |
 |---|---|---|
 | **모듈 간 도메인 이벤트** | Spring ApplicationEvent | OrderFilledEvent, GradeChangedEvent |
-| **서비스 간 데이터 스트림** | Kafka topic | market.ticks, market.events |
+| **외부 발행 (Outbox)** | Spring Modulith → Kafka | trading.order-filled, trading.order-cancelled |
+| **서비스 간 데이터 스트림** | Kafka topic (직접) | market.ticks, market.events |
 
-도메인 이벤트를 Kafka로 보내지 않은 이유:
-- **트랜잭션 일관성**: `@TransactionalEventListener(AFTER_COMMIT)`은 동일 프로세스 트랜잭션과 결합된다. Kafka Outbox 패턴 없이 Kafka로 보내면 DB 커밋 전에 메시지가 나갈 수 있다.
-- **운영 복잡도**: 현재 규모에서 Kafka 브로커 장애가 주문 체결을 블로킹해서는 안 된다.
-- **Spring Modulith 통합**: `@Externalized` + `event_publication`이 재처리 보장을 제공한다.
+자세한 내용: [outbox-pattern.md](./outbox-pattern.md)
 
 ### 5-2. @Async 필요 조건
 

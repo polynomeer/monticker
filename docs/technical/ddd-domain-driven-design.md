@@ -488,6 +488,9 @@ class PaperController(
 |-------|-----------|-----------|------|
 | **Phase 5** | `matching`, `paper`, `wallet` | RiskRule·PaperPortfolio·BehaviorScore QueryService 분리, N+1 제거 | ✅ 완료 |
 | **Phase 6** | `analytics` | Pattern·Regime·Portfolio·Tax QueryService 분리, N+1 제거, EfficientFrontier 트랜잭션 버그 수정 | ✅ 완료 |
+| **Phase 7** | `paper`, `wallet` | `portfolio_positions` 읽기모델 테이블 도입 — `paper_trades` 집계 제거, LATERAL JOIN 단일 쿼리 | ✅ 완료 |
+
+Phase 7 상세: [cqrs-portfolio-positions.md](./cqrs-portfolio-positions.md)
 
 ---
 
