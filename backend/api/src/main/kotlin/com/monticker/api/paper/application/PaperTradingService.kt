@@ -19,6 +19,7 @@ class PaperTradingService(
     private val jdbc: JdbcTemplate,
     private val ledgerService: LedgerService,
     private val portfolioQueryService: PaperPortfolioQueryService,
+    private val projection: PortfolioPositionProjection,
 ) {
     private fun getOrCreateAccount(userId: Long): PaperAccount =
         accountRepo.findByUserId(userId).orElseGet {
@@ -40,6 +41,7 @@ class PaperTradingService(
         accountRepo.save(account)
         val trade = tradeRepo.save(PaperTrade(userId = userId, stockId = stockId, side = "BUY",
             quantity = quantity, price = price.amount, amount = amount.amount))
+        projection.onBuy(userId, stockId, quantity, amount.amount)
         ledgerService.recordBuy(userId, trade.id, stockId, amount.amount, account.cash.amount)
         return TradeResultResponse("BUY", stockId, quantity, price.amount, amount.amount, account.cash.amount, trade.id)
     }
@@ -57,6 +59,7 @@ class PaperTradingService(
         accountRepo.save(account)
         val trade = tradeRepo.save(PaperTrade(userId = userId, stockId = stockId, side = "SELL",
             quantity = quantity, price = price.amount, amount = amount.amount))
+        projection.onSell(userId, stockId, quantity)
         ledgerService.recordSell(userId, trade.id, stockId, amount.amount, account.cash.amount)
         return TradeResultResponse("SELL", stockId, quantity, price.amount, amount.amount, account.cash.amount, trade.id)
     }
@@ -66,6 +69,7 @@ class PaperTradingService(
         account.reset()
         accountRepo.save(account)
         jdbc.update("DELETE FROM paper_trades WHERE user_id = ?", userId)
+        projection.onReset(userId)
     }
 }
 

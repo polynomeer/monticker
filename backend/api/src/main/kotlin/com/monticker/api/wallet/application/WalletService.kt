@@ -44,27 +44,20 @@ class WalletService(
     }
 
     private fun calcHoldingsValue(userId: Long): BigDecimal {
-        val rows = jdbc.queryForList(
-            """SELECT stock_id,
-                      SUM(CASE WHEN side='BUY' THEN quantity ELSE -quantity END) AS net_qty
-               FROM paper_trades
-               WHERE user_id = ?
-               GROUP BY stock_id
-               HAVING SUM(CASE WHEN side='BUY' THEN quantity ELSE -quantity END) > 0""",
-            userId
-        )
-        var total = BigDecimal.ZERO
-        for (row in rows) {
-            val stockId = (row["stock_id"] as Number).toLong()
-            val qty = (row["net_qty"] as Number).toInt()
-            val price = runCatching {
-                jdbc.queryForObject(
-                    "SELECT close FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1",
-                    BigDecimal::class.java, stockId
-                )
-            }.getOrNull() ?: continue
-            total = total.add(price.multiply(BigDecimal(qty)))
-        }
-        return total
+        // CQRS 읽기모델: portfolio_positions와 최신 가격을 조인해 보유 평가액을 단일 쿼리로 계산한다.
+        return jdbc.queryForObject(
+            """
+            SELECT COALESCE(SUM(pp.net_qty * c.close), 0)
+            FROM portfolio_positions pp
+            JOIN LATERAL (
+                SELECT close FROM candles_1m
+                WHERE stock_id = pp.stock_id
+                ORDER BY candle_time DESC LIMIT 1
+            ) c ON TRUE
+            WHERE pp.user_id = ? AND pp.net_qty > 0
+            """.trimIndent(),
+            BigDecimal::class.java,
+            userId,
+        ) ?: BigDecimal.ZERO
     }
 }

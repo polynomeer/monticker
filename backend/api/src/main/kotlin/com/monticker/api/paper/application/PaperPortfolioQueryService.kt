@@ -37,23 +37,25 @@ class PaperPortfolioQueryService(
     }
 
     fun buildHoldings(userId: Long): List<HoldingResponse> {
-        val rows = tradeRepo.findHoldings(userId)
-        if (rows.isEmpty()) return emptyList()
+        // CQRS 읽기모델: paper_trades 집계 대신 portfolio_positions를 직접 읽는다.
+        val positions = jdbc.query(
+            "SELECT stock_id, net_qty, avg_buy_price FROM portfolio_positions WHERE user_id = ? AND net_qty > 0",
+            { rs, _ -> Triple(rs.getLong("stock_id"), rs.getInt("net_qty"), rs.getBigDecimal("avg_buy_price")) },
+            userId,
+        )
+        if (positions.isEmpty()) return emptyList()
 
-        val stockIds   = rows.mapNotNull { (it[0] as? Number)?.toLong() }
-        val priceMap   = currentPriceMap(stockIds)
-        val infoMap    = stockInfoMap(stockIds)
+        val stockIds = positions.map { it.first }
+        val priceMap = currentPriceMap(stockIds)
+        val infoMap  = stockInfoMap(stockIds)
 
-        return rows.mapNotNull { row ->
-            val stockId  = (row[0] as Number).toLong()
-            val qty      = (row[1] as Number).toInt()
-            val avgPrice = row[2] as? BigDecimal ?: return@mapNotNull null
-            val cur      = priceMap[stockId] ?: return@mapNotNull null
+        return positions.mapNotNull { (stockId, qty, avgPrice) ->
+            val cur = priceMap[stockId] ?: return@mapNotNull null
             val (symbol, name) = infoMap[stockId] ?: return@mapNotNull null
-            val value    = cur.multiply(BigDecimal(qty))
-            val cost     = avgPrice.multiply(BigDecimal(qty))
-            val pnl      = value - cost
-            val pnlRate  = if (cost > BigDecimal.ZERO)
+            val value   = cur.multiply(BigDecimal(qty))
+            val cost    = avgPrice.multiply(BigDecimal(qty))
+            val pnl     = value - cost
+            val pnlRate = if (cost > BigDecimal.ZERO)
                 pnl.divide(cost, 6, RoundingMode.HALF_UP).multiply(BigDecimal("100")).toDouble() else 0.0
             HoldingResponse(stockId, symbol, name, qty, avgPrice, cur, value, pnl, pnlRate)
         }
