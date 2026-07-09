@@ -1105,3 +1105,72 @@ MatchingService.submitOrder()  [트랜잭션 시작]
 - `acks=all` — 모든 ISR replica 확인 후 ACK
 - `enable.idempotence=true` — 네트워크 재시도로 인한 중복 발행 방지
 - `retries=3` — 일시 장애 시 자동 재시도
+
+## API Gateway
+
+외부 트래픽 진입점은 환경에 따라 다르다.
+
+| 환경 | 게이트웨이 | 파일 |
+|------|----------|------|
+| 로컬 (docker-compose) | NGINX | `infra/docker/nginx/nginx.conf` |
+| K8s | NGINX Ingress Controller | `infra/k8s/base/ingress.yaml` |
+
+### 공통 기능
+
+| 기능 | 구현 |
+|------|------|
+| **Rate Limiting** | K8s: `limit-rps=60`, `limit-connections=20` (IP 기반, burst×5 허용) |
+| **Request ID** | `X-Request-Id` 헤더 주입 — 클라이언트 값 우선, 없으면 UUID 생성 |
+| **Real IP 전달** | `X-Forwarded-For`, `X-Real-IP` → 앱 레벨 `RateLimitFilter`가 사용 |
+| **WebSocket** | `/ws` 경로에 Upgrade/Connection 헤더 처리, 타임아웃 3600s |
+| **Security Headers** | `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` |
+| **CORS** | Ingress 수준에서 허용 origin/method/header 제어 |
+| **업스트림 정보 차단** | `X-Powered-By`, `Server` 헤더 숨김 |
+
+### 라우팅
+
+```
+Client
+  │
+  ▼
+NGINX (Gateway)
+  ├─ /api/**  → api:8080  (Spring Boot)
+  ├─ /ws/**   → api:8080  (WebSocket/STOMP)
+  └─ /**      → web:3000  (Next.js)
+
+api 내부:
+  ├─ TRADING_SERVICE_URL 설정됨 → trading-service:8083 (MSA)
+  ├─ QUANT_ENGINE_URL 설정됨    → quant-engine:8082   (MSA)
+  └─ 미설정                     → 로컬 서비스 직접 호출 (모놀리스)
+```
+
+2-tier Rate Limiting: Gateway(Ingress, 60rps/IP) → 앱(RateLimitFilter, 300req/min/IP + @RateLimited userId)
+
+## Service Discovery
+
+별도 서비스 레지스트리(Consul, Eureka) 없이 **K8s DNS**를 Service Discovery로 사용한다.
+
+### K8s 환경 (prod/staging)
+
+```
+api Pod → DNS 조회: trading-service → K8s Service → trading-service Pod(s)
+```
+
+| 서비스 | K8s DNS 이름 | 포트 | ConfigMap 키 |
+|-------|-------------|------|-------------|
+| trading-service | `trading-service.monticker.svc.cluster.local` | 8083 | `TRADING_SERVICE_URL` |
+| quant-engine | `quant-engine.monticker.svc.cluster.local` | 8082 | `QUANT_ENGINE_URL` |
+
+ConfigMap에 축약형(`http://trading-service:8083`)으로 설정된다. 네임스페이스 내부에서는 서비스 이름만으로 해석된다.
+
+### 환경별 모드
+
+| 환경 | `TRADING_SERVICE_URL` | 동작 |
+|------|-----------------------|------|
+| dev overlay | `""` (비움) | 모놀리스 모드 — api가 로컬 서비스 직접 호출 |
+| base / prod | `http://trading-service:8083` | MSA 모드 — K8s DNS로 서비스 탐색 |
+
+### Readiness Probe = 서비스 헬스체크
+
+K8s Readiness Probe(`/actuator/health/readiness`)가 Pod가 트래픽을 받을 준비가 됐는지 판단한다.
+Readiness 실패 시 K8s Service의 엔드포인트 목록에서 제거되어 트래픽이 라우팅되지 않는다. 이것이 K8s 환경의 동적 Service Discovery 메커니즘이다.

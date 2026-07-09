@@ -20,6 +20,18 @@ patches:
     target:
       kind: Deployment
       name: web
+  # dev: MSA 서비스 URL 비움 → 모놀리스 모드로 동작 (리소스 절약)
+  # prod 배포는 base ConfigMap 값(K8s DNS)을 그대로 사용해 MSA 모드로 동작한다.
+  - patch: |-
+      - op: replace
+        path: /data/TRADING_SERVICE_URL
+        value: ""
+      - op: replace
+        path: /data/QUANT_ENGINE_URL
+        value: ""
+    target:
+      kind: ConfigMap
+      name: monticker-config
 
 images:
   - name: monticker/api

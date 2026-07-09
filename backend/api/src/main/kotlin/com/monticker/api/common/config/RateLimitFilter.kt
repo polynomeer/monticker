@@ -22,7 +22,10 @@ class RateLimitFilter(private val redis: StringRedisTemplate) : OncePerRequestFi
             return
         }
 
-        val ip   = req.remoteAddr
+        // NGINX 프록시 환경: X-Forwarded-For 헤더의 첫 번째 IP를 실제 클라이언트 IP로 사용한다.
+        // 헤더가 없으면 직접 연결 IP를 사용한다.
+        val ip   = req.getHeader("X-Forwarded-For")?.split(",")?.firstOrNull()?.trim()
+                   ?: req.remoteAddr
         val path = req.requestURI
 
         // 엔드포인트별 IP 기반 제한. 인증 엔드포인트는 브루트포스 방어를 위해 더 엄격히 적용한다.

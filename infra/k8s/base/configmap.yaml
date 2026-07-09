@@ -12,6 +12,12 @@ data:
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4318"
   PINPOINT_ENABLE: "false"
   PINPOINT_COLLECTOR_IP: "pinpoint-collector"
+  # Service Discovery: K8s DNS를 통해 MSA 서비스 주소를 자동 해석한다.
+  # 형식: http://{k8s-service-name}:{port}
+  # api 모듈은 이 값이 설정되면 해당 서비스로 요청을 위임하고,
+  # 비어 있으면 단일 프로세스(모놀리스) 모드로 로컬 서비스를 직접 호출한다.
+  TRADING_SERVICE_URL: "http://trading-service:8083"
+  QUANT_ENGINE_URL: "http://quant-engine:8082"
 ---
 apiVersion: v1
 kind: ConfigMap
