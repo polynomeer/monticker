@@ -187,6 +187,10 @@ echo "  tail -f logs/api.log"
 echo "  tail -f logs/worker.log"
 echo "  tail -f logs/web.log"
 echo ""
+echo "차트 데이터 백필 (처음 실행 또는 DB 초기화 후):"
+echo "  pip install -r scripts/requirements-backfill.txt"
+echo "  python scripts/backfill-candles.py"
+echo ""
 echo "Press Ctrl-C to stop all."
 
 wait

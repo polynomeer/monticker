@@ -64,3 +64,8 @@ coverage/
 # ── Claude Code internals ─────────────────────────────────────
 .claude/worktrees/
 logs/
+
+# ── Chart backfill cache ───────────────────────────────────────
+# data/backfill/*.csv 는 Yahoo Finance 다운로드 캐시다.
+# 재실행 시 재사용되지만 커밋하지 않는다.
+data/backfill/*.csv
