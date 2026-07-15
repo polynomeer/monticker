@@ -1,5 +1,6 @@
 package com.monticker.api.watchlist.api
 
+import com.monticker.api.watchlist.application.WatchlistSearchResult
 import com.monticker.api.watchlist.application.WatchlistService
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
@@ -54,7 +55,53 @@ class WatchlistController(
             ResponseEntity.notFound().build()
         }
     }
+
+    /**
+     * 내 관심종목 내 키워드 검색.
+     * 종목명·심볼·섹터·메모를 통합 검색한다.
+     *
+     * GET /api/watchlists/search?query=반도체
+     * GET /api/watchlists/search?query=삼성&limit=10
+     */
+    @GetMapping("/search")
+    fun search(
+        @AuthenticationPrincipal userId: Long,
+        @RequestParam query: String,
+        @RequestParam(defaultValue = "20") limit: Int,
+    ): ResponseEntity<List<WatchlistSearchResponse>> {
+        if (query.isBlank()) return ResponseEntity.badRequest().build()
+        val results = watchlistService.search(userId, query, limit)
+        return ResponseEntity.ok(results.map { WatchlistSearchResponse.from(it) })
+    }
 }
 
 data class CreateGroupRequest(val name: String)
 data class AddItemRequest(val stockId: Long, val memo: String? = null)
+
+data class WatchlistSearchResponse(
+    val itemId: Long,
+    val groupId: Long,
+    val groupName: String,
+    val stockId: Long,
+    val symbol: String,
+    val stockName: String,
+    val sector: String?,
+    val memo: String?,
+    val targetPrice: Double?,
+    val score: Float?,
+) {
+    companion object {
+        fun from(r: WatchlistSearchResult) = WatchlistSearchResponse(
+            itemId      = r.itemId,
+            groupId     = r.groupId,
+            groupName   = r.groupName,
+            stockId     = r.stockId,
+            symbol      = r.symbol,
+            stockName   = r.stockName,
+            sector      = r.sector,
+            memo        = r.memo,
+            targetPrice = r.targetPrice,
+            score       = r.score,
+        )
+    }
+}
