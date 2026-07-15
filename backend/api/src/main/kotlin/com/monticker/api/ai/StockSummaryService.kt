@@ -9,6 +9,8 @@ import com.monticker.api.event.domain.StockEvent
 import com.monticker.api.news.application.NewsService
 import com.monticker.api.news.domain.NewsArticle
 import org.slf4j.LoggerFactory
+import org.springframework.data.elasticsearch.client.elc.NativeQuery
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations
 import org.springframework.stereotype.Service
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -19,10 +21,19 @@ class StockSummaryService(
     private val newsService: NewsService,
     private val anthropicClient: AnthropicClient,
     private val anthropicConfig: AnthropicConfig,
+    private val esOps: ElasticsearchOperations,
+    private val summarySearchRepository: SummarySearchRepository,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
     fun getSummary(stockId: Long, stockName: String): String {
+        // ES 캐시 확인 — 1시간 이내 생성된 요약이 있으면 재사용
+        val cached = findCached(stockId)
+        if (cached != null) {
+            log.debug("Summary cache hit for stockId={}", stockId)
+            return cached.summary
+        }
+
         if (!anthropicConfig.isConfigured) {
             return generateFallbackSummary(stockId)
         }
@@ -47,16 +58,63 @@ class StockSummaryService(
                 .build()
 
             val response = anthropicClient.messages().create(params)
-            response.content().stream()
+            val summary = response.content().stream()
                 .flatMap { it.text().stream() }
                 .map { it.text() }
                 .findFirst()
                 .orElse(generateFallbackSummary(stockId))
+
+            saveToEs(stockId, stockName, summary)
+            summary
         } catch (e: Exception) {
             log.error("Claude API call failed for stockId={}: {}", stockId, e.message)
             generateFallbackSummary(stockId)
         }
     }
+
+    // ── ES 캐시 ──────────────────────────────────────────────────────────────
+
+    private fun findCached(stockId: Long): SummaryDocument? {
+        return try {
+            val since = Instant.now().minus(1, ChronoUnit.HOURS)
+            val query = NativeQuery.builder()
+                .withQuery { q ->
+                    q.bool { b ->
+                        b.filter { f -> f.term { t -> t.field("stockId").value(stockId) } }
+                        b.filter { f ->
+                            f.range { r ->
+                                r.date { d -> d.field("generatedAt").gte(since.toEpochMilli().toString()) }
+                            }
+                        }
+                        b
+                    }
+                }
+                .withMaxResults(1)
+                .build()
+            esOps.search(query, SummaryDocument::class.java).firstOrNull()?.content
+        } catch (e: Exception) {
+            log.debug("ES summary cache lookup failed: {}", e.message)
+            null
+        }
+    }
+
+    private fun saveToEs(stockId: Long, stockName: String, summary: String) {
+        try {
+            summarySearchRepository.save(
+                SummaryDocument(
+                    id          = stockId.toString(),
+                    stockId     = stockId,
+                    stockName   = stockName,
+                    summary     = summary,
+                    generatedAt = Instant.now(),
+                )
+            )
+        } catch (e: Exception) {
+            log.warn("ES summary save failed for stockId={}: {}", stockId, e.message)
+        }
+    }
+
+    // ── 프롬프트 빌더 ────────────────────────────────────────────────────────
 
     private fun buildPrompt(
         stockName: String,
