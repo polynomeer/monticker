@@ -32,6 +32,8 @@ spring:
       port: ${REDIS_PORT:6379}
     mongodb:
       uri: ${MONGODB_URI:mongodb://monticker:monticker@localhost:27017/monticker?authSource=admin}
+    elasticsearch:
+      uris: ${ELASTICSEARCH_URI:http://localhost:9200}
   kafka:
     bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
     producer:
