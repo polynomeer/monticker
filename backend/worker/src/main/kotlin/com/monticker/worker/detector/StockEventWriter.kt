@@ -2,6 +2,7 @@ package com.monticker.worker.detector
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
 import java.sql.Timestamp
@@ -28,6 +29,7 @@ class StockEventWriter(
     private val pushSender: com.monticker.worker.push.ExpoPushSender,
     // ingestion.source=internal일 때는 빈 ObjectProvider — 주입 없이도 동작 (ADR-005)
     private val eventKafkaProducer: org.springframework.beans.factory.ObjectProvider<com.monticker.worker.kafka.EventKafkaProducer>,
+    private val esOps: ElasticsearchOperations,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val objectMapper = ObjectMapper()
@@ -69,10 +71,35 @@ class StockEventWriter(
             objectMapper.writeValueAsString(event.metadataJson),
         )
 
+        val insertedId = jdbcTemplate.queryForObject(
+            "SELECT id FROM stock_events WHERE stock_id = ? AND event_type = ? AND event_time = ?",
+            Long::class.java,
+            event.stockId, event.eventType.name, Timestamp.from(event.eventTime),
+        )
+        if (insertedId != null) indexToEs(insertedId, event)
+
         log.info("Event created: {} {} score={}", event.eventType, event.stockId, event.importanceScore)
         eventKafkaProducer.ifAvailable { it.publish(event) }
         sendEventPush(event)
         return true
+    }
+
+    private fun indexToEs(id: Long, event: DetectedEvent) {
+        try {
+            val doc = StockEventDocument(
+                id              = id.toString(),
+                stockId         = event.stockId,
+                eventType       = event.eventType.name,
+                title           = event.title,
+                description     = event.description,
+                eventTime       = event.eventTime,
+                importanceScore = event.importanceScore,
+                sourceType      = "SYSTEM",
+            )
+            esOps.save(doc)
+        } catch (e: Exception) {
+            log.warn("ES indexing failed for event id={}: {}", id, e.message)
+        }
     }
 
     private fun sendEventPush(event: DetectedEvent) {

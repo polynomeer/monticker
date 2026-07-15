@@ -1,27 +1,76 @@
 package com.monticker.api.event.api
 
+import com.monticker.api.event.application.EventSearchResult
+import com.monticker.api.event.application.EventSearchService
 import com.monticker.api.event.application.EventTimelineService
 import com.monticker.api.event.application.SectorEventSummary
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 
 @RestController
 class EventTimelineController(
     private val eventTimelineService: EventTimelineService,
+    private val eventSearchService: EventSearchService,
 ) {
+    /**
+     * 종목별 이벤트 타임라인.
+     * query / types / minScore 지정 시 ES 전문검색, 미지정 시 DB 조회.
+     *
+     * GET /api/stocks/{stockId}/events
+     * GET /api/stocks/{stockId}/events?query=어닝서프라이즈
+     * GET /api/stocks/{stockId}/events?types=DISCLOSURE_PUBLISHED,NEWS_PUBLISHED&minScore=5
+     */
     @GetMapping("/api/stocks/{stockId}/events")
     fun getTimeline(
         @PathVariable stockId: Long,
-        @RequestParam(required = false) from: Instant? = null,
-        @RequestParam(required = false) to: Instant? = null,
+        @RequestParam(required = false) query: String?,
+        @RequestParam(required = false) types: List<String>?,
+        @RequestParam(defaultValue = "0") minScore: Int,
+        @RequestParam(required = false) from: Instant?,
+        @RequestParam(required = false) to: Instant?,
+        @RequestParam(defaultValue = "50") limit: Int,
     ): ResponseEntity<List<StockEventResponse>> {
-        val events = eventTimelineService.getTimeline(
-            stockId = stockId,
-            from = from ?: Instant.now().minusSeconds(86400),
-            to = to ?: Instant.now(),
-        ).map { StockEventResponse.from(it) }
-        return ResponseEntity.ok(events)
+        val resolvedFrom = from ?: Instant.now().minus(24, ChronoUnit.HOURS)
+        val resolvedTo   = to   ?: Instant.now()
+        val results = eventSearchService.searchByStock(
+            stockId    = stockId,
+            query      = query,
+            eventTypes = types ?: emptyList(),
+            minScore   = minScore,
+            from       = resolvedFrom,
+            to         = resolvedTo,
+            limit      = limit.coerceIn(1, 100),
+        )
+        return ResponseEntity.ok(results.map { StockEventResponse.from(it) })
+    }
+
+    /**
+     * 전 종목 크로스 이벤트 검색.
+     *
+     * GET /api/events/search?query=금리인상
+     * GET /api/events/search?query=AI&types=NEWS_PUBLISHED&minScore=7
+     */
+    @GetMapping("/api/events/search")
+    fun searchAll(
+        @RequestParam query: String,
+        @RequestParam(required = false) types: List<String>?,
+        @RequestParam(defaultValue = "0") minScore: Int,
+        @RequestParam(required = false) from: Instant?,
+        @RequestParam(required = false) to: Instant?,
+        @RequestParam(defaultValue = "50") limit: Int,
+    ): ResponseEntity<List<StockEventResponse>> {
+        if (query.isBlank()) return ResponseEntity.badRequest().build()
+        val results = eventSearchService.searchAll(
+            query      = query,
+            eventTypes = types ?: emptyList(),
+            minScore   = minScore,
+            from       = from,
+            to         = to,
+            limit      = limit.coerceIn(1, 100),
+        )
+        return ResponseEntity.ok(results.map { StockEventResponse.from(it) })
     }
 
     @GetMapping("/api/sectors/events")
