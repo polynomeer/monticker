@@ -16,6 +16,23 @@ services:
       timeout: 5s
       retries: 5
 
+  mongodb:
+    image: mongo:7
+    container_name: monticker-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: monticker
+      MONGO_INITDB_ROOT_PASSWORD: monticker
+      MONGO_INITDB_DATABASE: monticker
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   redis:
     image: redis:7-alpine
     container_name: monticker-redis
@@ -439,6 +456,7 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  mongodb_data:
   prometheus_data:
   grafana_data:
   pinpoint_hbase_data:

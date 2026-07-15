@@ -34,7 +34,7 @@ class AnalyticsController(
         ResponseEntity.ok(taxOptimizerService.findHarvestingCandidates(userId()))
 
     @GetMapping("/position-size/kelly")
-    fun getKellyForRuleSet(@RequestParam ruleSetId: Long) =
+    fun getKellyForRuleSet(@RequestParam ruleSetId: String) =
         ResponseEntity.ok(positionSizerService.calculateKellyForRuleSet(ruleSetId))
 
     @PostMapping("/position-size/kelly")

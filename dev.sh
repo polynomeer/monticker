@@ -129,28 +129,31 @@ if [ "$WITH_MSA" = true ]; then
   docker compose --profile msa build --quiet 2>&1 || {
     echo -e "${YELLOW}[WARN] 일부 이미지 빌드 실패. 계속 진행합니다.${NC}"
   }
-  docker compose up -d postgres redis jaeger 2>&1 | grep -v "^$" || true
+  docker compose up -d postgres redis mongodb jaeger 2>&1 | grep -v "^$" || true
   docker compose --profile msa up -d --no-build 2>&1 | grep -v "^$" || true
 
 elif [ "$WITH_KAFKA" = true ]; then
-  echo "1/4  Starting infra (Kafka 모드: postgres + redis + jaeger + kafka + market-gateway + broadcast-gateway)..."
+  echo "1/4  Starting infra (Kafka 모드: postgres + redis + mongodb + jaeger + kafka + market-gateway + broadcast-gateway)..."
   echo -e "  ${CYAN}Building kafka service images (변경 없으면 캐시 사용)...${NC}"
   docker compose --profile kafka build --quiet 2>&1 || true
-  docker compose up -d postgres redis jaeger 2>&1 | grep -v "^$" || true
+  docker compose up -d postgres redis mongodb jaeger 2>&1 | grep -v "^$" || true
   docker compose --profile kafka up -d --no-build 2>&1 | grep -v "^$" || true
 
 elif [ "$WITH_PINPOINT" = true ]; then
-  echo "1/4  Starting infra (postgres + redis + jaeger + pinpoint)..."
-  docker compose up -d postgres redis jaeger 2>&1 | grep -v "^$" || true
+  echo "1/4  Starting infra (postgres + redis + mongodb + jaeger + pinpoint)..."
+  docker compose up -d postgres redis mongodb jaeger 2>&1 | grep -v "^$" || true
   docker compose --profile pinpoint up -d 2>&1 | grep -v "^$" || true
 
 else
-  echo "1/4  Starting infra (postgres + redis + jaeger)..."
-  docker compose up -d postgres redis jaeger 2>&1 | grep -v "^$" || true
+  echo "1/4  Starting infra (postgres + redis + mongodb + jaeger)..."
+  docker compose up -d postgres redis mongodb jaeger 2>&1 | grep -v "^$" || true
 fi
 
 postgres_ready() { docker compose exec postgres pg_isready -U monticker -q 2>/dev/null; }
 wait_for "postgres" "/dev/null" postgres_ready "" 60
+
+mongodb_ready() { docker compose ps mongodb 2>/dev/null | grep -q "healthy"; }
+wait_for "mongodb" "/dev/null" mongodb_ready "" 60
 
 if [ "$WITH_KAFKA" = true ]; then
   # healthcheck 통과 여부로 확인 (이미지별 bin 경로 차이 회피)

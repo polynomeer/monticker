@@ -3,6 +3,7 @@ package com.monticker.api.quant.api
 import com.monticker.api.common.aop.RateLimited
 import com.monticker.api.common.aop.Timed
 import com.monticker.api.quant.application.*
+import com.monticker.api.quant.domain.RuleVersionEntry
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.web.bind.annotation.*
@@ -22,7 +23,7 @@ class RuleSetController(private val service: RuleSetService) {
         ResponseEntity.ok(service.findByUser(userId()))
 
     @GetMapping("/{id}")
-    fun getById(@PathVariable id: Long): ResponseEntity<*> =
+    fun getById(@PathVariable id: String): ResponseEntity<*> =
         try {
             ResponseEntity.ok(service.findById(id, userId()))
         } catch (e: NoSuchElementException) {
@@ -31,7 +32,7 @@ class RuleSetController(private val service: RuleSetService) {
 
     @PutMapping("/{id}")
     fun update(
-        @PathVariable id: Long,
+        @PathVariable id: String,
         @RequestBody req: UpdateRuleSetRequest,
     ): ResponseEntity<*> =
         try {
@@ -41,20 +42,27 @@ class RuleSetController(private val service: RuleSetService) {
         }
 
     @DeleteMapping("/{id}")
-    fun delete(@PathVariable id: Long): ResponseEntity<Void> {
-        return try {
+    fun delete(@PathVariable id: String): ResponseEntity<Void> =
+        try {
             service.delete(id, userId())
             ResponseEntity.noContent().build()
         } catch (e: NoSuchElementException) {
             ResponseEntity.notFound().build()
         }
-    }
+
+    @GetMapping("/{id}/versions")
+    fun versions(@PathVariable id: String): ResponseEntity<*> =
+        try {
+            ResponseEntity.ok(service.getVersionHistory(id, userId()))
+        } catch (e: NoSuchElementException) {
+            ResponseEntity.notFound().build<Unit>()
+        }
 
     @PostMapping("/{id}/backtest")
     @Timed("quant.backtest", tags = ["module=quant"])
     @RateLimited(limit = 10, windowSec = 3600, keyPrefix = "quant.backtest")
     fun runBacktest(
-        @PathVariable id: Long,
+        @PathVariable id: String,
         @RequestBody req: QuantBacktestRequest,
     ): ResponseEntity<*> =
         try {
@@ -66,7 +74,7 @@ class RuleSetController(private val service: RuleSetService) {
         }
 
     @GetMapping("/{id}/backtest")
-    fun listBacktests(@PathVariable id: Long): ResponseEntity<*> =
+    fun listBacktests(@PathVariable id: String): ResponseEntity<*> =
         try {
             ResponseEntity.ok(service.listBacktestResults(id, userId()))
         } catch (e: NoSuchElementException) {

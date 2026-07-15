@@ -10,7 +10,6 @@ import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.security.MessageDigest
 import java.time.LocalDate
-import java.time.temporal.ChronoUnit
 
 @Service
 class RuleSetService(
@@ -22,63 +21,65 @@ class RuleSetService(
 
     // ─── CRUD ──────────────────────────────────────────────────────────────────
 
-    @Transactional
     fun create(userId: Long, req: CreateRuleSetRequest): RuleSetResponse {
-        val json        = objectMapper.writeValueAsString(req.ruleDefinition)
-        val fingerprint = sha256(json)
-        val entity = RuleSet(
-            userId              = userId,
-            name                = req.name,
-            description         = req.description,
-            ruleDefinition      = json,
-            ruleSetFingerprint  = fingerprint,
+        @Suppress("UNCHECKED_CAST")
+        val defMap = objectMapper.convertValue(req.ruleDefinition, Map::class.java) as Map<String, Any>
+        val fingerprint = sha256(objectMapper.writeValueAsString(defMap))
+        val doc = RuleSetDocument(
+            userId             = userId,
+            name               = req.name,
+            description        = req.description,
+            ruleDefinition     = defMap,
+            ruleSetFingerprint = fingerprint,
         )
-        return ruleSetRepository.save(entity).toResponse()
+        return ruleSetRepository.save(doc).toResponse()
     }
 
     fun findByUser(userId: Long): List<RuleSetResponse> =
         ruleSetRepository.findAllByUserId(userId).map { it.toResponse() }
 
-    fun findById(id: Long, userId: Long): RuleSetResponse =
+    fun findById(id: String, userId: Long): RuleSetResponse =
         ruleSetRepository.findByIdAndUserId(id, userId)
             .orElseThrow { NoSuchElementException("RuleSet $id not found") }
             .toResponse()
 
-    @Transactional
-    fun update(id: Long, userId: Long, req: UpdateRuleSetRequest): RuleSetResponse {
-        val entity = ruleSetRepository.findByIdAndUserId(id, userId)
+    fun update(id: String, userId: Long, req: UpdateRuleSetRequest): RuleSetResponse {
+        val doc = ruleSetRepository.findByIdAndUserId(id, userId)
             .orElseThrow { NoSuchElementException("RuleSet $id not found") }
-        req.name?.let { entity.rename(it) }
-        req.description?.let { entity.updateDescription(it) }
+        req.name?.let { doc.rename(it) }
+        req.description?.let { doc.updateDescription(it) }
         req.ruleDefinition?.let {
-            val json = objectMapper.writeValueAsString(it)
-            entity.updateDefinition(json, sha256(json))
+            @Suppress("UNCHECKED_CAST")
+            val defMap = objectMapper.convertValue(it, Map::class.java) as Map<String, Any>
+            doc.updateDefinition(defMap, sha256(objectMapper.writeValueAsString(defMap)), req.changeSummary)
         }
-        return ruleSetRepository.save(entity).toResponse()
+        return ruleSetRepository.save(doc).toResponse()
     }
 
-    @Transactional
-    fun delete(id: Long, userId: Long) {
-        val entity = ruleSetRepository.findByIdAndUserId(id, userId)
+    fun delete(id: String, userId: Long) {
+        val doc = ruleSetRepository.findByIdAndUserId(id, userId)
             .orElseThrow { NoSuchElementException("RuleSet $id not found") }
-        ruleSetRepository.delete(entity)
+        ruleSetRepository.delete(doc)
+    }
+
+    fun getVersionHistory(id: String, userId: Long): List<RuleVersionEntry> {
+        val doc = ruleSetRepository.findByIdAndUserId(id, userId)
+            .orElseThrow { NoSuchElementException("RuleSet $id not found") }
+        return doc.versions.sortedByDescending { it.version }
     }
 
     // ─── Backtest ──────────────────────────────────────────────────────────────
 
     @Transactional
-    fun runBacktest(id: Long, userId: Long, req: QuantBacktestRequest): QuantBacktestResponse {
-        val ruleSet = ruleSetRepository.findByIdAndUserId(id, userId)
+    fun runBacktest(id: String, userId: Long, req: QuantBacktestRequest): QuantBacktestResponse {
+        val doc = ruleSetRepository.findByIdAndUserId(id, userId)
             .orElseThrow { NoSuchElementException("RuleSet $id not found") }
 
-        // 1. Load 1m candles and aggregate to daily OHLCV
         val candles = loadDailyCandles(req.stockId, req.startDate, req.endDate)
         require(candles.isNotEmpty()) { "No candle data found for stock ${req.stockId}" }
 
-        // 2. Parse rule_definition JSON
-        val ruleDef = parseRuleDefinition(ruleSet.ruleDefinition)
+        val ruleDef = parseRuleDefinition(doc.ruleDefinition)
 
-        // 3. Run engine
         val result = QuantBacktestEngine.run(
             candles        = candles,
             ruleDef        = ruleDef,
@@ -88,11 +89,9 @@ class RuleSetService(
         )
 
         val m = result.metrics
-
-        // 4. Persist
         val entity = QuantBacktestResult(
-            ruleSetId        = ruleSet.id,
-            ruleSetVersion   = ruleSet.version,
+            ruleSetId        = doc.id!!,
+            ruleSetVersion   = doc.version,
             stockId          = req.stockId,
             startDate        = req.startDate,
             endDate          = req.endDate,
@@ -116,15 +115,13 @@ class RuleSetService(
         )
         val saved = backtestResultRepository.save(entity)
 
-        // Update ruleSet status
-        ruleSet.markBacktested()
-        ruleSetRepository.save(ruleSet)
+        doc.markBacktested()
+        ruleSetRepository.save(doc)
 
         return saved.toResponse()
     }
 
-    fun listBacktestResults(id: Long, userId: Long): List<QuantBacktestResponse> {
-        // Verify ownership
+    fun listBacktestResults(id: String, userId: Long): List<QuantBacktestResponse> {
         ruleSetRepository.findByIdAndUserId(id, userId)
             .orElseThrow { NoSuchElementException("RuleSet $id not found") }
         return backtestResultRepository.findAllByRuleSetId(id).map { it.toResponse() }
@@ -132,8 +129,8 @@ class RuleSetService(
 
     // ─── Helpers ───────────────────────────────────────────────────────────────
 
-    private fun loadDailyCandles(stockId: Long, from: LocalDate, to: LocalDate): List<DailyCandle> {
-        return jdbc.query(
+    private fun loadDailyCandles(stockId: Long, from: LocalDate, to: LocalDate): List<DailyCandle> =
+        jdbc.query(
             """
             SELECT
                 DATE(candle_time AT TIME ZONE 'Asia/Seoul') AS d,
@@ -160,12 +157,9 @@ class RuleSetService(
             },
             stockId, from, to,
         )
-    }
 
     @Suppress("UNCHECKED_CAST")
-    private fun parseRuleDefinition(json: String): RuleDefinition {
-        val tree = objectMapper.readValue(json, Map::class.java) as Map<String, Any>
-
+    private fun parseRuleDefinition(def: Map<String, Any>): RuleDefinition {
         fun parseCondition(raw: Map<*, *>): RuleCondition {
             val params = (raw["params"] as? Map<*, *>)
                 ?.entries?.associate { (k, v) -> k.toString() to (v as Any) }
@@ -177,46 +171,43 @@ class RuleSetService(
                 value      = raw["value"],
             )
         }
-
         fun parseGroup(raw: Map<*, *>): RuleGroup {
             val conditions = (raw["conditions"] as List<*>)
                 .filterIsInstance<Map<*, *>>()
                 .map { parseCondition(it) }
             return RuleGroup(operator = raw["operator"] as String, conditions = conditions)
         }
-
-        fun parseSizing(raw: Map<*, *>): PositionSizing =
-            PositionSizing(
-                type  = raw["type"] as String,
-                value = (raw["value"] as Number).toDouble(),
-            )
-
+        fun parseSizing(raw: Map<*, *>) = PositionSizing(
+            type  = raw["type"] as String,
+            value = (raw["value"] as Number).toDouble(),
+        )
         return RuleDefinition(
-            entryRules     = parseGroup(tree["entryRules"] as Map<*, *>),
-            exitRules      = parseGroup(tree["exitRules"] as Map<*, *>),
-            positionSizing = parseSizing(tree["positionSizing"] as Map<*, *>),
+            entryRules     = parseGroup(def["entryRules"] as Map<*, *>),
+            exitRules      = parseGroup(def["exitRules"] as Map<*, *>),
+            positionSizing = parseSizing(def["positionSizing"] as Map<*, *>),
         )
     }
 
     private fun sha256(input: String): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        val bytes  = digest.digest(input.toByteArray(Charsets.UTF_8))
+        val bytes = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))
         return bytes.joinToString("") { "%02x".format(it) }
     }
 
     // ─── Mappers ───────────────────────────────────────────────────────────────
 
-    private fun RuleSet.toResponse() = RuleSetResponse(
-        id          = id,
-        userId      = userId,
-        name        = name,
-        description = description,
-        version     = version,
-        status      = status.name,
-        ruleDefinition = ruleDefinition,
-        fingerprint = ruleSetFingerprint,
-        createdAt   = createdAt.toString(),
-        updatedAt   = updatedAt.toString(),
+    private fun RuleSetDocument.toResponse() = RuleSetResponse(
+        id             = id!!,
+        userId         = userId,
+        name           = name,
+        description    = description,
+        version        = version,
+        status         = status,
+        ruleDefinition = objectMapper.writeValueAsString(ruleDefinition),
+        universeJson   = objectMapper.writeValueAsString(universeJson),
+        fingerprint    = ruleSetFingerprint,
+        versionCount   = versions.size,
+        createdAt      = createdAt.toString(),
+        updatedAt      = updatedAt.toString(),
     )
 
     private fun QuantBacktestResult.toResponse() = QuantBacktestResponse(
@@ -242,7 +233,7 @@ class RuleSetService(
     )
 }
 
-// ─── Request / Response DTOs ────────────────────────────────────────────────
+// ─── DTOs ────────────────────────────────────────────────────────────────────
 
 data class CreateRuleSetRequest(
     val name: String,
@@ -254,6 +245,7 @@ data class UpdateRuleSetRequest(
     val name: String? = null,
     val description: String? = null,
     val ruleDefinition: Any? = null,
+    val changeSummary: String? = null,
 )
 
 data class QuantBacktestRequest(
@@ -264,21 +256,23 @@ data class QuantBacktestRequest(
 )
 
 data class RuleSetResponse(
-    val id: Long,
+    val id: String,
     val userId: Long,
     val name: String,
     val description: String?,
     val version: Int,
     val status: String,
     val ruleDefinition: String,
+    val universeJson: String,
     val fingerprint: String,
+    val versionCount: Int,
     val createdAt: String,
     val updatedAt: String,
 )
 
 data class QuantBacktestResponse(
     val id: Long,
-    val ruleSetId: Long,
+    val ruleSetId: String,
     val ruleSetVersion: Int,
     val stockId: Long,
     val startDate: LocalDate,

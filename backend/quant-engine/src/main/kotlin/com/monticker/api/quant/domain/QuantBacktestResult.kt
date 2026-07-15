@@ -12,8 +12,8 @@ class QuantBacktestResult(
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long = 0,
 
-    @Column(name = "rule_set_id", nullable = false)
-    val ruleSetId: Long,
+    @Column(name = "rule_set_id", nullable = false, length = 24)
+    val ruleSetId: String,
 
     @Column(name = "rule_set_version", nullable = false)
     val ruleSetVersion: Int,

@@ -28,7 +28,7 @@ class PositionSizerService(
         return KellyResult(winRate, avgWinPct, avgLossPct, full, half, recommendation)
     }
 
-    fun calculateKellyForRuleSet(ruleSetId: Long): KellyResult {
+    fun calculateKellyForRuleSet(ruleSetId: String): KellyResult {
         val results = backtestResultRepository.findAllByRuleSetId(ruleSetId)
         val latest = results.maxByOrNull { it.createdAt }
             ?: return calculateKelly(0.0, 0.0, 0.0).copy(
