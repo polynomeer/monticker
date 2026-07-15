@@ -6,6 +6,7 @@ import com.monticker.worker.push.ExpoPushSender
 import com.monticker.worker.push.PushMessage
 import org.slf4j.LoggerFactory
 import org.springframework.context.event.EventListener
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Component
@@ -37,6 +38,7 @@ data class AlertRuleRow(
 class AlertEvaluator(
     private val jdbc: JdbcTemplate,
     private val pushSender: ExpoPushSender,
+    private val esOps: ElasticsearchOperations,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val objectMapper = ObjectMapper()
@@ -132,6 +134,25 @@ class AlertEvaluator(
         val status = if (results.all { it.status == "ok" }) "SENT" else "FAILED"
         jdbc.update("UPDATE alert_histories SET delivery_status = ? WHERE id = ?", status, historyId)
         log.info("[AlertEvaluator] push sent: userId={} status={}", rule.userId, status)
+
+        indexToEs(historyId, rule, message, status, Instant.now())
+    }
+
+    private fun indexToEs(id: Long, rule: AlertRuleRow, message: String, status: String, triggeredAt: Instant) {
+        try {
+            esOps.save(AlertHistoryDocument(
+                id             = id.toString(),
+                ruleId         = rule.id,
+                userId         = rule.userId,
+                stockId        = rule.stockId.takeIf { it != 0L },
+                ruleType       = rule.ruleType,
+                message        = message,
+                deliveryStatus = status,
+                triggeredAt    = triggeredAt,
+            ))
+        } catch (e: Exception) {
+            log.warn("[AlertEvaluator] ES indexing failed for historyId={}: {}", id, e.message)
+        }
     }
 
     private fun buildMessage(rule: AlertRuleRow, price: BigDecimal) = when (rule.ruleType) {

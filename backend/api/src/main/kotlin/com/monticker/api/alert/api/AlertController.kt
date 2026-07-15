@@ -1,5 +1,6 @@
 package com.monticker.api.alert.api
 
+import com.monticker.api.alert.application.AlertHistoryResult
 import com.monticker.api.alert.application.AlertService
 import com.monticker.api.alert.domain.AlertRuleType
 import com.monticker.api.common.aop.RateLimited
@@ -43,6 +44,60 @@ class AlertController(private val alertService: AlertService) {
     @GetMapping("/stats")
     fun getStats() =
         ResponseEntity.ok(alertService.getStats(userId()))
+
+    /**
+     * 내 알림 이력 검색.
+     *
+     * GET /api/alerts/history/search?query=목표가초과
+     * GET /api/alerts/history/search?stockId=1&ruleType=PRICE_ABOVE&deliveryStatus=SENT
+     * GET /api/alerts/history/search?from=2026-01-01T00:00:00Z&to=2026-07-01T00:00:00Z
+     */
+    @GetMapping("/history/search")
+    fun searchHistory(
+        @RequestParam(required = false) query: String?,
+        @RequestParam(required = false) stockId: Long?,
+        @RequestParam(required = false) ruleType: String?,
+        @RequestParam(required = false) deliveryStatus: String?,
+        @RequestParam(required = false) from: Instant?,
+        @RequestParam(required = false) to: Instant?,
+        @RequestParam(defaultValue = "20") limit: Int,
+    ): ResponseEntity<List<AlertHistoryResponse>> {
+        val results = alertService.searchHistory(
+            userId         = userId(),
+            query          = query,
+            stockId        = stockId,
+            ruleType       = ruleType,
+            deliveryStatus = deliveryStatus,
+            from           = from,
+            to             = to,
+            limit          = limit,
+        )
+        return ResponseEntity.ok(results.map { AlertHistoryResponse.from(it) })
+    }
+}
+
+data class AlertHistoryResponse(
+    val id: Long,
+    val ruleId: Long,
+    val stockId: Long?,
+    val ruleType: String,
+    val message: String,
+    val deliveryStatus: String,
+    val triggeredAt: Instant,
+    val score: Float?,
+) {
+    companion object {
+        fun from(r: AlertHistoryResult) = AlertHistoryResponse(
+            id             = r.id,
+            ruleId         = r.ruleId,
+            stockId        = r.stockId,
+            ruleType       = r.ruleType,
+            message        = r.message,
+            deliveryStatus = r.deliveryStatus,
+            triggeredAt    = r.triggeredAt,
+            score          = r.score,
+        )
+    }
 }
 
 data class CreateAlertRuleRequest(
