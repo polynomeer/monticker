@@ -2,7 +2,9 @@ package com.monticker.worker.disclosure
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.worker.common.DistributedLock
+import com.monticker.worker.detector.StockEventDocument
 import org.slf4j.LoggerFactory
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
@@ -16,6 +18,7 @@ import java.time.format.DateTimeFormatter
 class DisclosureCollector(
     private val dartClient: DartClient,
     private val jdbc: JdbcTemplate,
+    private val esOps: ElasticsearchOperations,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val mapper = ObjectMapper()
@@ -92,6 +95,28 @@ class DisclosureCollector(
             importance,
             meta,
         )
+
+        // ES dual-write — DB pk를 rceptNo 기반 dedup key로 조회
+        val insertedId = jdbc.queryForObject(
+            "SELECT id FROM stock_events WHERE stock_id = ? AND source_type = 'DART' AND metadata_json->>'rceptNo' = ?",
+            Long::class.java, stockId, d.rceptNo,
+        )
+        if (insertedId != null) {
+            try {
+                esOps.save(StockEventDocument(
+                    id              = insertedId.toString(),
+                    stockId         = stockId,
+                    eventType       = "DISCLOSURE_PUBLISHED",
+                    title           = "[공시] ${d.reportName}",
+                    description     = "${d.corpName} — ${d.reportName}",
+                    eventTime       = eventTime,
+                    importanceScore = importance,
+                    sourceType      = "DART",
+                ))
+            } catch (e: Exception) {
+                log.warn("ES indexing failed for disclosure rceptNo={}: {}", d.rceptNo, e.message)
+            }
+        }
         return true
     }
 
