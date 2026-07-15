@@ -27,6 +27,7 @@ dependencies {
 	implementation("io.github.resilience4j:resilience4j-kotlin:2.2.0")
 	implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.2.0")
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+	implementation("org.springframework.boot:spring-boot-starter-data-elasticsearch")
 	implementation("org.springframework.boot:spring-boot-starter-aop")
 	implementation("org.springframework.boot:spring-boot-starter-data-redis")
 	implementation("org.springframework.boot:spring-boot-starter-validation")

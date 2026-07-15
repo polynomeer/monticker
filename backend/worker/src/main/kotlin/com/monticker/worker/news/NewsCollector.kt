@@ -2,6 +2,7 @@ package com.monticker.worker.news
 
 import com.monticker.worker.common.DistributedLock
 import org.slf4j.LoggerFactory
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
@@ -14,6 +15,7 @@ class NewsCollector(
     private val jdbc: JdbcTemplate,
     private val sentimentAnalyzer: NewsSentimentAnalyzer,
     private val bloomFilter: NewsBloomFilter,
+    private val esOps: ElasticsearchOperations,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -46,8 +48,8 @@ class NewsCollector(
             "SELECT id, name FROM stocks WHERE is_active = true ORDER BY id LIMIT 200",
         ) { rs, _ -> rs.getLong("id") to rs.getString("name") }
 
-    private fun fetchNews(stockName: String): List<NewsItem> {
-        return if (naverClient.isConfigured) {
+    private fun fetchNews(stockName: String): List<NewsItem> =
+        if (naverClient.isConfigured) {
             naverClient.search(stockName, display = 5).map { n ->
                 NewsItem(
                     title       = n.title,
@@ -68,13 +70,13 @@ class NewsCollector(
                 )
             }
         }
-    }
 
     private fun persist(stockId: Long, item: NewsItem): Boolean {
         val publishedAt = item.publishedAt ?: Instant.now()
         val sentiment   = sentimentAnalyzer.analyze(item.title, item.description)
 
-        val inserted = jdbc.update(
+        // DB 저장 — ON CONFLICT DO NOTHING (url unique)
+        val rows = jdbc.update(
             """
             INSERT INTO news_articles (stock_id, title, description, url, source, published_at, sentiment)
             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -89,11 +91,46 @@ class NewsCollector(
             sentiment,
         )
 
-        if (inserted > 0) {
+        if (rows > 0) {
             bloomFilter.put(item.link)
+
+            // ES dual-write — DB pk는 RETURNING으로 가져올 수 없어서 url 기반 id 생성
+            val esId = fetchIdByUrl(item.link)
+            if (esId != null) {
+                indexToEs(esId, stockId, item, publishedAt, sentiment)
+            }
+
             log.debug("Saved news stockId={} title={} sentiment={}", stockId, item.title.take(60), sentiment)
         }
-        return inserted > 0
+        return rows > 0
+    }
+
+    private fun fetchIdByUrl(url: String): Long? =
+        runCatching {
+            jdbc.queryForObject(
+                "SELECT id FROM news_articles WHERE url = ?",
+                Long::class.java,
+                url,
+            )
+        }.getOrNull()
+
+    private fun indexToEs(id: Long, stockId: Long, item: NewsItem, publishedAt: Instant, sentiment: String?) {
+        try {
+            val doc = NewsDocument(
+                id          = id.toString(),
+                stockId     = stockId,
+                title       = item.title,
+                description = item.description,
+                url         = item.link,
+                source      = item.source,
+                publishedAt = publishedAt,
+                sentiment   = sentiment,
+            )
+            esOps.save(doc)
+        } catch (e: Exception) {
+            // ES 인덱싱 실패는 경고만 — DB 저장은 이미 완료
+            log.warn("ES indexing failed for news id={}: {}", id, e.message)
+        }
     }
 }
 
