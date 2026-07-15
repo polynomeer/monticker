@@ -4,13 +4,17 @@ import com.monticker.api.common.cache.CacheConfig
 import com.monticker.api.common.tracing.Tracing
 import com.monticker.api.screener.domain.ScreenerItem
 import com.monticker.api.screener.infrastructure.ScreenerRepository
-import org.springframework.cache.annotation.CacheEvict
+import com.monticker.api.stock.application.StockSearchService
+import org.slf4j.LoggerFactory
 import org.springframework.cache.annotation.Cacheable
-import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 
 @Service
-class ScreenerService(private val repo: ScreenerRepository) {
+class ScreenerService(
+    private val repo: ScreenerRepository,
+    private val stockSearchService: StockSearchService,
+) {
+    private val log = LoggerFactory.getLogger(javaClass)
 
     /**
      * 스크리너 결과를 5초간 캐싱한다.
@@ -41,6 +45,37 @@ class ScreenerService(private val repo: ScreenerRepository) {
             val total = repo.count(market)
             span.setAttribute("screener.resultCount", items.size.toLong())
             ScreenerResult(items, total, offset + items.size < total)
+        }
+    }
+
+    /**
+     * ES 종목 검색 결과로 스크리너 뷰를 구성한다.
+     * ES → 종목 ID 목록 → DB 시세 조회 파이프라인.
+     * ES 불가 시 DB LIKE 검색으로 폴백한다.
+     */
+    fun search(
+        query: String,
+        sort: String = "amount",
+        limit: Int   = 20,
+    ): ScreenerResult {
+        return Tracing.span("screener.search", mapOf("screener.query" to query)) { span ->
+            val stockIds = try {
+                stockSearchService.search(query)
+                    .take(limit)
+                    .map { it.id }
+            } catch (e: Exception) {
+                log.warn("ES stock search failed in screener, falling back to DB: {}", e.message)
+                emptyList()
+            }
+
+            if (stockIds.isEmpty()) {
+                span.setAttribute("screener.resultCount", 0L)
+                return@span ScreenerResult(emptyList(), 0, false)
+            }
+
+            val items = repo.findItemsByStockIds(stockIds, sort)
+            span.setAttribute("screener.resultCount", items.size.toLong())
+            ScreenerResult(items, items.size, false)
         }
     }
 }
