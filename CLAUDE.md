@@ -18,6 +18,7 @@ Once development begins, update this file with:
 - [docs/workflow.md](docs/workflow.md) — Claude Code development workflow, subagents, hooks, CI/CD
 - [docs/data-model.md](docs/data-model.md) — full DB schema (PostgreSQL, TimescaleDB, Redis key conventions)
 - [docs/external-apis.md](docs/external-apis.md) — stock price, news, disclosure, AI provider candidates and setup
+- [docs/elasticsearch.md](docs/elasticsearch.md) — ES 인덱스 6개·도메인 8개 적용 현황, 파이프라인, fallback 전략
 - [docs/decisions/](docs/decisions/) — Architecture Decision Records (ADRs)
 - [docs/technical/](docs/technical/README.md) — implementation deep-dives (how it was built)
 - [docs/domain/](docs/domain/README.md) — product/business rationale (why it was designed this way)
