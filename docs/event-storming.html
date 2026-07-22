@@ -1,0 +1,597 @@
+<title>Event Storming — monticker</title>
+<style>
+:root {
+  --board-bg: #16213e;
+  --lane-even: rgba(255,255,255,0.03);
+  --lane-odd: rgba(255,255,255,0.015);
+  --lane-border: rgba(255,255,255,0.07);
+  --label-bg: rgba(0,0,0,0.4);
+  --label-text: #a0b0cc;
+  --note-shadow: 0 3px 10px rgba(0,0,0,0.5);
+
+  /* sticky note colors */
+  --c-cmd:  #1565C0; --c-cmd-t:  #fff;
+  --c-evt:  #BF360C; --c-evt-t:  #fff;
+  --c-agg:  #F57F17; --c-agg-t:  #1a1a1a;
+  --c-pol:  #4A148C; --c-pol-t:  #fff;
+  --c-ext:  #880E4F; --c-ext-t:  #fff;
+  --c-rm:   #1B5E20; --c-rm-t:   #fff;
+}
+@media (prefers-color-scheme: light) { :root { --board-bg: #2a2d3e; } }
+:root[data-theme="light"] { --board-bg: #2a2d3e; }
+
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #111;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  color: #e0e0e0;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+}
+
+/* ── HEADER ── */
+#hdr {
+  flex-shrink: 0;
+  background: #0d0d1a;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+#hdr h1 { font-size: 15px; font-weight: 700; color: #fff; letter-spacing: -0.3px; }
+#hdr .subtitle { font-size: 12px; color: #7a8ba0; }
+.legend { display: flex; gap: 10px; flex-wrap: wrap; margin-left: auto; }
+.leg-item {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; color: #a0b0cc;
+}
+.leg-dot {
+  width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0;
+}
+.ctrl-btn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #ccc;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.ctrl-btn:hover { background: rgba(255,255,255,0.15); }
+
+/* ── BOARD CONTAINER ── */
+#board-wrap {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+#board-scroll {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  cursor: grab;
+}
+#board-scroll:active { cursor: grabbing; }
+#board-scroll.panning { cursor: grabbing; }
+
+#board {
+  position: relative;
+  background: var(--board-bg);
+  /* Set by JS */
+}
+
+/* ── LANE ── */
+.lane {
+  position: absolute;
+  left: 0; right: 0;
+  border-top: 1px solid var(--lane-border);
+}
+.lane:nth-child(odd)  { background: var(--lane-even); }
+.lane:nth-child(even) { background: var(--lane-odd); }
+
+.lane-label {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 155px;
+  padding: 0 12px;
+  background: var(--label-bg);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border-right: 1px solid rgba(255,255,255,0.08);
+}
+.lane-label .bc-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: #c8d8f0;
+  letter-spacing: 0.03em;
+  line-height: 1.3;
+}
+.lane-label .bc-module {
+  font-size: 9px;
+  color: #5a7090;
+  margin-top: 3px;
+  font-family: ui-monospace, monospace;
+}
+
+/* ── STICKY NOTE ── */
+.note {
+  position: absolute;
+  border-radius: 3px;
+  box-shadow: var(--note-shadow);
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 6px 8px;
+  overflow: hidden;
+}
+.note::after {
+  content: '';
+  position: absolute;
+  bottom: 0; right: 0;
+  width: 0; height: 0;
+  border-style: solid;
+  border-width: 0 0 12px 12px;
+  border-color: transparent transparent rgba(0,0,0,0.25) transparent;
+}
+.note:hover {
+  transform: translateY(-3px) scale(1.04);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  z-index: 100;
+}
+.note .n-text {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: pre-line;
+}
+.note .n-sub {
+  font-size: 9px;
+  opacity: 0.75;
+  margin-top: 3px;
+  line-height: 1.2;
+  white-space: pre-line;
+}
+
+/* ── SVG ARROWS ── */
+#arrows-svg {
+  position: absolute;
+  top: 0; left: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+.arrow-line {
+  stroke-width: 1.8;
+  fill: none;
+  stroke-dasharray: 5 3;
+  opacity: 0.7;
+}
+.arrow-label {
+  font-size: 9px;
+  fill: #8ab4d8;
+  font-family: -apple-system, system-ui, sans-serif;
+}
+marker path { }
+
+/* ── TOOLTIP ── */
+#tooltip {
+  position: fixed;
+  background: rgba(10,15,30,0.95);
+  border: 1px solid rgba(100,150,220,0.4);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: #c8d8f0;
+  pointer-events: none;
+  z-index: 999;
+  display: none;
+  max-width: 260px;
+  line-height: 1.5;
+}
+#tooltip .tt-file {
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  color: #4ec9b0;
+  margin-top: 4px;
+}
+
+/* ── HOTSPOT ── */
+.hotspot {
+  position: absolute;
+  border: 2px dashed #ff4444;
+  border-radius: 4px;
+  background: rgba(255,68,68,0.07);
+}
+.hotspot-label {
+  position: absolute;
+  top: -18px; left: 4px;
+  font-size: 9px; color: #ff6666;
+  font-weight: 600;
+}
+</style>
+
+<div id="hdr">
+  <div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <svg width="18" height="18" viewBox="0 0 18 18"><rect width="18" height="18" rx="3" fill="#f57f17"/><rect x="3" y="4" width="12" height="2" rx="1" fill="#fff"/><rect x="3" y="8" width="12" height="2" rx="1" fill="#fff"/><rect x="3" y="12" width="8" height="2" rx="1" fill="#fff"/></svg>
+      <h1>Event Storming — monticker</h1>
+    </div>
+    <div class="subtitle">DDD 이벤트 스토밍 · 9개 바운디드 컨텍스트 · 주요 도메인 이벤트 흐름</div>
+  </div>
+  <div class="legend">
+    <div class="leg-item"><div class="leg-dot" style="background:#1565C0"></div>Command</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#BF360C"></div>Domain Event</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#F57F17"></div>Aggregate</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#4A148C"></div>Policy</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#880E4F"></div>External</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#1B5E20"></div>Read Model</div>
+  </div>
+  <div style="display:flex;gap:6px;margin-left:12px">
+    <button class="ctrl-btn" onclick="zoom(0.15)">＋</button>
+    <button class="ctrl-btn" onclick="zoom(-0.15)">－</button>
+    <button class="ctrl-btn" onclick="resetZoom()">↺ Reset</button>
+  </div>
+</div>
+
+<div id="board-wrap">
+  <div id="board-scroll">
+    <div id="board">
+      <svg id="arrows-svg"></svg>
+      <div id="tooltip"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const HEADER_W = 155;
+const COL_W    = 155;
+const ROW_H    = 140;
+const NOTE_W   = 118;
+const NOTE_H   = 80;
+const COLS     = 11;
+const PAD_TOP  = 30;
+
+const COLORS = {
+  cmd: { bg:'#1565C0', t:'#fff' },
+  evt: { bg:'#BF360C', t:'#fff' },
+  agg: { bg:'#E65100', t:'#fff' },  // use a slightly lighter orange for aggregate to differentiate
+  pol: { bg:'#4A148C', t:'#fff' },
+  ext: { bg:'#880E4F', t:'#fff' },
+  rm:  { bg:'#1B5E20', t:'#fff' },
+};
+// Override agg to yellow
+COLORS.agg = { bg:'#F57F17', t:'#1a1a1a' };
+
+const BCs = [
+  { name:'시장 데이터\n(Market Data)',   module:'worker · MarketGateway' },
+  { name:'뉴스 & 공시',                  module:'worker · NewsCollector\nDisclosureCollector' },
+  { name:'이벤트 탐지',                  module:'worker · Detector\nStockEventWriter' },
+  { name:'알림 (Alert)',                  module:'worker · AlertEvaluator\napi · AlertService' },
+  { name:'관심종목\n(Watchlist)',         module:'api · WatchlistService' },
+  { name:'퀀트 & 백테스트',              module:'api · RuleSetService\nquant-engine' },
+  { name:'주문 & 매칭\n(Order/Matching)', module:'api · MatchingService\nOrderSagaOrchestrator' },
+  { name:'지갑 & 투자\n(Wallet)',         module:'api · WalletService\nLedgerService' },
+  { name:'AI & 검색 (ES)',               module:'api · StockSummaryService\n6개 ES 인덱스' },
+];
+
+// notes: { r, c, type, text, sub, file, id }
+const notes = [
+  // ─── Row 0: Market Data ───
+  { r:0, c:0, type:'ext', text:'KIS API\n/ Mock', sub:'시세 공급원' },
+  { r:0, c:1, type:'cmd', text:'틱 수신', sub:'RecordTick', file:'worker/tick/TickKafkaConsumer' },
+  { r:0, c:2, type:'agg', text:'PriceTick', sub:'Aggregate', file:'worker/tick/TickProcessedEvent' },
+  { r:0, c:3, type:'evt', text:'Tick\nRecorded', sub:'TickProcessedEvent', file:'worker/tick/TickKafkaConsumer', id:'e_tick' },
+  { r:0, c:5, type:'evt', text:'Candle\nAggregated', sub:'1m · 1d 캔들', file:'worker/candle/CandleAggregator' },
+
+  // ─── Row 1: News & Disclosure ───
+  { r:1, c:0, type:'ext', text:'Naver\nNews API', sub:'외부 뉴스 소스' },
+  { r:1, c:1, type:'cmd', text:'뉴스 수집', sub:'30분 주기', file:'worker/news/NewsCollector' },
+  { r:1, c:2, type:'agg', text:'NewsArticle', sub:'Aggregate', file:'worker/news/NewsCollector' },
+  { r:1, c:3, type:'evt', text:'News\nPublished', sub:'news_articles 저장', file:'worker/news/NewsCollector', id:'e_news' },
+  { r:1, c:4, type:'evt', text:'Sentiment\nAnalyzed', sub:'POSITIVE/NEGATIVE', file:'worker/news/NewsSentimentAnalyzer' },
+  { r:1, c:6, type:'ext', text:'DART\nAPI', sub:'공시 수집' },
+  { r:1, c:7, type:'cmd', text:'공시 수집', sub:'10분 주기', file:'worker/disclosure/DisclosureCollector' },
+  { r:1, c:8, type:'evt', text:'Disclosure\nPublished', sub:'rceptNo dedup', file:'worker/disclosure/DisclosureCollector', id:'e_disc' },
+
+  // ─── Row 2: Event Detection ───
+  { r:2, c:3, type:'pol', text:'가격/거래량\n이상 탐지', sub:'Policy', file:'worker/detector/PriceSpikeDetector\nVolumeSurgeDetector', id:'p_detect' },
+  { r:2, c:5, type:'agg', text:'StockEvent', sub:'Aggregate', file:'api/event/domain/StockEvent' },
+  { r:2, c:6, type:'evt', text:'PriceSpike\nDetected', sub:'PRICE_SPIKE/DROP', file:'worker/detector/StockEventWriter' },
+  { r:2, c:7, type:'evt', text:'VolumeSurge\nDetected', sub:'VOLUME_SURGE', file:'worker/detector/VolumeSurgeDetector' },
+  { r:2, c:8, type:'evt', text:'Disclosure\nEvent Created', sub:'DISCLOSURE_PUBLISHED', file:'worker/disclosure/DisclosureCollector' },
+
+  // ─── Row 3: Alert ───
+  { r:3, c:0, type:'cmd', text:'알림규칙 생성', sub:'CreateAlertRule', file:'api/alert/api/AlertController' },
+  { r:3, c:1, type:'agg', text:'AlertRule', sub:'Aggregate', file:'api/alert/domain/AlertRule' },
+  { r:3, c:2, type:'evt', text:'AlertRule\nCreated', sub:'PRICE_ABOVE 등', file:'api/alert/application/AlertService' },
+  { r:3, c:3, type:'pol', text:'규칙 평가\n(틱 단위)', sub:'Policy', file:'worker/alert/AlertEvaluator', id:'p_alert' },
+  { r:3, c:5, type:'evt', text:'Alert\nFired', sub:'임계값 충족', file:'worker/alert/AlertEvaluator', id:'e_alert' },
+  { r:3, c:6, type:'pol', text:'Push\n발송', sub:'ExpoPushSender', file:'worker/push/ExpoPushSender' },
+  { r:3, c:7, type:'evt', text:'Push\nSent', sub:'SENT / FAILED', file:'worker/alert/AlertEvaluator' },
+
+  // ─── Row 4: Watchlist ───
+  { r:4, c:0, type:'cmd', text:'관심종목 추가', sub:'AddItem', file:'api/watchlist/api/WatchlistController' },
+  { r:4, c:1, type:'agg', text:'Watchlist\nItem', sub:'Aggregate', file:'api/watchlist/domain/WatchlistItem' },
+  { r:4, c:2, type:'evt', text:'Watchlist\nItem Added', sub:'그룹·종목·메모', file:'api/watchlist/application/WatchlistService' },
+  { r:4, c:3, type:'pol', text:'ES\n인덱싱', sub:'watchlist_items', file:'api/watchlist/application/WatchlistService' },
+  { r:4, c:4, type:'rm',  text:'관심종목\n검색뷰', sub:'GET /watchlists/search', file:'api/watchlist/api/WatchlistController' },
+  { r:4, c:6, type:'cmd', text:'관심종목 제거', sub:'RemoveItem', file:'api/watchlist/api/WatchlistController' },
+  { r:4, c:7, type:'evt', text:'Watchlist\nItem Removed', sub:'ES 삭제', file:'api/watchlist/application/WatchlistService' },
+
+  // ─── Row 5: Quant ───
+  { r:5, c:0, type:'cmd', text:'RuleSet 생성', sub:'CreateRuleSet', file:'api/quant/api/RuleSetController' },
+  { r:5, c:1, type:'agg', text:'RuleSet\n(MongoDB)', sub:'Aggregate', file:'api/quant/domain/RuleSetDocument' },
+  { r:5, c:2, type:'evt', text:'RuleSet\nCreated', sub:'MongoDB 저장', file:'api/quant/application/RuleSetService' },
+  { r:5, c:4, type:'cmd', text:'백테스트 실행', sub:'RunBacktest', file:'backend/quant-engine' },
+  { r:5, c:5, type:'agg', text:'Backtest\nResult', sub:'Aggregate', file:'api/backtest/domain/BacktestResult' },
+  { r:5, c:6, type:'evt', text:'Backtest\nCompleted', sub:'성과 지표 계산', file:'api/backtest/application' },
+  { r:5, c:7, type:'evt', text:'Signal\nGenerated', sub:'매매 시그널', file:'api/quant/domain/QunatSignal' },
+  { r:5, c:9, type:'pol', text:'체결 →\n전략반영', sub:'Policy', file:'api/quant/application/OrderFilledStrategyListener', id:'p_quant' },
+
+  // ─── Row 6: Order & Matching ───
+  { r:6, c:0, type:'cmd', text:'주문 제출', sub:'SubmitOrder', file:'api/matching/api/OrderController' },
+  { r:6, c:1, type:'agg', text:'Order', sub:'Aggregate', file:'api/matching/domain/Order' },
+  { r:6, c:2, type:'evt', text:'Order\nPlaced', sub:'PENDING 상태', file:'api/matching/application/MatchingService' },
+  { r:6, c:3, type:'pol', text:'주문 매칭\n(Saga)', sub:'OrderSagaOrchestrator', file:'api/matching/saga/OrderSagaOrchestrator' },
+  { r:6, c:5, type:'evt', text:'Order\nFilled', sub:'체결 완료', file:'api/matching/events/OrderFilledEvent', id:'e_filled' },
+  { r:6, c:6, type:'evt', text:'Order\nCancelled', sub:'취소', file:'api/matching/events/OrderCancelledEvent' },
+
+  // ─── Row 7: Wallet ───
+  { r:7, c:5, type:'pol', text:'지갑 업데이트\n정책', sub:'Policy', file:'api/wallet/application/OrderFilledEventListener', id:'p_wallet' },
+  { r:7, c:6, type:'agg', text:'Wallet\n/ Ledger', sub:'Aggregate', file:'api/wallet/domain/Ledger' },
+  { r:7, c:7, type:'evt', text:'Wallet\nUpdated', sub:'잔고·포지션 갱신', file:'api/wallet/application/WalletService' },
+  { r:7, c:8, type:'evt', text:'Trade\nRecorded', sub:'거래 기록', file:'api/wallet/application/ReceiptService' },
+  { r:7, c:9, type:'rm',  text:'손익 현황\n/ 거래내역', sub:'GET /wallet/pnl', file:'api/wallet/api/WalletController' },
+
+  // ─── Row 8: AI & ES ───
+  { r:8, c:0, type:'cmd', text:'AI 요약 요청', sub:'GET /summary', file:'api/ai/StockSummaryController' },
+  { r:8, c:1, type:'ext', text:'Claude\nHaiku API', sub:'Anthropic' },
+  { r:8, c:2, type:'evt', text:'Summary\nGenerated', sub:'2~3문장 한국어', file:'api/ai/StockSummaryService' },
+  { r:8, c:3, type:'pol', text:'ES 캐싱\n(TTL 1h)', sub:'Policy', file:'api/ai/StockSummaryService' },
+  { r:8, c:4, type:'rm',  text:'ES 검색뷰\n(6개 인덱스)', sub:'stocks·news·events\nsummaries·watchlist·alerts', file:'docs/elasticsearch.md' },
+];
+
+// Cross-BC arrows: [fromId, toId, label, color]
+const arrows = [
+  ['e_tick',   'p_detect', 'triggers', '#F57F17'],
+  ['e_tick',   'p_alert',  'triggers', '#F57F17'],
+  ['e_disc',   'e_alert',  '', '#880E4F'],   // disclosure can trigger alert
+  ['e_filled', 'p_wallet', 'triggers', '#BF360C'],
+  ['e_filled', 'p_quant',  'triggers', '#BF360C'],
+];
+
+// ── Render ──────────────────────────────────────────────────────────────────
+
+const board      = document.getElementById('board');
+const svgEl      = document.getElementById('arrows-svg');
+const tooltip    = document.getElementById('tooltip');
+const scroll     = document.getElementById('board-scroll');
+
+const ROWS = BCs.length;
+const BOARD_W = HEADER_W + COLS * COL_W + 40;
+const BOARD_H = PAD_TOP + ROWS * ROW_H + 40;
+
+board.style.width  = BOARD_W + 'px';
+board.style.height = BOARD_H + 'px';
+svgEl.setAttribute('width', BOARD_W);
+svgEl.setAttribute('height', BOARD_H);
+
+// arrow marker
+svgEl.innerHTML = `
+  <defs>
+    <marker id="arr" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <polygon points="0 0, 7 3.5, 0 7" fill="#8ab4d8" opacity="0.8"/>
+    </marker>
+    <marker id="arr-orange" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <polygon points="0 0, 7 3.5, 0 7" fill="#F57F17" opacity="0.9"/>
+    </marker>
+    <marker id="arr-red" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <polygon points="0 0, 7 3.5, 0 7" fill="#BF360C" opacity="0.9"/>
+    </marker>
+    <marker id="arr-pink" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <polygon points="0 0, 7 3.5, 0 7" fill="#880E4F" opacity="0.9"/>
+    </marker>
+  </defs>
+`;
+
+// Draw lanes
+BCs.forEach((bc, i) => {
+  const y = PAD_TOP + i * ROW_H;
+  const lane = document.createElement('div');
+  lane.className = 'lane';
+  lane.style.top = y + 'px';
+  lane.style.height = ROW_H + 'px';
+  lane.innerHTML = `
+    <div class="lane-label">
+      <div class="bc-name">${bc.name}</div>
+      <div class="bc-module">${bc.module}</div>
+    </div>`;
+  board.appendChild(lane);
+});
+
+// Helper: note center coords
+const notePos = {};
+function noteCenter(r, c) {
+  const x = HEADER_W + c * COL_W + (COL_W - NOTE_W) / 2 + NOTE_W / 2;
+  const y = PAD_TOP + r * ROW_H + (ROW_H - NOTE_H) / 2 + NOTE_H / 2;
+  return { x, y };
+}
+
+// Draw notes
+notes.forEach(n => {
+  const c = COLORS[n.type];
+  const x = HEADER_W + n.c * COL_W + (COL_W - NOTE_W) / 2;
+  const y = PAD_TOP + n.r * ROW_H + (ROW_H - NOTE_H) / 2;
+
+  const el = document.createElement('div');
+  el.className = 'note';
+  el.style.left   = x + 'px';
+  el.style.top    = y + 'px';
+  el.style.width  = NOTE_W + 'px';
+  el.style.height = NOTE_H + 'px';
+  el.style.background = c.bg;
+  el.style.color      = c.t;
+  el.innerHTML = `
+    <div class="n-text">${n.text}</div>
+    ${n.sub ? `<div class="n-sub">${n.sub}</div>` : ''}
+  `;
+
+  if (n.id) {
+    notePos[n.id] = noteCenter(n.r, n.c);
+  }
+
+  if (n.file) {
+    el.addEventListener('mouseenter', (e) => {
+      tooltip.style.display = 'block';
+      tooltip.innerHTML = `<strong>${n.text.replace(/\n/g,' ')}</strong>${n.sub ? '<br><span style="opacity:.7">'+n.sub+'</span>' : ''}<div class="tt-file">${n.file.replace(/\n/g,'<br>')}</div>`;
+    });
+    el.addEventListener('mousemove', (e) => {
+      const r = document.getElementById('board-wrap').getBoundingClientRect();
+      tooltip.style.left = Math.min(e.clientX + 14, window.innerWidth - 280) + 'px';
+      tooltip.style.top  = (e.clientY - 10) + 'px';
+    });
+    el.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+  }
+
+  board.appendChild(el);
+});
+
+// Draw cross-BC arrows (after all notes placed)
+function drawArrows() {
+  const markerMap = {
+    '#F57F17': 'arr-orange',
+    '#BF360C': 'arr-red',
+    '#880E4F': 'arr-pink',
+  };
+
+  arrows.forEach(([fromId, toId, label, color]) => {
+    const from = notePos[fromId];
+    const to   = notePos[toId];
+    if (!from || !to) return;
+
+    const markerId = markerMap[color] || 'arr';
+    const strokeColor = color || '#8ab4d8';
+
+    // cubic bezier: go down/up with some horizontal offset
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const cy1 = from.y + dy * 0.4;
+    const cy2 = to.y   - dy * 0.4;
+    const path = `M ${from.x} ${from.y} C ${from.x} ${cy1}, ${to.x} ${cy2}, ${to.x} ${to.y}`;
+
+    const pathEl = document.createElementNS('http://www.w3.org/2000/svg','path');
+    pathEl.setAttribute('d', path);
+    pathEl.setAttribute('stroke', strokeColor);
+    pathEl.setAttribute('stroke-width', '1.8');
+    pathEl.setAttribute('stroke-dasharray', '5 3');
+    pathEl.setAttribute('fill', 'none');
+    pathEl.setAttribute('marker-end', `url(#${markerId})`);
+    pathEl.setAttribute('opacity', '0.75');
+    svgEl.appendChild(pathEl);
+
+    if (label) {
+      const mx = (from.x + to.x) / 2;
+      const my = (from.y + to.y) / 2;
+      const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
+      txt.setAttribute('x', mx + 6);
+      txt.setAttribute('y', my);
+      txt.setAttribute('font-size', '9');
+      txt.setAttribute('fill', strokeColor);
+      txt.setAttribute('font-family', '-apple-system, system-ui, sans-serif');
+      txt.setAttribute('opacity', '0.85');
+      txt.textContent = label;
+      svgEl.appendChild(txt);
+    }
+  });
+}
+
+// Small inline arrows within same BC row (visual connectors)
+// For same-row adjacent notes: draw small right-pointing arrows
+function drawIntraArrows() {
+  // Group notes by row
+  const byRow = {};
+  notes.forEach(n => {
+    if (!byRow[n.r]) byRow[n.r] = [];
+    byRow[n.r].push(n);
+  });
+
+  Object.values(byRow).forEach(row => {
+    const sorted = [...row].sort((a,b) => a.c - b.c);
+    for (let i=0; i < sorted.length - 1; i++) {
+      const a = sorted[i], b = sorted[i+1];
+      if (b.c - a.c > 2) continue; // skip if too far apart (gap = different flow)
+      const fa = noteCenter(a.r, a.c);
+      const fb = noteCenter(b.r, b.c);
+      const x1 = fa.x + NOTE_W/2 - 2;
+      const x2 = fb.x - NOTE_W/2 + 2;
+      const y  = fa.y;
+      if (x2 <= x1) return;
+      const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1', x1); line.setAttribute('y1', y);
+      line.setAttribute('x2', x2); line.setAttribute('y2', y);
+      line.setAttribute('stroke', 'rgba(255,255,255,0.2)');
+      line.setAttribute('stroke-width', '1.2');
+      line.setAttribute('marker-end', 'url(#arr)');
+      svgEl.appendChild(line);
+    }
+  });
+}
+
+drawIntraArrows();
+drawArrows();
+
+// ── Zoom ────────────────────────────────────────────────────────────────────
+let scale = 1;
+const wrapper = document.getElementById('board-wrap');
+
+function zoom(delta) {
+  scale = Math.max(0.4, Math.min(1.8, scale + delta));
+  board.style.transform = `scale(${scale})`;
+  board.style.transformOrigin = 'top left';
+  // adjust scroll container size
+  scroll.style.width  = (BOARD_W * scale) + 'px';
+  scroll.style.height = (BOARD_H * scale) + 'px';
+}
+function resetZoom() {
+  scale = 1;
+  board.style.transform = '';
+  scroll.style.width = '';
+  scroll.style.height = '';
+}
+
+// ── Pan with mouse drag ──────────────────────────────────────────────────────
+let isPanning = false, startX, startY, sLeft, sTop;
+scroll.addEventListener('mousedown', e => {
+  if (e.target !== scroll && e.target !== board && !e.target.classList.contains('lane')) return;
+  isPanning = true;
+  startX = e.clientX; startY = e.clientY;
+  sLeft = scroll.scrollLeft; sTop = scroll.scrollTop;
+  scroll.classList.add('panning');
+});
+document.addEventListener('mousemove', e => {
+  if (!isPanning) return;
+  scroll.scrollLeft = sLeft - (e.clientX - startX);
+  scroll.scrollTop  = sTop  - (e.clientY - startY);
+});
+document.addEventListener('mouseup', () => {
+  isPanning = false;
+  scroll.classList.remove('panning');
+});
+
+// Scroll to center on load
+scroll.scrollLeft = 0;
+scroll.scrollTop  = 0;
+</script>
