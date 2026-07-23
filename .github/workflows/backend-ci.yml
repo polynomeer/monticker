@@ -9,6 +9,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module: [api, worker, trading-service, quant-engine]
 
     services:
       postgres:
@@ -39,5 +42,5 @@ jobs:
           java-version: "21"
           cache: gradle
 
-      - name: Run tests
-        run: cd backend/api && ./gradlew test
+      - name: Run tests — ${{ matrix.module }}
+        run: cd backend/${{ matrix.module }} && ./gradlew test

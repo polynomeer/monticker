@@ -26,10 +26,17 @@ class User(
     var role: UserRole = UserRole.USER,
 
     @Column(nullable = false)
+    var emailVerified: Boolean = false,
+
+    @Column(nullable = false)
     val createdAt: Instant = Instant.now(),
 
     @Column(nullable = false)
     var updatedAt: Instant = Instant.now(),
-)
+
+    var deletedAt: Instant? = null,
+) {
+    val isDeleted get() = deletedAt != null
+}
 
 enum class UserRole { USER, ADMIN, SYSTEM_WORKER }

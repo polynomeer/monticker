@@ -31,5 +31,8 @@ jobs:
       - name: Lint
         run: pnpm --filter @monticker/web lint
 
+      - name: Test
+        run: pnpm --filter @monticker/web test
+
       - name: Build
         run: pnpm --filter @monticker/web build
