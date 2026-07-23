@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS strategy_market (
     id              BIGSERIAL PRIMARY KEY,
-    ruleset_id      BIGINT NOT NULL UNIQUE REFERENCES quant_rulesets(id) ON DELETE CASCADE,
+    ruleset_id      VARCHAR(24) NOT NULL UNIQUE,
     user_id         BIGINT NOT NULL REFERENCES users(id),
     description     TEXT,
     subscribe_count INT NOT NULL DEFAULT 0,

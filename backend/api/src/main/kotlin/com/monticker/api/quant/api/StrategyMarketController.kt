@@ -6,7 +6,7 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 
-data class StrategyShareRequest(val rulesetId: Long, val description: String? = null)
+data class StrategyShareRequest(val rulesetId: String, val description: String? = null)
 
 @Validated
 @RestController
@@ -21,12 +21,10 @@ class StrategyMarketController(
         @RequestParam(defaultValue = "20") size: Int,
     ): ResponseEntity<List<Map<String, Any?>>> {
         val rows = jdbc.queryForList(
-            """SELECT sm.id, sm.description, sm.subscribe_count, sm.created_at,
-                      qr.name, qr.rule_definition, u.email AS author_email
+            """SELECT sm.id, sm.ruleset_id, sm.description, sm.subscribe_count, sm.created_at,
+                      u.email AS author_email
                FROM strategy_market sm
-               JOIN quant_rulesets qr ON qr.id = sm.ruleset_id
                JOIN users u ON u.id = sm.user_id
-               WHERE qr.deleted_at IS NULL
                ORDER BY sm.subscribe_count DESC, sm.created_at DESC
                LIMIT ? OFFSET ?""",
             size, page * size,
