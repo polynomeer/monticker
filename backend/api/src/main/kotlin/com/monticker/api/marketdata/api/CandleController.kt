@@ -2,10 +2,12 @@ package com.monticker.api.marketdata.api
 
 import com.monticker.api.marketdata.application.CandleService
 import org.springframework.http.ResponseEntity
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 import java.math.BigDecimal
 import java.time.Instant
 
+@Validated
 @RestController
 @RequestMapping("/api/stocks/{stockId}/candles")
 class CandleController(private val candleService: CandleService) {

@@ -6,8 +6,10 @@ import com.monticker.api.quant.application.*
 import com.monticker.api.quant.domain.RuleVersionEntry
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.context.SecurityContextHolder
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 
+@Validated
 @RestController
 @RequestMapping("/api/quant/rulesets")
 class RuleSetController(private val service: RuleSetService) {

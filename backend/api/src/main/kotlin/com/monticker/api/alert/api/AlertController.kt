@@ -9,9 +9,11 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.context.SecurityContextHolder
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 import java.time.Instant
 
+@Validated
 @RestController
 @RequestMapping("/api/alerts")
 class AlertController(private val alertService: AlertService) {

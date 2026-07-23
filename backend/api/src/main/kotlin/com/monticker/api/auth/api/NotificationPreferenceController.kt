@@ -2,6 +2,7 @@ package com.monticker.api.auth.api
 
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
 import org.springframework.http.ResponseEntity
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 import org.springframework.data.redis.core.StringRedisTemplate
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -16,6 +17,7 @@ data class NotificationPreferenceRequest(
     val weeklyReportEmail: Boolean = true,
 )
 
+@Validated
 @RestController
 @RequestMapping("/api/users/me")
 class NotificationPreferenceController(

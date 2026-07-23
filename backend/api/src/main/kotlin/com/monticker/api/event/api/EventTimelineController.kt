@@ -5,10 +5,12 @@ import com.monticker.api.event.application.EventSearchService
 import com.monticker.api.event.application.EventTimelineService
 import com.monticker.api.event.application.SectorEventSummary
 import org.springframework.http.ResponseEntity
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
+@Validated
 @RestController
 class EventTimelineController(
     private val eventTimelineService: EventTimelineService,

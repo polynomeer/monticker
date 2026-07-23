@@ -3,8 +3,10 @@ package com.monticker.api.device.api
 import org.springframework.http.ResponseEntity
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.annotation.AuthenticationPrincipal
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 
+@Validated
 @RestController
 @RequestMapping("/api/devices")
 class DeviceController(private val jdbc: JdbcTemplate) {

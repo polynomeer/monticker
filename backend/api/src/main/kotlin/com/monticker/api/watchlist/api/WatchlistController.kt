@@ -4,8 +4,10 @@ import com.monticker.api.watchlist.application.WatchlistSearchResult
 import com.monticker.api.watchlist.application.WatchlistService
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 
+@Validated
 @RestController
 @RequestMapping("/api/watchlists")
 class WatchlistController(

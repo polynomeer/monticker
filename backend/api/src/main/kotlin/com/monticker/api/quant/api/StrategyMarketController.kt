@@ -3,10 +3,12 @@ package com.monticker.api.quant.api
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
 import org.springframework.http.ResponseEntity
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 
 data class StrategyShareRequest(val rulesetId: Long, val description: String? = null)
 
+@Validated
 @RestController
 @RequestMapping("/api/quant/market")
 class StrategyMarketController(

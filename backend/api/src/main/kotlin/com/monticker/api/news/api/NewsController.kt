@@ -3,9 +3,11 @@ package com.monticker.api.news.api
 import com.monticker.api.news.application.NewsSearchResult
 import com.monticker.api.news.application.NewsSearchService
 import org.springframework.http.ResponseEntity
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 import java.time.Instant
 
+@Validated
 @RestController
 class NewsController(private val newsSearchService: NewsSearchService) {
 

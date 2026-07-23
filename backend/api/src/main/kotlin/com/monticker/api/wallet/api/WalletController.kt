@@ -10,9 +10,11 @@ import com.monticker.api.wallet.application.WalletService
 import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.context.SecurityContextHolder
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 import java.time.LocalDate
 
+@Validated
 @RestController
 @RequestMapping("/api/wallet")
 class WalletController(
@@ -47,6 +49,7 @@ class WalletController(
     fun getEmotionAnalysis() = ResponseEntity.ok(emotionTagService.getAnalysis(userId()))
 }
 
+@Validated
 @RestController
 @RequestMapping("/api/paper/trades")
 class TradeReceiptController(

@@ -60,17 +60,27 @@ function ToastItem({ toast }: { toast: Toast }) {
 
 export function ToastContainer() {
   const toasts = useToastStore((s) => s.toasts);
+  const errors   = toasts.filter(t => t.type === "error");
+  const nonErrors = toasts.filter(t => t.type !== "error");
 
   return (
-    <div
-      aria-live="polite"
-      className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none"
-    >
-      {toasts.map((t) => (
-        <div key={t.id} className="pointer-events-auto">
-          <ToastItem toast={t} />
-        </div>
-      ))}
+    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none">
+      {/* 에러 토스트 — assertive (즉시 읽기) */}
+      <div aria-live="assertive" aria-atomic="true" className="contents">
+        {errors.map(t => (
+          <div key={t.id} className="pointer-events-auto">
+            <ToastItem toast={t} />
+          </div>
+        ))}
+      </div>
+      {/* 일반 토스트 — polite (현재 읽기 완료 후) */}
+      <div aria-live="polite" aria-atomic="false" className="contents">
+        {nonErrors.map(t => (
+          <div key={t.id} className="pointer-events-auto">
+            <ToastItem toast={t} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

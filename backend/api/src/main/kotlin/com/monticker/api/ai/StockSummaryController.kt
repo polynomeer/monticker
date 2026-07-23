@@ -5,9 +5,11 @@ import com.monticker.api.stock.application.StockService
 import org.springframework.data.elasticsearch.client.elc.NativeQuery
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations
 import org.springframework.http.ResponseEntity
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 import java.time.Instant
 
+@Validated
 @RestController
 class StockSummaryController(
     private val stockSummaryService: StockSummaryService,

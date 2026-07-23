@@ -9,6 +9,7 @@ import com.monticker.api.matching.domain.OrderStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.context.SecurityContextHolder
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -56,6 +57,7 @@ data class RiskExposureResponse(
     val limits: RiskLimitsDto,
 )
 
+@Validated
 @RestController
 @RequestMapping("/api/risk")
 class RiskController(

@@ -49,15 +49,25 @@ spring:
 server:
   port: 8080
   shutdown: graceful
+  http2:
+    enabled: true
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/plain
+    min-response-size: 1024
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info,metrics,prometheus
+      base-path: /actuator
   endpoint:
     health:
       show-details: when-authorized
+      show-components: when-authorized
+    prometheus:
+      access: read-only
   metrics:
     export:
       prometheus:

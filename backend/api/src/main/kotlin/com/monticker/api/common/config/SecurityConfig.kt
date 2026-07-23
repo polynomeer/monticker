@@ -43,6 +43,8 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.GET, "/api/screener/**").permitAll()
                     .requestMatchers("/api/backtest/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/latency/**").permitAll()
+                    .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                    .requestMatchers("/actuator/metrics", "/actuator/prometheus").denyAll()
                     .requestMatchers("/actuator/**").permitAll()
                     .requestMatchers("/ws/**").permitAll()
                     .anyRequest().authenticated()

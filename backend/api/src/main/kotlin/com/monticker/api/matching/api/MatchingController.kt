@@ -5,9 +5,11 @@ import com.monticker.api.matching.application.MatchingService
 import com.monticker.api.matching.application.SubmitOrderRequest
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.context.SecurityContextHolder
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 import java.math.BigDecimal
 
+@Validated
 @RestController
 @RequestMapping("/api/matching")
 class MatchingController(private val matchingService: MatchingService) {

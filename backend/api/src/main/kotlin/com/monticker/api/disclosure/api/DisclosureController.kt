@@ -3,6 +3,7 @@ package com.monticker.api.disclosure.api
 import com.monticker.api.event.application.EventSearchService
 import com.monticker.api.event.application.EventSearchResult
 import org.springframework.http.ResponseEntity
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 import java.math.BigDecimal
 import java.time.Instant
@@ -16,6 +17,7 @@ import java.time.Instant
  * GET /api/disclosures/search?query=유상증자&stockId=1&minScore=80
  * GET /api/stocks/{stockId}/disclosures?query=합병
  */
+@Validated
 @RestController
 class DisclosureController(private val eventSearchService: EventSearchService) {
 

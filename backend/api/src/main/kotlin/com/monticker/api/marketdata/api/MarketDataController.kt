@@ -6,10 +6,12 @@ import com.monticker.api.marketdata.application.VwapResponse
 import com.monticker.api.marketdata.application.VwapPoint
 import com.monticker.api.stock.application.StockService
 import org.springframework.http.ResponseEntity
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 import java.math.BigDecimal
 import java.time.Instant
 
+@Validated
 @RestController
 @RequestMapping("/api/stocks")
 class MarketDataController(

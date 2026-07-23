@@ -7,8 +7,10 @@ import com.monticker.api.analytics.application.RegimeDetectorService
 import com.monticker.api.analytics.application.TaxOptimizerService
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.context.SecurityContextHolder
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 
+@Validated
 @RestController
 @RequestMapping("/api/analytics")
 class AnalyticsController(
@@ -48,6 +50,7 @@ data class KellyRequest(
     val avgLossPct: Double,
 )
 
+@Validated
 @RestController
 @RequestMapping("/api/stocks")
 class StockAnalyticsController(

@@ -4,10 +4,12 @@ import com.monticker.api.screener.application.ScreenerResult
 import com.monticker.api.screener.application.ScreenerService
 import com.monticker.api.screener.domain.ScreenerItem
 import org.springframework.http.ResponseEntity
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 import java.math.BigDecimal
 import java.time.Instant
 
+@Validated
 @RestController
 @RequestMapping("/api/screener")
 class ScreenerController(private val screenerService: ScreenerService) {

@@ -9,9 +9,11 @@ import org.springframework.batch.core.launch.JobLauncher
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 import java.time.LocalDate
 
+@Validated
 @RestController
 @RequestMapping("/api/admin/batch")
 @PreAuthorize("hasRole('ADMIN')")

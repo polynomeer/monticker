@@ -3,8 +3,10 @@ package com.monticker.api.stock.api
 import com.monticker.api.stock.application.StockSearchService
 import com.monticker.api.stock.application.StockService
 import org.springframework.http.ResponseEntity
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 
+@Validated
 @RestController
 @RequestMapping("/api/stocks")
 class StockController(

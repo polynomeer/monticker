@@ -1,6 +1,7 @@
 package com.monticker.api.marketdata.api
 
 import io.micrometer.core.instrument.MeterRegistry
+import org.springframework.validation.annotation.Validated
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
@@ -19,6 +20,7 @@ import java.util.concurrent.TimeUnit
  *   - broadcast    : tick 생성 → WebSocket 발신 완료
  *   - totalPipeline: tick 생성 → 브로드캐스트 (전체)
  */
+@Validated
 @RestController
 @RequestMapping("/api/latency")
 class LatencyController(private val meterRegistry: MeterRegistry) {
