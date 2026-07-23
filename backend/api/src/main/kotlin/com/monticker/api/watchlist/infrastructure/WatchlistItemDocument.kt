@@ -5,7 +5,7 @@ import org.springframework.data.elasticsearch.annotations.*
 import java.math.BigDecimal
 import java.time.Instant
 
-@Document(indexName = "watchlist_items")
+@Document(indexName = "watchlist_items", createIndex = false)
 @Setting(settingPath = "elasticsearch/watchlist-index-settings.json")
 data class WatchlistItemDocument(
     @Id val id: String,                // itemId

@@ -5,7 +5,7 @@ import org.springframework.data.elasticsearch.annotations.*
 import java.math.BigDecimal
 import java.time.Instant
 
-@Document(indexName = "stock_events")
+@Document(indexName = "stock_events", createIndex = false)
 @Setting(settingPath = "elasticsearch/event-index-settings.json")
 data class StockEventDocument(
     @Id val id: String,

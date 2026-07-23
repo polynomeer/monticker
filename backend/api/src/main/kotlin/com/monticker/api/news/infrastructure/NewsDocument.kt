@@ -9,7 +9,7 @@ import org.springframework.data.elasticsearch.annotations.FieldType
 import org.springframework.data.elasticsearch.annotations.Setting
 import java.time.Instant
 
-@Document(indexName = "news_articles")
+@Document(indexName = "news_articles", createIndex = false)
 @Setting(settingPath = "elasticsearch/news-index-settings.json")
 data class NewsDocument(
     @Id

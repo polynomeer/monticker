@@ -4,7 +4,7 @@ import org.springframework.data.annotation.Id
 import org.springframework.data.elasticsearch.annotations.*
 import java.time.Instant
 
-@Document(indexName = "alert_histories")
+@Document(indexName = "alert_histories", createIndex = false)
 @Setting(settingPath = "elasticsearch/alert-index-settings.json")
 data class AlertHistoryDocument(
     @Id val id: String,

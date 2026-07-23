@@ -15,7 +15,7 @@ import org.springframework.data.elasticsearch.annotations.Setting
  *  - autocomplete:  edge_ngram(1-10) — 앞글자 자동완성 (삼 → 삼성, 삼성전, ...)
  *  - symbol 필드:   keyword + text 멀티필드 (코드 완전 일치 우선)
  */
-@Document(indexName = "stocks")
+@Document(indexName = "stocks", createIndex = false)
 @Setting(settingPath = "elasticsearch/stock-index-settings.json")
 data class StockDocument(
     @Id
