@@ -9,6 +9,8 @@ import org.springframework.context.event.EventListener
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.mail.SimpleMailMessage
+import org.springframework.mail.javamail.JavaMailSender
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Component
 import java.math.BigDecimal
@@ -42,6 +44,7 @@ class AlertEvaluator(
     private val pushSender: ExpoPushSender,
     private val esOps: ElasticsearchOperations,
     private val redis: StringRedisTemplate,
+    private val mailSender: JavaMailSender,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val objectMapper = ObjectMapper()
@@ -139,7 +142,11 @@ class AlertEvaluator(
             String::class.java,
             rule.userId,
         )
-        if (tokens.isEmpty()) return
+        if (tokens.isEmpty()) {
+            sendEmailFallback(rule.userId, message)
+            jdbc.update("UPDATE alert_histories SET delivery_status = 'EMAIL_FALLBACK' WHERE id = ?", historyId)
+            return
+        }
 
         val results = pushSender.send(tokens.map { token ->
             PushMessage(
@@ -171,6 +178,24 @@ class AlertEvaluator(
             ))
         } catch (e: Exception) {
             log.warn("[AlertEvaluator] ES indexing failed for historyId={}: {}", id, e.message)
+        }
+    }
+
+    private fun sendEmailFallback(userId: Long, message: String) {
+        try {
+            val email = jdbc.queryForObject(
+                "SELECT email FROM users WHERE id = ? AND deleted_at IS NULL",
+                String::class.java, userId,
+            ) ?: return
+            val mail = SimpleMailMessage().apply {
+                setTo(email)
+                subject = "[monticker] 알림"
+                text    = "$message\n\n설정한 알림 조건이 충족되었습니다."
+            }
+            mailSender.send(mail)
+            log.info("[AlertEvaluator] email fallback sent: userId={}", userId)
+        } catch (e: Exception) {
+            log.warn("[AlertEvaluator] email fallback failed: userId={} {}", userId, e.message)
         }
     }
 

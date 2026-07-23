@@ -4,6 +4,9 @@ import com.monticker.api.alert.application.AlertHistoryResult
 import com.monticker.api.alert.application.AlertService
 import com.monticker.api.alert.domain.AlertRuleType
 import com.monticker.api.common.aop.RateLimited
+import jakarta.validation.Valid
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.NotNull
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.web.bind.annotation.*
@@ -21,7 +24,7 @@ class AlertController(private val alertService: AlertService) {
 
     @PostMapping("/rules")
     @RateLimited(limit = 20, windowSec = 3600, keyPrefix = "alert.create")
-    fun createRule(@RequestBody request: CreateAlertRuleRequest): ResponseEntity<AlertRuleResponse> {
+    fun createRule(@Valid @RequestBody request: CreateAlertRuleRequest): ResponseEntity<AlertRuleResponse> {
         val ruleType = try {
             AlertRuleType.valueOf(request.ruleType)
         } catch (e: IllegalArgumentException) {
@@ -102,8 +105,8 @@ data class AlertHistoryResponse(
 
 data class CreateAlertRuleRequest(
     val stockId: Long? = null,
-    val ruleType: String,
-    val condition: Map<String, Any>,
+    @field:NotBlank val ruleType: String,
+    @field:NotNull val condition: Map<String, Any>,
 )
 
 data class AlertRuleResponse(

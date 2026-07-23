@@ -75,8 +75,22 @@ class PaperPortfolioQueryService(
         return PortfolioResponse(account.cash.amount, totalValue, pnl, pnlRate, holdings)
     }
 
-    fun getHistory(userId: Long): List<TradeHistoryResponse> {
-        val trades = tradeRepo.findTop20ByUserIdOrderByTradedAtDesc(userId)
+    fun getHistory(userId: Long, page: Int = 0, size: Int = 20): List<TradeHistoryResponse> {
+        val trades = jdbc.query(
+            """SELECT pt.id, pt.side, pt.stock_id, pt.quantity, pt.price, pt.amount, pt.traded_at
+               FROM paper_trades pt WHERE pt.user_id = ? ORDER BY pt.traded_at DESC LIMIT ? OFFSET ?""",
+            { rs, _ -> com.monticker.api.paper.domain.PaperTrade(
+                id       = rs.getLong("id"),
+                userId   = userId,
+                stockId  = rs.getLong("stock_id"),
+                side     = rs.getString("side"),
+                quantity = rs.getInt("quantity"),
+                price    = rs.getBigDecimal("price"),
+                amount   = rs.getBigDecimal("amount"),
+                tradedAt = rs.getTimestamp("traded_at").toInstant(),
+            )},
+            userId, size, page * size,
+        )
         if (trades.isEmpty()) return emptyList()
         val infoMap = stockInfoMap(trades.map { it.stockId }.distinct())
         return trades.mapNotNull { t ->

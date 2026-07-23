@@ -47,9 +47,9 @@ export default function Home() {
     useScreener(tab, market, sort);
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6">
+    <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
       {/* 헤더 */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4 sm:mb-6">
         <div>
           <h1 className="text-xl font-bold dark:text-[#f8f8f2]">스크리너</h1>
           <p className="text-xs text-[#6272a4] mt-0.5 flex items-center gap-1.5">
@@ -79,22 +79,24 @@ export default function Home() {
         ))}
       </div>
 
-      {/* 필터 */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        <div className="flex gap-1">
-          {MARKETS.map(m => (
-            <Pill key={m.key} active={market === m.key} onClick={() => setMarket(m.key)}>
-              {m.label}
-            </Pill>
-          ))}
-        </div>
-        <div className="w-px bg-[#44475a] self-stretch mx-1" />
-        <div className="flex gap-1">
-          {SORTS.map(s => (
-            <Pill key={s.key} active={sort === s.key} onClick={() => setSort(s.key)}>
-              {s.label}
-            </Pill>
-          ))}
+      {/* 필터 — 모바일에서 가로 스크롤 */}
+      <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0 mb-4">
+        <div className="flex gap-2 min-w-max">
+          <div className="flex gap-1">
+            {MARKETS.map(m => (
+              <Pill key={m.key} active={market === m.key} onClick={() => setMarket(m.key)}>
+                {m.label}
+              </Pill>
+            ))}
+          </div>
+          <div className="w-px bg-[#44475a] self-stretch mx-1" />
+          <div className="flex gap-1">
+            {SORTS.map(s => (
+              <Pill key={s.key} active={sort === s.key} onClick={() => setSort(s.key)}>
+                {s.label}
+              </Pill>
+            ))}
+          </div>
         </div>
       </div>
 

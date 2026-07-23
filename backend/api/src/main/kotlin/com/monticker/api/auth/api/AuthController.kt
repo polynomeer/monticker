@@ -3,7 +3,12 @@ package com.monticker.api.auth.api
 import com.monticker.api.auth.application.AuthService
 import com.monticker.api.auth.application.TokenPair
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
+import jakarta.validation.Valid
+import jakarta.validation.constraints.Email
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Size
 import org.springframework.http.ResponseEntity
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 
 @RestController
@@ -14,10 +19,7 @@ class AuthController(
 ) {
 
     @PostMapping("/signup")
-    fun signup(@RequestBody req: SignupRequest): ResponseEntity<SignupResponse> {
-        require(req.email.isNotBlank() && req.password.length >= 8 && req.nickname.isNotBlank()) {
-            "입력값이 올바르지 않습니다."
-        }
+    fun signup(@Valid @RequestBody req: SignupRequest): ResponseEntity<SignupResponse> {
         val tokens = authService.signup(req.email, req.password, req.nickname)
         return ResponseEntity.ok(SignupResponse(
             accessToken  = tokens.accessToken,
@@ -39,7 +41,7 @@ class AuthController(
     }
 
     @PostMapping("/login")
-    fun login(@RequestBody req: LoginRequest): ResponseEntity<TokenResponse> {
+    fun login(@Valid @RequestBody req: LoginRequest): ResponseEntity<TokenResponse> {
         return try {
             ResponseEntity.ok(authService.login(req.email, req.password).toResponse())
         } catch (e: IllegalArgumentException) {
@@ -81,12 +83,22 @@ class AuthController(
     }
 }
 
-data class SignupRequest(val email: String, val password: String, val nickname: String)
-data class LoginRequest(val email: String, val password: String)
-data class RefreshRequest(val refreshToken: String)
-data class EmailRequest(val email: String)
-data class ResetPasswordRequest(val token: String, val newPassword: String)
-data class DeleteAccountRequest(val password: String)
+data class SignupRequest(
+    @field:Email @field:NotBlank val email: String,
+    @field:Size(min = 8, max = 100) @field:NotBlank val password: String,
+    @field:NotBlank @field:Size(min = 2, max = 30) val nickname: String,
+)
+data class LoginRequest(
+    @field:Email @field:NotBlank val email: String,
+    @field:NotBlank val password: String,
+)
+data class RefreshRequest(@field:NotBlank val refreshToken: String)
+data class EmailRequest(@field:Email @field:NotBlank val email: String)
+data class ResetPasswordRequest(
+    @field:NotBlank val token: String,
+    @field:Size(min = 8, max = 100) @field:NotBlank val newPassword: String,
+)
+data class DeleteAccountRequest(@field:NotBlank val password: String)
 
 data class TokenResponse(val accessToken: String, val refreshToken: String)
 data class SignupResponse(val accessToken: String, val refreshToken: String, val emailVerificationSent: Boolean)

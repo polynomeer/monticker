@@ -120,6 +120,19 @@ class AuthService(
         log.info("[AuthService] 계정 삭제(soft): userId={}", userId)
     }
 
+    fun socialLoginOrSignup(email: String, nickname: String): TokenPair {
+        val user = userRepository.findByEmail(email).orElse(null) ?: userRepository.save(
+            User(
+                email        = email,
+                passwordHash = "",
+                nickname     = nickname,
+                emailVerified = true,
+            )
+        )
+        require(!user.isDeleted) { "삭제된 계정입니다." }
+        return issueTokens(user)
+    }
+
     private fun sendVerificationEmail(user: User) {
         val token = UUID.randomUUID().toString()
         redis.opsForValue().set("$VERIFY_PREFIX$token", user.id.toString(), Duration.ofHours(VERIFY_TTL_H))

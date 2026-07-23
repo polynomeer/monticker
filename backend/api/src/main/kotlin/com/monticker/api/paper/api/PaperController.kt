@@ -48,7 +48,10 @@ class PaperController(
     }
 
     @GetMapping("/history")
-    fun getHistory() = ResponseEntity.ok(portfolioQueryService.getHistory(userId()))
+    fun getHistory(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+    ) = ResponseEntity.ok(portfolioQueryService.getHistory(userId(), page, size.coerceIn(1, 100)))
 
     @PostMapping("/reset")
     @RateLimited(limit = 3, windowSec = 86400, keyPrefix = "paper.reset")

@@ -1,7 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import AlertStats from "@/components/alerts/AlertStats";
+import EmptyState from "@/components/common/EmptyState";
 import { authFetch } from "@/services/api";
+import { useRouter } from "next/navigation";
 
 interface AlertHistory {
   id: number;
@@ -37,7 +39,7 @@ export default function AlertsPage() {
         {loading ? (
           <div className="h-32 animate-pulse dark:bg-[#44475a]/20" />
         ) : !alerts.length ? (
-          <p className="text-center py-8 text-sm dark:text-[#6272a4]">알림 이력이 없습니다.</p>
+          <EmptyState icon="🔔" title="알림 이력이 없습니다" description="종목 상세 페이지에서 가격 알림을 설정해보세요." />
         ) : (
           <ul className="divide-y dark:divide-[#44475a]/40">
             {alerts.map(a => (
