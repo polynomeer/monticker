@@ -21,6 +21,10 @@ interface Props { stockId: number; symbol: string; stockName: string; }
 const INTERVALS = [
   { label: "1분", value: "1m" },
   { label: "일봉", value: "1d" },
+  { label: "1주", value: "1w" },
+  { label: "1달", value: "1M" },
+  { label: "3달", value: "3M" },
+  { label: "1년", value: "1Y" },
 ];
 
 export default function StockDetailClient({ stockId, symbol, stockName }: Props) {

@@ -21,11 +21,18 @@ class BacktestService(private val jdbc: JdbcTemplate) {
             val symbol = info["symbol"] as String
             span.setAttribute("backtest.symbol", symbol)
 
+            val maxRange = request.fromDate.plusYears(2)
+            require(!request.toDate.isAfter(maxRange)) { "백테스트 기간은 최대 2년입니다" }
+            require(!request.toDate.isBefore(request.fromDate)) { "종료일이 시작일보다 빠릅니다" }
+
             val candles = Tracing.span("backtest.loadCandles", mapOf("stockId" to request.stockId)) { _ ->
                 jdbc.query(
                     """SELECT DATE(candle_time AT TIME ZONE 'Asia/Seoul') AS d,
                               open, high, low, close, volume
-                       FROM candles_1d WHERE stock_id = ? ORDER BY d""",
+                       FROM candles_1d
+                       WHERE stock_id = ?
+                         AND candle_time >= ? AND candle_time <= ?
+                       ORDER BY d""",
                     { rs, _ -> DailyCandle(
                         date   = rs.getDate("d").toLocalDate(),
                         open   = rs.getBigDecimal("open"),
@@ -35,6 +42,8 @@ class BacktestService(private val jdbc: JdbcTemplate) {
                         volume = rs.getLong("volume"),
                     )},
                     request.stockId,
+                    java.sql.Date.valueOf(request.fromDate),
+                    java.sql.Date.valueOf(request.toDate),
                 )
             }
 

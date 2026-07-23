@@ -88,6 +88,8 @@ app:
   mail:
     from: ${MAIL_FROM:noreply@monticker.io}
   base-url: ${APP_BASE_URL:http://localhost:3000}
+  cors:
+    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:3000,https://*.monticker.io}
 
 jwt:
   secret: monticker-dev-secret-key-must-be-at-least-32-bytes-long

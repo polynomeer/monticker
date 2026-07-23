@@ -5,6 +5,7 @@ import com.monticker.api.alert.infrastructure.AlertHistorySearchRepository
 import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Component
 import java.time.Instant
 
@@ -20,6 +21,7 @@ class AlertHistoryIndexer(
     private val log = LoggerFactory.getLogger(javaClass)
 
     @PostConstruct
+    @Async
     fun indexRecent() {
         try {
             val docs = fetchRecent(limit = 50_000)

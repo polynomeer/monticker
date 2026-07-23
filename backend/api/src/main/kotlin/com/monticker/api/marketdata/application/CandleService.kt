@@ -16,10 +16,21 @@ class CandleService(private val candleRepository: CandleRepository) {
         to: Instant = Instant.now(),
     ): List<Candle> {
         val table = when (interval) {
-            "1m" -> "candles_1m"
-            "1d" -> "candles_1d"
-            else -> throw IllegalArgumentException("Unsupported interval: $interval")
+            "1m"  -> "candles_1m"
+            "1d"  -> "candles_1d"
+            "1w"  -> "candles_1w"
+            "1M"  -> "candles_1M"
+            "3M"  -> "candles_1M"
+            "1Y"  -> "candles_1d"
+            else  -> throw IllegalArgumentException("Unsupported interval: $interval")
         }
-        return candleRepository.findCandles(stockId, table, from, to)
+        val effectiveFrom = when (interval) {
+            "1w" -> Instant.now().minus(90, ChronoUnit.DAYS)
+            "1M" -> Instant.now().minus(365, ChronoUnit.DAYS)
+            "3M" -> Instant.now().minus(365 * 3L, ChronoUnit.DAYS)
+            "1Y" -> Instant.now().minus(365, ChronoUnit.DAYS)
+            else -> from
+        }
+        return candleRepository.findCandles(stockId, table, effectiveFrom, to)
     }
 }

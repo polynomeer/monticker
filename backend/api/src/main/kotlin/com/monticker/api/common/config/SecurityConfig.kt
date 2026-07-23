@@ -3,6 +3,7 @@ package com.monticker.api.common.config
 import com.monticker.api.auth.infrastructure.JwtAuthenticationFilter
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
 import com.monticker.api.common.idempotency.IdempotencyFilter
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.HttpMethod
@@ -22,6 +23,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource
 class SecurityConfig(
     private val jwtTokenProvider: JwtTokenProvider,
     private val idempotencyFilter: IdempotencyFilter,
+    @Value("\${app.cors.allowed-origins:http://localhost:3000}") private val allowedOrigins: String,
 ) {
 
     @Bean
@@ -62,7 +64,7 @@ class SecurityConfig(
     @Bean
     fun corsConfigurationSource(): CorsConfigurationSource {
         val config = CorsConfiguration()
-        config.allowedOriginPatterns = listOf("http://localhost:3000", "https://*.monticker.io")
+        config.allowedOriginPatterns = allowedOrigins.split(",").map { it.trim() }
         config.allowedMethods = listOf("GET", "POST", "PUT", "DELETE", "OPTIONS")
         config.allowedHeaders = listOf("*")
         config.allowCredentials = true

@@ -7,10 +7,12 @@ import com.monticker.worker.push.PushMessage
 import org.slf4j.LoggerFactory
 import org.springframework.context.event.EventListener
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations
+import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Component
 import java.math.BigDecimal
+import java.time.Duration
 import java.time.Instant
 
 data class AlertRuleRow(
@@ -39,6 +41,7 @@ class AlertEvaluator(
     private val jdbc: JdbcTemplate,
     private val pushSender: ExpoPushSender,
     private val esOps: ElasticsearchOperations,
+    private val redis: StringRedisTemplate,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val objectMapper = ObjectMapper()
@@ -86,18 +89,34 @@ class AlertEvaluator(
                 val threshold = (condition["threshold"] as? Number)?.toDouble() ?: return
                 currentPrice < BigDecimal.valueOf(threshold)
             }
+            "VOLUME_SURGE" -> {
+                val surgeRatio = (condition["surgeRatio"] as? Number)?.toDouble() ?: 2.0
+                val period     = (condition["period"] as? Number)?.toInt() ?: 20
+                val row = jdbc.queryForMap(
+                    """SELECT c.volume AS today_vol,
+                              AVG(c2.volume) AS avg_vol
+                       FROM candles_1d c
+                       JOIN candles_1d c2 ON c2.stock_id = c.stock_id
+                          AND c2.candle_time >= NOW() - INTERVAL '$period days'
+                          AND c2.candle_time < DATE_TRUNC('day', NOW() AT TIME ZONE 'Asia/Seoul')
+                       WHERE c.stock_id = ?
+                         AND c.candle_time >= DATE_TRUNC('day', NOW() AT TIME ZONE 'Asia/Seoul')
+                       LIMIT 1""",
+                    rule.stockId,
+                )
+                val todayVol = (row["today_vol"] as? Number)?.toLong() ?: 0L
+                val avgVol   = (row["avg_vol"] as? Number)?.toDouble() ?: 1.0
+                avgVol > 0 && todayVol > avgVol * surgeRatio
+            }
             else -> false
         }
         if (triggered) dispatchAlert(rule, currentPrice)
     }
 
     private fun dispatchAlert(rule: AlertRuleRow, currentPrice: BigDecimal) {
-        val alreadyFired = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM alert_histories WHERE rule_id = ? AND triggered_at > NOW() - INTERVAL '10 minutes'",
-            Int::class.java,
-            rule.id,
-        ) ?: 0
-        if (alreadyFired > 0) return
+        val cooldownKey = "alert:cooldown:${rule.id}"
+        val acquired = redis.opsForValue().setIfAbsent(cooldownKey, "1", Duration.ofSeconds(600))
+        if (acquired != true) return
 
         val message = buildMessage(rule, currentPrice)
 
@@ -156,9 +175,10 @@ class AlertEvaluator(
     }
 
     private fun buildMessage(rule: AlertRuleRow, price: BigDecimal) = when (rule.ruleType) {
-        "PRICE_ABOVE" -> "가격이 ₩${price.toLong().formatKR()} 이상이 되었습니다"
-        "PRICE_BELOW" -> "가격이 ₩${price.toLong().formatKR()} 이하가 되었습니다"
-        else          -> "알림 조건 충족: ${rule.ruleType}"
+        "PRICE_ABOVE"  -> "가격이 ₩${price.toLong().formatKR()} 이상이 되었습니다"
+        "PRICE_BELOW"  -> "가격이 ₩${price.toLong().formatKR()} 이하가 되었습니다"
+        "VOLUME_SURGE" -> "거래량이 평균 대비 급증했습니다 (현재가 ₩${price.toLong().formatKR()})"
+        else           -> "알림 조건 충족: ${rule.ruleType}"
     }
 
     private fun Long.formatKR() = "%,d".format(this)

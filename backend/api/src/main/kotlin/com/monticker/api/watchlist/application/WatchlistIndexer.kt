@@ -5,6 +5,7 @@ import com.monticker.api.watchlist.infrastructure.WatchlistSearchRepository
 import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Component
 import java.time.Instant
 
@@ -20,6 +21,7 @@ class WatchlistIndexer(
     private val log = LoggerFactory.getLogger(javaClass)
 
     @PostConstruct
+    @Async
     fun indexAll() {
         try {
             val docs = fetchAll()
