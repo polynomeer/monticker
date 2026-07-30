@@ -55,6 +55,12 @@ docs/           Product, architecture, decisions
 | `ALLOWED_ORIGINS` | | `http://localhost:3000` | CORS 허용 Origin (쉼표 구분) |
 | `NEXT_PUBLIC_API_URL` | | `http://localhost:8080` | 웹 → API 서버 URL |
 | `NEXT_PUBLIC_BASE_URL` | | `https://monticker.io` | 웹 앱 공개 URL (OG 태그용) |
+| `GOOGLE_CLIENT_ID` | | — | Google OAuth2 Client ID |
+| `GOOGLE_CLIENT_SECRET` | | — | Google OAuth2 Client Secret |
+| `KAKAO_CLIENT_ID` | | — | 카카오 앱 REST API 키 |
+| `KAKAO_CLIENT_SECRET` | | — | 카카오 Client Secret (선택) |
+| `NAVER_CLIENT_ID` | | — | 네이버 애플리케이션 Client ID |
+| `NAVER_CLIENT_SECRET` | | — | 네이버 애플리케이션 Client Secret |
 
 ## Docs
 

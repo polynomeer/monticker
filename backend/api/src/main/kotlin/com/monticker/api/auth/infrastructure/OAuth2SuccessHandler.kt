@@ -31,15 +31,23 @@ class OAuth2SuccessHandler(
         authentication: Authentication,
     ) {
         val oauth2User = authentication.principal as OAuth2User
-        val email      = oauth2User.getAttribute<String>("email") ?: run {
+
+        val email = oauth2User.getAttribute<String>("email") ?: run {
             log.warn("[OAuth2] email attribute missing in principal")
             response.sendRedirect("$baseUrl/login?error=oauth2")
             return
         }
-        val nickname   = oauth2User.getAttribute<String>("name") ?: email.substringBefore("@")
+        val nickname   = oauth2User.getAttribute<String>("name")     ?: email.substringBefore("@")
+        val provider   = oauth2User.getAttribute<String>("provider") ?: "UNKNOWN"
+        // Google은 "sub", 카카오/네이버는 CustomOAuth2UserService가 email을 키로 사용
+        val providerId = oauth2User.getAttribute<Any>("sub")?.toString()
+            ?: oauth2User.getAttribute<Any>("id")?.toString()
+            ?: email
 
-        val tokens = authService.socialLoginOrSignup(email, nickname)
-        log.info("[OAuth2] social login success: email={}", email)
-        response.sendRedirect("$baseUrl/oauth2/callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}")
+        val tokens = authService.socialLoginOrSignup(email, nickname, provider, providerId)
+        log.info("[OAuth2] social login success: provider={}, email={}", provider, email)
+        response.sendRedirect(
+            "$baseUrl/oauth2/callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}"
+        )
     }
 }

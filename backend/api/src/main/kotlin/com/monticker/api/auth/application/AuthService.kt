@@ -120,12 +120,14 @@ class AuthService(
         log.info("[AuthService] 계정 삭제(soft): userId={}", userId)
     }
 
-    fun socialLoginOrSignup(email: String, nickname: String): TokenPair {
+    fun socialLoginOrSignup(email: String, nickname: String, provider: String, providerId: String): TokenPair {
         val user = userRepository.findByEmail(email).orElse(null) ?: userRepository.save(
             User(
-                email        = email,
-                passwordHash = "",
-                nickname     = nickname,
+                email         = email,
+                passwordHash  = "",
+                nickname      = nickname,
+                provider      = provider,
+                providerId    = providerId,
                 emailVerified = true,
             )
         )

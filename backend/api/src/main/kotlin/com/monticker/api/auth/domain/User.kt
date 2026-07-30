@@ -21,6 +21,9 @@ class User(
     @Column(nullable = false)
     val provider: String = "LOCAL",
 
+    @Column(name = "provider_id")
+    val providerId: String? = null,
+
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
     var role: UserRole = UserRole.USER,

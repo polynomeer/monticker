@@ -1,7 +1,10 @@
 package com.monticker.api.common.config
 
+import com.monticker.api.auth.infrastructure.CustomOAuth2UserService
+import com.monticker.api.auth.infrastructure.HttpCookieOAuth2AuthorizationRequestRepository
 import com.monticker.api.auth.infrastructure.JwtAuthenticationFilter
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
+import com.monticker.api.auth.infrastructure.OAuth2SuccessHandler
 import com.monticker.api.common.idempotency.IdempotencyFilter
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
@@ -23,7 +26,11 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource
 class SecurityConfig(
     private val jwtTokenProvider: JwtTokenProvider,
     private val idempotencyFilter: IdempotencyFilter,
+    private val oauth2SuccessHandler: OAuth2SuccessHandler,
+    private val customOAuth2UserService: CustomOAuth2UserService,
+    private val cookieAuthorizationRequestRepository: HttpCookieOAuth2AuthorizationRequestRepository,
     @Value("\${app.cors.allowed-origins:http://localhost:3000}") private val allowedOrigins: String,
+    @Value("\${app.base-url:http://localhost:3000}") private val baseUrl: String,
 ) {
 
     @Bean
@@ -34,10 +41,13 @@ class SecurityConfig(
         http
             .csrf { it.disable() }
             .cors { it.configurationSource(corsConfigurationSource()) }
-            .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
+            // OAuth2 인가 코드 플로우는 세션이 필요 — IF_REQUIRED로 완화
+            // (JWT API 요청은 JwtAuthenticationFilter가 처리하므로 실질적으로 stateless)
+            .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED) }
             .authorizeHttpRequests { auth ->
                 auth
                     .requestMatchers("/api/auth/**").permitAll()
+                    .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/stocks/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/events/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/screener/**").permitAll()
@@ -51,6 +61,15 @@ class SecurityConfig(
             }
             .exceptionHandling {
                 it.authenticationEntryPoint(HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
+            }
+            .oauth2Login { oauth2 ->
+                oauth2
+                    .authorizationEndpoint { ep ->
+                        ep.authorizationRequestRepository(cookieAuthorizationRequestRepository)
+                    }
+                    .userInfoEndpoint { it.userService(customOAuth2UserService) }
+                    .successHandler(oauth2SuccessHandler)
+                    .failureUrl("$baseUrl/login?error=oauth2")
             }
             .addFilterBefore(
                 JwtAuthenticationFilter(jwtTokenProvider),
