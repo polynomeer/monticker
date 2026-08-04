@@ -18,6 +18,7 @@ class BatchJobScheduler(
     @Qualifier("regimeClassificationJob") private val regimeJob: Job,
     @Qualifier("behaviorScoreJob")        private val scoreJob: Job,
     @Qualifier("paperSettlementJob")      private val paperSettlementJob: Job,
+    @Qualifier("subscriptionRenewalJob")  private val subscriptionRenewalJob: Job,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -39,6 +40,15 @@ class BatchJobScheduler(
     fun runBehaviorScore() {
         log.info("BehaviorScore job starting...")
         runJob(scoreJob, JobParametersBuilder()
+            .addString("date", LocalDate.now().toString())
+            .toJobParameters())
+    }
+
+    // 매월 1일 01:00 KST — 만료 예정 구독 갱신 결제 시도
+    @Scheduled(cron = "0 0 1 1 * *", zone = "Asia/Seoul")
+    fun runSubscriptionRenewal() {
+        log.info("Subscription renewal job starting...")
+        runJob(subscriptionRenewalJob, JobParametersBuilder()
             .addString("date", LocalDate.now().toString())
             .toJobParameters())
     }
