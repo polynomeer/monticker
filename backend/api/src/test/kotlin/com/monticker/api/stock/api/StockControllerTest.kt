@@ -1,5 +1,6 @@
 package com.monticker.api.stock.api
 
+import com.monticker.api.stock.application.StockSearchService
 import com.monticker.api.stock.application.StockService
 import com.monticker.api.stock.domain.Market
 import com.monticker.api.stock.domain.Stock
@@ -15,7 +16,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders
 class StockControllerTest {
 
     private val stockService = mockk<StockService>()
-    private val controller = StockController(stockService)
+    private val stockSearchService = mockk<StockSearchService>(relaxed = true)
+    private val controller = StockController(stockService, stockSearchService)
     private val mockMvc: MockMvc = MockMvcBuilders.standaloneSetup(controller).build()
 
     @Test

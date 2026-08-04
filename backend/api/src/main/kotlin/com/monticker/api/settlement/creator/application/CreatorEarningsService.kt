@@ -5,6 +5,7 @@ import com.monticker.api.settlement.creator.infrastructure.CreatorEarningReposit
 import com.monticker.api.settlement.creator.infrastructure.CreatorPayoutRepository
 import com.monticker.api.subscription.infrastructure.pg.PgClient
 import com.monticker.api.subscription.infrastructure.pg.PaymentRequest
+import com.monticker.api.wallet.application.LedgerService
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
@@ -18,6 +19,7 @@ class CreatorEarningsService(
     private val earningRepo: CreatorEarningRepository,
     private val payoutRepo: CreatorPayoutRepository,
     private val pgClient: PgClient,
+    private val ledgerService: LedgerService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -68,6 +70,7 @@ class CreatorEarningsService(
             )
         )
 
+        ledgerService.recordCreatorEarning(creatorId, strategyId, netAmount, earning.id)
         log.info(
             "수익 적립: creatorId={} strategyId={} gross={} net={}",
             creatorId, strategyId, price, netAmount,
@@ -146,6 +149,7 @@ class CreatorEarningsService(
             remaining = remaining.subtract(earning.netAmount)
         }
 
+        ledgerService.recordCreatorPayoutPaid(payout.creatorId, payout.amount, payoutId)
         log.info("출금 지급 완료: payoutId={} creatorId={} amount={}", payoutId, payout.creatorId, payout.amount)
         return payoutRepo.save(payout)
     }

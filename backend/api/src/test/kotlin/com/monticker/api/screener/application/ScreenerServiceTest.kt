@@ -2,6 +2,7 @@ package com.monticker.api.screener.application
 
 import com.monticker.api.screener.domain.ScreenerItem
 import com.monticker.api.screener.infrastructure.ScreenerRepository
+import com.monticker.api.stock.application.StockSearchService
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -12,7 +13,8 @@ import java.math.BigDecimal
 class ScreenerServiceTest {
 
     private val repo = mockk<ScreenerRepository>()
-    private val service = ScreenerService(repo)
+    private val stockSearchService = mockk<StockSearchService>(relaxed = true)
+    private val service = ScreenerService(repo, stockSearchService)
 
     private fun item(rank: Int, stockId: Long) = ScreenerItem(
         rank = rank, stockId = stockId, symbol = "00$stockId", name = "종목$stockId",

@@ -6,9 +6,11 @@ import com.monticker.api.stock.infrastructure.StockRepository
 import com.monticker.api.watchlist.domain.WatchlistGroup
 import com.monticker.api.watchlist.infrastructure.WatchlistGroupRepository
 import com.monticker.api.watchlist.infrastructure.WatchlistItemRepository
+import com.monticker.api.watchlist.infrastructure.WatchlistSearchRepository
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import java.util.Optional
@@ -18,7 +20,9 @@ class WatchlistServiceTest {
     private val groupRepository = mockk<WatchlistGroupRepository>()
     private val itemRepository = mockk<WatchlistItemRepository>()
     private val stockRepository = mockk<StockRepository>()
-    private val service = WatchlistService(groupRepository, itemRepository, stockRepository)
+    private val watchlistSearchRepository = mockk<WatchlistSearchRepository>(relaxed = true)
+    private val esOps = mockk<ElasticsearchOperations>(relaxed = true)
+    private val service = WatchlistService(groupRepository, itemRepository, stockRepository, watchlistSearchRepository, esOps)
 
     @Test
     fun `createGroup throws when name is blank`() {

@@ -6,6 +6,7 @@ import com.monticker.api.subscription.infrastructure.SubscriptionPlanRepository
 import com.monticker.api.subscription.infrastructure.UserSubscriptionRepository
 import com.monticker.api.subscription.infrastructure.pg.PgClient
 import com.monticker.api.subscription.infrastructure.pg.PaymentRequest
+import com.monticker.api.wallet.application.LedgerService
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
@@ -20,6 +21,7 @@ class SubscriptionService(
     private val subscriptionRepo: UserSubscriptionRepository,
     private val paymentRepo: PaymentRecordRepository,
     private val pgClient: PgClient,
+    private val ledgerService: LedgerService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -62,6 +64,7 @@ class SubscriptionService(
             subscriptionRepo.save(subscription)
 
             log.info("구독 활성화: userId={} plan={} txId={}", userId, planCode, result.pgTransactionId)
+            ledgerService.recordSubscriptionPayment(userId, planCode.name, plan.price, record.id)
             SubscribeResult.success(planCode, paymentId = record.id)
         } else {
             record.markFailed(result.failureReason ?: "PG 결제 실패")

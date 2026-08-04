@@ -77,6 +77,60 @@ class LedgerService(
         )
     }
 
+    fun recordSubscriptionPayment(userId: Long, planCode: String, amount: BigDecimal, paymentId: Long) {
+        ledgerRepo.save(
+            LedgerEvent(
+                userId       = userId,
+                eventType    = LedgerEventType.SUBSCRIPTION_PAYMENT,
+                amount       = amount.negate(),
+                description  = "구독료 결제 ($planCode)",
+                metadataJson = """{"paymentId":$paymentId,"planCode":"$planCode"}""",
+            )
+        )
+    }
+
+    fun recordCreatorEarning(creatorId: Long, strategyId: Long, netAmount: BigDecimal, earningId: Long) {
+        ledgerRepo.save(
+            LedgerEvent(
+                userId       = creatorId,
+                eventType    = LedgerEventType.CREATOR_EARNING_CREDITED,
+                amount       = netAmount,
+                description  = "전략 수익 적립",
+                metadataJson = """{"earningId":$earningId,"strategyId":$strategyId}""",
+            )
+        )
+    }
+
+    fun recordCreatorPayoutPaid(creatorId: Long, amount: BigDecimal, payoutId: Long) {
+        ledgerRepo.save(
+            LedgerEvent(
+                userId       = creatorId,
+                eventType    = LedgerEventType.CREATOR_PAYOUT_PAID,
+                amount       = amount.negate(),
+                description  = "전략 수익 출금",
+                metadataJson = """{"payoutId":$payoutId}""",
+            )
+        )
+    }
+
+    fun recordBrokerageSettlement(
+        userId: Long,
+        settlementId: Long,
+        symbol: String,
+        side: String,
+        netAmount: BigDecimal,
+    ) {
+        ledgerRepo.save(
+            LedgerEvent(
+                userId       = userId,
+                eventType    = LedgerEventType.BROKERAGE_SETTLEMENT,
+                amount       = if (side == "SELL") netAmount else netAmount.negate(),
+                description  = "실거래 정산 ($symbol $side)",
+                metadataJson = """{"settlementId":$settlementId,"symbol":"$symbol","side":"$side"}""",
+            )
+        )
+    }
+
     fun recordDeposit(userId: Long, amount: BigDecimal, balanceAfter: BigDecimal) {
         ledgerRepo.save(
             LedgerEvent(

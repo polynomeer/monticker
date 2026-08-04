@@ -4,8 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.api.auth.application.AuthService
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
 import org.junit.jupiter.api.Test
-import org.mockito.kotlin.any
-import org.mockito.kotlin.whenever
+import org.mockito.ArgumentMatchers.anyString
+import org.mockito.BDDMockito.given
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest
 import org.springframework.boot.test.mock.mockito.MockBean
@@ -52,7 +52,7 @@ class AuthControllerTest {
     @Test
     @WithMockUser
     fun `회원가입 - 정상 요청은 200`() {
-        whenever(authService.signup(any(), any(), any())).thenReturn(
+        given(authService.signup(anyString(), anyString(), anyString())).willReturn(
             com.monticker.api.auth.application.TokenPair("access", "refresh")
         )
         mvc.post("/api/auth/signup") {

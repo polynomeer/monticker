@@ -7,6 +7,8 @@ import io.mockk.*
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
+import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.data.redis.core.ValueOperations
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import java.util.Optional
@@ -21,7 +23,11 @@ class AuthServiceTest {
         accessTokenExpiryMs = 900_000L,
         refreshTokenExpiryMs = 604_800_000L,
     )
-    private val service = AuthService(userRepository, provider, encoder, jdbc)
+    private val redis = mockk<StringRedisTemplate>(relaxed = true).also {
+        every { it.opsForValue() } returns mockk<ValueOperations<String, String>>(relaxed = true)
+    }
+    private val emailService = mockk<EmailService>(relaxed = true)
+    private val service = AuthService(userRepository, provider, encoder, jdbc, redis, emailService)
 
     @Test
     fun `signup creates user and returns tokens`() {

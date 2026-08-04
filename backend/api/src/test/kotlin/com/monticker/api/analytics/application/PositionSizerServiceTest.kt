@@ -92,7 +92,7 @@ class PositionSizerServiceTest {
 
     private fun backtestResult(winRate: BigDecimal?, profitFactor: BigDecimal?, createdAt: java.time.Instant) =
         QuantBacktestResult(
-            ruleSetId = 1L, ruleSetVersion = 1, stockId = 100L,
+            ruleSetId = "1", ruleSetVersion = 1, stockId = 100L,
             startDate = LocalDate.of(2025, 1, 1), endDate = LocalDate.of(2025, 12, 31),
             initialCapital = BigDecimal("10000000"), finalCapital = BigDecimal("11000000"),
             winRate = winRate, profitFactor = profitFactor, createdAt = createdAt,
@@ -100,9 +100,9 @@ class PositionSizerServiceTest {
 
     @Test
     fun `calculateKellyForRuleSet returns a no-data recommendation when there are no backtest results`() {
-        every { backtestResultRepository.findAllByRuleSetId(1L) } returns emptyList()
+        every { backtestResultRepository.findAllByRuleSetId("1") } returns emptyList()
 
-        val result = service.calculateKellyForRuleSet(1L)
+        val result = service.calculateKellyForRuleSet("1")
 
         assertThat(result.recommendation).contains("백테스트 결과가 없습니다")
         assertThat(result.fullKelly).isEqualTo(0.0)
@@ -112,9 +112,9 @@ class PositionSizerServiceTest {
     fun `calculateKellyForRuleSet uses the most recently created backtest result`() {
         val older = backtestResult(BigDecimal("40"), BigDecimal("1.0"), java.time.Instant.now().minusSeconds(120))
         val newer = backtestResult(BigDecimal("60"), BigDecimal("2.0"), java.time.Instant.now())
-        every { backtestResultRepository.findAllByRuleSetId(1L) } returns listOf(older, newer)
+        every { backtestResultRepository.findAllByRuleSetId("1") } returns listOf(older, newer)
 
-        val result = service.calculateKellyForRuleSet(1L)
+        val result = service.calculateKellyForRuleSet("1")
 
         // winRate 60% should be used (from the newer result), not 40%
         assertThat(result.winRate).isCloseTo(0.6, within(0.0001))
@@ -125,9 +125,9 @@ class PositionSizerServiceTest {
         // profitFactor = (winRate * avgWin) / ((1-winRate) * avgLoss), avgLoss=1
         // winRate=0.5, profitFactor=2.0 -> avgWin = (2.0 * 0.5 * 1) / 0.5 = 2.0
         val result = backtestResult(BigDecimal("50"), BigDecimal("2.0"), java.time.Instant.now())
-        every { backtestResultRepository.findAllByRuleSetId(1L) } returns listOf(result)
+        every { backtestResultRepository.findAllByRuleSetId("1") } returns listOf(result)
 
-        val kelly = service.calculateKellyForRuleSet(1L)
+        val kelly = service.calculateKellyForRuleSet("1")
 
         assertThat(kelly.avgWin).isCloseTo(2.0, within(0.0001))
         assertThat(kelly.avgLoss).isEqualTo(1.0)
@@ -136,9 +136,9 @@ class PositionSizerServiceTest {
     @Test
     fun `calculateKellyForRuleSet falls back to a fixed avgWin ratio when profitFactor is missing`() {
         val result = backtestResult(BigDecimal("55"), null, java.time.Instant.now())
-        every { backtestResultRepository.findAllByRuleSetId(1L) } returns listOf(result)
+        every { backtestResultRepository.findAllByRuleSetId("1") } returns listOf(result)
 
-        val kelly = service.calculateKellyForRuleSet(1L)
+        val kelly = service.calculateKellyForRuleSet("1")
 
         assertThat(kelly.avgWin).isCloseTo(1.5, within(0.0001))
     }
@@ -146,9 +146,9 @@ class PositionSizerServiceTest {
     @Test
     fun `calculateKellyForRuleSet treats a missing winRate as zero`() {
         val result = backtestResult(null, BigDecimal("2.0"), java.time.Instant.now())
-        every { backtestResultRepository.findAllByRuleSetId(1L) } returns listOf(result)
+        every { backtestResultRepository.findAllByRuleSetId("1") } returns listOf(result)
 
-        val kelly = service.calculateKellyForRuleSet(1L)
+        val kelly = service.calculateKellyForRuleSet("1")
 
         assertThat(kelly.winRate).isEqualTo(0.0)
         assertThat(kelly.fullKelly).isEqualTo(0.0)

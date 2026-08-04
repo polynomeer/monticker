@@ -2,6 +2,7 @@ package com.monticker.api.alert.application
 
 import com.monticker.api.alert.domain.AlertRule
 import com.monticker.api.alert.domain.AlertRuleType
+import com.monticker.api.alert.infrastructure.AlertHistorySearchRepository
 import com.monticker.api.alert.infrastructure.AlertRuleRepository
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.mockk.every
@@ -10,6 +11,7 @@ import io.mockk.verify
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations
 import org.springframework.jdbc.core.JdbcTemplate
 import java.util.Optional
 
@@ -17,7 +19,9 @@ class AlertServiceTest {
 
     private val repo = mockk<AlertRuleRepository>()
     private val jdbc = mockk<JdbcTemplate>()
-    private val service = AlertService(repo, ObjectMapper(), jdbc)
+    private val alertHistorySearchRepository = mockk<AlertHistorySearchRepository>(relaxed = true)
+    private val esOps = mockk<ElasticsearchOperations>(relaxed = true)
+    private val service = AlertService(repo, ObjectMapper(), jdbc, alertHistorySearchRepository, esOps)
 
     @Test
     fun `createRule saves and returns rule`() {

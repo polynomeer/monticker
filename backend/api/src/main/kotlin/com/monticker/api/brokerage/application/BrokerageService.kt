@@ -14,6 +14,7 @@ import com.monticker.api.brokerage.infrastructure.BrokerageOrderRepository
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRequest
 import com.monticker.api.brokerage.infrastructure.BrokerageSettlementRepository
 import com.monticker.api.brokerage.infrastructure.BrokerageToken
+import com.monticker.api.wallet.application.LedgerService
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
@@ -28,6 +29,7 @@ class BrokerageService(
     private val accountRepo: BrokerageAccountRepository,
     private val orderRepo: BrokerageOrderRepository,
     private val settlementRepo: BrokerageSettlementRepository,
+    private val ledgerService: LedgerService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -144,6 +146,13 @@ class BrokerageService(
     fun settle(settlement: BrokerageSettlement) {
         settlement.settle()
         settlementRepo.save(settlement)
+        ledgerService.recordBrokerageSettlement(
+            userId       = settlement.userId,
+            settlementId = settlement.id,
+            symbol       = settlement.symbol,
+            side         = settlement.side,
+            netAmount    = settlement.netAmount,
+        )
         log.info("증권사 정산 완료: id={} symbol={} side={} qty={}", settlement.id, settlement.symbol, settlement.side, settlement.quantity)
     }
 

@@ -5,8 +5,14 @@ import java.math.BigDecimal
 import java.time.Instant
 
 enum class LedgerEventType {
+    // 기존 페이퍼트레이딩
     DEPOSIT, WITHDRAWAL, CASH_RESERVED, CASH_UNRESERVED, FILL, PARTIAL_FILL, FEE, SETTLEMENT,
+    // 정산 시스템 (V27)
     PAPER_SETTLEMENT_COMPLETE,
+    SUBSCRIPTION_PAYMENT,
+    CREATOR_EARNING_CREDITED,
+    CREATOR_PAYOUT_PAID,
+    BROKERAGE_SETTLEMENT,
 }
 
 @Entity

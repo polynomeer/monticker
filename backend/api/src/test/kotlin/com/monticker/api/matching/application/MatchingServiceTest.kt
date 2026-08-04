@@ -7,6 +7,7 @@ import com.monticker.api.matching.domain.OrderStatus
 import com.monticker.api.matching.domain.OrderType
 import com.monticker.api.matching.infrastructure.FillRepository
 import com.monticker.api.matching.infrastructure.OrderRepository
+import com.monticker.api.matching.saga.OrderSagaOrchestrator
 import com.monticker.api.matching.statemachine.OrderStateMachineService
 import io.mockk.every
 import io.mockk.mockk
@@ -30,8 +31,9 @@ class MatchingServiceTest {
     private val jdbc = mockk<JdbcTemplate>(relaxed = true)
     private val stateMachineService = mockk<OrderStateMachineService>(relaxed = true)
     private val eventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
+    private val sagaOrchestrator = mockk<OrderSagaOrchestrator>(relaxed = true)
 
-    private val service = MatchingService(orderRepo, fillRepo, fillQueryService, orderBookService, riskChecker, jdbc, stateMachineService, eventPublisher)
+    private val service = MatchingService(orderRepo, fillRepo, fillQueryService, orderBookService, riskChecker, jdbc, stateMachineService, eventPublisher, sagaOrchestrator)
 
     private val userId = 1L
     private val stockId = 100L
