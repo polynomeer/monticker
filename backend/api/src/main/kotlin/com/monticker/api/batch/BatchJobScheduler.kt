@@ -19,6 +19,7 @@ class BatchJobScheduler(
     @Qualifier("behaviorScoreJob")        private val scoreJob: Job,
     @Qualifier("paperSettlementJob")      private val paperSettlementJob: Job,
     @Qualifier("subscriptionRenewalJob")  private val subscriptionRenewalJob: Job,
+    @Qualifier("brokerageSettlementJob")  private val brokerageSettlementJob: Job,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -49,6 +50,15 @@ class BatchJobScheduler(
     fun runSubscriptionRenewal() {
         log.info("Subscription renewal job starting...")
         runJob(subscriptionRenewalJob, JobParametersBuilder()
+            .addString("date", LocalDate.now().toString())
+            .toJobParameters())
+    }
+
+    // 장 마감 후 17:00 KST — T+2 기준일 도래한 실거래 증권사 정산 처리
+    @Scheduled(cron = "0 0 17 * * MON-FRI", zone = "Asia/Seoul")
+    fun runBrokerageSettlement() {
+        log.info("Brokerage settlement job starting...")
+        runJob(brokerageSettlementJob, JobParametersBuilder()
             .addString("date", LocalDate.now().toString())
             .toJobParameters())
     }

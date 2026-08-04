@@ -139,6 +139,9 @@ app:
   pg:
     mock:
       enabled: ${PG_MOCK_ENABLED:true}       # 로컬 개발 전용 — 프로덕션은 반드시 false
+  brokerage:
+    mock:
+      enabled: ${BROKERAGE_MOCK_ENABLED:true} # 로컬 개발 전용 — 프로덕션은 반드시 false
 
 
 jwt:
