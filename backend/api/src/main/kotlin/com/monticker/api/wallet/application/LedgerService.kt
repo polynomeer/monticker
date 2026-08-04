@@ -55,6 +55,28 @@ class LedgerService(
         )
     }
 
+    fun recordSettlementComplete(
+        userId: Long,
+        settlementId: Long,
+        stockId: Long,
+        fee: BigDecimal,
+        tax: BigDecimal,
+        balanceAfter: BigDecimal,
+    ) {
+        val total = fee.add(tax)
+        ledgerRepo.save(
+            LedgerEvent(
+                userId       = userId,
+                eventType    = LedgerEventType.PAPER_SETTLEMENT_COMPLETE,
+                amount       = total.negate(),
+                balanceAfter = balanceAfter,
+                stockId      = stockId,
+                description  = "T+2 정산 완료 (수수료 $fee, 세금 $tax)",
+                metadataJson = """{"settlementId":$settlementId,"fee":$fee,"tax":$tax}""",
+            )
+        )
+    }
+
     fun recordDeposit(userId: Long, amount: BigDecimal, balanceAfter: BigDecimal) {
         ledgerRepo.save(
             LedgerEvent(

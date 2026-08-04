@@ -17,6 +17,7 @@ class BatchJobScheduler(
     private val jobLauncher: JobLauncher,
     @Qualifier("regimeClassificationJob") private val regimeJob: Job,
     @Qualifier("behaviorScoreJob")        private val scoreJob: Job,
+    @Qualifier("paperSettlementJob")      private val paperSettlementJob: Job,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -38,6 +39,15 @@ class BatchJobScheduler(
     fun runBehaviorScore() {
         log.info("BehaviorScore job starting...")
         runJob(scoreJob, JobParametersBuilder()
+            .addString("date", LocalDate.now().toString())
+            .toJobParameters())
+    }
+
+    // 장 마감 후 16:30 KST — T+2 기준일 도래한 페이퍼트레이딩 정산 처리
+    @Scheduled(cron = "0 30 16 * * MON-FRI", zone = "Asia/Seoul")
+    fun runPaperSettlement() {
+        log.info("Paper settlement job starting...")
+        runJob(paperSettlementJob, JobParametersBuilder()
             .addString("date", LocalDate.now().toString())
             .toJobParameters())
     }

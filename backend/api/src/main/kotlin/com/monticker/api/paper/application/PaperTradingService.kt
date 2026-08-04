@@ -20,6 +20,7 @@ class PaperTradingService(
     private val ledgerService: LedgerService,
     private val portfolioQueryService: PaperPortfolioQueryService,
     private val projection: PortfolioPositionProjection,
+    private val settlementService: PaperSettlementService,
 ) {
     private fun getOrCreateAccount(userId: Long): PaperAccount =
         accountRepo.findByUserId(userId).orElseGet {
@@ -43,6 +44,7 @@ class PaperTradingService(
             quantity = quantity, price = price.amount, amount = amount.amount))
         projection.onBuy(userId, stockId, quantity, amount.amount)
         ledgerService.recordBuy(userId, trade.id, stockId, amount.amount, account.cash.amount)
+        settlementService.createPending(trade)
         return TradeResultResponse("BUY", stockId, quantity, price.amount, amount.amount, account.cash.amount, trade.id)
     }
 
@@ -61,6 +63,7 @@ class PaperTradingService(
             quantity = quantity, price = price.amount, amount = amount.amount))
         projection.onSell(userId, stockId, quantity)
         ledgerService.recordSell(userId, trade.id, stockId, amount.amount, account.cash.amount)
+        settlementService.createPending(trade)
         return TradeResultResponse("SELL", stockId, quantity, price.amount, amount.amount, account.cash.amount, trade.id)
     }
 

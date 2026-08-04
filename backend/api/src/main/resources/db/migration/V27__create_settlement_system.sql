@@ -15,7 +15,7 @@
 -- ① 페이퍼트레이딩 T+2 정산
 CREATE TABLE IF NOT EXISTS paper_settlements (
     id           BIGSERIAL       PRIMARY KEY,
-    fill_id      BIGINT          NOT NULL UNIQUE REFERENCES fills(id),
+    trade_id     BIGINT          NOT NULL UNIQUE REFERENCES paper_trades(id),
     user_id      BIGINT          NOT NULL REFERENCES users(id),
     stock_id     BIGINT          NOT NULL REFERENCES stocks(id),
     side         VARCHAR(4)      NOT NULL CHECK (side IN ('BUY','SELL')),
