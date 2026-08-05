@@ -32,14 +32,19 @@ interface BehaviorScore {
 }
 
 const EVENT_LABELS: Record<string, { label: string; color: string; icon: string }> = {
-  DEPOSIT:        { label: "입금",     color: "text-[#50fa7b]", icon: "💵" },
-  WITHDRAWAL:     { label: "출금",     color: "text-[#ff5555]", icon: "🏧" },
-  FILL:           { label: "체결",     color: "text-[#bd93f9]", icon: "✅" },
-  PARTIAL_FILL:   { label: "부분체결", color: "text-[#ffb86c]", icon: "🔸" },
-  CASH_RESERVED:  { label: "예약",     color: "text-[#6272a4]", icon: "🔒" },
-  CASH_UNRESERVED:{ label: "예약해제", color: "text-[#6272a4]", icon: "🔓" },
-  FEE:            { label: "수수료",   color: "text-[#ff5555]", icon: "💸" },
-  SETTLEMENT:     { label: "정산완료", color: "text-[#50fa7b]", icon: "🎯" },
+  DEPOSIT:                    { label: "입금",           color: "text-[#50fa7b]", icon: "💵" },
+  WITHDRAWAL:                 { label: "출금",           color: "text-[#ff5555]", icon: "🏧" },
+  FILL:                       { label: "체결",           color: "text-[#bd93f9]", icon: "✅" },
+  PARTIAL_FILL:               { label: "부분체결",       color: "text-[#ffb86c]", icon: "🔸" },
+  CASH_RESERVED:              { label: "예약",           color: "text-[#6272a4]", icon: "🔒" },
+  CASH_UNRESERVED:            { label: "예약해제",       color: "text-[#6272a4]", icon: "🔓" },
+  FEE:                        { label: "수수료",         color: "text-[#ff5555]", icon: "💸" },
+  SETTLEMENT:                 { label: "정산완료",       color: "text-[#50fa7b]", icon: "🎯" },
+  PAPER_SETTLEMENT_COMPLETE:  { label: "모의투자 정산",  color: "text-[#50fa7b]", icon: "📋" },
+  SUBSCRIPTION_PAYMENT:       { label: "구독 결제",      color: "text-[#ff5555]", icon: "💳" },
+  CREATOR_EARNING_CREDITED:   { label: "전략 수익 적립", color: "text-[#50fa7b]", icon: "💰" },
+  CREATOR_PAYOUT_PAID:        { label: "수익 출금",      color: "text-[#ff5555]", icon: "🏦" },
+  BROKERAGE_SETTLEMENT:       { label: "증권사 정산",    color: "text-[#8be9fd]", icon: "🏛️" },
 };
 
 function won(n: number) {

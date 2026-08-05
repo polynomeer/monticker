@@ -55,7 +55,7 @@ function StrategyCard({ strategy }: { strategy: MarketStrategy }) {
 export default function StrategyMarketPage() {
   const [page, setPage] = useState(0);
 
-  const { data: strategies = [], isLoading } = useQuery<MarketStrategy[]>({
+  const { data: strategies, isLoading } = useQuery<MarketStrategy[]>({
     queryKey: ["quant", "market", page],
     queryFn: () => authFetch(`/api/quant/market?page=${page}&size=20`).then(r => r.json()),
   });
@@ -74,7 +74,7 @@ export default function StrategyMarketPage() {
             <div key={i} className="h-24 rounded-xl bg-[#44475a]/20 animate-pulse" />
           ))}
         </div>
-      ) : strategies.length === 0 ? (
+      ) : (strategies ?? []).length === 0 ? (
         <div className="text-center py-20 space-y-3">
           <p className="text-4xl">🏪</p>
           <p className="font-semibold text-[#f8f8f2]">아직 공유된 전략이 없습니다</p>
@@ -89,7 +89,7 @@ export default function StrategyMarketPage() {
       ) : (
         <>
           <div className="space-y-3">
-            {strategies.map(s => <StrategyCard key={s.id} strategy={s} />)}
+            {(strategies ?? []).map((s: MarketStrategy) => <StrategyCard key={s.id} strategy={s} />)}
           </div>
           <div className="flex justify-center gap-3 mt-8">
             {page > 0 && (
@@ -100,7 +100,7 @@ export default function StrategyMarketPage() {
                 이전
               </button>
             )}
-            {strategies.length === 20 && (
+            {(strategies ?? []).length === 20 && (
               <button
                 onClick={() => setPage(p => p + 1)}
                 className="px-4 py-2 rounded-lg bg-[#44475a] text-[#f8f8f2] text-sm hover:bg-[#6272a4] transition-colors"

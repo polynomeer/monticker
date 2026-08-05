@@ -54,12 +54,20 @@ export default function QuantLabPage() {
             나만의 투자 규칙을 만들고, 검증하고, 운용하는 전략 연구소
           </p>
         </div>
-        <Link
-          href="/quant-lab/builder"
-          className="px-5 py-2.5 rounded-xl bg-[#bd93f9] text-[#282a36] font-semibold text-sm hover:bg-[#ff79c6] transition-colors"
-        >
-          + 새 룰셋
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/quant-lab/earnings"
+            className="px-4 py-2 rounded-xl border border-[#50fa7b]/40 text-[#50fa7b] text-sm hover:bg-[#50fa7b]/10 transition-colors"
+          >
+            💰 수익 대시보드
+          </Link>
+          <Link
+            href="/quant-lab/builder"
+            className="px-5 py-2.5 rounded-xl bg-[#bd93f9] text-[#282a36] font-semibold text-sm hover:bg-[#ff79c6] transition-colors"
+          >
+            + 새 룰셋
+          </Link>
+        </div>
       </div>
 
       {/* 빈 상태 */}

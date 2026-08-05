@@ -9,16 +9,18 @@ import AuthNav from "@/components/AuthNav";
 import SearchAutocomplete from "@/components/stock/SearchAutocomplete";
 
 const NAV_LINKS = [
-  { href: "/",           label: "스크리너" },
-  { href: "/backtest",    label: "백테스팅" },
-  { href: "/quant-lab",  label: "Quant Lab" },
-  { href: "/matching",   label: "체결엔진" },
-  { href: "/risk",       label: "리스크" },
-  { href: "/analytics",  label: "Analytics" },
-  { href: "/portfolio",  label: "포트폴리오" },
-  { href: "/watchlist",  label: "관심종목" },
-  { href: "/wallet",     label: "지갑" },
-  { href: "/alerts",     label: "알림" },
+  { href: "/",              label: "스크리너" },
+  { href: "/backtest",      label: "백테스팅" },
+  { href: "/quant-lab",     label: "Quant Lab" },
+  { href: "/matching",      label: "체결엔진" },
+  { href: "/risk",          label: "리스크" },
+  { href: "/analytics",     label: "Analytics" },
+  { href: "/portfolio",     label: "포트폴리오" },
+  { href: "/watchlist",     label: "관심종목" },
+  { href: "/wallet",        label: "지갑" },
+  { href: "/settlement",    label: "정산" },
+  { href: "/subscription",  label: "구독" },
+  { href: "/alerts",        label: "알림" },
 ];
 
 export default function NavBar() {
