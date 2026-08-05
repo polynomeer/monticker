@@ -5,6 +5,50 @@ spring:
     password: ${DB_PASSWORD}
   jpa:
     show-sql: false
+  security:
+    oauth2:
+      client:
+        registration:
+          # Google: https://console.cloud.google.com/apis/credentials
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+          # Kakao: https://developers.kakao.com/console/app
+          kakao:
+            client-id: ${KAKAO_CLIENT_ID}
+            client-secret: ${KAKAO_CLIENT_SECRET}
+          # Naver: https://developers.naver.com/apps
+          naver:
+            client-id: ${NAVER_CLIENT_ID}
+            client-secret: ${NAVER_CLIENT_SECRET}
+
+jwt:
+  secret: ${JWT_SECRET}                   # 최소 32바이트 랜덤 문자열
+
+app:
+  base-url: ${APP_BASE_URL}
+  cors:
+    allowed-origins: ${ALLOWED_ORIGINS}
+  social:
+    mock:
+      enabled: false                      # 절대 true로 변경 금지
+  pg:
+    mock:
+      enabled: false                      # 절대 true로 변경 금지
+    toss:
+      # 발급: https://developers.tosspayments.com → 내 상점 → 연동 정보
+      # 테스트: test_sk_...  라이브: live_sk_...
+      secret-key: ${TOSS_SECRET_KEY}
+  brokerage:
+    mock:
+      enabled: false                      # 절대 true로 변경 금지
+    kis:
+      # 신청: https://apiportal.koreainvestment.com
+      # 실거래: https://openapi.koreainvestment.com:9443
+      base-url: ${KIS_BASE_URL:https://openapi.koreainvestment.com:9443}
+
+anthropic:
+  api-key: ${ANTHROPIC_API_KEY}
 
 logging:
   level:

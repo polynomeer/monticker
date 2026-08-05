@@ -138,10 +138,14 @@ app:
       enabled: ${SOCIAL_MOCK_ENABLED:false}  # 로컬 개발 전용 — 프로덕션은 반드시 false
   pg:
     mock:
-      enabled: ${PG_MOCK_ENABLED:true}       # 로컬 개발 전용 — 프로덕션은 반드시 false
+      enabled: ${PG_MOCK_ENABLED:true}        # 로컬 개발 전용 — 프로덕션은 반드시 false
+    toss:
+      secret-key: ${TOSS_SECRET_KEY:}         # 프로덕션 필수 — 로컬에서는 mock 사용
   brokerage:
     mock:
       enabled: ${BROKERAGE_MOCK_ENABLED:true} # 로컬 개발 전용 — 프로덕션은 반드시 false
+    kis:
+      base-url: ${KIS_BASE_URL:https://openapivts.koreainvestment.com:29443} # 기본값: 모의투자 서버
 
 
 jwt:
