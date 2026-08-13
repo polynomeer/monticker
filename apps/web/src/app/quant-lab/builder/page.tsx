@@ -55,7 +55,7 @@ function ConditionRow({ cond, onChange, onRemove }: {
   const meta = INDICATORS.find(i => i.value === cond.indicator);
 
   return (
-    <div className="flex flex-wrap gap-2 items-center p-3 rounded-lg bg-[#282a36] border border-[#44475a]">
+    <div className="flex flex-wrap gap-2 items-center p-3 rounded-lg bg-gray-50 dark:bg-[#282a36] border border-gray-200 dark:border-[#44475a]">
       {/* 지표 선택 */}
       <select
         value={cond.indicator}
@@ -63,7 +63,7 @@ function ConditionRow({ cond, onChange, onRemove }: {
           const m = INDICATORS.find(i => i.value === e.target.value)!;
           onChange({ ...cond, indicator: e.target.value, comparator: m.comparators[0], params: {}, value: undefined });
         }}
-        className="rounded-md bg-[#44475a] text-[#f8f8f2] text-xs px-2 py-1.5 border-none focus:outline-none focus:ring-1 focus:ring-[#bd93f9]"
+        className="rounded-md bg-white dark:bg-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none focus:ring-1 focus:ring-[#bd93f9]"
       >
         {INDICATORS.map(i => <option key={i.value} value={i.value}>{i.label}</option>)}
       </select>
@@ -74,7 +74,7 @@ function ConditionRow({ cond, onChange, onRemove }: {
           type="number"
           value={cond.params.period ?? 20}
           onChange={e => onChange({ ...cond, params: { ...cond.params, period: +e.target.value } })}
-          className="w-16 rounded-md bg-[#44475a] text-[#f8f8f2] text-xs px-2 py-1.5 border-none focus:outline-none focus:ring-1 focus:ring-[#bd93f9]"
+          className="w-16 rounded-md bg-white dark:bg-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none focus:ring-1 focus:ring-[#bd93f9]"
           min={1}
         />
       )}
@@ -83,7 +83,7 @@ function ConditionRow({ cond, onChange, onRemove }: {
       <select
         value={cond.comparator}
         onChange={e => onChange({ ...cond, comparator: e.target.value })}
-        className="rounded-md bg-[#44475a] text-[#f8f8f2] text-xs px-2 py-1.5 border-none focus:outline-none focus:ring-1 focus:ring-[#bd93f9]"
+        className="rounded-md bg-white dark:bg-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none focus:ring-1 focus:ring-[#bd93f9]"
       >
         {meta?.comparators.map(c => (
           <option key={c} value={c}>{COMPARATOR_LABEL[c] ?? c}</option>
@@ -97,14 +97,14 @@ function ConditionRow({ cond, onChange, onRemove }: {
             type="number"
             value={Array.isArray(cond.value) ? cond.value[0] : 30}
             onChange={e => onChange({ ...cond, value: [+e.target.value, Array.isArray(cond.value) ? cond.value[1] : 70] })}
-            className="w-16 rounded-md bg-[#44475a] text-[#f8f8f2] text-xs px-2 py-1.5 border-none focus:outline-none"
+            className="w-16 rounded-md bg-white dark:bg-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none"
           />
-          <span className="text-[#6272a4] text-xs">~</span>
+          <span className="text-gray-500 dark:text-[#6272a4] text-xs">~</span>
           <input
             type="number"
             value={Array.isArray(cond.value) ? cond.value[1] : 70}
             onChange={e => onChange({ ...cond, value: [Array.isArray(cond.value) ? cond.value[0] : 30, +e.target.value] })}
-            className="w-16 rounded-md bg-[#44475a] text-[#f8f8f2] text-xs px-2 py-1.5 border-none focus:outline-none"
+            className="w-16 rounded-md bg-white dark:bg-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none"
           />
         </>
       ) : (meta as any)?.hasValue ? (
@@ -112,11 +112,11 @@ function ConditionRow({ cond, onChange, onRemove }: {
           type="number"
           value={typeof cond.value === "number" ? cond.value : ""}
           onChange={e => onChange({ ...cond, value: +e.target.value })}
-          className="w-20 rounded-md bg-[#44475a] text-[#f8f8f2] text-xs px-2 py-1.5 border-none focus:outline-none focus:ring-1 focus:ring-[#bd93f9]"
+          className="w-20 rounded-md bg-white dark:bg-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none focus:ring-1 focus:ring-[#bd93f9]"
         />
       ) : null}
 
-      <button onClick={onRemove} className="ml-auto text-[#ff5555] text-xs px-2 hover:opacity-70">✕</button>
+      <button onClick={onRemove} className="ml-auto text-[#ff5555] text-xs px-2 hover:opacity-70 active:scale-90 transition-transform">✕</button>
     </div>
   );
 }
@@ -204,46 +204,46 @@ export default function BuilderPage() {
   const addExit  = () => setExit(p => [...p, { id: uid(), indicator: "PROFIT_RATE", comparator: "GTE", params: {}, value: 8 }]);
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
+    <div className="max-w-3xl mx-auto px-4 py-6 sm:py-8 animate-fade-up">
       <div className="flex items-center gap-3 mb-8">
-        <button onClick={() => router.back()} className="text-[#6272a4] hover:text-[#f8f8f2] text-sm">← 뒤로</button>
-        <h1 className="text-xl font-bold text-[#f8f8f2]">
+        <button onClick={() => router.back()} className="text-gray-500 dark:text-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2] text-sm transition-colors">← 뒤로</button>
+        <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-[#f8f8f2]">
           {editId ? "룰셋 수정" : "새 룰셋 만들기"}
         </h1>
       </div>
 
       {/* 기본 정보 */}
-      <section className="mb-6 p-5 rounded-xl border border-[#44475a] bg-[#21222c]">
-        <h2 className="text-sm font-semibold text-[#f8f8f2] mb-4">기본 정보</h2>
+      <section className="mb-6 p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2] mb-4">기본 정보</h2>
         <div className="space-y-3">
           <input
             type="text"
             placeholder="전략 이름 (예: 거래량 돌파 단기 전략)"
             value={name}
             onChange={e => setName(e.target.value)}
-            className="w-full rounded-lg bg-[#282a36] border border-[#44475a] text-[#f8f8f2] px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#bd93f9]"
+            className="w-full rounded-lg bg-white dark:bg-[#282a36] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] placeholder-gray-400 dark:placeholder-[#6272a4] px-4 py-2.5 text-sm transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:ring-2 focus:ring-[#bd93f9]/50"
           />
           <textarea
             placeholder="전략 설명 (선택)"
             value={description}
             onChange={e => setDescription(e.target.value)}
             rows={2}
-            className="w-full rounded-lg bg-[#282a36] border border-[#44475a] text-[#f8f8f2] px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#bd93f9]"
+            className="w-full rounded-lg bg-white dark:bg-[#282a36] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] placeholder-gray-400 dark:placeholder-[#6272a4] px-4 py-2.5 text-sm resize-none transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:ring-2 focus:ring-[#bd93f9]/50"
           />
         </div>
       </section>
 
       {/* 매수 조건 */}
-      <section className="mb-6 p-5 rounded-xl border border-[#50fa7b]/30 bg-[#21222c]">
+      <section className="mb-6 p-5 rounded-xl border border-[#50fa7b]/30 bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-[#50fa7b]">매수 조건</h2>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-[#6272a4]">조건 연산자:</span>
+            <span className="text-xs text-gray-500 dark:text-[#6272a4]">조건 연산자:</span>
             {(["AND","OR"] as const).map(op => (
               <button
                 key={op}
                 onClick={() => setEntryOp(op)}
-                className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${entryOp === op ? "bg-[#50fa7b] text-[#282a36]" : "bg-[#44475a] text-[#6272a4]"}`}
+                className={`px-2 py-0.5 rounded text-xs font-medium transition-all duration-150 active:scale-95 ${entryOp === op ? "bg-[#50fa7b] text-[#282a36]" : "bg-gray-100 dark:bg-[#44475a] text-gray-500 dark:text-[#6272a4]"}`}
               >
                 {op}
               </button>
@@ -266,16 +266,16 @@ export default function BuilderPage() {
       </section>
 
       {/* 매도 조건 */}
-      <section className="mb-6 p-5 rounded-xl border border-[#ff5555]/30 bg-[#21222c]">
+      <section className="mb-6 p-5 rounded-xl border border-[#ff5555]/30 bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-[#ff5555]">매도 조건</h2>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-[#6272a4]">조건 연산자:</span>
+            <span className="text-xs text-gray-500 dark:text-[#6272a4]">조건 연산자:</span>
             {(["AND","OR"] as const).map(op => (
               <button
                 key={op}
                 onClick={() => setExitOp(op)}
-                className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${exitOp === op ? "bg-[#ff5555] text-[#f8f8f2]" : "bg-[#44475a] text-[#6272a4]"}`}
+                className={`px-2 py-0.5 rounded text-xs font-medium transition-all duration-150 active:scale-95 ${exitOp === op ? "bg-[#ff5555] text-white" : "bg-gray-100 dark:bg-[#44475a] text-gray-500 dark:text-[#6272a4]"}`}
               >
                 {op}
               </button>
@@ -298,18 +298,18 @@ export default function BuilderPage() {
       </section>
 
       {/* 포지션 사이징 */}
-      <section className="mb-8 p-5 rounded-xl border border-[#44475a] bg-[#21222c]">
-        <h2 className="text-sm font-semibold text-[#f8f8f2] mb-4">포지션 사이징</h2>
+      <section className="mb-8 p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2] mb-4">포지션 사이징</h2>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-[#6272a4]">1회 매수에 총 자본의</span>
+          <span className="text-sm text-gray-500 dark:text-[#6272a4]">1회 매수에 총 자본의</span>
           <input
             type="number"
             value={positionPct}
             onChange={e => setPositionPct(+e.target.value)}
             min={1} max={100}
-            className="w-20 rounded-lg bg-[#282a36] border border-[#44475a] text-[#f8f8f2] px-3 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#bd93f9]"
+            className="w-20 rounded-lg bg-white dark:bg-[#282a36] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] px-3 py-1.5 text-sm text-center transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:ring-2 focus:ring-[#bd93f9]/50"
           />
-          <span className="text-sm text-[#6272a4]">% 사용</span>
+          <span className="text-sm text-gray-500 dark:text-[#6272a4]">% 사용</span>
         </div>
       </section>
 
@@ -317,7 +317,7 @@ export default function BuilderPage() {
       <button
         onClick={() => saveMutation.mutate()}
         disabled={!name.trim() || entry.length === 0 || exit.length === 0 || saveMutation.isPending}
-        className="w-full py-3 rounded-xl bg-[#bd93f9] text-[#282a36] font-bold text-sm hover:bg-[#ff79c6] transition-colors disabled:opacity-40"
+        className="w-full py-3 rounded-xl bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100"
       >
         {saveMutation.isPending ? "저장 중..." : "룰셋 저장 →"}
       </button>

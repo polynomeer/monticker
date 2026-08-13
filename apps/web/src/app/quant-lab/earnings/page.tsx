@@ -73,13 +73,13 @@ function PayoutModal({ available, onClose, onSubmit }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-md mx-4 p-6 rounded-2xl border border-[#44475a] bg-[#282a36] shadow-2xl">
-        <h2 className="text-base font-bold text-[#f8f8f2] mb-1">수익 출금 신청</h2>
-        <p className="text-xs text-[#6272a4] mb-5">출금 가능: <span className="text-[#50fa7b] font-semibold">{won(available)}</span> · 최소 10,000원</p>
+      <div className="w-full max-w-md mx-4 p-6 rounded-2xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#282a36] shadow-2xl animate-fade-up">
+        <h2 className="text-base font-bold text-gray-900 dark:text-[#f8f8f2] mb-1">수익 출금 신청</h2>
+        <p className="text-xs text-gray-500 dark:text-[#6272a4] mb-5">출금 가능: <span className="text-[#50fa7b] font-semibold">{won(available)}</span> · 최소 10,000원</p>
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="text-xs text-[#6272a4] block mb-1">출금 금액 (원)</label>
+            <label className="text-xs text-gray-500 dark:text-[#6272a4] block mb-1">출금 금액 (원)</label>
             <input
               type="number"
               required
@@ -88,50 +88,50 @@ function PayoutModal({ available, onClose, onSubmit }: {
               value={form.amount}
               onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
               placeholder="10,000 이상"
-              className="w-full px-3 py-2 rounded-lg bg-[#21222c] border border-[#44475a] text-[#f8f8f2] text-sm focus:outline-none focus:border-[#bd93f9] transition-colors"
+              className="w-full px-3 py-2 rounded-lg bg-white dark:bg-[#21222c] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-sm focus:outline-none focus:border-[#bd93f9] transition-colors"
             />
           </div>
           <div>
-            <label className="text-xs text-[#6272a4] block mb-1">은행명</label>
+            <label className="text-xs text-gray-500 dark:text-[#6272a4] block mb-1">은행명</label>
             <input
               type="text"
               required
               value={form.bankName}
               onChange={e => setForm(f => ({ ...f, bankName: e.target.value }))}
               placeholder="예: 카카오뱅크"
-              className="w-full px-3 py-2 rounded-lg bg-[#21222c] border border-[#44475a] text-[#f8f8f2] text-sm focus:outline-none focus:border-[#bd93f9] transition-colors"
+              className="w-full px-3 py-2 rounded-lg bg-white dark:bg-[#21222c] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-sm focus:outline-none focus:border-[#bd93f9] transition-colors"
             />
           </div>
           <div>
-            <label className="text-xs text-[#6272a4] block mb-1">계좌번호</label>
+            <label className="text-xs text-gray-500 dark:text-[#6272a4] block mb-1">계좌번호</label>
             <input
               type="text"
               required
               value={form.accountNumber}
               onChange={e => setForm(f => ({ ...f, accountNumber: e.target.value }))}
               placeholder="- 없이 입력"
-              className="w-full px-3 py-2 rounded-lg bg-[#21222c] border border-[#44475a] text-[#f8f8f2] text-sm focus:outline-none focus:border-[#bd93f9] transition-colors"
+              className="w-full px-3 py-2 rounded-lg bg-white dark:bg-[#21222c] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-sm focus:outline-none focus:border-[#bd93f9] transition-colors"
             />
           </div>
           <div>
-            <label className="text-xs text-[#6272a4] block mb-1">예금주</label>
+            <label className="text-xs text-gray-500 dark:text-[#6272a4] block mb-1">예금주</label>
             <input
               type="text"
               required
               value={form.accountHolder}
               onChange={e => setForm(f => ({ ...f, accountHolder: e.target.value }))}
               placeholder="이름"
-              className="w-full px-3 py-2 rounded-lg bg-[#21222c] border border-[#44475a] text-[#f8f8f2] text-sm focus:outline-none focus:border-[#bd93f9] transition-colors"
+              className="w-full px-3 py-2 rounded-lg bg-white dark:bg-[#21222c] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-sm focus:outline-none focus:border-[#bd93f9] transition-colors"
             />
           </div>
 
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl border border-[#44475a] text-[#6272a4] text-sm hover:bg-[#44475a]/30 transition-colors">
+              className="flex-1 py-2.5 rounded-xl border border-gray-300 dark:border-[#44475a] text-gray-500 dark:text-[#6272a4] text-sm hover:bg-gray-50 dark:hover:bg-[#44475a]/30 active:scale-[0.98] transition-all duration-150">
               취소
             </button>
             <button type="submit"
-              className="flex-1 py-2.5 rounded-xl bg-[#bd93f9] text-[#282a36] text-sm font-semibold hover:bg-[#ff79c6] transition-colors">
+              className="flex-1 py-2.5 rounded-xl bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] text-sm font-semibold hover:opacity-90 active:scale-[0.98] transition-all duration-150">
               신청하기
             </button>
           </div>
@@ -193,7 +193,7 @@ export default function EarningsPage() {
   });
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
+    <div className="max-w-3xl mx-auto px-4 py-6 sm:py-8 animate-fade-up">
       {showModal && (
         <PayoutModal
           available={balance}
@@ -204,22 +204,22 @@ export default function EarningsPage() {
 
       {/* 헤더 */}
       <div className="flex items-center gap-3 mb-8">
-        <Link href="/quant-lab" className="text-[#6272a4] hover:text-[#f8f8f2] text-sm">← Quant Lab</Link>
-        <h1 className="text-xl font-bold text-[#f8f8f2]">제작자 수익</h1>
+        <Link href="/quant-lab" className="text-gray-500 dark:text-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2] text-sm transition-colors">← Quant Lab</Link>
+        <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-[#f8f8f2]">제작자 수익</h1>
       </div>
 
       {/* 출금 가능 잔액 카드 */}
-      <div className="mb-6 p-5 rounded-2xl border border-[#bd93f9]/30 bg-[#21222c]">
+      <div className="mb-6 p-5 rounded-2xl border border-[#bd93f9]/30 bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
         <div className="flex items-end justify-between gap-4">
           <div>
-            <p className="text-xs text-[#6272a4] mb-1">출금 가능 잔액</p>
-            <p className="text-3xl font-bold text-[#f8f8f2]">{won(balance)}</p>
-            <p className="text-xs text-[#6272a4] mt-1">제작자 70% 수익분 · 최소 출금 10,000원</p>
+            <p className="text-xs text-gray-500 dark:text-[#6272a4] mb-1">출금 가능 잔액</p>
+            <p className="text-3xl font-bold tabular-nums text-gray-900 dark:text-[#f8f8f2]">{won(balance)}</p>
+            <p className="text-xs text-gray-500 dark:text-[#6272a4] mt-1">제작자 70% 수익분 · 최소 출금 10,000원</p>
           </div>
           <button
             onClick={() => setShowModal(true)}
             disabled={balance < 10000}
-            className="shrink-0 px-5 py-2.5 rounded-xl bg-[#bd93f9] text-[#282a36] text-sm font-semibold hover:bg-[#ff79c6] transition-colors disabled:opacity-40"
+            className="shrink-0 px-5 py-2.5 rounded-xl bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] text-sm font-semibold hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100"
           >
             출금 신청
           </button>
@@ -227,11 +227,11 @@ export default function EarningsPage() {
       </div>
 
       {/* 탭 */}
-      <div className="flex gap-1 mb-6 border-b border-[#44475a]">
+      <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-[#44475a]">
         {(["overview", "earnings", "payouts"] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px
-              ${tab === t ? "border-[#bd93f9] text-[#bd93f9]" : "border-transparent text-[#6272a4] hover:text-[#f8f8f2]"}`}>
+            className={`px-4 py-2 text-sm font-medium transition-colors duration-200 border-b-2 -mb-px
+              ${tab === t ? "border-blue-600 dark:border-[#bd93f9] text-blue-600 dark:text-[#bd93f9]" : "border-transparent text-gray-500 dark:text-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2]"}`}>
             {t === "overview" ? "전략별 수익" : t === "earnings" ? "수익 내역" : "출금 내역"}
           </button>
         ))}
@@ -240,20 +240,20 @@ export default function EarningsPage() {
       {/* 전략별 수익 요약 */}
       {tab === "overview" && (
         (byStrategy ?? []).length === 0 ? (
-          <div className="text-center py-16 border border-dashed border-[#44475a] rounded-xl text-[#6272a4] text-sm">
+          <div className="text-center py-16 border border-dashed border-gray-300 dark:border-[#44475a] rounded-xl text-gray-500 dark:text-[#6272a4] text-sm">
             아직 수익이 없습니다. 전략을 공유하고 구독자를 모아보세요.
-            <Link href="/quant-lab/builder" className="block mt-3 text-[#bd93f9] hover:underline">룰셋 만들기 →</Link>
+            <Link href="/quant-lab/builder" className="block mt-3 text-blue-600 dark:text-[#bd93f9] hover:underline">룰셋 만들기 →</Link>
           </div>
         ) : (
           <div className="space-y-3">
             {(byStrategy ?? []).map((row: EarningSummary, i: number) => (
-              <div key={row.strategyId} className="p-4 rounded-xl border border-[#44475a] bg-[#21222c] flex items-center gap-4">
-                <span className="text-lg text-[#6272a4] font-mono w-6 text-center">{i + 1}</span>
+              <div key={row.strategyId} className="p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line flex items-center gap-4">
+                <span className="text-lg text-gray-400 dark:text-[#6272a4] font-mono w-6 text-center">{i + 1}</span>
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-[#f8f8f2]">전략 #{row.strategyId}</p>
-                  <p className="text-xs text-[#6272a4]">누적 순수익</p>
+                  <p className="text-sm font-medium text-gray-900 dark:text-[#f8f8f2]">전략 #{row.strategyId}</p>
+                  <p className="text-xs text-gray-500 dark:text-[#6272a4]">누적 순수익</p>
                 </div>
-                <p className="text-base font-bold text-[#50fa7b]">{won(row.totalNet)}</p>
+                <p className="text-base font-bold tabular-nums text-[#50fa7b]">{won(row.totalNet)}</p>
               </div>
             ))}
           </div>
@@ -265,7 +265,7 @@ export default function EarningsPage() {
         (() => {
           const items: CreatorEarning[] = earningsData?.content ?? [];
           return items.length === 0 ? (
-            <div className="text-center py-16 border border-dashed border-[#44475a] rounded-xl text-[#6272a4] text-sm">
+            <div className="text-center py-16 border border-dashed border-gray-300 dark:border-[#44475a] rounded-xl text-gray-500 dark:text-[#6272a4] text-sm">
               수익 내역이 없습니다.
             </div>
           ) : (
@@ -274,18 +274,18 @@ export default function EarningsPage() {
                 {items.map(e => {
                   const meta = EARNING_STATUS[e.status];
                   return (
-                    <div key={e.id} className="flex items-center gap-3 p-4 rounded-xl border border-[#44475a] bg-[#21222c]">
+                    <div key={e.id} className="flex items-center gap-3 p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-[#f8f8f2]">전략 #{e.strategyId}</span>
+                          <span className="text-sm font-medium text-gray-900 dark:text-[#f8f8f2]">전략 #{e.strategyId}</span>
                           <span className={`text-xs ${meta.color}`}>{meta.label}</span>
                         </div>
-                        <p className="text-xs text-[#6272a4] mt-0.5">
+                        <p className="text-xs text-gray-500 dark:text-[#6272a4] mt-0.5">
                           {new Date(e.earnedAt).toLocaleDateString("ko-KR")} ·
                           총액 {won(e.grossAmount)} → 플랫폼 수수료 {won(e.platformFee)}
                         </p>
                       </div>
-                      <p className="text-sm font-bold text-[#50fa7b] shrink-0">+{won(e.netAmount)}</p>
+                      <p className="text-sm font-bold tabular-nums text-[#50fa7b] shrink-0">+{won(e.netAmount)}</p>
                     </div>
                   );
                 })}
@@ -294,11 +294,11 @@ export default function EarningsPage() {
                 <div className="flex justify-center gap-3 mt-6">
                   {earningPage > 0 && (
                     <button onClick={() => setEarningPage(p => p - 1)}
-                      className="px-4 py-2 rounded-lg bg-[#44475a] text-[#f8f8f2] text-sm hover:bg-[#6272a4] transition-colors">이전</button>
+                      className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-[#44475a] text-gray-700 dark:text-[#f8f8f2] text-sm font-medium hover:bg-gray-200 dark:hover:bg-[#6272a4] active:scale-[0.98] transition-all duration-150">이전</button>
                   )}
                   {earningPage < (earningsData?.totalPages ?? 1) - 1 && (
                     <button onClick={() => setEarningPage(p => p + 1)}
-                      className="px-4 py-2 rounded-lg bg-[#44475a] text-[#f8f8f2] text-sm hover:bg-[#6272a4] transition-colors">다음</button>
+                      className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-[#44475a] text-gray-700 dark:text-[#f8f8f2] text-sm font-medium hover:bg-gray-200 dark:hover:bg-[#6272a4] active:scale-[0.98] transition-all duration-150">다음</button>
                   )}
                 </div>
               )}
@@ -312,7 +312,7 @@ export default function EarningsPage() {
         (() => {
           const items: CreatorPayout[] = payoutsData?.content ?? [];
           return items.length === 0 ? (
-            <div className="text-center py-16 border border-dashed border-[#44475a] rounded-xl text-[#6272a4] text-sm">
+            <div className="text-center py-16 border border-dashed border-gray-300 dark:border-[#44475a] rounded-xl text-gray-500 dark:text-[#6272a4] text-sm">
               출금 내역이 없습니다.
             </div>
           ) : (
@@ -320,17 +320,17 @@ export default function EarningsPage() {
               {items.map(p => {
                 const meta = PAYOUT_STATUS[p.status];
                 return (
-                  <div key={p.id} className="p-4 rounded-xl border border-[#44475a] bg-[#21222c]">
+                  <div key={p.id} className="p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
                     <div className="flex items-center justify-between gap-4">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-[#f8f8f2]">{won(p.amount)}</span>
+                          <span className="text-sm font-bold tabular-nums text-gray-900 dark:text-[#f8f8f2]">{won(p.amount)}</span>
                           <span className={`text-xs ${meta.color}`}>{meta.label}</span>
                         </div>
-                        <p className="text-xs text-[#6272a4] mt-0.5">
+                        <p className="text-xs text-gray-500 dark:text-[#6272a4] mt-0.5">
                           {p.bankName} {p.accountNumber.slice(-4).padStart(p.accountNumber.length, "•")} ({p.accountHolder})
                         </p>
-                        <p className="text-xs text-[#6272a4]">
+                        <p className="text-xs text-gray-500 dark:text-[#6272a4]">
                           신청일: {new Date(p.requestedAt).toLocaleDateString("ko-KR")}
                           {p.paidAt && ` · 지급일: ${new Date(p.paidAt).toLocaleDateString("ko-KR")}`}
                         </p>
@@ -344,7 +344,7 @@ export default function EarningsPage() {
         })()
       )}
 
-      <p className="text-xs text-[#6272a4] text-center mt-8">
+      <p className="text-xs text-gray-400 dark:text-[#6272a4] text-center mt-8">
         수익은 구독자 결제 금액의 70%입니다. 최소 출금액 10,000원.
       </p>
     </div>
