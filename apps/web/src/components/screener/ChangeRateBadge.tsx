@@ -18,7 +18,7 @@ export default function ChangeRateBadge({ rate, amount }: Props) {
   return (
     <div className="flex flex-col items-end gap-0.5">
       <span
-        className="text-sm font-semibold px-2 py-0.5 rounded"
+        className="text-sm font-semibold tabular-nums px-2 py-0.5 rounded-md transition-colors duration-150"
         style={{ color, backgroundColor: `${color}18` }}
       >
         {sign}{rate.toFixed(2)}%

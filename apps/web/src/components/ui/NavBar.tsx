@@ -49,17 +49,20 @@ export default function NavBar() {
 
   return (
     <nav className={cn(
-      "sticky top-0 z-40 w-full transition-all duration-200",
+      "sticky top-0 z-40 w-full transition-all duration-300 ease-out",
       scrolled
-        ? "bg-white/80 dark:bg-[#21222c]/80 backdrop-blur-md border-b border-gray-200 dark:border-[#44475a]/60"
-        : "bg-white dark:bg-[#21222c] border-b border-gray-200 dark:border-[#44475a]"
+        ? "bg-white/75 dark:bg-dracula-surface/70 backdrop-blur-xl border-b border-gray-200/70 dark:border-dracula-line/50 shadow-glow-line"
+        : "bg-white dark:bg-dracula-surface border-b border-gray-200 dark:border-dracula-line/80"
     )}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-4">
 
         {/* 로고 */}
         <Link href="/"
-          className="font-bold text-blue-600 dark:text-[#bd93f9] text-lg tracking-tight shrink-0 hover:opacity-80 transition-opacity">
-          monticker
+          className="group flex items-center gap-2 shrink-0">
+          <span className="w-2 h-2 rounded-full bg-gradient-to-br from-dracula-purple to-dracula-cyan shadow-glow-purple transition-transform duration-300 group-hover:scale-125" />
+          <span className="font-bold text-blue-600 dark:text-dracula-fg text-lg tracking-tight transition-colors group-hover:text-blue-500 dark:group-hover:text-dracula-purple">
+            monticker
+          </span>
         </Link>
 
         {/* 검색 (데스크탑) */}
@@ -68,18 +71,21 @@ export default function NavBar() {
         </div>
 
         {/* 데스크탑 링크 */}
-        <div className="hidden md:flex items-center gap-0.5 ml-2">
+        <div className="hidden md:flex items-center gap-0.5 ml-2 min-w-0 overflow-x-auto fade-edge-x [scrollbar-width:thin]">
           {NAV_LINKS.map(({ href, label }) => {
             const active = pathname === href || pathname.startsWith(href + "/");
             return (
               <Link key={href} href={href}
                 className={cn(
-                  "px-3 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap",
+                  "relative px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 whitespace-nowrap",
                   active
-                    ? "text-gray-900 dark:text-[#f8f8f2] bg-gray-100 dark:bg-[#44475a]/50 font-semibold"
-                    : "text-gray-500 dark:text-[#848e9c] hover:text-gray-900 dark:hover:text-[#f8f8f2] hover:bg-gray-50 dark:hover:bg-[#44475a]/30"
+                    ? "text-gray-900 dark:text-dracula-fg bg-gray-100 dark:bg-dracula-purple/15 font-semibold"
+                    : "text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg hover:bg-gray-50 dark:hover:bg-dracula-line/30"
                 )}>
                 {label}
+                {active && (
+                  <span className="absolute left-3 right-3 -bottom-[1px] h-[2px] rounded-full bg-blue-600 dark:bg-dracula-purple" />
+                )}
               </Link>
             );
           })}
@@ -96,7 +102,7 @@ export default function NavBar() {
           <div className="md:hidden relative" ref={menuRef}>
             <button onClick={() => setMenuOpen(v => !v)}
               aria-label="메뉴" aria-expanded={menuOpen}
-              className="p-2 rounded-md text-gray-500 dark:text-[#848e9c] hover:text-gray-900 dark:hover:text-[#f8f8f2] hover:bg-gray-100 dark:hover:bg-[#44475a]/40 transition-colors">
+              className="p-2 rounded-md text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg hover:bg-gray-100 dark:hover:bg-dracula-line/40 active:scale-95 transition-all duration-150">
               {menuOpen ? (
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M4 4l12 12M16 4L4 16" />
@@ -109,28 +115,30 @@ export default function NavBar() {
             </button>
 
             {menuOpen && (
-              <div className="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-[#21222c] border border-gray-200 dark:border-[#44475a] rounded-xl shadow-xl overflow-hidden">
+              <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-dracula-surface border border-gray-200 dark:border-dracula-line rounded-xl shadow-xl dark:shadow-glow-line overflow-hidden animate-fade-up">
                 {/* 모바일 검색 */}
-                <div className="p-3 border-b border-gray-100 dark:border-[#44475a]">
+                <div className="p-3 border-b border-gray-100 dark:border-dracula-line">
                   <SearchAutocomplete />
                 </div>
                 {/* 모바일 링크 */}
-                {NAV_LINKS.map(({ href, label }) => {
-                  const active = pathname === href || pathname.startsWith(href + "/");
-                  return (
-                    <Link key={href} href={href}
-                      className={cn(
-                        "block px-4 py-3 text-sm transition-colors",
-                        active
-                          ? "text-gray-900 dark:text-[#f8f8f2] bg-gray-50 dark:bg-[#bd93f9]/15 font-semibold"
-                          : "text-gray-500 dark:text-[#848e9c] hover:text-gray-900 dark:hover:text-[#f8f8f2] hover:bg-gray-50 dark:hover:bg-[#44475a]/30"
-                      )}>
-                      {label}
-                    </Link>
-                  );
-                })}
+                <div className="max-h-[60vh] overflow-y-auto">
+                  {NAV_LINKS.map(({ href, label }) => {
+                    const active = pathname === href || pathname.startsWith(href + "/");
+                    return (
+                      <Link key={href} href={href}
+                        className={cn(
+                          "block px-4 py-3 text-sm transition-colors",
+                          active
+                            ? "text-gray-900 dark:text-dracula-fg bg-gray-50 dark:bg-dracula-purple/15 font-semibold"
+                            : "text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg hover:bg-gray-50 dark:hover:bg-dracula-line/30"
+                        )}>
+                        {label}
+                      </Link>
+                    );
+                  })}
+                </div>
                 {/* 모바일 AuthNav */}
-                <div className="px-4 py-3 border-t border-gray-100 dark:border-[#44475a]">
+                <div className="px-4 py-3 border-t border-gray-100 dark:border-dracula-line">
                   <AuthNav />
                 </div>
               </div>

@@ -14,8 +14,8 @@ export default function ScreenerRow({ item }: Props) {
   const isKR = ["KOSPI","KOSDAQ"].includes(item.market);
 
   return (
-    <div className="flex items-center h-[52px] px-2 border-b border-[#44475a]/30
-                    hover:bg-[#44475a]/10 transition-colors">
+    <div className="group flex items-center h-[52px] px-2 border-b border-[#44475a]/30
+                    hover:bg-dracula-purple/[0.04] transition-colors duration-150">
 
       {/* # 순위 */}
       <div className="w-10 px-2 shrink-0">
@@ -24,12 +24,12 @@ export default function ScreenerRow({ item }: Props) {
 
       {/* 종목명 */}
       <div className="flex-1 min-w-[160px] px-2">
-        <Link href={`/stocks/${item.symbol}`} className="flex items-center gap-2 hover:opacity-80">
-          <div className="w-7 h-7 rounded-full bg-[#44475a] flex items-center justify-center shrink-0">
+        <Link href={`/stocks/${item.symbol}`} className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-full bg-[#44475a] flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110">
             <span className="text-[9px] font-bold text-[#f8f8f2]">{item.name.slice(0, 2)}</span>
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-medium dark:text-[#f8f8f2] truncate">{item.name}</p>
+            <p className="text-sm font-medium dark:text-[#f8f8f2] truncate group-hover:text-dracula-purple dark:group-hover:text-dracula-purple transition-colors">{item.name}</p>
             <p className="text-[10px] text-[#6272a4]">{item.symbol} · {item.market}</p>
           </div>
         </Link>

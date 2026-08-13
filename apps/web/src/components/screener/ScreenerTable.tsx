@@ -57,22 +57,31 @@ export default function ScreenerTable({
   if (loading) return (
     <div className="space-y-1 p-2">
       {Array.from({ length: 12 }).map((_, i) => (
-        <div key={i} className="h-[52px] rounded bg-[#44475a]/20 animate-pulse" />
+        <div key={i}
+          className="h-[52px] rounded-lg bg-gradient-to-r from-dracula-line/10 via-dracula-line/25 to-dracula-line/10 bg-[length:200%_100%] animate-shimmer"
+          style={{ animationDelay: `${i * 40}ms` }}
+        />
       ))}
     </div>
   );
 
   if (!items.length) return (
-    <div className="text-center py-16 text-[#6272a4] text-sm">데이터가 없습니다.</div>
+    <div className="flex flex-col items-center gap-2 text-center py-20 text-dracula-comment">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="opacity-50">
+        <circle cx="11" cy="11" r="7" />
+        <path d="M21 21l-4.3-4.3" />
+      </svg>
+      <span className="text-sm">데이터가 없습니다.</span>
+    </div>
   );
 
   return (
     <div className="overflow-x-auto">
       {/* 헤더 — 스크롤과 무관하게 고정 */}
-      <div className="flex items-center border-b border-[#44475a] px-2 py-2 min-w-[720px]">
+      <div className="flex items-center border-b border-gray-200 dark:border-[#44475a] px-2 py-2.5 min-w-[720px] bg-gray-50 dark:bg-dracula-line/5">
         {HEADERS.map(h => (
           <div key={h.label}
-            className={`text-xs text-[#6272a4] font-medium px-2 ${h.width}`}>
+            className={`text-xs text-gray-500 dark:text-[#6272a4] font-semibold tracking-wide px-2 ${h.width}`}>
             {h.label}
           </div>
         ))}
@@ -117,7 +126,7 @@ export default function ScreenerTable({
       </div>
 
       {/* 행 수 표시 */}
-      <div className="px-4 py-2 text-[10px] text-[#44475a] border-t border-[#44475a]/30">
+      <div className="px-4 py-2 text-[10px] text-gray-400 dark:text-[#44475a] border-t border-gray-100 dark:border-[#44475a]/30">
         {items.length.toLocaleString()}개 표시 중
         {hasMore && " (스크롤하면 더 보기)"}
         &nbsp;·&nbsp;DOM 렌더: {virtualItems.length}행
