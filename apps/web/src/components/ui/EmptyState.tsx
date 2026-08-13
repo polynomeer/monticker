@@ -25,9 +25,9 @@ export function EmptyState({
       <span className="text-4xl mb-4 opacity-60" aria-hidden>
         {icon}
       </span>
-      <p className="text-[#f8f8f2] font-semibold text-base mb-1">{title}</p>
+      <p className="text-gray-900 dark:text-[#f8f8f2] font-semibold text-base mb-1">{title}</p>
       {description && (
-        <p className="text-[#6272a4] text-sm max-w-xs">{description}</p>
+        <p className="text-gray-500 dark:text-[#6272a4] text-sm max-w-xs">{description}</p>
       )}
       {action && <div className="mt-6">{action}</div>}
     </div>

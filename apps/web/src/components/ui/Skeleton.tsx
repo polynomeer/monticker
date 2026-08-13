@@ -8,7 +8,7 @@ export function Skeleton({ className }: SkeletonProps) {
   return (
     <div
       className={cn(
-        "animate-pulse rounded bg-[#44475a]",
+        "rounded bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15 bg-[length:200%_100%] animate-shimmer",
         className
       )}
     />
@@ -30,7 +30,7 @@ export function SkeletonText({ lines = 3 }: { lines?: number }) {
 
 export function SkeletonCard() {
   return (
-    <div className="rounded-xl border border-[#44475a] bg-[#282a36] p-4 space-y-3">
+    <div className="rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#282a36] p-4 space-y-3">
       <div className="flex items-center gap-3">
         <Skeleton className="h-10 w-10 rounded-full" />
         <div className="flex-1 space-y-2">

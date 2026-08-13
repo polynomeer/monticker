@@ -47,11 +47,11 @@ export default function OnboardingPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#0d1117] text-[#f8f8f2] px-6">
-      <div className="max-w-sm w-full space-y-8 text-center">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#0d1117] bg-mesh-dark text-[#f8f8f2] px-6">
+      <div key={step} className="max-w-sm w-full space-y-8 text-center animate-fade-up">
         <div className="text-7xl">{current.icon}</div>
         <div className="space-y-3">
-          <h1 className="text-2xl font-bold">{current.title}</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{current.title}</h1>
           <p className="text-sm text-[#6272a4] leading-relaxed">{current.description}</p>
         </div>
 
@@ -60,8 +60,8 @@ export default function OnboardingPage() {
           {STEPS.map((_, i) => (
             <span
               key={i}
-              className={`block w-2 h-2 rounded-full transition-colors ${
-                i === step ? "bg-[#bd93f9]" : "bg-[#44475a]"
+              className={`block h-2 rounded-full transition-all duration-300 ${
+                i === step ? "w-6 bg-[#bd93f9] shadow-glow-purple" : "w-2 bg-[#44475a]"
               }`}
             />
           ))}
@@ -71,14 +71,14 @@ export default function OnboardingPage() {
           {step > 0 && (
             <button
               onClick={() => setStep(s => s - 1)}
-              className="flex-1 py-3 rounded-xl border border-[#44475a] text-sm text-[#6272a4] hover:border-[#6272a4] transition-colors"
+              className="flex-1 py-3 rounded-xl border border-[#44475a] text-sm text-[#6272a4] hover:border-[#6272a4] hover:text-[#f8f8f2] active:scale-[0.98] transition-all duration-150"
             >
               이전
             </button>
           )}
           <button
             onClick={next}
-            className="flex-1 py-3 rounded-xl bg-[#bd93f9] text-[#282a36] font-bold text-sm hover:bg-[#ff79c6] transition-colors"
+            className="flex-1 py-3 rounded-xl bg-[#bd93f9] text-[#282a36] font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150"
           >
             {isLast ? "시작하기" : "다음"}
           </button>

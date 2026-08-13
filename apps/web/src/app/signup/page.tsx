@@ -57,15 +57,15 @@ export default function SignupPage() {
   };
 
   const inputCls = (field: string) =>
-    `border rounded-lg px-4 py-2 w-full focus:outline-none focus:ring-2 dark:bg-[#44475a] dark:text-[#f8f8f2] dark:placeholder-[#6272a4] ${
+    `border rounded-lg px-4 py-2 w-full transition-all duration-150 focus:outline-none focus:ring-2 hover:border-gray-400 dark:hover:border-[#6272a4] dark:bg-[#44475a] dark:text-[#f8f8f2] dark:placeholder-[#6272a4] ${
       errors[field]
         ? "border-[#ff5555] focus:ring-[#ff5555]/50"
-        : "border-gray-300 dark:border-[#44475a] focus:ring-[#bd93f9]/50"
+        : "border-gray-300 dark:border-[#44475a] focus:ring-[#bd93f9]/50 focus:border-[#bd93f9]"
     }`;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-[#282a36]">
-      <div className="bg-white dark:bg-[#21222c] dark:border-[#44475a] p-8 rounded-xl shadow-sm border border-gray-200 w-full max-w-sm">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-[#282a36] bg-mesh-light dark:bg-mesh-dark px-4">
+      <div className="bg-white dark:bg-[#21222c] dark:border-[#44475a] p-8 rounded-xl shadow-xl dark:shadow-glow-line border border-gray-200 w-full max-w-sm animate-fade-up">
         <h1 className="text-2xl font-bold mb-6 text-center dark:text-[#f8f8f2]">회원가입</h1>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
 
@@ -121,13 +121,13 @@ export default function SignupPage() {
           )}
 
           <button type="submit" disabled={loading}
-            className="bg-[#bd93f9] text-[#282a36] py-2 rounded-lg hover:bg-[#ff79c6] disabled:opacity-50 font-semibold transition-colors">
+            className="bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] py-2 rounded-lg hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 font-semibold transition-all duration-150">
             {loading ? "처리 중..." : "회원가입"}
           </button>
         </form>
         <p className="mt-4 text-center text-sm text-gray-500 dark:text-[#6272a4]">
           이미 계정이 있으신가요?{" "}
-          <Link href="/login" className="text-[#bd93f9] hover:underline">로그인</Link>
+          <Link href="/login" className="text-blue-600 dark:text-[#bd93f9] hover:underline">로그인</Link>
         </p>
       </div>
     </div>

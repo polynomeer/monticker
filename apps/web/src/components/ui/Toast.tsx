@@ -38,7 +38,7 @@ function ToastItem({ toast }: { toast: Toast }) {
 
   return (
     <div
-      className={`flex items-start gap-3 px-4 py-3 rounded-lg shadow-lg min-w-[280px] max-w-sm ${s.bar} animate-slide-in`}
+      className={`flex items-start gap-3 px-4 py-3 rounded-lg shadow-lg backdrop-blur-sm min-w-[280px] max-w-sm ${s.bar} animate-slide-in`}
     >
       <span className={`text-lg font-bold mt-0.5 ${s.title}`}>{s.icon}</span>
       <div className="flex-1 min-w-0">
@@ -49,7 +49,7 @@ function ToastItem({ toast }: { toast: Toast }) {
       </div>
       <button
         onClick={() => removeToast(toast.id)}
-        className="text-[#6272a4] hover:text-[#f8f8f2] text-lg leading-none ml-1 transition-colors"
+        className="text-[#6272a4] hover:text-[#f8f8f2] text-lg leading-none ml-1 transition-colors active:scale-90"
         aria-label="닫기"
       >
         ×
