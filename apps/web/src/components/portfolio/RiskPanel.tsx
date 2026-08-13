@@ -117,11 +117,11 @@ export default function RiskPanel() {
 
   if (loading) {
     return (
-      <div className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 rounded-xl p-5">
-        <div className="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mb-3" />
+      <div className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 rounded-xl p-5 shadow-sm">
+        <div className="h-4 w-32 bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-gray-700/50 dark:via-gray-600/50 dark:to-gray-700/50 bg-[length:200%_100%] animate-shimmer rounded mb-3" />
         <div className="grid grid-cols-3 gap-2">
           {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="h-16 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
+            <div key={i} className="h-16 bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-gray-700/50 dark:via-gray-600/50 dark:to-gray-700/50 bg-[length:200%_100%] animate-shimmer rounded-lg" />
           ))}
         </div>
       </div>
@@ -148,7 +148,7 @@ export default function RiskPanel() {
   const betaColor = data.beta <= 1.2 ? "text-gray-900 dark:text-gray-100" : "text-[#f6465d]";
 
   return (
-    <div className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 rounded-xl p-5 space-y-4">
+    <div className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 rounded-xl p-5 space-y-4 shadow-sm animate-fade-up">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold">리스크 지표</h2>
         <span className="text-[10px] text-gray-400">보유 종목 일봉 기준</span>

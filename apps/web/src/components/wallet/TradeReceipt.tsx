@@ -67,20 +67,20 @@ export default function TradeReceipt({ receipt, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50 p-4">
-      <div className="w-full max-w-sm bg-[#21222c] rounded-2xl border border-[#44475a] overflow-hidden">
+      <div className="w-full max-w-sm bg-white dark:bg-[#21222c] rounded-2xl border border-gray-200 dark:border-[#44475a] overflow-hidden shadow-2xl animate-fade-up">
         {step === "receipt" ? (
           <>
             {/* 영수증 헤더 */}
             <div className={`px-6 py-5 text-center ${isBuy ? "bg-[#50fa7b]/10" : "bg-[#ff5555]/10"}`}>
               <div className="text-3xl mb-2">{isBuy ? "📥" : "📤"}</div>
-              <p className="text-sm text-[#6272a4]">{receipt.stockName}</p>
-              <p className="text-lg font-bold text-[#f8f8f2]">
+              <p className="text-sm text-gray-500 dark:text-[#6272a4]">{receipt.stockName}</p>
+              <p className="text-lg font-bold text-gray-900 dark:text-[#f8f8f2]">
                 {receipt.quantity}주 {isBuy ? "매수" : "매도"} 완료
               </p>
             </div>
 
             {/* 영수증 항목 */}
-            <div className="px-6 py-4 space-y-3 border-t border-dashed border-[#44475a]">
+            <div className="px-6 py-4 space-y-3 border-t border-dashed border-gray-200 dark:border-[#44475a]">
               {[
                 { label: "체결 가격",  value: `${receipt.filledPrice.toLocaleString()}원` },
                 { label: "주문 금액",  value: won(receipt.orderedAmount) },
@@ -88,13 +88,13 @@ export default function TradeReceipt({ receipt, onClose }: Props) {
                 { label: "수수료",     value: won(receipt.fee), sub: true },
               ].map(r => (
                 <div key={r.label} className="flex justify-between items-center">
-                  <span className={`text-sm ${r.sub ? "text-[#6272a4]" : "text-[#f8f8f2]"}`}>{r.label}</span>
-                  <span className={`text-sm ${r.sub ? "text-[#6272a4]" : "font-medium text-[#f8f8f2]"}`}>{r.value}</span>
+                  <span className={`text-sm ${r.sub ? "text-gray-500 dark:text-[#6272a4]" : "text-gray-900 dark:text-[#f8f8f2]"}`}>{r.label}</span>
+                  <span className={`text-sm ${r.sub ? "text-gray-500 dark:text-[#6272a4]" : "font-medium text-gray-900 dark:text-[#f8f8f2]"}`}>{r.value}</span>
                 </div>
               ))}
 
-              <div className="border-t border-[#44475a] pt-3 flex justify-between items-center">
-                <span className="text-sm font-semibold text-[#f8f8f2]">
+              <div className="border-t border-gray-200 dark:border-[#44475a] pt-3 flex justify-between items-center">
+                <span className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">
                   {isBuy ? "차감 금액" : "수령 금액"}
                 </span>
                 <span className={`text-base font-bold ${isBuy ? "text-[#ff5555]" : "text-[#50fa7b]"}`}>
@@ -104,40 +104,40 @@ export default function TradeReceipt({ receipt, onClose }: Props) {
 
               {receipt.balanceAfter != null && (
                 <div className="flex justify-between items-center">
-                  <span className="text-xs text-[#6272a4]">체결 후 잔고</span>
-                  <span className="text-xs text-[#6272a4]">{won(receipt.balanceAfter)}</span>
+                  <span className="text-xs text-gray-500 dark:text-[#6272a4]">체결 후 잔고</span>
+                  <span className="text-xs text-gray-500 dark:text-[#6272a4]">{won(receipt.balanceAfter)}</span>
                 </div>
               )}
 
               <div className="flex justify-between items-center">
-                <span className="text-xs text-[#6272a4]">체결 시간</span>
-                <span className="text-xs text-[#6272a4]">
+                <span className="text-xs text-gray-500 dark:text-[#6272a4]">체결 시간</span>
+                <span className="text-xs text-gray-500 dark:text-[#6272a4]">
                   {new Date(receipt.tradedAt).toLocaleTimeString("ko-KR")}
                 </span>
               </div>
 
               <div className="flex justify-between items-center">
-                <span className="text-xs text-[#6272a4]">결제 상태</span>
+                <span className="text-xs text-gray-500 dark:text-[#6272a4]">결제 상태</span>
                 <span className="text-xs text-[#50fa7b] font-medium">✓ {receipt.status}</span>
               </div>
             </div>
 
             <div className="px-6 pb-5 space-y-2">
               <button onClick={() => setStep("emotion")}
-                className="w-full py-2.5 rounded-xl bg-[#bd93f9] text-[#282a36] font-bold text-sm hover:bg-[#ff79c6] transition-colors">
+                className="w-full py-2.5 rounded-xl bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150">
                 매수 이유 기록하기 →
               </button>
               <button onClick={onClose}
-                className="w-full py-2 text-xs text-[#6272a4] hover:text-[#f8f8f2] transition-colors">
+                className="w-full py-2 text-xs text-gray-500 dark:text-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2] transition-colors">
                 건너뛰기
               </button>
             </div>
           </>
         ) : (
           <>
-            <div className="px-6 py-5 border-b border-[#44475a]">
-              <p className="text-sm font-semibold text-[#f8f8f2]">이 거래의 이유가 무엇이었나요?</p>
-              <p className="text-xs text-[#6272a4] mt-1">나중에 수익률과 연결해서 투자 습관을 분석해드립니다</p>
+            <div className="px-6 py-5 border-b border-gray-200 dark:border-[#44475a]">
+              <p className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">이 거래의 이유가 무엇이었나요?</p>
+              <p className="text-xs text-gray-500 dark:text-[#6272a4] mt-1">나중에 수익률과 연결해서 투자 습관을 분석해드립니다</p>
             </div>
 
             <div className="px-6 py-4 grid grid-cols-2 gap-2">
@@ -147,7 +147,7 @@ export default function TradeReceipt({ receipt, onClose }: Props) {
                   className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-all border
                     ${selectedEmotion === em.value
                       ? "bg-[#bd93f9]/20 border-[#bd93f9] text-[#bd93f9]"
-                      : "border-[#44475a] text-[#6272a4] hover:border-[#6272a4] hover:text-[#f8f8f2]"}`}>
+                      : "border-gray-300 dark:border-[#44475a] text-gray-500 dark:text-[#6272a4] hover:border-gray-400 dark:hover:border-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2]"}`}>
                   <span>{em.emoji}</span>
                   <span>{em.label}</span>
                 </button>
@@ -160,15 +160,15 @@ export default function TradeReceipt({ receipt, onClose }: Props) {
                 value={memo}
                 onChange={e => setMemo(e.target.value)}
                 rows={2}
-                className="w-full rounded-lg bg-[#282a36] border border-[#44475a] text-[#f8f8f2] text-sm px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-[#bd93f9] placeholder-[#6272a4]"
+                className="w-full rounded-lg bg-white dark:bg-[#282a36] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-sm px-3 py-2 resize-none transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:ring-2 focus:ring-[#bd93f9]/50 placeholder-gray-400 dark:placeholder-[#6272a4]"
               />
               <button
                 onClick={() => emotionMutation.mutate()}
                 disabled={!selectedEmotion || emotionMutation.isPending}
-                className="w-full py-2.5 rounded-xl bg-[#bd93f9] text-[#282a36] font-bold text-sm hover:bg-[#ff79c6] transition-colors disabled:opacity-40">
+                className="w-full py-2.5 rounded-xl bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40">
                 {emotionMutation.isPending ? "저장 중..." : "저장하기"}
               </button>
-              <button onClick={onClose} className="w-full py-2 text-xs text-[#6272a4] hover:text-[#f8f8f2]">
+              <button onClick={onClose} className="w-full py-2 text-xs text-gray-500 dark:text-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2] transition-colors">
                 건너뛰기
               </button>
             </div>

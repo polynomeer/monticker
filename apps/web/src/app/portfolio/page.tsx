@@ -9,7 +9,7 @@ import RiskPanel from "@/components/portfolio/RiskPanel";
 
 function fmt(n: number) { return n.toLocaleString("ko-KR", { maximumFractionDigits: 0 }); }
 function pct(n: number) { return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`; }
-function pnlColor(n: number) { return n > 0 ? "text-[#ff5050]" : n < 0 ? "text-[#4a8fd4]" : "dark:text-[#6272a4]"; }
+function pnlColor(n: number) { return n > 0 ? "text-[#ff5050]" : n < 0 ? "text-[#4a8fd4]" : "text-gray-500 dark:text-[#6272a4]"; }
 
 export default function PortfolioPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -58,48 +58,48 @@ export default function PortfolioPage() {
 
   if (!isLoggedIn) return (
     <div className="max-w-3xl mx-auto p-6 text-center py-20">
-      <p className="dark:text-[#6272a4] mb-4">모의 투자를 이용하려면 로그인이 필요합니다.</p>
-      <Link href="/login" className="bg-blue-600 dark:bg-[#bd93f9] dark:text-[#282a36] text-white px-6 py-2 rounded-lg">로그인</Link>
+      <p className="text-gray-500 dark:text-[#6272a4] mb-4">모의 투자를 이용하려면 로그인이 필요합니다.</p>
+      <Link href="/login" className="inline-block bg-blue-600 dark:bg-[#bd93f9] dark:text-[#282a36] text-white px-6 py-2 rounded-lg font-medium hover:opacity-90 active:scale-[0.98] transition-all duration-150">로그인</Link>
     </div>
   );
 
   if (isLoading) return (
     <div className="max-w-3xl mx-auto p-6">
-      <div className="h-32 dark:bg-[#44475a]/20 rounded-xl animate-pulse mb-4" />
+      <div className="h-32 rounded-xl bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15 bg-[length:200%_100%] animate-shimmer mb-4" />
     </div>
   );
 
   return (
-    <div className="max-w-3xl mx-auto p-6 space-y-5">
+    <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-5 animate-fade-up">
       {/* 헤더 */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold dark:text-[#f8f8f2]">모의 포트폴리오</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-[#f8f8f2]">모의 포트폴리오</h1>
         <button onClick={handleReset}
-          className="text-xs dark:text-[#6272a4] hover:text-[#f6465d] border dark:border-[#44475a] px-3 py-1.5 rounded-lg">
+          className="text-xs text-gray-500 dark:text-[#6272a4] hover:text-[#f6465d] border border-gray-300 dark:border-[#44475a] px-3 py-1.5 rounded-lg transition-colors">
           초기화
         </button>
       </div>
 
       {/* 자산 요약 */}
       {portfolio && (
-        <div className="border dark:border-[#44475a] dark:bg-[#282a36] rounded-xl p-5">
+        <div className="border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#282a36] shadow-sm dark:shadow-glow-line rounded-xl p-5">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
-              <p className="text-xs dark:text-[#6272a4]">총 평가금액</p>
-              <p className="text-xl font-bold dark:text-[#f8f8f2]">₩{fmt(portfolio.totalValue)}</p>
+              <p className="text-xs text-gray-500 dark:text-[#6272a4]">총 평가금액</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-[#f8f8f2]">₩{fmt(portfolio.totalValue)}</p>
             </div>
             <div>
-              <p className="text-xs dark:text-[#6272a4]">가용 현금</p>
-              <p className="text-xl font-bold dark:text-[#f8f8f2]">₩{fmt(portfolio.cash)}</p>
+              <p className="text-xs text-gray-500 dark:text-[#6272a4]">가용 현금</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-[#f8f8f2]">₩{fmt(portfolio.cash)}</p>
             </div>
             <div>
-              <p className="text-xs dark:text-[#6272a4]">총 손익</p>
+              <p className="text-xs text-gray-500 dark:text-[#6272a4]">총 손익</p>
               <p className={`text-xl font-bold ${pnlColor(portfolio.totalPnl)}`}>
                 {portfolio.totalPnl >= 0 ? "+" : ""}₩{fmt(portfolio.totalPnl)}
               </p>
             </div>
             <div>
-              <p className="text-xs dark:text-[#6272a4]">수익률</p>
+              <p className="text-xs text-gray-500 dark:text-[#6272a4]">수익률</p>
               <p className={`text-xl font-bold ${pnlColor(portfolio.totalPnlRate)}`}>
                 {pct(portfolio.totalPnlRate)}
               </p>
@@ -109,32 +109,32 @@ export default function PortfolioPage() {
       )}
 
       {/* 종목 매수 검색 */}
-      <div className="border dark:border-[#44475a] dark:bg-[#282a36] rounded-xl p-4">
-        <p className="text-xs dark:text-[#6272a4] mb-2 font-medium">종목 매수</p>
+      <div className="border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#282a36] shadow-sm dark:shadow-glow-line rounded-xl p-4">
+        <p className="text-xs text-gray-500 dark:text-[#6272a4] mb-2 font-medium">종목 매수</p>
         <div className="relative">
           <input
             type="text" value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             placeholder="종목명 또는 티커 검색..."
-            className="w-full border dark:border-[#44475a] dark:bg-[#44475a]/30 dark:text-[#f8f8f2]
+            className="w-full border border-gray-300 dark:border-[#44475a] bg-white dark:bg-[#44475a]/30 text-gray-900 dark:text-[#f8f8f2]
                        dark:placeholder-[#6272a4] rounded-lg px-4 py-2.5 text-sm
-                       focus:outline-none focus:dark:border-[#bd93f9]"
+                       transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:border-[#bd93f9]"
           />
           {searchResults.length > 0 && (
-            <ul className="absolute top-full left-0 right-0 mt-1
-                           dark:bg-[#282a36] border dark:border-[#44475a]
+            <ul className="absolute top-full left-0 right-0 mt-1 animate-fade-up
+                           bg-white dark:bg-[#282a36] border border-gray-200 dark:border-[#44475a]
                            rounded-xl shadow-xl z-20 overflow-hidden">
               {searchResults.map(s => (
                 <li key={s.id}>
                   <button
                     onMouseDown={() => selectStockForBuy(s)}
                     className="w-full flex items-center justify-between px-4 py-3
-                               hover:dark:bg-[#44475a]/30 text-sm">
+                               hover:bg-gray-50 dark:hover:bg-[#44475a]/30 text-sm transition-colors">
                     <div className="text-left">
-                      <p className="font-medium dark:text-[#f8f8f2]">{s.name}</p>
-                      <p className="text-xs dark:text-[#6272a4]">{s.symbol}</p>
+                      <p className="font-medium text-gray-900 dark:text-[#f8f8f2]">{s.name}</p>
+                      <p className="text-xs text-gray-500 dark:text-[#6272a4]">{s.symbol}</p>
                     </div>
-                    <span className="text-xs dark:text-[#bd93f9]">매수 →</span>
+                    <span className="text-xs text-blue-600 dark:text-[#bd93f9]">매수 →</span>
                   </button>
                 </li>
               ))}
@@ -144,28 +144,28 @@ export default function PortfolioPage() {
       </div>
 
       {/* 보유 종목 */}
-      <div className="border dark:border-[#44475a] dark:bg-[#282a36] rounded-xl overflow-hidden">
-        <div className="px-5 py-3 border-b dark:border-[#44475a] flex items-center justify-between">
-          <span className="text-sm font-semibold dark:text-[#f8f8f2]">보유 종목</span>
-          <span className="text-xs dark:text-[#6272a4]">{portfolio?.holdings.length ?? 0}개</span>
+      <div className="border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#282a36] shadow-sm dark:shadow-glow-line rounded-xl overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-200 dark:border-[#44475a] bg-gray-50 dark:bg-transparent flex items-center justify-between">
+          <span className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">보유 종목</span>
+          <span className="text-xs text-gray-500 dark:text-[#6272a4]">{portfolio?.holdings.length ?? 0}개</span>
         </div>
         {!portfolio?.holdings.length ? (
-          <p className="text-center py-8 text-sm dark:text-[#6272a4]">보유 종목이 없습니다.</p>
+          <p className="text-center py-8 text-sm text-gray-500 dark:text-[#6272a4]">보유 종목이 없습니다.</p>
         ) : (
-          <div className="divide-y dark:divide-[#44475a]/40">
+          <div className="divide-y divide-gray-100 dark:divide-[#44475a]/40">
             {portfolio.holdings.map((h: Holding) => (
               <div key={h.stockId} className="px-5 py-4 flex items-center gap-3">
                 <div className="flex-1 min-w-0">
                   <Link href={`/stocks/${h.symbol}`}
-                    className="font-medium dark:text-[#f8f8f2] hover:dark:text-[#bd93f9] truncate block">
+                    className="font-medium text-gray-900 dark:text-[#f8f8f2] hover:text-blue-600 dark:hover:text-[#bd93f9] truncate block">
                     {h.name}
                   </Link>
-                  <p className="text-xs dark:text-[#6272a4]">
+                  <p className="text-xs text-gray-500 dark:text-[#6272a4]">
                     {h.quantity}주 · 평단 ₩{fmt(h.avgPrice)}
                   </p>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="font-mono font-semibold dark:text-[#f8f8f2]">₩{fmt(h.value)}</p>
+                  <p className="font-mono font-semibold text-gray-900 dark:text-[#f8f8f2]">₩{fmt(h.value)}</p>
                   <p className={`text-xs font-mono ${pnlColor(h.pnl)}`}>
                     {pct(h.pnlRate)}
                   </p>
@@ -175,7 +175,7 @@ export default function PortfolioPage() {
                     stockId: h.stockId, symbol: h.symbol, name: h.name,
                     currentPrice: h.currentPrice, quantity: h.quantity,
                   })}
-                  className="shrink-0 text-xs px-3 py-1.5 rounded-lg font-semibold text-white bg-[#4a8fd4] hover:opacity-80">
+                  className="shrink-0 text-xs px-3 py-1.5 rounded-lg font-semibold text-white bg-[#4a8fd4] hover:opacity-80 active:scale-95 transition-all duration-150">
                   매도
                 </button>
               </div>
@@ -188,14 +188,14 @@ export default function PortfolioPage() {
       <RiskPanel />
 
       {/* 거래 내역 */}
-      <div className="border dark:border-[#44475a] dark:bg-[#282a36] rounded-xl overflow-hidden">
-        <div className="px-5 py-3 border-b dark:border-[#44475a]">
-          <span className="text-sm font-semibold dark:text-[#f8f8f2]">거래 내역</span>
+      <div className="border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#282a36] shadow-sm dark:shadow-glow-line rounded-xl overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-200 dark:border-[#44475a] bg-gray-50 dark:bg-transparent">
+          <span className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">거래 내역</span>
         </div>
         {!history.length ? (
-          <p className="text-center py-8 text-sm dark:text-[#6272a4]">거래 내역이 없습니다.</p>
+          <p className="text-center py-8 text-sm text-gray-500 dark:text-[#6272a4]">거래 내역이 없습니다.</p>
         ) : (
-          <ul className="divide-y dark:divide-[#44475a]/40">
+          <ul className="divide-y divide-gray-100 dark:divide-[#44475a]/40">
             {history.map((h: TradeHistory) => (
               <li key={h.id} className="flex items-center justify-between px-5 py-3">
                 <div className="flex items-center gap-3">
@@ -205,15 +205,15 @@ export default function PortfolioPage() {
                       : "bg-[#4a8fd4]/20 text-[#4a8fd4]"
                   }`}>{h.side === "BUY" ? "매수" : "매도"}</span>
                   <div>
-                    <p className="text-sm font-medium dark:text-[#f8f8f2]">{h.name ?? h.symbol}</p>
-                    <p className="text-xs dark:text-[#6272a4]">
+                    <p className="text-sm font-medium text-gray-900 dark:text-[#f8f8f2]">{h.name ?? h.symbol}</p>
+                    <p className="text-xs text-gray-500 dark:text-[#6272a4]">
                       {new Date(h.tradedAt).toLocaleString("ko-KR")}
                     </p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="font-mono text-sm dark:text-[#f8f8f2]">{h.quantity}주</p>
-                  <p className="text-xs dark:text-[#6272a4]">₩{fmt(h.price)}/주</p>
+                  <p className="font-mono text-sm text-gray-900 dark:text-[#f8f8f2]">{h.quantity}주</p>
+                  <p className="text-xs text-gray-500 dark:text-[#6272a4]">₩{fmt(h.price)}/주</p>
                 </div>
               </li>
             ))}

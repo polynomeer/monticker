@@ -74,11 +74,11 @@ export default function TradeModal({ stock, currentPrice, side, maxQuantity, onC
   // 영수증 로딩 중 (tradeId는 있는데 receipt 아직 없음)
   if (receiptTradeId && !receipt) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-        <div className="bg-[#21222c] rounded-2xl p-8 text-center">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="bg-white dark:bg-[#21222c] rounded-2xl p-8 text-center shadow-2xl animate-fade-up">
           <div className="text-2xl mb-2">✅</div>
-          <p className="text-[#f8f8f2] font-semibold">체결 완료</p>
-          <p className="text-xs text-[#6272a4] mt-1">영수증 생성 중...</p>
+          <p className="text-gray-900 dark:text-[#f8f8f2] font-semibold">체결 완료</p>
+          <p className="text-xs text-gray-500 dark:text-[#6272a4] mt-1">영수증 생성 중...</p>
         </div>
       </div>
     );
@@ -87,10 +87,10 @@ export default function TradeModal({ stock, currentPrice, side, maxQuantity, onC
   const accentColor = isBuy ? "#ff5050" : "#4a8fd4";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-white dark:bg-[#282a36] border dark:border-[#44475a] rounded-2xl
-                      w-full max-w-sm mx-4 p-6 shadow-2xl">
+      <div className="bg-white dark:bg-[#282a36] border border-gray-200 dark:border-[#44475a] rounded-2xl
+                      w-full max-w-sm mx-4 p-6 shadow-2xl animate-fade-up">
 
         {/* 헤더 */}
         <div className="flex items-center justify-between mb-5">
@@ -100,55 +100,55 @@ export default function TradeModal({ stock, currentPrice, side, maxQuantity, onC
                 style={{ backgroundColor: `${accentColor}20`, color: accentColor }}>
                 {isBuy ? "매수" : "매도"}
               </span>
-              <span className="font-bold dark:text-[#f8f8f2]">{stock.name}</span>
+              <span className="font-bold text-gray-900 dark:text-[#f8f8f2]">{stock.name}</span>
             </div>
-            <p className="text-xs dark:text-[#6272a4] mt-0.5">{stock.symbol}</p>
+            <p className="text-xs text-gray-500 dark:text-[#6272a4] mt-0.5">{stock.symbol}</p>
           </div>
-          <button onClick={onClose} className="dark:text-[#6272a4] hover:dark:text-[#f8f8f2] text-lg">✕</button>
+          <button onClick={onClose} className="text-gray-400 dark:text-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2] text-lg transition-colors">✕</button>
         </div>
 
         {/* 현재가 */}
-        <div className="dark:bg-[#44475a]/20 rounded-lg p-3 mb-4">
+        <div className="bg-gray-50 dark:bg-[#44475a]/20 rounded-lg p-3 mb-4">
           <div className="flex justify-between text-sm">
-            <span className="dark:text-[#6272a4]">현재가</span>
-            <span className="font-mono font-bold dark:text-[#f8f8f2]">₩{fmt(currentPrice)}</span>
+            <span className="text-gray-500 dark:text-[#6272a4]">현재가</span>
+            <span className="font-mono font-bold text-gray-900 dark:text-[#f8f8f2]">₩{fmt(currentPrice)}</span>
           </div>
           {isBuy && (
             <div className="flex justify-between text-xs mt-1">
-              <span className="dark:text-[#6272a4]">가용 현금</span>
-              <span className="font-mono dark:text-[#f8f8f2]">₩{fmt(cash)}</span>
+              <span className="text-gray-500 dark:text-[#6272a4]">가용 현금</span>
+              <span className="font-mono text-gray-900 dark:text-[#f8f8f2]">₩{fmt(cash)}</span>
             </div>
           )}
         </div>
 
         {/* 수량 입력 */}
         <div className="mb-4">
-          <label className="text-xs dark:text-[#6272a4] mb-1 block">수량</label>
+          <label className="text-xs text-gray-500 dark:text-[#6272a4] mb-1 block">수량</label>
           <div className="flex items-center gap-2">
             <button onClick={() => setQuantity(q => Math.max(1, q - 1))}
-              className="w-9 h-9 rounded-lg dark:bg-[#44475a] dark:text-[#f8f8f2] font-bold text-lg hover:opacity-80">−</button>
+              className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-[#44475a] text-gray-900 dark:text-[#f8f8f2] font-bold text-lg hover:opacity-80 active:scale-95 transition-all duration-150">−</button>
             <input type="number" min={1} max={max} value={quantity}
               onChange={e => setQuantity(Math.min(max, Math.max(1, Number(e.target.value))))}
-              className="flex-1 text-center font-mono text-lg font-bold dark:bg-[#44475a]/30 dark:text-[#f8f8f2]
-                         border dark:border-[#44475a] rounded-lg py-2 focus:outline-none focus:dark:border-[#bd93f9]" />
+              className="flex-1 text-center font-mono text-lg font-bold bg-white dark:bg-[#44475a]/30 text-gray-900 dark:text-[#f8f8f2]
+                         border border-gray-300 dark:border-[#44475a] rounded-lg py-2 transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:border-[#bd93f9]" />
             <button onClick={() => setQuantity(q => Math.min(max, q + 1))}
-              className="w-9 h-9 rounded-lg dark:bg-[#44475a] dark:text-[#f8f8f2] font-bold text-lg hover:opacity-80">+</button>
+              className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-[#44475a] text-gray-900 dark:text-[#f8f8f2] font-bold text-lg hover:opacity-80 active:scale-95 transition-all duration-150">+</button>
           </div>
-          <button onClick={() => setQuantity(max)} className="text-[10px] mt-1 dark:text-[#6272a4] hover:dark:text-[#bd93f9]">
+          <button onClick={() => setQuantity(max)} className="text-[10px] mt-1 text-gray-500 dark:text-[#6272a4] hover:text-blue-600 dark:hover:text-[#bd93f9] transition-colors">
             최대 {max}주
           </button>
         </div>
 
         {/* 주문 금액 */}
-        <div className="dark:bg-[#44475a]/20 rounded-lg p-3 mb-4">
+        <div className="bg-gray-50 dark:bg-[#44475a]/20 rounded-lg p-3 mb-4">
           <div className="flex justify-between text-sm font-bold">
-            <span className="dark:text-[#6272a4]">주문 금액</span>
+            <span className="text-gray-500 dark:text-[#6272a4]">주문 금액</span>
             <span className="font-mono" style={{ color: accentColor }}>₩{fmt(totalAmount)}</span>
           </div>
           {isBuy && cash > 0 && (
             <div className="flex justify-between text-xs mt-1">
-              <span className="dark:text-[#6272a4]">주문 후 잔고</span>
-              <span className="font-mono dark:text-[#6272a4]">₩{fmt(cash - totalAmount)}</span>
+              <span className="text-gray-500 dark:text-[#6272a4]">주문 후 잔고</span>
+              <span className="font-mono text-gray-500 dark:text-[#6272a4]">₩{fmt(cash - totalAmount)}</span>
             </div>
           )}
         </div>
@@ -161,7 +161,7 @@ export default function TradeModal({ stock, currentPrice, side, maxQuantity, onC
         )}
 
         <button onClick={handleSubmit} disabled={!isValid || isPending}
-          className="w-full py-3 rounded-xl font-bold text-sm text-white disabled:opacity-40"
+          className="w-full py-3 rounded-xl font-bold text-sm text-white active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100"
           style={{ backgroundColor: isValid ? accentColor : undefined }}>
           {isPending ? "처리 중..." : `${isBuy ? "매수" : "매도"} ${fmt(totalAmount)}원`}
         </button>

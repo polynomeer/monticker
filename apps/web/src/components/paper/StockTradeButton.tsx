@@ -28,13 +28,13 @@ export default function StockTradeButton({ stockId, symbol, name, currentPrice }
       <div className="flex gap-2">
         <button
           onClick={() => setModal("BUY")}
-          className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white bg-[#ff5050] hover:opacity-90">
+          className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white bg-[#ff5050] hover:opacity-90 active:scale-[0.98] transition-all duration-150">
           매수
         </button>
         {ownedQty > 0 && (
           <button
             onClick={() => setModal("SELL")}
-            className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white bg-[#4a8fd4] hover:opacity-90">
+            className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white bg-[#4a8fd4] hover:opacity-90 active:scale-[0.98] transition-all duration-150">
             매도 ({ownedQty}주)
           </button>
         )}
