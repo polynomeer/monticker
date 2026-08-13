@@ -59,22 +59,25 @@ spring:
   security:
     oauth2:
       client:
+        # client-id/secret이 비어있으면 OAuth2ClientProperties.validate()가 기동 자체를 막는다.
+        # 소셜 로그인 키를 설정하지 않은 로컬/dev 환경에서도 뜨도록 더미 값을 기본값으로 둔다 —
+        # 실제 로그인 시도는 각 provider가 거부할 뿐, 보안상 문제는 없다. (prod는 application-prod.yml에서 필수값으로 덮어씀)
         registration:
           google:
-            client-id: ${GOOGLE_CLIENT_ID:}
-            client-secret: ${GOOGLE_CLIENT_SECRET:}
+            client-id: ${GOOGLE_CLIENT_ID:unset}
+            client-secret: ${GOOGLE_CLIENT_SECRET:unset}
             scope: email, profile
           kakao:
-            client-id: ${KAKAO_CLIENT_ID:}
-            client-secret: ${KAKAO_CLIENT_SECRET:}
+            client-id: ${KAKAO_CLIENT_ID:unset}
+            client-secret: ${KAKAO_CLIENT_SECRET:unset}
             client-authentication-method: client_secret_post
             authorization-grant-type: authorization_code
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
             scope: profile_nickname, account_email
             client-name: Kakao
           naver:
-            client-id: ${NAVER_CLIENT_ID:}
-            client-secret: ${NAVER_CLIENT_SECRET:}
+            client-id: ${NAVER_CLIENT_ID:unset}
+            client-secret: ${NAVER_CLIENT_SECRET:unset}
             client-authentication-method: client_secret_post
             authorization-grant-type: authorization_code
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
