@@ -50,7 +50,7 @@ export default function StockSearchPage() {
         <button
           type="submit"
           disabled={loading}
-          className="px-5 py-2.5 rounded-lg bg-[#bd93f9] text-[#282a36] font-semibold text-sm hover:bg-[#ff79c6] transition-colors disabled:opacity-50"
+          className="px-5 py-2.5 rounded-lg bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] font-semibold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:active:scale-100"
         >
           {loading ? "..." : "검색"}
         </button>
@@ -59,7 +59,7 @@ export default function StockSearchPage() {
       {loading && (
         <ul className="space-y-2 max-w-lg">
           {[1, 2, 3].map((i) => (
-            <li key={i} className="h-16 rounded-xl bg-[#44475a] animate-pulse" />
+            <li key={i} className="h-16 rounded-xl bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15 bg-[length:200%_100%] animate-shimmer" />
           ))}
         </ul>
       )}
@@ -78,16 +78,16 @@ export default function StockSearchPage() {
             <li key={stock.id}>
               <Link
                 href={`/stocks/${stock.symbol}`}
-                className="flex items-center justify-between p-4 rounded-xl border border-[#44475a] bg-[#21222c] hover:border-[#bd93f9]/60 hover:bg-[#282a36] transition-colors"
+                className="group flex items-center justify-between p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] hover:border-blue-400 dark:hover:border-[#bd93f9]/60 hover:bg-gray-50 dark:hover:bg-[#282a36] hover:shadow-md active:scale-[0.99] transition-all duration-150"
               >
                 <div>
-                  <span className="font-semibold text-[#f8f8f2]">{stock.name}</span>
-                  <span className="ml-2 text-sm text-[#6272a4]">{stock.symbol}</span>
+                  <span className="font-semibold text-gray-900 dark:text-[#f8f8f2] group-hover:text-blue-600 dark:group-hover:text-[#bd93f9] transition-colors">{stock.name}</span>
+                  <span className="ml-2 text-sm text-gray-500 dark:text-[#6272a4]">{stock.symbol}</span>
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   <Badge variant="neutral">{stock.market}</Badge>
                   {stock.sector && (
-                    <span className="text-xs text-[#6272a4]">{stock.sector}</span>
+                    <span className="text-xs text-gray-500 dark:text-[#6272a4]">{stock.sector}</span>
                   )}
                 </div>
               </Link>

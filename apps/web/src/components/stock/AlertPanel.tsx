@@ -44,19 +44,19 @@ export default function AlertPanel({ stockId, symbol }: Props) {
   };
 
   return (
-    <div className="rounded-xl border border-[#44475a] bg-[#21222c] p-4">
-      <h3 className="font-semibold text-[#f8f8f2] mb-3">
+    <div className="rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] p-4 shadow-sm dark:shadow-glow-line">
+      <h3 className="font-semibold text-gray-900 dark:text-[#f8f8f2] mb-3">
         알림 설정{" "}
-        <span className="text-[#6272a4] text-sm font-normal">({symbol})</span>
+        <span className="text-gray-500 dark:text-[#6272a4] text-sm font-normal">({symbol})</span>
       </h3>
 
       <form onSubmit={handleSave} className="flex flex-col gap-3">
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-[#f8f8f2]">알림 유형</label>
+          <label className="text-sm font-medium text-gray-700 dark:text-[#f8f8f2]">알림 유형</label>
           <select
             value={ruleType}
             onChange={(e) => setRuleType(e.target.value)}
-            className="w-full rounded-lg border border-[#44475a] bg-[#21222c] px-4 py-2.5 text-sm text-[#f8f8f2] focus:outline-none focus:ring-2 focus:ring-[#bd93f9] focus:border-transparent"
+            className="w-full rounded-lg border border-gray-300 dark:border-[#44475a] bg-white dark:bg-[#21222c] px-4 py-2.5 text-sm text-gray-900 dark:text-[#f8f8f2] transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:ring-2 focus:ring-[#bd93f9]/50 focus:border-[#bd93f9]"
           >
             <option value="PRICE_ABOVE">가격 이상 알림</option>
             <option value="PRICE_BELOW">가격 이하 알림</option>
@@ -77,7 +77,7 @@ export default function AlertPanel({ stockId, symbol }: Props) {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-lg bg-[#bd93f9] text-[#282a36] font-semibold text-sm py-2.5 hover:bg-[#ff79c6] transition-colors disabled:opacity-50"
+          className="w-full rounded-lg bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] font-semibold text-sm py-2.5 hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:active:scale-100"
         >
           {loading ? "저장 중..." : "알림 저장"}
         </button>

@@ -81,7 +81,7 @@ function OrderBook({ stockId }: Props) {
   }, [stockId]);
 
   if (!initialized || !dataRef.current)
-    return <div className="h-40 animate-pulse dark:bg-[#44475a]/20 rounded-lg" />;
+    return <div className="h-40 rounded-lg bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15 bg-[length:200%_100%] animate-shimmer" />;
 
   const d = dataRef.current;
   const maxQty = Math.max(...d.asks.map(a => a.quantity), ...d.bids.map(b => b.quantity));

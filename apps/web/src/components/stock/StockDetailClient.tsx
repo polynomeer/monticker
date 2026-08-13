@@ -37,7 +37,7 @@ export default function StockDetailClient({ stockId, symbol, stockName }: Props)
   const { price } = useStockPrice(stockId);
 
   return (
-    <div className="grid grid-cols-1 gap-4">
+    <div className="grid grid-cols-1 gap-4 animate-fade-up">
       <PriceCard symbol={symbol} />
       <WatchlistAddButton stockId={stockId} />
       <StockTradeButton
@@ -52,10 +52,10 @@ export default function StockDetailClient({ stockId, symbol, stockName }: Props)
         <div className="flex flex-wrap items-center gap-2 mb-2">
           {INTERVALS.map(i => (
             <button key={i.value} onClick={() => setInterval(i.value)}
-              className={`text-sm px-3 py-1 rounded ${
+              className={`text-sm px-3 py-1 rounded transition-all duration-150 active:scale-95 ${
                 interval === i.value
                   ? "bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] font-semibold"
-                  : "bg-gray-100 dark:bg-[#44475a] text-gray-600 dark:text-[#6272a4]"
+                  : "bg-gray-100 dark:bg-[#44475a] text-gray-600 dark:text-[#6272a4] hover:bg-gray-200 dark:hover:bg-[#44475a]/70"
               }`}>{i.label}</button>
           ))}
           <div className="ml-auto flex gap-1">
@@ -65,10 +65,10 @@ export default function StockDetailClient({ stockId, symbol, stockName }: Props)
               { key: "VWAP", state: showVwap, toggle: () => setShowVwap(p => !p) },
             ].map(({ key, state, toggle }) => (
               <button key={key} onClick={toggle}
-                className={`text-xs px-2 py-1 rounded border transition-colors ${
+                className={`text-xs px-2 py-1 rounded border transition-all duration-150 active:scale-95 ${
                   state
                     ? "border-[#bd93f9] text-[#bd93f9] bg-[#bd93f9]/10"
-                    : "border-gray-200 dark:border-[#44475a] text-gray-500 dark:text-[#6272a4]"
+                    : "border-gray-200 dark:border-[#44475a] text-gray-500 dark:text-[#6272a4] hover:border-gray-300 dark:hover:border-[#6272a4]"
                 }`}>{key}</button>
             ))}
           </div>

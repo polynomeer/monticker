@@ -43,7 +43,7 @@ export default function PriceCard({ symbol }: Props) {
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-[#44475a] bg-[#21222c] p-4">
+      <div className="rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] p-4 shadow-sm dark:shadow-glow-line">
         <Skeleton className="h-9 w-36 mb-2" />
         <Skeleton className="h-4 w-24" />
       </div>
@@ -52,27 +52,27 @@ export default function PriceCard({ symbol }: Props) {
 
   if (!data || !data.hasData) {
     return (
-      <div className="rounded-xl border border-[#44475a] bg-[#21222c] p-4 text-[#6272a4] text-sm">
+      <div className="rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] p-4 shadow-sm dark:shadow-glow-line text-[#6272a4] text-sm">
         시세 데이터 없음 (워커가 실행 중이어야 합니다)
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-[#44475a] bg-[#21222c] p-4">
+    <div className="rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] p-4 shadow-sm dark:shadow-glow-line">
       <div className="flex items-baseline gap-3">
-        <span className="text-3xl font-bold text-[#f8f8f2]">
+        <span className="text-3xl font-bold tabular-nums text-gray-900 dark:text-[#f8f8f2]">
           {data.price?.toLocaleString()}
         </span>
-        <span className="text-sm text-[#6272a4]">{symbol}</span>
+        <span className="text-sm text-gray-500 dark:text-[#6272a4]">{symbol}</span>
       </div>
       {data.volume && (
-        <p className="text-sm text-[#6272a4] mt-1">
+        <p className="text-sm text-gray-500 dark:text-[#6272a4] mt-1 tabular-nums">
           거래량 {data.volume.toLocaleString()}
         </p>
       )}
       {data.tradeTime && (
-        <p className="text-xs text-[#44475a] mt-1">
+        <p className="text-xs text-gray-400 dark:text-[#44475a] mt-1">
           {new Date(data.tradeTime).toLocaleTimeString("ko-KR")}
         </p>
       )}
