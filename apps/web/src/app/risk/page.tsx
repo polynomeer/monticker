@@ -37,15 +37,15 @@ function GaugeMeter({ label, current, limit, unit = "%", invert = false }: {
   const color  = danger ? "bg-[#ff5555]" : warn ? "bg-[#ffb86c]" : "bg-[#50fa7b]";
 
   return (
-    <div className="p-4 rounded-xl border border-[#44475a] bg-[#282a36]">
+    <div className="p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#282a36] shadow-sm dark:shadow-glow-line">
       <div className="flex justify-between items-center mb-2">
-        <span className="text-xs text-[#6272a4]">{label}</span>
-        <span className={`text-xs font-semibold ${danger ? "text-[#ff5555]" : warn ? "text-[#ffb86c]" : "text-[#50fa7b]"}`}>
+        <span className="text-xs text-gray-500 dark:text-[#6272a4]">{label}</span>
+        <span className={`text-xs font-semibold tabular-nums ${danger ? "text-[#ff5555]" : warn ? "text-[#ffb86c]" : "text-[#50fa7b]"}`}>
           {current.toFixed(2)}{unit} / {limit}{unit}
         </span>
       </div>
-      <div className="h-2 rounded-full bg-[#44475a] overflow-hidden">
-        <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${ratio * 100}%` }} />
+      <div className="h-2 rounded-full bg-gray-200 dark:bg-[#44475a] overflow-hidden">
+        <div className={`h-full rounded-full transition-all duration-300 ${color}`} style={{ width: `${ratio * 100}%` }} />
       </div>
     </div>
   );
@@ -57,12 +57,12 @@ function LimitInput({ label, value, onChange, step = 0.5, min = 0, max = 100, su
 }) {
   return (
     <div>
-      <label className="text-xs text-[#6272a4] mb-1 block">{label}</label>
+      <label className="text-xs text-gray-500 dark:text-[#6272a4] mb-1 block">{label}</label>
       <div className="flex items-center gap-2">
         <input type="number" value={value} step={step} min={min} max={max}
           onChange={e => onChange(parseFloat(e.target.value))}
-          className="flex-1 rounded-lg bg-[#282a36] border border-[#44475a] text-[#f8f8f2] text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#bd93f9]" />
-        <span className="text-xs text-[#6272a4] w-6">{suffix}</span>
+          className="flex-1 rounded-lg bg-white dark:bg-[#282a36] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-sm px-3 py-2 transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:ring-2 focus:ring-[#bd93f9]/50" />
+        <span className="text-xs text-gray-500 dark:text-[#6272a4] w-6">{suffix}</span>
       </div>
     </div>
   );
@@ -103,16 +103,16 @@ export default function RiskPage() {
   const won = (n: number) => n.toLocaleString("ko-KR");
 
   if (isLoading) return (
-    <div className="max-w-3xl mx-auto px-4 py-8 space-y-3">
-      {[1,2,3].map(i => <div key={i} className="h-16 rounded-xl bg-[#44475a]/30 animate-pulse" />)}
+    <div className="max-w-3xl mx-auto px-4 py-6 sm:py-8 space-y-3">
+      {[1,2,3].map(i => <div key={i} className="h-16 rounded-xl bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15 bg-[length:200%_100%] animate-shimmer" />)}
     </div>
   );
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
+    <div className="max-w-3xl mx-auto px-4 py-6 sm:py-8 animate-fade-up">
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-[#f8f8f2]">리스크 한도</h1>
-        <p className="text-xs text-[#6272a4] mt-0.5">
+        <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-[#f8f8f2]">리스크 한도</h1>
+        <p className="text-xs text-gray-500 dark:text-[#6272a4] mt-0.5">
           주문 전 자동 체크 — 한도 초과 시 주문이 거부됩니다
         </p>
       </div>
@@ -128,16 +128,16 @@ export default function RiskPage() {
                 color: exposure.dailyPnl >= 0 ? "text-[#50fa7b]" : "text-[#ff5555]" },
               { label: "미체결 주문", value: `${exposure.activeOrderCount}건` },
             ].map(c => (
-              <div key={c.label} className="p-3 rounded-xl border border-[#44475a] bg-[#21222c]">
-                <p className="text-xs text-[#6272a4] mb-1">{c.label}</p>
-                <p className={`text-sm font-bold ${c.color ?? "text-[#f8f8f2]"}`}>{c.value}</p>
+              <div key={c.label} className="p-3 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+                <p className="text-xs text-gray-500 dark:text-[#6272a4] mb-1">{c.label}</p>
+                <p className={`text-sm font-bold tabular-nums ${c.color ?? "text-gray-900 dark:text-[#f8f8f2]"}`}>{c.value}</p>
               </div>
             ))}
           </div>
 
           {/* 리스크 게이지 */}
           <div className="space-y-3 mb-6">
-            <h2 className="text-sm font-semibold text-[#f8f8f2]">현재 리스크 수준</h2>
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">현재 리스크 수준</h2>
 
             <GaugeMeter label="일일 손실률"
               current={Math.abs(Math.min(exposure.dailyPnlPct, 0))}
@@ -166,8 +166,8 @@ export default function RiskPage() {
 
       {/* 한도 설정 */}
       {limits && (
-        <div className="p-5 rounded-xl border border-[#44475a] bg-[#21222c] space-y-4">
-          <h2 className="text-sm font-semibold text-[#f8f8f2]">한도 설정</h2>
+        <div className="p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line space-y-4">
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">한도 설정</h2>
 
           <div className="grid grid-cols-2 gap-4">
             <LimitInput label="일일 손실 한도 (%)"
@@ -192,7 +192,7 @@ export default function RiskPage() {
                 <input type="checkbox" checked={limits.isActive}
                   onChange={e => setDraft(d => ({ ...(d ?? limits), isActive: e.target.checked }))}
                   className="w-4 h-4 accent-[#bd93f9]" />
-                <span className="text-sm text-[#f8f8f2]">리스크 체크 활성화</span>
+                <span className="text-sm text-gray-900 dark:text-[#f8f8f2]">리스크 체크 활성화</span>
               </label>
             </div>
           </div>
@@ -201,11 +201,11 @@ export default function RiskPage() {
             <div className="flex gap-2">
               <button onClick={() => updateMutation.mutate(draft)}
                 disabled={updateMutation.isPending}
-                className="flex-1 py-2.5 rounded-xl bg-[#bd93f9] text-[#282a36] font-bold text-sm hover:bg-[#ff79c6] transition-colors disabled:opacity-40">
+                className="flex-1 py-2.5 rounded-xl bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100">
                 {updateMutation.isPending ? "저장 중..." : "한도 저장"}
               </button>
               <button onClick={() => setDraft(null)}
-                className="px-4 py-2.5 rounded-xl border border-[#44475a] text-[#6272a4] text-sm hover:text-[#f8f8f2]">
+                className="px-4 py-2.5 rounded-xl border border-gray-300 dark:border-[#44475a] text-gray-500 dark:text-[#6272a4] text-sm hover:text-gray-900 dark:hover:text-[#f8f8f2] active:scale-[0.98] transition-all duration-150">
                 취소
               </button>
             </div>
@@ -213,7 +213,7 @@ export default function RiskPage() {
         </div>
       )}
 
-      <p className="mt-6 text-xs text-[#6272a4] text-center">
+      <p className="mt-6 text-xs text-gray-400 dark:text-[#6272a4] text-center">
         한도는 모의투자 전용 리스크 게이트입니다. 실제 투자에는 적용되지 않습니다.
       </p>
     </div>

@@ -51,7 +51,7 @@ const PATTERN_LABEL: Record<string, string> = {
 const REGIME_META: Record<string, { label: string; color: string }> = {
   BULL: { label: "상승장", color: "text-[#50fa7b] bg-[#50fa7b]/10" },
   BEAR: { label: "하락장", color: "text-[#ff5555] bg-[#ff5555]/10" },
-  SIDEWAYS: { label: "횡보장", color: "text-[#6272a4] bg-[#44475a]" },
+  SIDEWAYS: { label: "횡보장", color: "text-gray-500 bg-gray-100 dark:text-[#6272a4] dark:bg-[#44475a]" },
   HIGH_VOL: { label: "고변동성", color: "text-[#ffb86c] bg-[#ffb86c]/10" },
 };
 
@@ -61,8 +61,8 @@ function pct(n: number) { return (n * 100).toFixed(2) + "%"; }
 function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button onClick={onClick}
-      className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px
-        ${active ? "border-[#bd93f9] text-[#bd93f9]" : "border-transparent text-[#6272a4] hover:text-[#f8f8f2]"}`}>
+      className={`px-4 py-2 text-sm font-medium transition-colors duration-200 border-b-2 -mb-px
+        ${active ? "border-blue-600 dark:border-[#bd93f9] text-blue-600 dark:text-[#bd93f9]" : "border-transparent text-gray-500 dark:text-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2]"}`}>
       {children}
     </button>
   );
@@ -100,19 +100,19 @@ function PortfolioOptimizerTab() {
 
   return (
     <div className="space-y-4">
-      <div className="p-5 rounded-xl border border-[#44475a] bg-[#21222c]">
-        <p className="text-sm font-semibold text-[#f8f8f2] mb-3">최적화 대상 종목 선택</p>
+      <div className="p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+        <p className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2] mb-3">최적화 대상 종목 선택</p>
         <div className="flex flex-wrap gap-2 mb-4">
           {STOCKS.map(s => (
             <button key={s.id} onClick={() => toggle(s.id)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors
-                ${selected.includes(s.id) ? "bg-[#bd93f9] text-[#282a36]" : "bg-[#44475a] text-[#6272a4]"}`}>
+                ${selected.includes(s.id) ? "bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36]" : "bg-gray-100 dark:bg-[#44475a] text-gray-500 dark:text-[#6272a4]"}`}>
               {s.label}
             </button>
           ))}
         </div>
         <button onClick={() => { refetch(); }} disabled={selected.length < 2 || isFetching}
-          className="px-5 py-2 rounded-xl bg-[#bd93f9] text-[#282a36] text-sm font-bold hover:bg-[#ff79c6] transition-colors disabled:opacity-40">
+          className="px-5 py-2 rounded-xl bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] text-sm font-bold hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100">
           {isFetching ? "계산 중..." : "최적 비중 계산"}
         </button>
         {selected.length < 2 && <p className="text-xs text-[#ff5555] mt-2">2개 이상 종목을 선택하세요</p>}
@@ -121,30 +121,30 @@ function PortfolioOptimizerTab() {
       {data?.error && <p className="text-sm text-[#ff5555]">{data.error}</p>}
 
       {data && !data.error && (
-        <div className="p-5 rounded-xl border border-[#44475a] bg-[#21222c] space-y-4">
+        <div className="p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <p className="text-xs text-[#6272a4]">기대 수익률 (연환산)</p>
+              <p className="text-xs text-gray-500 dark:text-[#6272a4]">기대 수익률 (연환산)</p>
               <p className="text-lg font-bold text-[#50fa7b]">{pct(data.expectedReturn)}</p>
             </div>
             <div>
-              <p className="text-xs text-[#6272a4]">예상 위험 (변동성)</p>
-              <p className="text-lg font-bold text-[#f8f8f2]">{pct(data.expectedRisk)}</p>
+              <p className="text-xs text-gray-500 dark:text-[#6272a4]">예상 위험 (변동성)</p>
+              <p className="text-lg font-bold text-gray-900 dark:text-[#f8f8f2]">{pct(data.expectedRisk)}</p>
             </div>
           </div>
 
           <div>
-            <p className="text-xs text-[#6272a4] mb-2">추천 비중</p>
+            <p className="text-xs text-gray-500 dark:text-[#6272a4] mb-2">추천 비중</p>
             <div className="space-y-2">
               {(Object.entries(data.weights) as [string, number][]).map(([stockId, w]) => {
                 const stock = STOCKS.find(s => s.id === Number(stockId));
                 return (
                   <div key={stockId} className="flex items-center gap-3">
-                    <span className="text-xs text-[#f8f8f2] w-20">{stock?.label ?? stockId}</span>
-                    <div className="flex-1 h-2 rounded-full bg-[#44475a] overflow-hidden">
+                    <span className="text-xs text-gray-900 dark:text-[#f8f8f2] w-20">{stock?.label ?? stockId}</span>
+                    <div className="flex-1 h-2 rounded-full bg-gray-200 dark:bg-[#44475a] overflow-hidden">
                       <div className="h-full bg-[#bd93f9] rounded-full" style={{ width: `${w * 100}%` }} />
                     </div>
-                    <span className="text-xs text-[#6272a4] w-12 text-right">{pct(w)}</span>
+                    <span className="text-xs text-gray-500 dark:text-[#6272a4] w-12 text-right">{pct(w)}</span>
                   </div>
                 );
               })}
@@ -160,13 +160,13 @@ function PortfolioOptimizerTab() {
       )}
 
       {frontier && frontier.length > 0 && (
-        <div className="p-5 rounded-xl border border-[#44475a] bg-[#21222c]">
-          <p className="text-sm font-semibold text-[#f8f8f2] mb-3">효율적 프론티어</p>
+        <div className="p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+          <p className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2] mb-3">효율적 프론티어</p>
           <div className="space-y-1.5">
             {frontier.map((f: FrontierPoint, i: number) => (
               <div key={i} className="flex justify-between text-xs">
-                <span className="text-[#6272a4]">위험 {pct(f.expectedRisk)}</span>
-                <span className="text-[#f8f8f2]">수익 {pct(f.expectedReturn)}</span>
+                <span className="text-gray-500 dark:text-[#6272a4]">위험 {pct(f.expectedRisk)}</span>
+                <span className="text-gray-900 dark:text-[#f8f8f2]">수익 {pct(f.expectedReturn)}</span>
               </div>
             ))}
           </div>
@@ -187,35 +187,35 @@ function TaxOptimizerTab() {
     },
   });
 
-  if (isLoading) return <div className="text-center py-12 text-[#6272a4] text-sm">로딩 중...</div>;
+  if (isLoading) return <div className="text-center py-12 text-gray-500 dark:text-[#6272a4] text-sm">로딩 중...</div>;
   if (!data) return null;
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
-        <div className="p-4 rounded-xl border border-[#44475a] bg-[#21222c]">
-          <p className="text-xs text-[#6272a4]">올해 실현 이익</p>
+        <div className="p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+          <p className="text-xs text-gray-500 dark:text-[#6272a4]">올해 실현 이익</p>
           <p className="text-lg font-bold text-[#50fa7b]">{won(data.realizedGainYtd)}원</p>
         </div>
-        <div className="p-4 rounded-xl border border-[#44475a] bg-[#21222c]">
-          <p className="text-xs text-[#6272a4]">예상 절세 효과</p>
+        <div className="p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+          <p className="text-xs text-gray-500 dark:text-[#6272a4]">예상 절세 효과</p>
           <p className="text-lg font-bold text-[#bd93f9]">{won(data.totalEstimatedTaxSaving)}원</p>
         </div>
       </div>
 
       {data.candidates.length === 0 ? (
-        <div className="text-center py-12 border border-dashed border-[#44475a] rounded-xl text-[#6272a4] text-sm">
+        <div className="text-center py-12 border border-dashed border-gray-300 dark:border-[#44475a] rounded-xl text-gray-500 dark:text-[#6272a4] text-sm">
           현재 손실 종목이 없습니다.
         </div>
       ) : (
         <div className="space-y-2">
           {data.candidates.map((c: HarvestingCandidate) => (
-            <div key={c.stockId} className="p-4 rounded-xl border border-[#44475a] bg-[#21222c]">
+            <div key={c.stockId} className="p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
               <div className="flex justify-between items-center mb-1">
-                <span className="text-sm font-semibold text-[#f8f8f2]">{c.name}</span>
+                <span className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">{c.name}</span>
                 <span className="text-xs text-[#ff5555]">{won(c.unrealizedLoss)}원 평가손실</span>
               </div>
-              <div className="flex justify-between text-xs text-[#6272a4]">
+              <div className="flex justify-between text-xs text-gray-500 dark:text-[#6272a4]">
                 <span>{c.quantity}주 · 평단 {won(c.avgPrice)}원 → 현재 {won(c.currentPrice)}원</span>
                 <span className="text-[#bd93f9] font-medium">절세 {won(c.estimatedTaxSaving)}원</span>
               </div>
@@ -224,7 +224,7 @@ function TaxOptimizerTab() {
         </div>
       )}
 
-      <p className="text-xs text-[#6272a4] text-center">{data.disclaimer}</p>
+      <p className="text-xs text-gray-500 dark:text-[#6272a4] text-center">{data.disclaimer}</p>
     </div>
   );
 }
@@ -249,44 +249,44 @@ function KellyTab() {
 
   return (
     <div className="space-y-4">
-      <div className="p-5 rounded-xl border border-[#44475a] bg-[#21222c] space-y-3">
-        <p className="text-sm font-semibold text-[#f8f8f2]">백테스트 결과 입력</p>
+      <div className="p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line space-y-3">
+        <p className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">백테스트 결과 입력</p>
         <div className="grid grid-cols-3 gap-3">
           <div>
-            <label className="text-xs text-[#6272a4] mb-1 block">승률 (%)</label>
+            <label className="text-xs text-gray-500 dark:text-[#6272a4] mb-1 block">승률 (%)</label>
             <input type="number" value={winRate} onChange={e => setWinRate(+e.target.value)}
-              className="w-full rounded-lg bg-[#282a36] border border-[#44475a] text-[#f8f8f2] text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#bd93f9]" />
+              className="w-full rounded-lg bg-white dark:bg-[#282a36] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-sm px-3 py-2 transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:ring-2 focus:ring-[#bd93f9]/50" />
           </div>
           <div>
-            <label className="text-xs text-[#6272a4] mb-1 block">평균 이익 (%)</label>
+            <label className="text-xs text-gray-500 dark:text-[#6272a4] mb-1 block">평균 이익 (%)</label>
             <input type="number" value={avgWin} onChange={e => setAvgWin(+e.target.value)}
-              className="w-full rounded-lg bg-[#282a36] border border-[#44475a] text-[#f8f8f2] text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#bd93f9]" />
+              className="w-full rounded-lg bg-white dark:bg-[#282a36] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-sm px-3 py-2 transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:ring-2 focus:ring-[#bd93f9]/50" />
           </div>
           <div>
-            <label className="text-xs text-[#6272a4] mb-1 block">평균 손실 (%)</label>
+            <label className="text-xs text-gray-500 dark:text-[#6272a4] mb-1 block">평균 손실 (%)</label>
             <input type="number" value={avgLoss} onChange={e => setAvgLoss(+e.target.value)}
-              className="w-full rounded-lg bg-[#282a36] border border-[#44475a] text-[#f8f8f2] text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#bd93f9]" />
+              className="w-full rounded-lg bg-white dark:bg-[#282a36] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-sm px-3 py-2 transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:ring-2 focus:ring-[#bd93f9]/50" />
           </div>
         </div>
         <button onClick={() => mutation.mutate()} disabled={mutation.isPending}
-          className="px-5 py-2 rounded-xl bg-[#bd93f9] text-[#282a36] text-sm font-bold hover:bg-[#ff79c6] transition-colors disabled:opacity-40">
+          className="px-5 py-2 rounded-xl bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] text-sm font-bold hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100">
           {mutation.isPending ? "계산 중..." : "켈리 비율 계산"}
         </button>
       </div>
 
       {mutation.data && (
-        <div className="p-5 rounded-xl border border-[#44475a] bg-[#21222c] space-y-3">
+        <div className="p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 rounded-lg bg-[#282a36]">
-              <p className="text-xs text-[#6272a4]">Full Kelly</p>
-              <p className="text-xl font-bold text-[#f8f8f2]">{pct(mutation.data.fullKelly)}</p>
+            <div className="p-3 rounded-lg bg-gray-50 dark:bg-[#282a36]">
+              <p className="text-xs text-gray-500 dark:text-[#6272a4]">Full Kelly</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-[#f8f8f2]">{pct(mutation.data.fullKelly)}</p>
             </div>
             <div className="p-3 rounded-lg bg-[#bd93f9]/10 border border-[#bd93f9]/30">
               <p className="text-xs text-[#bd93f9]">권장 (Half Kelly)</p>
               <p className="text-xl font-bold text-[#bd93f9]">{pct(mutation.data.halfKelly)}</p>
             </div>
           </div>
-          <p className="text-xs text-[#f8f8f2] p-3 rounded-lg bg-[#282a36]">{mutation.data.recommendation}</p>
+          <p className="text-xs text-gray-900 dark:text-[#f8f8f2] p-3 rounded-lg bg-gray-50 dark:bg-[#282a36]">{mutation.data.recommendation}</p>
         </div>
       )}
     </div>
@@ -311,30 +311,30 @@ function PatternTab() {
         {STOCKS.map(s => (
           <button key={s.id} onClick={() => setStockId(s.id)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors
-              ${stockId === s.id ? "bg-[#bd93f9] text-[#282a36]" : "bg-[#44475a] text-[#6272a4]"}`}>
+              ${stockId === s.id ? "bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36]" : "bg-gray-100 dark:bg-[#44475a] text-gray-500 dark:text-[#6272a4]"}`}>
             {s.label}
           </button>
         ))}
       </div>
 
       {isLoading ? (
-        <div className="text-center py-12 text-[#6272a4] text-sm">패턴 분석 중...</div>
+        <div className="text-center py-12 text-gray-500 dark:text-[#6272a4] text-sm">패턴 분석 중...</div>
       ) : !data || data.length === 0 ? (
-        <div className="text-center py-12 border border-dashed border-[#44475a] rounded-xl text-[#6272a4] text-sm">
+        <div className="text-center py-12 border border-dashed border-gray-300 dark:border-[#44475a] rounded-xl text-gray-500 dark:text-[#6272a4] text-sm">
           감지된 패턴이 없습니다.
         </div>
       ) : (
         <div className="space-y-2">
           {data.map((p: PatternMatch, i: number) => (
-            <div key={i} className="p-4 rounded-xl border border-[#44475a] bg-[#21222c]">
+            <div key={i} className="p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
               <div className="flex justify-between items-center mb-1">
-                <span className="text-sm font-semibold text-[#f8f8f2]">
+                <span className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">
                   {PATTERN_LABEL[p.patternType] ?? p.patternType}
                 </span>
                 <span className="text-xs font-bold text-[#bd93f9]">완성도 {p.confidenceScore}%</span>
               </div>
-              <p className="text-xs text-[#6272a4] mb-1">{p.candleFrom} ~ {p.candleTo}</p>
-              <p className="text-xs text-[#f8f8f2]">{p.description}</p>
+              <p className="text-xs text-gray-500 dark:text-[#6272a4] mb-1">{p.candleFrom} ~ {p.candleTo}</p>
+              <p className="text-xs text-gray-900 dark:text-[#f8f8f2]">{p.description}</p>
             </div>
           ))}
         </div>
@@ -361,18 +361,18 @@ function RegimeTab() {
         {STOCKS.map(s => (
           <button key={s.id} onClick={() => setStockId(s.id)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors
-              ${stockId === s.id ? "bg-[#bd93f9] text-[#282a36]" : "bg-[#44475a] text-[#6272a4]"}`}>
+              ${stockId === s.id ? "bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36]" : "bg-gray-100 dark:bg-[#44475a] text-gray-500 dark:text-[#6272a4]"}`}>
             {s.label}
           </button>
         ))}
       </div>
 
       {isLoading ? (
-        <div className="text-center py-12 text-[#6272a4] text-sm">분석 중...</div>
+        <div className="text-center py-12 text-gray-500 dark:text-[#6272a4] text-sm">분석 중...</div>
       ) : data?.error ? (
         <p className="text-sm text-[#ff5555] text-center py-8">{data.error}</p>
       ) : data ? (
-        <div className="p-5 rounded-xl border border-[#44475a] bg-[#21222c] space-y-4">
+        <div className="p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line space-y-4">
           <div className="flex items-center gap-3">
             <span className={`px-4 py-2 rounded-full text-lg font-bold ${REGIME_META[data.regime]?.color ?? ""}`}>
               {REGIME_META[data.regime]?.label ?? data.regime}
@@ -380,21 +380,21 @@ function RegimeTab() {
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <p className="text-xs text-[#6272a4]">ADX (추세강도)</p>
-              <p className="text-sm font-bold text-[#f8f8f2]">{data.adx.toFixed(1)}</p>
+              <p className="text-xs text-gray-500 dark:text-[#6272a4]">ADX (추세강도)</p>
+              <p className="text-sm font-bold text-gray-900 dark:text-[#f8f8f2]">{data.adx.toFixed(1)}</p>
             </div>
             <div>
-              <p className="text-xs text-[#6272a4]">변동성 (연환산)</p>
-              <p className="text-sm font-bold text-[#f8f8f2]">{pct(data.volatility)}</p>
+              <p className="text-xs text-gray-500 dark:text-[#6272a4]">변동성 (연환산)</p>
+              <p className="text-sm font-bold text-gray-900 dark:text-[#f8f8f2]">{pct(data.volatility)}</p>
             </div>
             <div>
-              <p className="text-xs text-[#6272a4]">추세 기울기</p>
+              <p className="text-xs text-gray-500 dark:text-[#6272a4]">추세 기울기</p>
               <p className={`text-sm font-bold ${data.trendSlope >= 0 ? "text-[#50fa7b]" : "text-[#ff5555]"}`}>
                 {data.trendSlope >= 0 ? "+" : ""}{(data.trendSlope * 100).toFixed(3)}%
               </p>
             </div>
           </div>
-          <p className="text-xs text-[#f8f8f2] p-3 rounded-lg bg-[#282a36]">{data.explanation}</p>
+          <p className="text-xs text-gray-900 dark:text-[#f8f8f2] p-3 rounded-lg bg-gray-50 dark:bg-[#282a36]">{data.explanation}</p>
         </div>
       ) : null}
     </div>
@@ -415,15 +415,15 @@ export default function AnalyticsPage() {
   const [tab, setTab] = useState<typeof TABS[number]["key"]>("portfolio");
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
+    <div className="max-w-3xl mx-auto px-4 py-6 sm:py-8 animate-fade-up">
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-[#f8f8f2]">Quant Analytics</h1>
-        <p className="text-xs text-[#6272a4] mt-0.5">
+        <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-[#f8f8f2]">Quant Analytics</h1>
+        <p className="text-xs text-gray-500 dark:text-[#6272a4] mt-0.5">
           포트폴리오 최적화 · 세금 시뮬레이션 · 포지션 사이징 · 패턴/국면 분석
         </p>
       </div>
 
-      <div className="flex gap-1 mb-6 border-b border-[#44475a] overflow-x-auto">
+      <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-[#44475a] overflow-x-auto no-scrollbar">
         {TABS.map(t => (
           <TabButton key={t.key} active={tab === t.key} onClick={() => setTab(t.key)}>
             {t.label}
