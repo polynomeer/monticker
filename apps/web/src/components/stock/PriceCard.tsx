@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Card } from "@/components/ui/Card";
 
 interface PriceData {
   stockId: number;
@@ -43,23 +44,23 @@ export default function PriceCard({ symbol }: Props) {
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] p-4 shadow-sm dark:shadow-glow-line">
+      <Card className="p-4">
         <Skeleton className="h-9 w-36 mb-2" />
         <Skeleton className="h-4 w-24" />
-      </div>
+      </Card>
     );
   }
 
   if (!data || !data.hasData) {
     return (
-      <div className="rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] p-4 shadow-sm dark:shadow-glow-line text-[#6272a4] text-sm">
+      <Card className="p-4 text-[#6272a4] text-sm">
         시세 데이터 없음 (워커가 실행 중이어야 합니다)
-      </div>
+      </Card>
     );
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] p-4 shadow-sm dark:shadow-glow-line">
+    <Card className="p-4" hover>
       <div className="flex items-baseline gap-3">
         <span className="text-3xl font-bold tabular-nums text-gray-900 dark:text-[#f8f8f2]">
           {data.price?.toLocaleString()}
@@ -76,6 +77,6 @@ export default function PriceCard({ symbol }: Props) {
           {new Date(data.tradeTime).toLocaleTimeString("ko-KR")}
         </p>
       )}
-    </div>
+    </Card>
   );
 }

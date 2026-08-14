@@ -25,7 +25,7 @@ export default function ThemeToggle() {
                    bg-white dark:bg-dracula-bg text-gray-700 dark:text-dracula-fg
                    hover:border-gray-400 dark:hover:border-dracula-comment
                    focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:focus:ring-dracula-purple/40
-                   transition-colors cursor-pointer"
+                   transition-colors duration-300 ease-spring cursor-pointer"
         title="차트 테마"
       >
         {(Object.entries(CHART_THEMES) as [ChartThemeKey, { label: string }][]).map(([key, t]) => (
@@ -41,7 +41,7 @@ export default function ThemeToggle() {
                    bg-white dark:bg-dracula-bg
                    text-gray-600 dark:text-dracula-yellow
                    hover:bg-gray-100 dark:hover:bg-dracula-line/40
-                   active:scale-95 transition-all duration-150"
+                   hover:scale-[1.05] active:scale-95 transition-all duration-300 ease-spring"
         aria-label={isDark ? "라이트 모드로 전환" : "다크 모드로 전환"}
         title={isDark ? "라이트 모드" : "다크 모드"}
       >

@@ -49,7 +49,7 @@ export default function NavBar() {
 
   return (
     <nav className={cn(
-      "sticky top-0 z-40 w-full transition-all duration-300 ease-out",
+      "sticky top-0 z-40 w-full transition-all duration-300 ease-spring",
       scrolled
         ? "bg-white/75 dark:bg-dracula-surface/70 backdrop-blur-xl border-b border-gray-200/70 dark:border-dracula-line/50 shadow-glow-line"
         : "bg-white dark:bg-dracula-surface border-b border-gray-200 dark:border-dracula-line/80"
@@ -59,8 +59,8 @@ export default function NavBar() {
         {/* 로고 */}
         <Link href="/"
           className="group flex items-center gap-2 shrink-0">
-          <span className="w-2 h-2 rounded-full bg-gradient-to-br from-dracula-purple to-dracula-cyan shadow-glow-purple transition-transform duration-300 group-hover:scale-125" />
-          <span className="font-bold text-blue-600 dark:text-dracula-fg text-lg tracking-tight transition-colors group-hover:text-blue-500 dark:group-hover:text-dracula-purple">
+          <span className="w-2 h-2 rounded-full bg-gradient-to-br from-dracula-purple to-dracula-cyan shadow-glow-purple transition-transform duration-300 ease-spring group-hover:scale-150" />
+          <span className="font-bold text-blue-600 dark:text-dracula-fg text-lg tracking-tight transition-colors duration-300 ease-spring group-hover:text-blue-500 dark:group-hover:text-dracula-purple">
             monticker
           </span>
         </Link>
@@ -77,14 +77,14 @@ export default function NavBar() {
             return (
               <Link key={href} href={href}
                 className={cn(
-                  "relative px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 whitespace-nowrap",
+                  "relative px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-300 ease-spring whitespace-nowrap",
                   active
                     ? "text-gray-900 dark:text-dracula-fg bg-gray-100 dark:bg-dracula-purple/15 font-semibold"
                     : "text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg hover:bg-gray-50 dark:hover:bg-dracula-line/30"
                 )}>
                 {label}
                 {active && (
-                  <span className="absolute left-3 right-3 -bottom-[1px] h-[2px] rounded-full bg-blue-600 dark:bg-dracula-purple" />
+                  <span className="absolute left-3 right-3 -bottom-[1px] h-[2px] rounded-full bg-blue-600 dark:bg-dracula-purple animate-pop-in" />
                 )}
               </Link>
             );
@@ -115,19 +115,20 @@ export default function NavBar() {
             </button>
 
             {menuOpen && (
-              <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-dracula-surface border border-gray-200 dark:border-dracula-line rounded-xl shadow-xl dark:shadow-glow-line overflow-hidden animate-fade-up">
+              <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-dracula-surface border border-gray-200 dark:border-dracula-line rounded-xl shadow-xl dark:shadow-glow-line overflow-hidden animate-pop-in">
                 {/* 모바일 검색 */}
                 <div className="p-3 border-b border-gray-100 dark:border-dracula-line">
                   <SearchAutocomplete />
                 </div>
                 {/* 모바일 링크 */}
                 <div className="max-h-[60vh] overflow-y-auto">
-                  {NAV_LINKS.map(({ href, label }) => {
+                  {NAV_LINKS.map(({ href, label }, i) => {
                     const active = pathname === href || pathname.startsWith(href + "/");
                     return (
                       <Link key={href} href={href}
+                        style={{ animationDelay: `${i * 30}ms` }}
                         className={cn(
-                          "block px-4 py-3 text-sm transition-colors",
+                          "block px-4 py-3 text-sm transition-colors animate-fade-up",
                           active
                             ? "text-gray-900 dark:text-dracula-fg bg-gray-50 dark:bg-dracula-purple/15 font-semibold"
                             : "text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg hover:bg-gray-50 dark:hover:bg-dracula-line/30"

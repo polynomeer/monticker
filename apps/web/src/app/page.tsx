@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import ScreenerTable from "@/components/screener/ScreenerTable";
+import { Card } from "@/components/ui/Card";
 import { useScreener } from "@/hooks/useScreener";
 
 const TABS = [
@@ -28,7 +29,7 @@ function Pill({
     <button
       onClick={onClick}
       className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap
-        transition-all duration-200 active:scale-95
+        transition-all duration-300 ease-spring hover:scale-[1.04] active:scale-[0.96]
         ${active
           ? "bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg shadow-sm dark:shadow-glow-purple"
           : "bg-gray-100 dark:bg-dracula-line/50 text-gray-500 dark:text-dracula-comment hover:bg-gray-200 dark:hover:bg-dracula-line hover:text-gray-900 dark:hover:text-dracula-fg"
@@ -70,7 +71,7 @@ export default function Home() {
           <button
             key={t.key}
             onClick={() => { setTab(t.key); setSort("amount"); }}
-            className={`px-4 py-2 text-sm font-medium transition-colors duration-200 border-b-2 -mb-px
+            className={`px-4 py-2 text-sm font-medium transition-colors duration-300 ease-spring border-b-2 -mb-px
               ${tab === t.key
                 ? "border-blue-600 dark:border-[#bd93f9] text-blue-600 dark:text-[#bd93f9]"
                 : "border-transparent text-gray-500 dark:text-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2]"
@@ -103,7 +104,7 @@ export default function Home() {
       </div>
 
       {/* 테이블 */}
-      <div className="border border-gray-200 dark:border-[#44475a] rounded-xl overflow-hidden bg-white dark:bg-[#282a36] shadow-sm dark:shadow-glow-line">
+      <Card className="overflow-hidden">
         <ScreenerTable
           items={items}
           loading={loading}
@@ -111,7 +112,7 @@ export default function Home() {
           hasMore={hasMore}
           onLoadMore={loadMore}
         />
-      </div>
+      </Card>
     </div>
   );
 }

@@ -42,6 +42,11 @@ const config: Config = {
       boxShadow: {
         "glow-purple": "0 8px 30px -8px rgba(189, 147, 249, 0.35)",
         "glow-line": "0 8px 30px -12px rgba(0, 0, 0, 0.5)",
+        "bezel-inset": "inset 0 1px 1px rgba(248, 248, 242, 0.06)",
+        "bezel-inset-light": "inset 0 1px 1px rgba(255, 255, 255, 0.8)",
+      },
+      transitionTimingFunction: {
+        spring: "cubic-bezier(0.16, 1, 0.3, 1)",
       },
       backgroundImage: {
         "mesh-dark":
@@ -51,17 +56,22 @@ const config: Config = {
       },
       keyframes: {
         fadeUp: {
-          from: { opacity: "0", transform: "translateY(8px)" },
-          to: { opacity: "1", transform: "translateY(0)" },
+          from: { opacity: "0", transform: "translateY(8px)", filter: "blur(4px)" },
+          to: { opacity: "1", transform: "translateY(0)", filter: "blur(0)" },
         },
         shimmer: {
           from: { backgroundPosition: "-200% 0" },
           to: { backgroundPosition: "200% 0" },
         },
+        popIn: {
+          from: { opacity: "0", transform: "scale(0.96) translateY(4px)" },
+          to: { opacity: "1", transform: "scale(1) translateY(0)" },
+        },
       },
       animation: {
         "fade-up": "fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both",
         shimmer: "shimmer 2s linear infinite",
+        "pop-in": "popIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both",
       },
     },
   },
