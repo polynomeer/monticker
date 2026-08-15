@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
+import { Card } from "@/components/ui/Card";
 
 interface NotifPref {
   pushEnabled: boolean;
@@ -82,28 +83,28 @@ export default function NotificationSettingsPage() {
     <div className="max-w-lg mx-auto px-4 py-6 sm:py-8 animate-fade-up">
       <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-[#f8f8f2] mb-6">알림 설정</h1>
 
-      <section className="mb-6 p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+      <Card className="p-5" outerClassName="mb-6">
         <h2 className="text-sm font-semibold text-blue-600 dark:text-[#bd93f9] mb-3">전체 알림</h2>
         <Toggle checked={pref.pushEnabled}  onChange={set("pushEnabled")}  label="푸시 알림" description="모바일 앱 푸시 알림" />
         <Toggle checked={pref.emailEnabled} onChange={set("emailEnabled")} label="이메일 알림" description="이메일 수신 동의" />
-      </section>
+      </Card>
 
-      <section className="mb-6 p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+      <Card className="p-5" outerClassName="mb-6">
         <h2 className="text-sm font-semibold text-green-600 dark:text-[#50fa7b] mb-3">가격 알림</h2>
         <Toggle checked={pref.priceAlertPush}  onChange={set("priceAlertPush")}  label="푸시" />
         <Toggle checked={pref.priceAlertEmail} onChange={set("priceAlertEmail")} label="이메일" />
-      </section>
+      </Card>
 
-      <section className="mb-6 p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+      <Card className="p-5" outerClassName="mb-6">
         <h2 className="text-sm font-semibold text-orange-600 dark:text-[#ffb86c] mb-3">뉴스·공시 알림</h2>
         <Toggle checked={pref.newsAlertPush}  onChange={set("newsAlertPush")}  label="푸시" />
         <Toggle checked={pref.newsAlertEmail} onChange={set("newsAlertEmail")} label="이메일" />
-      </section>
+      </Card>
 
-      <section className="mb-8 p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+      <Card className="p-5" outerClassName="mb-8">
         <h2 className="text-sm font-semibold text-cyan-600 dark:text-[#8be9fd] mb-3">리포트</h2>
         <Toggle checked={pref.weeklyReportEmail} onChange={set("weeklyReportEmail")} label="주간 리포트 이메일" description="매주 월요일 발송" />
-      </section>
+      </Card>
 
       <button
         onClick={save}

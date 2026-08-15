@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Card } from "@/components/ui/Card";
 
 interface StockEvent {
   id: number;
@@ -48,7 +49,7 @@ export default function EventTimeline({ stockId }: Props) {
   }, [stockId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] p-4 shadow-sm dark:shadow-glow-line">
+    <Card className="p-4">
       <h3 className="font-semibold text-gray-900 dark:text-[#f8f8f2] mb-3">이벤트 타임라인</h3>
 
       {loading && (
@@ -99,6 +100,6 @@ export default function EventTimeline({ stockId }: Props) {
           ))}
         </ul>
       )}
-    </div>
+    </Card>
   );
 }

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
+import { Card } from "@/components/ui/Card";
 import Link from "next/link";
 
 interface MarketStrategy {
@@ -29,7 +30,7 @@ function StrategyCard({ strategy }: { strategy: MarketStrategy }) {
   });
 
   return (
-    <div className="p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line hover:border-blue-300 dark:hover:border-[#bd93f9]/50 transition-colors">
+    <Card className="p-5" hover>
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-gray-900 dark:text-[#f8f8f2] truncate">{strategy.name}</h3>
@@ -48,7 +49,7 @@ function StrategyCard({ strategy }: { strategy: MarketStrategy }) {
           {subscribeMutation.isPending ? "..." : "구독"}
         </button>
       </div>
-    </div>
+    </Card>
   );
 }
 

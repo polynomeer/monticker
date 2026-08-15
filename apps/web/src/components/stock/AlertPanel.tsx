@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Input } from "@/components/ui/Input";
+import { Card } from "@/components/ui/Card";
 import { useToast } from "@/hooks/useToast";
 
 interface Props {
@@ -44,7 +45,7 @@ export default function AlertPanel({ stockId, symbol }: Props) {
   };
 
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] p-4 shadow-sm dark:shadow-glow-line">
+    <Card className="p-4">
       <h3 className="font-semibold text-gray-900 dark:text-[#f8f8f2] mb-3">
         알림 설정{" "}
         <span className="text-gray-500 dark:text-[#6272a4] text-sm font-normal">({symbol})</span>
@@ -82,6 +83,6 @@ export default function AlertPanel({ stockId, symbol }: Props) {
           {loading ? "저장 중..." : "알림 저장"}
         </button>
       </form>
-    </div>
+    </Card>
   );
 }

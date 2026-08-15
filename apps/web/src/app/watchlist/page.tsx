@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Card } from "@/components/ui/Card";
 
 interface WatchlistItem {
   id: number;
@@ -75,7 +76,7 @@ export default function WatchlistPage() {
       ) : (
         <div className="space-y-6">
           {groups.map((group) => (
-            <div key={group.id} className="border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#282a36] rounded-lg p-4 shadow-sm dark:shadow-glow-line hover:border-gray-300 dark:hover:border-[#6272a4]/60 transition-colors">
+            <Card key={group.id} className="p-4" hover>
               <h2 className="font-semibold text-lg mb-3 text-gray-900 dark:text-[#f8f8f2]">{group.name}</h2>
               {group.items.length === 0 ? (
                 <p className="text-gray-400 dark:text-[#6272a4] text-sm">종목이 없습니다.</p>
@@ -92,7 +93,7 @@ export default function WatchlistPage() {
                   ))}
                 </ul>
               )}
-            </div>
+            </Card>
           ))}
         </div>
       )}

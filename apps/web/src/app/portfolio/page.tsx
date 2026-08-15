@@ -6,6 +6,7 @@ import { getAccessToken } from "@/services/auth";
 import { usePaperPortfolio, usePaperHistory, usePaperTrade, type Holding, type TradeHistory } from "@/hooks/usePaperTrade";
 import TradeModal from "@/components/paper/TradeModal";
 import RiskPanel from "@/components/portfolio/RiskPanel";
+import { Card } from "@/components/ui/Card";
 
 function fmt(n: number) { return n.toLocaleString("ko-KR", { maximumFractionDigits: 0 }); }
 function pct(n: number) { return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`; }
@@ -82,7 +83,7 @@ export default function PortfolioPage() {
 
       {/* 자산 요약 */}
       {portfolio && (
-        <div className="border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#282a36] shadow-sm dark:shadow-glow-line rounded-xl p-5">
+        <Card className="p-5">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
               <p className="text-xs text-gray-500 dark:text-[#6272a4]">총 평가금액</p>
@@ -105,11 +106,11 @@ export default function PortfolioPage() {
               </p>
             </div>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* 종목 매수 검색 */}
-      <div className="border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#282a36] shadow-sm dark:shadow-glow-line rounded-xl p-4">
+      <Card className="p-4">
         <p className="text-xs text-gray-500 dark:text-[#6272a4] mb-2 font-medium">종목 매수</p>
         <div className="relative">
           <input
@@ -141,10 +142,10 @@ export default function PortfolioPage() {
             </ul>
           )}
         </div>
-      </div>
+      </Card>
 
       {/* 보유 종목 */}
-      <div className="border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#282a36] shadow-sm dark:shadow-glow-line rounded-xl overflow-hidden">
+      <Card className="overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-200 dark:border-[#44475a] bg-gray-50 dark:bg-transparent flex items-center justify-between">
           <span className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">보유 종목</span>
           <span className="text-xs text-gray-500 dark:text-[#6272a4]">{portfolio?.holdings.length ?? 0}개</span>
@@ -182,13 +183,13 @@ export default function PortfolioPage() {
             ))}
           </div>
         )}
-      </div>
+      </Card>
 
       {/* 리스크 지표 */}
       <RiskPanel />
 
       {/* 거래 내역 */}
-      <div className="border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#282a36] shadow-sm dark:shadow-glow-line rounded-xl overflow-hidden">
+      <Card className="overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-200 dark:border-[#44475a] bg-gray-50 dark:bg-transparent">
           <span className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">거래 내역</span>
         </div>
@@ -219,7 +220,7 @@ export default function PortfolioPage() {
             ))}
           </ul>
         )}
-      </div>
+      </Card>
 
       {/* 매도 모달 */}
       {sellModal && (

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
+import { Card } from "@/components/ui/Card";
 
 interface RiskLimits {
   dailyLossLimitPct: number;
@@ -37,7 +38,7 @@ function GaugeMeter({ label, current, limit, unit = "%", invert = false }: {
   const color  = danger ? "bg-[#ff5555]" : warn ? "bg-[#ffb86c]" : "bg-[#50fa7b]";
 
   return (
-    <div className="p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#282a36] shadow-sm dark:shadow-glow-line">
+    <Card className="p-4">
       <div className="flex justify-between items-center mb-2">
         <span className="text-xs text-gray-500 dark:text-[#6272a4]">{label}</span>
         <span className={`text-xs font-semibold tabular-nums ${danger ? "text-[#ff5555]" : warn ? "text-[#ffb86c]" : "text-[#50fa7b]"}`}>
@@ -47,7 +48,7 @@ function GaugeMeter({ label, current, limit, unit = "%", invert = false }: {
       <div className="h-2 rounded-full bg-gray-200 dark:bg-[#44475a] overflow-hidden">
         <div className={`h-full rounded-full transition-all duration-300 ${color}`} style={{ width: `${ratio * 100}%` }} />
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -128,10 +129,10 @@ export default function RiskPage() {
                 color: exposure.dailyPnl >= 0 ? "text-[#50fa7b]" : "text-[#ff5555]" },
               { label: "미체결 주문", value: `${exposure.activeOrderCount}건` },
             ].map(c => (
-              <div key={c.label} className="p-3 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+              <Card key={c.label} className="p-3">
                 <p className="text-xs text-gray-500 dark:text-[#6272a4] mb-1">{c.label}</p>
                 <p className={`text-sm font-bold tabular-nums ${c.color ?? "text-gray-900 dark:text-[#f8f8f2]"}`}>{c.value}</p>
-              </div>
+              </Card>
             ))}
           </div>
 
@@ -166,7 +167,7 @@ export default function RiskPage() {
 
       {/* 한도 설정 */}
       {limits && (
-        <div className="p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line space-y-4">
+        <Card className="p-5 space-y-4">
           <h2 className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">한도 설정</h2>
 
           <div className="grid grid-cols-2 gap-4">
@@ -210,7 +211,7 @@ export default function RiskPage() {
               </button>
             </div>
           )}
-        </div>
+        </Card>
       )}
 
       <p className="mt-6 text-xs text-gray-400 dark:text-[#6272a4] text-center">

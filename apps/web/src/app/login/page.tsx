@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { login, saveTokens } from "@/services/auth";
 import Link from "next/link";
+import { Card } from "@/components/ui/Card";
 
 const API_URL  = process.env.NEXT_PUBLIC_API_URL  || "http://localhost:8080";
 const IS_MOCK  = process.env.NEXT_PUBLIC_SOCIAL_MOCK === "true";
@@ -90,7 +91,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-[#282a36] bg-mesh-light dark:bg-mesh-dark px-4">
-      <div className="bg-white dark:bg-[#21222c] dark:border-[#44475a] p-8 rounded-xl shadow-xl dark:shadow-glow-line border border-gray-200 w-full max-w-sm animate-fade-up">
+      <Card className="p-8" outerClassName="w-full max-w-sm animate-fade-up">
         <h1 className="text-2xl font-bold mb-6 text-center dark:text-[#f8f8f2]">로그인</h1>
 
         {/* 소셜 로그인 */}
@@ -208,7 +209,7 @@ export default function LoginPage() {
           계정이 없으신가요?{" "}
           <Link href="/signup" className="text-blue-600 dark:text-[#bd93f9] hover:underline">회원가입</Link>
         </p>
-      </div>
+      </Card>
     </div>
   );
 }

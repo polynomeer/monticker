@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
+import { Card } from "@/components/ui/Card";
 
 interface PaperSettlement {
   id: number;
@@ -48,7 +49,7 @@ function SettlementRow({ s }: { s: PaperSettlement }) {
   const side   = SIDE_META[s.side];
 
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line overflow-hidden">
+    <Card className="overflow-hidden">
       <button
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center gap-3 p-4 text-left hover:bg-gray-50 dark:hover:bg-[#44475a]/20 transition-colors"
@@ -98,7 +99,7 @@ function SettlementRow({ s }: { s: PaperSettlement }) {
           )}
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -138,10 +139,10 @@ export default function SettlementPage() {
             { label: "대기 중", count: settlements.filter((s: PaperSettlement) => s.status === "PENDING").length,  color: "text-[#ffb86c]" },
             { label: "정산 완료", count: settlements.filter((s: PaperSettlement) => s.status === "SETTLED").length, color: "text-[#50fa7b]" },
           ].map(row => (
-            <div key={row.label} className="p-3 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line text-center">
+            <Card key={row.label} className="p-3 text-center">
               <p className={`text-xl font-bold ${row.color}`}>{row.count}</p>
               <p className="text-xs text-gray-500 dark:text-[#6272a4] mt-0.5">{row.label}</p>
-            </div>
+            </Card>
           ))}
         </div>
       )}

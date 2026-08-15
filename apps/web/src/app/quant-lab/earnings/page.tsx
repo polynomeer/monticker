@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
+import { Card } from "@/components/ui/Card";
 
 interface EarningSummary {
   strategyId: number;
@@ -73,7 +74,7 @@ function PayoutModal({ available, onClose, onSubmit }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-md mx-4 p-6 rounded-2xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#282a36] shadow-2xl animate-fade-up">
+      <Card className="p-6" outerClassName="w-full max-w-md mx-4 animate-fade-up">
         <h2 className="text-base font-bold text-gray-900 dark:text-[#f8f8f2] mb-1">수익 출금 신청</h2>
         <p className="text-xs text-gray-500 dark:text-[#6272a4] mb-5">출금 가능: <span className="text-[#50fa7b] font-semibold">{won(available)}</span> · 최소 10,000원</p>
 
@@ -136,7 +137,7 @@ function PayoutModal({ available, onClose, onSubmit }: {
             </button>
           </div>
         </form>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -209,7 +210,7 @@ export default function EarningsPage() {
       </div>
 
       {/* 출금 가능 잔액 카드 */}
-      <div className="mb-6 p-5 rounded-2xl border border-[#bd93f9]/30 bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+      <Card className="p-5 border-[#bd93f9]/30 dark:border-[#bd93f9]/30" outerClassName="mb-6">
         <div className="flex items-end justify-between gap-4">
           <div>
             <p className="text-xs text-gray-500 dark:text-[#6272a4] mb-1">출금 가능 잔액</p>
@@ -224,7 +225,7 @@ export default function EarningsPage() {
             출금 신청
           </button>
         </div>
-      </div>
+      </Card>
 
       {/* 탭 */}
       <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-[#44475a]">
@@ -247,14 +248,14 @@ export default function EarningsPage() {
         ) : (
           <div className="space-y-3">
             {(byStrategy ?? []).map((row: EarningSummary, i: number) => (
-              <div key={row.strategyId} className="p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line flex items-center gap-4">
+              <Card key={row.strategyId} className="p-4 flex items-center gap-4" hover>
                 <span className="text-lg text-gray-400 dark:text-[#6272a4] font-mono w-6 text-center">{i + 1}</span>
                 <div className="flex-1">
                   <p className="text-sm font-medium text-gray-900 dark:text-[#f8f8f2]">전략 #{row.strategyId}</p>
                   <p className="text-xs text-gray-500 dark:text-[#6272a4]">누적 순수익</p>
                 </div>
                 <p className="text-base font-bold tabular-nums text-[#50fa7b]">{won(row.totalNet)}</p>
-              </div>
+              </Card>
             ))}
           </div>
         )
@@ -274,7 +275,7 @@ export default function EarningsPage() {
                 {items.map(e => {
                   const meta = EARNING_STATUS[e.status];
                   return (
-                    <div key={e.id} className="flex items-center gap-3 p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+                    <Card key={e.id} className="flex items-center gap-3 p-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium text-gray-900 dark:text-[#f8f8f2]">전략 #{e.strategyId}</span>
@@ -286,7 +287,7 @@ export default function EarningsPage() {
                         </p>
                       </div>
                       <p className="text-sm font-bold tabular-nums text-[#50fa7b] shrink-0">+{won(e.netAmount)}</p>
-                    </div>
+                    </Card>
                   );
                 })}
               </div>
@@ -320,7 +321,7 @@ export default function EarningsPage() {
               {items.map(p => {
                 const meta = PAYOUT_STATUS[p.status];
                 return (
-                  <div key={p.id} className="p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+                  <Card key={p.id} className="p-4">
                     <div className="flex items-center justify-between gap-4">
                       <div>
                         <div className="flex items-center gap-2">
@@ -336,7 +337,7 @@ export default function EarningsPage() {
                         </p>
                       </div>
                     </div>
-                  </div>
+                  </Card>
                 );
               })}
             </div>

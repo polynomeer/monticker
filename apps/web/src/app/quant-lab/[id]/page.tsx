@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
+import { Card } from "@/components/ui/Card";
 
 interface RuleSet {
   id: number; name: string; description: string | null;
@@ -127,7 +128,7 @@ export default function QuantLabDetailPage() {
       </div>
 
       {/* 백테스트 실행 패널 */}
-      <div className="mb-8 p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+      <Card className="p-5" outerClassName="mb-8">
         <h2 className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2] mb-4">백테스트 실행</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
           <div>
@@ -172,7 +173,7 @@ export default function QuantLabDetailPage() {
         <p className="mt-2 text-xs text-gray-500 dark:text-[#6272a4] text-center">
           수수료 0.015% + 슬리피지 0.1% 반영 · 과거 성과가 미래 수익을 보장하지 않습니다
         </p>
-      </div>
+      </Card>
 
       {/* 최신 결과 */}
       {latestResult && (

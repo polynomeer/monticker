@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { authFetch } from "@/services/api";
+import { Card } from "@/components/ui/Card";
 
 interface ReplayEvent {
   time: string;
@@ -76,7 +77,7 @@ export default function ReplayPage() {
         <>
           {/* 일일 요약 */}
           {data.events.length > 0 && (
-            <div className="mb-6 p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line grid grid-cols-2 gap-3">
+            <Card className="grid grid-cols-2 gap-3 p-4" outerClassName="mb-6">
               <div>
                 <p className="text-xs text-gray-500 dark:text-[#6272a4]">총 손익</p>
                 <p className={`text-lg font-bold ${data.summary.totalPnl >= 0 ? "text-[#50fa7b]" : "text-[#ff5555]"}`}>
@@ -93,7 +94,7 @@ export default function ReplayPage() {
                   <p className="text-sm text-[#50fa7b]">{data.summary.bestTrade}</p>
                 </div>
               )}
-            </div>
+            </Card>
           )}
 
           {/* 이벤트 타임라인 */}
@@ -112,7 +113,7 @@ export default function ReplayPage() {
                     <div key={i} className="relative">
                       {/* 점 */}
                       <div className="absolute -left-[18px] top-3 w-3 h-3 rounded-full bg-gray-300 dark:bg-[#44475a] border-2 border-white dark:border-[#282a36]" />
-                      <div className="p-3 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+                      <Card className="p-3">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <span>{meta.icon}</span>
@@ -140,7 +141,7 @@ export default function ReplayPage() {
                           )}
                         </div>
                         {ev.description && <p className="text-xs text-gray-500 dark:text-[#6272a4] mt-1">{ev.description}</p>}
-                      </div>
+                      </Card>
                     </div>
                   );
                 })}

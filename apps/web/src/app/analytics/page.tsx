@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
+import { Card } from "@/components/ui/Card";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -100,7 +101,7 @@ function PortfolioOptimizerTab() {
 
   return (
     <div className="space-y-4">
-      <div className="p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+      <Card className="p-5">
         <p className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2] mb-3">최적화 대상 종목 선택</p>
         <div className="flex flex-wrap gap-2 mb-4">
           {STOCKS.map(s => (
@@ -116,12 +117,12 @@ function PortfolioOptimizerTab() {
           {isFetching ? "계산 중..." : "최적 비중 계산"}
         </button>
         {selected.length < 2 && <p className="text-xs text-[#ff5555] mt-2">2개 이상 종목을 선택하세요</p>}
-      </div>
+      </Card>
 
       {data?.error && <p className="text-sm text-[#ff5555]">{data.error}</p>}
 
       {data && !data.error && (
-        <div className="p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line space-y-4">
+        <Card className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <p className="text-xs text-gray-500 dark:text-[#6272a4]">기대 수익률 (연환산)</p>
@@ -156,11 +157,11 @@ function PortfolioOptimizerTab() {
               💡 {data.suggestion}
             </p>
           )}
-        </div>
+        </Card>
       )}
 
       {frontier && frontier.length > 0 && (
-        <div className="p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+        <Card className="p-5">
           <p className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2] mb-3">효율적 프론티어</p>
           <div className="space-y-1.5">
             {frontier.map((f: FrontierPoint, i: number) => (
@@ -170,7 +171,7 @@ function PortfolioOptimizerTab() {
               </div>
             ))}
           </div>
-        </div>
+        </Card>
       )}
     </div>
   );
@@ -193,14 +194,14 @@ function TaxOptimizerTab() {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
-        <div className="p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+        <Card className="p-4">
           <p className="text-xs text-gray-500 dark:text-[#6272a4]">올해 실현 이익</p>
           <p className="text-lg font-bold text-[#50fa7b]">{won(data.realizedGainYtd)}원</p>
-        </div>
-        <div className="p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+        </Card>
+        <Card className="p-4">
           <p className="text-xs text-gray-500 dark:text-[#6272a4]">예상 절세 효과</p>
           <p className="text-lg font-bold text-[#bd93f9]">{won(data.totalEstimatedTaxSaving)}원</p>
-        </div>
+        </Card>
       </div>
 
       {data.candidates.length === 0 ? (
@@ -210,7 +211,7 @@ function TaxOptimizerTab() {
       ) : (
         <div className="space-y-2">
           {data.candidates.map((c: HarvestingCandidate) => (
-            <div key={c.stockId} className="p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+            <Card key={c.stockId} className="p-4">
               <div className="flex justify-between items-center mb-1">
                 <span className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">{c.name}</span>
                 <span className="text-xs text-[#ff5555]">{won(c.unrealizedLoss)}원 평가손실</span>
@@ -219,7 +220,7 @@ function TaxOptimizerTab() {
                 <span>{c.quantity}주 · 평단 {won(c.avgPrice)}원 → 현재 {won(c.currentPrice)}원</span>
                 <span className="text-[#bd93f9] font-medium">절세 {won(c.estimatedTaxSaving)}원</span>
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}
@@ -249,7 +250,7 @@ function KellyTab() {
 
   return (
     <div className="space-y-4">
-      <div className="p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line space-y-3">
+      <Card className="p-5 space-y-3">
         <p className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">백테스트 결과 입력</p>
         <div className="grid grid-cols-3 gap-3">
           <div>
@@ -272,10 +273,10 @@ function KellyTab() {
           className="px-5 py-2 rounded-xl bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] text-sm font-bold hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100">
           {mutation.isPending ? "계산 중..." : "켈리 비율 계산"}
         </button>
-      </div>
+      </Card>
 
       {mutation.data && (
-        <div className="p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line space-y-3">
+        <Card className="p-5 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="p-3 rounded-lg bg-gray-50 dark:bg-[#282a36]">
               <p className="text-xs text-gray-500 dark:text-[#6272a4]">Full Kelly</p>
@@ -287,7 +288,7 @@ function KellyTab() {
             </div>
           </div>
           <p className="text-xs text-gray-900 dark:text-[#f8f8f2] p-3 rounded-lg bg-gray-50 dark:bg-[#282a36]">{mutation.data.recommendation}</p>
-        </div>
+        </Card>
       )}
     </div>
   );
@@ -326,7 +327,7 @@ function PatternTab() {
       ) : (
         <div className="space-y-2">
           {data.map((p: PatternMatch, i: number) => (
-            <div key={i} className="p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+            <Card key={i} className="p-4">
               <div className="flex justify-between items-center mb-1">
                 <span className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">
                   {PATTERN_LABEL[p.patternType] ?? p.patternType}
@@ -335,7 +336,7 @@ function PatternTab() {
               </div>
               <p className="text-xs text-gray-500 dark:text-[#6272a4] mb-1">{p.candleFrom} ~ {p.candleTo}</p>
               <p className="text-xs text-gray-900 dark:text-[#f8f8f2]">{p.description}</p>
-            </div>
+            </Card>
           ))}
         </div>
       )}
@@ -372,7 +373,7 @@ function RegimeTab() {
       ) : data?.error ? (
         <p className="text-sm text-[#ff5555] text-center py-8">{data.error}</p>
       ) : data ? (
-        <div className="p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line space-y-4">
+        <Card className="p-5 space-y-4">
           <div className="flex items-center gap-3">
             <span className={`px-4 py-2 rounded-full text-lg font-bold ${REGIME_META[data.regime]?.color ?? ""}`}>
               {REGIME_META[data.regime]?.label ?? data.regime}
@@ -395,7 +396,7 @@ function RegimeTab() {
             </div>
           </div>
           <p className="text-xs text-gray-900 dark:text-[#f8f8f2] p-3 rounded-lg bg-gray-50 dark:bg-[#282a36]">{data.explanation}</p>
-        </div>
+        </Card>
       ) : null}
     </div>
   );

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
+import { Card } from "@/components/ui/Card";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -119,7 +120,7 @@ function OrderForm() {
   const isBuy = side === "BUY";
 
   return (
-    <div className="p-5 rounded-2xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line space-y-4">
+    <Card className="p-5 space-y-4">
       <h2 className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">주문 입력</h2>
 
       {/* 종목 + 방향 */}
@@ -211,7 +212,7 @@ function OrderForm() {
       {submitMutation.isError && (
         <p className="text-xs text-[#ff5555]">{(submitMutation.error as Error).message}</p>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -245,7 +246,7 @@ function ActiveOrders() {
   return (
     <div className="space-y-2">
       {orders.map((o: OrderDto) => (
-        <div key={o.id} className="flex items-center justify-between p-3 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line text-xs">
+        <Card key={o.id} className="flex items-center justify-between p-3 text-xs">
           <div>
             <div className="flex items-center gap-2 mb-0.5">
               <span className={`font-bold ${o.side === "BUY" ? "text-[#ff5050]" : "text-[#4a8fd4]"}`}>
@@ -269,7 +270,7 @@ function ActiveOrders() {
                 className="text-[#ff5555] hover:opacity-70 active:scale-95 transition-transform font-medium">취소</button>
             )}
           </div>
-        </div>
+        </Card>
       ))}
     </div>
   );
@@ -318,7 +319,7 @@ export default function MatchingPage() {
             ) : (
               <div className="space-y-2">
                 {fills.slice(0, 10).map((f: FillDto) => (
-                  <div key={f.id} className="flex justify-between items-center p-3 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line text-xs">
+                  <Card key={f.id} className="flex justify-between items-center p-3 text-xs">
                     <div className="flex items-center gap-2">
                       <span className={`font-bold ${f.side === "BUY" ? "text-[#ff5050]" : "text-[#4a8fd4]"}`}>
                         {f.side === "BUY" ? "매수" : "매도"}
@@ -330,7 +331,7 @@ export default function MatchingPage() {
                       <p className="text-gray-900 dark:text-[#f8f8f2] tabular-nums">{won(f.amount)}원</p>
                       <p className="text-gray-500 dark:text-[#6272a4] tabular-nums">수수료 {won(f.fee)}원</p>
                     </div>
-                  </div>
+                  </Card>
                 ))}
               </div>
             )}

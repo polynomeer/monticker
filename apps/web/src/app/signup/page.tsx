@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signup, saveTokens } from "@/services/auth";
 import Link from "next/link";
+import { Card } from "@/components/ui/Card";
 
 function passwordStrength(pw: string): { label: string; color: string; width: string } {
   if (pw.length === 0) return { label: "", color: "", width: "0%" };
@@ -65,7 +66,7 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-[#282a36] bg-mesh-light dark:bg-mesh-dark px-4">
-      <div className="bg-white dark:bg-[#21222c] dark:border-[#44475a] p-8 rounded-xl shadow-xl dark:shadow-glow-line border border-gray-200 w-full max-w-sm animate-fade-up">
+      <Card className="p-8" outerClassName="w-full max-w-sm animate-fade-up">
         <h1 className="text-2xl font-bold mb-6 text-center dark:text-[#f8f8f2]">회원가입</h1>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
 
@@ -129,7 +130,7 @@ export default function SignupPage() {
           이미 계정이 있으신가요?{" "}
           <Link href="/login" className="text-blue-600 dark:text-[#bd93f9] hover:underline">로그인</Link>
         </p>
-      </div>
+      </Card>
     </div>
   );
 }

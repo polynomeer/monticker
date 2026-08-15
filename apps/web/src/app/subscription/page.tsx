@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
+import { Card } from "@/components/ui/Card";
 
 interface Plan {
   id: number;
@@ -59,7 +60,10 @@ function PlanCard({
   const isCurrent = currentCode === plan.code;
 
   return (
-    <div className={`relative flex flex-col p-6 rounded-2xl border bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line transition-all ${isCurrent ? accent.border + " ring-1 ring-[#bd93f9]/30" : accent.border}`}>
+    <Card
+      className={`relative flex flex-col p-6 transition-all ${isCurrent ? accent.border + " ring-1 ring-[#bd93f9]/30" : accent.border}`}
+      hover
+    >
       {isCurrent && (
         <span className="absolute top-4 right-4 text-xs px-2 py-0.5 rounded-full bg-[#bd93f9]/20 text-[#bd93f9] font-medium">
           현재 플랜
@@ -89,7 +93,7 @@ function PlanCard({
       >
         {isCurrent ? "현재 플랜" : isPending ? "처리 중..." : plan.price === 0 ? "무료로 시작" : "구독하기"}
       </button>
-    </div>
+    </Card>
   );
 }
 
@@ -172,7 +176,7 @@ export default function SubscriptionPage() {
 
       {/* 현재 구독 상태 배너 */}
       {mySub && (
-        <div className="mb-6 p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line flex items-center justify-between gap-4">
+        <Card className="p-4 flex items-center justify-between gap-4" outerClassName="mb-6">
           <div>
             <p className="text-xs text-gray-500 dark:text-[#6272a4]">현재 구독</p>
             <p className="font-semibold text-gray-900 dark:text-[#f8f8f2] mt-0.5">
@@ -196,7 +200,7 @@ export default function SubscriptionPage() {
               {cancelMutation.isPending ? "처리 중..." : "구독 해지"}
             </button>
           )}
-        </div>
+        </Card>
       )}
 
       {/* 탭 */}
@@ -246,7 +250,7 @@ export default function SubscriptionPage() {
             {(paymentsData ?? []).map((p: PaymentRecord) => {
               const meta = PAYMENT_LABELS[p.status] ?? { label: p.status, color: "text-gray-900 dark:text-[#f8f8f2]" };
               return (
-                <div key={p.id} className="flex items-center gap-3 p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+                <Card key={p.id} className="flex items-center gap-3 p-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-gray-900 dark:text-[#f8f8f2]">{p.planCode} 플랜</span>
@@ -259,7 +263,7 @@ export default function SubscriptionPage() {
                   <p className={`text-sm font-semibold ${p.status === "SUCCESS" ? "text-[#50fa7b]" : "text-[#ff5555]"}`}>
                     {p.amount.toLocaleString("ko-KR")}원
                   </p>
-                </div>
+                </Card>
               );
             })}
           </div>

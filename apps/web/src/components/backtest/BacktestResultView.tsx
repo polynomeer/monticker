@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { Card } from "@/components/ui/Card";
 
 interface Props { result: any; }
 
@@ -43,7 +44,7 @@ export default function BacktestResultView({ result }: Props) {
       const chart = echarts.init(chartRef.current, undefined, { renderer: "canvas", height: 200 });
 
       chart.setOption({
-        backgroundColor: isDark ? "#1e1f29" : "#fff",
+        backgroundColor: isDark ? "#21222c" : "#fff",
         animation: false,
         tooltip: { trigger: "axis", backgroundColor: isDark ? "#282a36" : "#fff",
           borderColor: "#44475a", textStyle: { color: isDark ? "#f8f8f2" : "#374151", fontSize: 11 } },
@@ -75,7 +76,7 @@ export default function BacktestResultView({ result }: Props) {
   return (
     <div className="space-y-4 animate-fade-up">
       {/* 요약 헤더 */}
-      <div className="border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#282a36] shadow-sm dark:shadow-glow-line rounded-xl p-4">
+      <Card className="p-4">
         <div className="flex items-center justify-between mb-3">
           <div>
             <span className="text-sm text-gray-500 dark:text-[#6272a4]">{symbol} — {result.strategy}</span>
@@ -99,17 +100,17 @@ export default function BacktestResultView({ result }: Props) {
           <MetricCard label="Profit Factor" value={metrics.profitFactor.toFixed(2)}
             color={metrics.profitFactor >= 1 ? "text-[#0ecb81]" : "text-[#f6465d]"} />
         </div>
-      </div>
+      </Card>
 
       {/* 자산 곡선 */}
-      <div className="border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#1e1f29] shadow-sm dark:shadow-glow-line rounded-xl overflow-hidden">
+      <Card className="overflow-hidden">
         <div className="px-4 pt-3 text-xs text-gray-500 dark:text-[#6272a4] font-medium">자산 곡선</div>
         <div ref={chartRef} className="w-full" />
-      </div>
+      </Card>
 
       {/* 거래 내역 */}
       {trades.length > 0 && (
-        <div className="border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#282a36] shadow-sm dark:shadow-glow-line rounded-xl overflow-hidden">
+        <Card className="overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-200 dark:border-[#44475a] bg-gray-50 dark:bg-transparent">
             <span className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">거래 내역</span>
             <span className="ml-2 text-xs text-gray-500 dark:text-[#6272a4]">평균 보유 {metrics.avgHoldingDays.toFixed(1)}일</span>
@@ -140,7 +141,7 @@ export default function BacktestResultView({ result }: Props) {
               </tbody>
             </table>
           </div>
-        </div>
+        </Card>
       )}
     </div>
   );

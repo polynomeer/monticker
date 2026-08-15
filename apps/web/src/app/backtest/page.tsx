@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import BacktestResultView from "@/components/backtest/BacktestResultView";
+import { Card } from "@/components/ui/Card";
 
 const STOCKS = [
   { id: 2, symbol: "005930", name: "삼성전자" },
@@ -78,7 +79,7 @@ export default function BacktestPage() {
       </div>
 
       {/* 설정 패널 */}
-      <div className="border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#282a36] shadow-sm dark:shadow-glow-line rounded-xl p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <Card className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* 종목 */}
         <div>
           <label className="text-xs text-gray-500 dark:text-[#6272a4] mb-1 block">종목</label>
@@ -143,7 +144,7 @@ export default function BacktestPage() {
           </button>
           {error && <p className="text-xs text-red-500 dark:text-[#f6465d] mt-1 text-center">{(error as Error).message}</p>}
         </div>
-      </div>
+      </Card>
 
       {/* 결과 */}
       {data && <BacktestResultView result={data} />}

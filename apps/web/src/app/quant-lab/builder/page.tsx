@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
+import { Card } from "@/components/ui/Card";
 
 // ── 조건 블록 타입 ─────────────────────────────────────────────────────────────
 
@@ -213,7 +214,7 @@ export default function BuilderPage() {
       </div>
 
       {/* 기본 정보 */}
-      <section className="mb-6 p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+      <Card className="p-5" outerClassName="mb-6">
         <h2 className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2] mb-4">기본 정보</h2>
         <div className="space-y-3">
           <input
@@ -231,10 +232,10 @@ export default function BuilderPage() {
             className="w-full rounded-lg bg-white dark:bg-[#282a36] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] placeholder-gray-400 dark:placeholder-[#6272a4] px-4 py-2.5 text-sm resize-none transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:ring-2 focus:ring-[#bd93f9]/50"
           />
         </div>
-      </section>
+      </Card>
 
       {/* 매수 조건 */}
-      <section className="mb-6 p-5 rounded-xl border border-[#50fa7b]/30 bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+      <Card className="p-5 border-[#50fa7b]/30 dark:border-[#50fa7b]/30" outerClassName="mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-[#50fa7b]">매수 조건</h2>
           <div className="flex items-center gap-2">
@@ -263,10 +264,10 @@ export default function BuilderPage() {
         <button onClick={addEntry} className="mt-3 text-xs text-[#50fa7b] hover:opacity-70 transition-opacity">
           + 조건 추가
         </button>
-      </section>
+      </Card>
 
       {/* 매도 조건 */}
-      <section className="mb-6 p-5 rounded-xl border border-[#ff5555]/30 bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+      <Card className="p-5 border-[#ff5555]/30 dark:border-[#ff5555]/30" outerClassName="mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-[#ff5555]">매도 조건</h2>
           <div className="flex items-center gap-2">
@@ -295,10 +296,10 @@ export default function BuilderPage() {
         <button onClick={addExit} className="mt-3 text-xs text-[#ff5555] hover:opacity-70 transition-opacity">
           + 조건 추가
         </button>
-      </section>
+      </Card>
 
       {/* 포지션 사이징 */}
-      <section className="mb-8 p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+      <Card className="p-5" outerClassName="mb-8">
         <h2 className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2] mb-4">포지션 사이징</h2>
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-500 dark:text-[#6272a4]">1회 매수에 총 자본의</span>
@@ -311,7 +312,7 @@ export default function BuilderPage() {
           />
           <span className="text-sm text-gray-500 dark:text-[#6272a4]">% 사용</span>
         </div>
-      </section>
+      </Card>
 
       {/* 저장 버튼 */}
       <button

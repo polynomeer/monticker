@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { authFetch } from "@/services/api";
+import { Card } from "@/components/ui/Card";
 
 interface WalletMap {
   availableCash: number;
@@ -112,10 +113,10 @@ export default function WalletPage() {
 
       {/* 총 자산 */}
       {wallet && (
-        <div className="mb-6 p-5 rounded-2xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+        <Card className="p-5" outerClassName="mb-6">
           <p className="text-xs text-gray-500 dark:text-[#6272a4] mb-1">총 자산</p>
           <p className="text-3xl font-bold text-gray-900 dark:text-[#f8f8f2]">{won(total)}</p>
-        </div>
+        </Card>
       )}
 
       {/* 탭 */}
@@ -138,7 +139,7 @@ export default function WalletPage() {
             { label: "보유 주식 평가액", value: wallet.holdingsValue,     pct: total > 0 ? wallet.holdingsValue / total * 100 : 0,     color: "bg-[#bd93f9]",  icon: "📈" },
             { label: "정산 대기 금액",   value: wallet.settlementPending, pct: total > 0 ? wallet.settlementPending / total * 100 : 0, color: "bg-[#6272a4]",  icon: "⏳" },
           ].map(row => (
-            <div key={row.label} className="p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+            <Card key={row.label} className="p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-gray-500 dark:text-[#6272a4] flex items-center gap-1.5">{row.icon} {row.label}</span>
                 <span className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">{won(row.value)}</span>
@@ -147,7 +148,7 @@ export default function WalletPage() {
                 <div className={`h-full rounded-full ${row.color}`} style={{ width: `${row.pct.toFixed(1)}%` }} />
               </div>
               <p className="text-xs text-gray-500 dark:text-[#6272a4] mt-1 text-right">{row.pct.toFixed(1)}%</p>
-            </div>
+            </Card>
           ))}
         </div>
       )}
@@ -163,7 +164,7 @@ export default function WalletPage() {
             const meta = EVENT_LABELS[ev.eventType] ?? { label: ev.eventType, color: "text-gray-900 dark:text-[#f8f8f2]", icon: "•" };
             const sign = ev.amount > 0 ? "+" : "";
             return (
-              <div key={ev.id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+              <Card key={ev.id} className="flex items-center gap-3 p-3">
                 <span className="text-lg">{meta.icon}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -182,7 +183,7 @@ export default function WalletPage() {
                     <p className="text-xs text-gray-500 dark:text-[#6272a4]">잔고 {won(ev.balanceAfter)}</p>
                   )}
                 </div>
-              </div>
+              </Card>
             );
           })}
         </div>
@@ -201,7 +202,7 @@ export default function WalletPage() {
               </div>
 
               {score.feedback.length > 0 && (
-                <div className="p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line">
+                <Card className="p-4">
                   <p className="text-xs font-semibold text-gray-900 dark:text-[#f8f8f2] mb-3">📋 피드백</p>
                   <ul className="space-y-1.5">
                     {score.feedback.map((fb: string, i: number) => (
@@ -210,7 +211,7 @@ export default function WalletPage() {
                       </li>
                     ))}
                   </ul>
-                </div>
+                </Card>
               )}
 
               <p className="text-xs text-gray-500 dark:text-[#6272a4] text-center">

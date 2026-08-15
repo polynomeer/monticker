@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authFetch } from "@/services/api";
+import { Card } from "@/components/ui/Card";
 
 interface RuleSet {
   id: number;
@@ -99,9 +100,10 @@ export default function QuantLabPage() {
           {ruleSets.map((rs: RuleSet) => {
             const st = STATUS_LABEL[rs.status] ?? STATUS_LABEL.DRAFT;
             return (
-              <div
+              <Card
                 key={rs.id}
-                className="flex items-center justify-between p-5 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] shadow-sm dark:shadow-glow-line hover:border-blue-300 dark:hover:border-[#bd93f9]/50 transition-colors"
+                className="flex items-center justify-between p-5"
+                hover
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
@@ -143,7 +145,7 @@ export default function QuantLabPage() {
                     삭제
                   </button>
                 </div>
-              </div>
+              </Card>
             );
           })}
         </div>

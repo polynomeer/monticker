@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import AlertStats from "@/components/alerts/AlertStats";
 import EmptyState from "@/components/common/EmptyState";
+import { Card } from "@/components/ui/Card";
 import { authFetch } from "@/services/api";
 import { useRouter } from "next/navigation";
 
@@ -32,7 +33,7 @@ export default function AlertsPage() {
 
       <AlertStats />
 
-      <div className="border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#282a36] rounded-xl overflow-hidden shadow-sm dark:shadow-glow-line">
+      <Card className="overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-200 dark:border-[#44475a] bg-gray-50 dark:bg-transparent">
           <span className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">알림 목록</span>
         </div>
@@ -60,7 +61,7 @@ export default function AlertsPage() {
             ))}
           </ul>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

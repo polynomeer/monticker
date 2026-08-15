@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { authFetch } from "@/services/api";
+import { Card } from "@/components/ui/Card";
 
 interface DailyStat { date: string; count: number; }
 interface Stats {
@@ -21,7 +22,7 @@ export default function AlertStats() {
   const maxCount = Math.max(...stats.recentFires.map(d => d.count), 1);
 
   return (
-    <div className="border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#282a36] rounded-xl p-5 space-y-4 shadow-sm dark:shadow-glow-line">
+    <Card className="p-5 space-y-4">
       <h2 className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">알림 통계</h2>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -67,6 +68,6 @@ export default function AlertStats() {
           </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 }
