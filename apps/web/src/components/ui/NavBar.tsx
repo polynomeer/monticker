@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { Card } from "@/components/ui/Card";
 import ThemeToggle from "@/components/ThemeToggle";
 import AuthNav from "@/components/AuthNav";
 import SearchAutocomplete from "@/components/stock/SearchAutocomplete";
@@ -115,7 +116,10 @@ export default function NavBar() {
             </button>
 
             {menuOpen && (
-              <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-dracula-surface border border-gray-200 dark:border-dracula-line rounded-xl shadow-xl dark:shadow-glow-line overflow-hidden animate-pop-in">
+              <Card
+                outerClassName="absolute right-0 top-full mt-2 w-56 animate-pop-in"
+                className="overflow-hidden"
+              >
                 {/* 모바일 검색 */}
                 <div className="p-3 border-b border-gray-100 dark:border-dracula-line">
                   <SearchAutocomplete />
@@ -142,7 +146,7 @@ export default function NavBar() {
                 <div className="px-4 py-3 border-t border-gray-100 dark:border-dracula-line">
                   <AuthNav />
                 </div>
-              </div>
+              </Card>
             )}
           </div>
         </div>
