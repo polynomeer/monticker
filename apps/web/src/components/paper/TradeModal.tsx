@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { CheckCircle, X } from "@phosphor-icons/react";
 import { usePaperTrade, usePaperPortfolio } from "@/hooks/usePaperTrade";
 import TradeReceipt from "@/components/wallet/TradeReceipt";
 import { authFetch } from "@/services/api";
@@ -76,7 +77,7 @@ export default function TradeModal({ stock, currentPrice, side, maxQuantity, onC
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
         <div className="bg-white dark:bg-[#21222c] rounded-2xl p-8 text-center shadow-2xl animate-fade-up">
-          <div className="text-2xl mb-2">✅</div>
+          <div className="flex justify-center mb-2 text-[#50fa7b]"><CheckCircle size={28} weight="bold" aria-hidden /></div>
           <p className="text-gray-900 dark:text-[#f8f8f2] font-semibold">체결 완료</p>
           <p className="text-xs text-gray-500 dark:text-[#6272a4] mt-1">영수증 생성 중...</p>
         </div>
@@ -108,7 +109,7 @@ export default function TradeModal({ stock, currentPrice, side, maxQuantity, onC
             onClick={onClose}
             aria-label="닫기"
             className="inline-flex items-center justify-center w-8 h-8 -mr-1.5 -mt-1 text-gray-400 dark:text-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2] text-lg transition-colors"
-          >✕</button>
+          ><X size={16} weight="bold" aria-hidden /></button>
         </div>
 
         {/* 현재가 */}

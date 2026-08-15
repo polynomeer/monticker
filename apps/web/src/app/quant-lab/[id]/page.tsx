@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { HourglassMedium, Play } from "@phosphor-icons/react";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
@@ -166,9 +167,11 @@ export default function QuantLabDetailPage() {
         <button
           onClick={() => runMutation.mutate()}
           disabled={runMutation.isPending}
-          className="w-full py-2.5 rounded-xl bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100"
+          className="w-full py-2.5 rounded-xl bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100 inline-flex items-center justify-center gap-1.5"
         >
-          {runMutation.isPending ? "⏳ 백테스트 실행 중..." : "▶ 백테스트 실행"}
+          {runMutation.isPending
+            ? <><HourglassMedium size={14} weight="bold" aria-hidden /> 백테스트 실행 중...</>
+            : <><Play size={14} weight="fill" aria-hidden /> 백테스트 실행</>}
         </button>
         <p className="mt-2 text-xs text-gray-500 dark:text-[#6272a4] text-center">
           수수료 0.015% + 슬리피지 0.1% 반영 · 과거 성과가 미래 수익을 보장하지 않습니다

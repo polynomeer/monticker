@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { X } from "@phosphor-icons/react";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
@@ -121,7 +122,7 @@ function ConditionRow({ cond, onChange, onRemove }: {
         onClick={onRemove}
         aria-label="조건 삭제"
         className="ml-auto inline-flex items-center justify-center w-6 h-6 text-[#ff5555] text-xs hover:opacity-70 active:scale-90 transition-transform"
-      >✕</button>
+      ><X size={14} weight="bold" aria-hidden /></button>
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import { type Icon, ArrowLeft, ArrowLineDown, ArrowLineUp, Money, Bank, Receipt, Circle } from "@phosphor-icons/react";
 import { authFetch } from "@/services/api";
 import { Card } from "@/components/ui/Card";
 
@@ -29,12 +30,12 @@ interface DailyReplay {
   };
 }
 
-const TYPE_META: Record<string, { icon: string; color: string; label: string }> = {
-  BUY:        { icon: "📥", color: "text-[#50fa7b]", label: "매수" },
-  SELL:       { icon: "📤", color: "text-[#ff5555]", label: "매도" },
-  DEPOSIT:    { icon: "💵", color: "text-[#bd93f9]", label: "입금" },
-  WITHDRAWAL: { icon: "🏧", color: "text-gray-500 dark:text-[#6272a4]", label: "출금" },
-  FEE:        { icon: "💸", color: "text-gray-500 dark:text-[#6272a4]", label: "수수료" },
+const TYPE_META: Record<string, { icon: Icon; color: string; label: string }> = {
+  BUY:        { icon: ArrowLineDown, color: "text-[#50fa7b]", label: "매수" },
+  SELL:       { icon: ArrowLineUp, color: "text-[#ff5555]", label: "매도" },
+  DEPOSIT:    { icon: Money, color: "text-[#bd93f9]", label: "입금" },
+  WITHDRAWAL: { icon: Bank, color: "text-gray-500 dark:text-[#6272a4]", label: "출금" },
+  FEE:        { icon: Receipt, color: "text-gray-500 dark:text-[#6272a4]", label: "수수료" },
 };
 
 function won(n: number) { return n.toLocaleString("ko-KR") + "원"; }
@@ -59,7 +60,7 @@ export default function ReplayPage() {
           onClick={() => router.back()}
           aria-label="뒤로가기"
           className="inline-flex items-center justify-center w-8 h-8 -ml-1 text-gray-500 dark:text-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2] text-sm transition-colors active:scale-95"
-        >←</button>
+        ><ArrowLeft size={18} weight="bold" aria-hidden /></button>
         <h1 className="text-xl font-bold text-gray-900 dark:text-[#f8f8f2]">주문 리플레이</h1>
       </div>
 
@@ -112,7 +113,7 @@ export default function ReplayPage() {
               <div className="absolute left-2 top-0 bottom-0 w-px bg-gray-200 dark:bg-[#44475a]" />
               <div className="space-y-4">
                 {data.events.map((ev: ReplayEvent, i: number) => {
-                  const meta = TYPE_META[ev.type] ?? { icon: "•", color: "text-gray-900 dark:text-[#f8f8f2]", label: ev.type };
+                  const meta = TYPE_META[ev.type] ?? { icon: Circle, color: "text-gray-900 dark:text-[#f8f8f2]", label: ev.type };
                   return (
                     <div key={i} className="relative">
                       {/* 점 */}
@@ -120,7 +121,7 @@ export default function ReplayPage() {
                       <Card className="p-3">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <span>{meta.icon}</span>
+                            <meta.icon size={14} weight="bold" className={meta.color} aria-hidden />
                             <span className={`text-xs font-medium ${meta.color}`}>{meta.label}</span>
                             {ev.stockSymbol && (
                               <span className="text-xs text-gray-900 dark:text-[#f8f8f2] font-semibold">{ev.stockName ?? ev.stockSymbol}</span>

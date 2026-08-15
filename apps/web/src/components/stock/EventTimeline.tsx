@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CalendarBlank } from "@phosphor-icons/react";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -62,7 +63,7 @@ export default function EventTimeline({ stockId }: Props) {
 
       {!loading && events.length === 0 && (
         <EmptyState
-          icon="📅"
+          icon={CalendarBlank}
           title="이벤트 없음"
           description="최근 24시간 내 이벤트가 없습니다."
         />

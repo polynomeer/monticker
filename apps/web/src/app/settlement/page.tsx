@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { type Icon, HourglassMedium, CheckCircle, XCircle } from "@phosphor-icons/react";
 import { authFetch } from "@/services/api";
 import { Card } from "@/components/ui/Card";
 
@@ -28,10 +29,10 @@ interface Page<T> {
   number: number;
 }
 
-const STATUS_META: Record<string, { label: string; color: string; icon: string }> = {
-  PENDING:  { label: "대기 중",   color: "text-[#ffb86c]", icon: "⏳" },
-  SETTLED:  { label: "정산 완료", color: "text-[#50fa7b]", icon: "✅" },
-  FAILED:   { label: "실패",      color: "text-[#ff5555]", icon: "❌" },
+const STATUS_META: Record<string, { label: string; color: string; icon: Icon }> = {
+  PENDING:  { label: "대기 중",   color: "text-[#ffb86c]", icon: HourglassMedium },
+  SETTLED:  { label: "정산 완료", color: "text-[#50fa7b]", icon: CheckCircle },
+  FAILED:   { label: "실패",      color: "text-[#ff5555]", icon: XCircle },
 };
 
 const SIDE_META: Record<string, { label: string; color: string }> = {
@@ -54,7 +55,7 @@ function SettlementRow({ s }: { s: PaperSettlement }) {
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center gap-3 p-4 text-left hover:bg-gray-50 dark:hover:bg-[#44475a]/20 transition-colors"
       >
-        <span className="text-base">{status.icon}</span>
+        <status.icon size={18} weight="bold" className={status.color} aria-hidden />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`text-xs font-medium ${side.color}`}>{side.label}</span>
@@ -151,9 +152,10 @@ export default function SettlementPage() {
       <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-[#44475a]">
         {(["all", "pending"] as const).map(t => (
           <button key={t} onClick={() => { setTab(t); setPage(0); }}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px inline-flex items-center gap-1.5
               ${tab === t ? "border-blue-600 dark:border-[#bd93f9] text-blue-600 dark:text-[#bd93f9]" : "border-transparent text-gray-500 dark:text-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2]"}`}>
-            {t === "all" ? "전체 내역" : "⏳ 대기 중"}
+            {t === "pending" && <HourglassMedium size={14} weight="bold" aria-hidden />}
+            {t === "all" ? "전체 내역" : "대기 중"}
           </button>
         ))}
       </div>

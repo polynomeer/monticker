@@ -3,6 +3,10 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import {
+  type Icon, ArrowLineDown, ArrowLineUp, CheckCircle, CircleHalf, Lock, LockOpen,
+  Receipt, Target, ClipboardText, CreditCard, Coins, Bank, Buildings, Wallet, ChartLineUp, HourglassMedium, Circle,
+} from "@phosphor-icons/react";
 import { authFetch } from "@/services/api";
 import { Card } from "@/components/ui/Card";
 
@@ -32,20 +36,20 @@ interface BehaviorScore {
   reliabilityNotes: Record<string, unknown>;
 }
 
-const EVENT_LABELS: Record<string, { label: string; color: string; icon: string }> = {
-  DEPOSIT:                    { label: "입금",           color: "text-[#50fa7b]", icon: "💵" },
-  WITHDRAWAL:                 { label: "출금",           color: "text-[#ff5555]", icon: "🏧" },
-  FILL:                       { label: "체결",           color: "text-[#bd93f9]", icon: "✅" },
-  PARTIAL_FILL:               { label: "부분체결",       color: "text-[#ffb86c]", icon: "🔸" },
-  CASH_RESERVED:              { label: "예약",           color: "text-gray-500 dark:text-[#6272a4]", icon: "🔒" },
-  CASH_UNRESERVED:            { label: "예약해제",       color: "text-gray-500 dark:text-[#6272a4]", icon: "🔓" },
-  FEE:                        { label: "수수료",         color: "text-[#ff5555]", icon: "💸" },
-  SETTLEMENT:                 { label: "정산완료",       color: "text-[#50fa7b]", icon: "🎯" },
-  PAPER_SETTLEMENT_COMPLETE:  { label: "모의투자 정산",  color: "text-[#50fa7b]", icon: "📋" },
-  SUBSCRIPTION_PAYMENT:       { label: "구독 결제",      color: "text-[#ff5555]", icon: "💳" },
-  CREATOR_EARNING_CREDITED:   { label: "전략 수익 적립", color: "text-[#50fa7b]", icon: "💰" },
-  CREATOR_PAYOUT_PAID:        { label: "수익 출금",      color: "text-[#ff5555]", icon: "🏦" },
-  BROKERAGE_SETTLEMENT:       { label: "증권사 정산",    color: "text-[#8be9fd]", icon: "🏛️" },
+const EVENT_LABELS: Record<string, { label: string; color: string; icon: Icon }> = {
+  DEPOSIT:                    { label: "입금",           color: "text-[#50fa7b]", icon: ArrowLineDown },
+  WITHDRAWAL:                 { label: "출금",           color: "text-[#ff5555]", icon: ArrowLineUp },
+  FILL:                       { label: "체결",           color: "text-[#bd93f9]", icon: CheckCircle },
+  PARTIAL_FILL:               { label: "부분체결",       color: "text-[#ffb86c]", icon: CircleHalf },
+  CASH_RESERVED:              { label: "예약",           color: "text-gray-500 dark:text-[#6272a4]", icon: Lock },
+  CASH_UNRESERVED:            { label: "예약해제",       color: "text-gray-500 dark:text-[#6272a4]", icon: LockOpen },
+  FEE:                        { label: "수수료",         color: "text-[#ff5555]", icon: Receipt },
+  SETTLEMENT:                 { label: "정산완료",       color: "text-[#50fa7b]", icon: Target },
+  PAPER_SETTLEMENT_COMPLETE:  { label: "모의투자 정산",  color: "text-[#50fa7b]", icon: ClipboardText },
+  SUBSCRIPTION_PAYMENT:       { label: "구독 결제",      color: "text-[#ff5555]", icon: CreditCard },
+  CREATOR_EARNING_CREDITED:   { label: "전략 수익 적립", color: "text-[#50fa7b]", icon: Coins },
+  CREATOR_PAYOUT_PAID:        { label: "수익 출금",      color: "text-[#ff5555]", icon: Bank },
+  BROKERAGE_SETTLEMENT:       { label: "증권사 정산",    color: "text-[#8be9fd]", icon: Buildings },
 };
 
 function won(n: number) {
@@ -134,14 +138,16 @@ export default function WalletPage() {
       {activeTab === "map" && wallet && (
         <div className="space-y-3">
           {[
-            { label: "사용 가능 현금",  value: wallet.availableCash,     pct: total > 0 ? wallet.availableCash / total * 100 : 0,     color: "bg-[#50fa7b]",  icon: "💵" },
-            { label: "주문 예약금",      value: wallet.reservedCash,      pct: total > 0 ? wallet.reservedCash / total * 100 : 0,      color: "bg-[#ffb86c]",  icon: "🔒" },
-            { label: "보유 주식 평가액", value: wallet.holdingsValue,     pct: total > 0 ? wallet.holdingsValue / total * 100 : 0,     color: "bg-[#bd93f9]",  icon: "📈" },
-            { label: "정산 대기 금액",   value: wallet.settlementPending, pct: total > 0 ? wallet.settlementPending / total * 100 : 0, color: "bg-[#6272a4]",  icon: "⏳" },
+            { label: "사용 가능 현금",  value: wallet.availableCash,     pct: total > 0 ? wallet.availableCash / total * 100 : 0,     color: "bg-[#50fa7b]",  icon: Wallet },
+            { label: "주문 예약금",      value: wallet.reservedCash,      pct: total > 0 ? wallet.reservedCash / total * 100 : 0,      color: "bg-[#ffb86c]",  icon: Lock },
+            { label: "보유 주식 평가액", value: wallet.holdingsValue,     pct: total > 0 ? wallet.holdingsValue / total * 100 : 0,     color: "bg-[#bd93f9]",  icon: ChartLineUp },
+            { label: "정산 대기 금액",   value: wallet.settlementPending, pct: total > 0 ? wallet.settlementPending / total * 100 : 0, color: "bg-[#6272a4]",  icon: HourglassMedium },
           ].map(row => (
             <Card key={row.label} className="p-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-500 dark:text-[#6272a4] flex items-center gap-1.5">{row.icon} {row.label}</span>
+                <span className="text-sm text-gray-500 dark:text-[#6272a4] flex items-center gap-1.5">
+                  <row.icon size={14} weight="bold" aria-hidden /> {row.label}
+                </span>
                 <span className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">{won(row.value)}</span>
               </div>
               <div className="h-1.5 rounded-full bg-gray-200 dark:bg-[#44475a] overflow-hidden">
@@ -161,11 +167,11 @@ export default function WalletPage() {
               아직 거래 기록이 없습니다. 모의투자를 시작해보세요.
             </div>
           ) : (wallet?.recentLedger ?? []).map((ev: LedgerEvent) => {
-            const meta = EVENT_LABELS[ev.eventType] ?? { label: ev.eventType, color: "text-gray-900 dark:text-[#f8f8f2]", icon: "•" };
+            const meta = EVENT_LABELS[ev.eventType] ?? { label: ev.eventType, color: "text-gray-900 dark:text-[#f8f8f2]", icon: Circle };
             const sign = ev.amount > 0 ? "+" : "";
             return (
               <Card key={ev.id} className="flex items-center gap-3 p-3">
-                <span className="text-lg">{meta.icon}</span>
+                <meta.icon size={20} weight="bold" className={meta.color} aria-hidden />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className={`text-xs font-medium ${meta.color}`}>{meta.label}</span>
@@ -203,7 +209,9 @@ export default function WalletPage() {
 
               {score.feedback.length > 0 && (
                 <Card className="p-4">
-                  <p className="text-xs font-semibold text-gray-900 dark:text-[#f8f8f2] mb-3">📋 피드백</p>
+                  <p className="text-xs font-semibold text-gray-900 dark:text-[#f8f8f2] mb-3 flex items-center gap-1.5">
+                    <ClipboardText size={14} weight="bold" aria-hidden /> 피드백
+                  </p>
                   <ul className="space-y-1.5">
                     {score.feedback.map((fb: string, i: number) => (
                       <li key={i} className="text-xs text-gray-500 dark:text-[#6272a4] flex gap-2">

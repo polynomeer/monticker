@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Coins, Flask, Wrench, ChartBar, Trophy } from "@phosphor-icons/react";
 import { authFetch } from "@/services/api";
 import { Card } from "@/components/ui/Card";
 
@@ -58,9 +59,9 @@ export default function QuantLabPage() {
         <div className="flex items-center gap-2">
           <Link
             href="/quant-lab/earnings"
-            className="px-4 py-2 rounded-xl border border-[#50fa7b]/40 text-[#50fa7b] text-sm font-medium hover:bg-[#50fa7b]/10 active:scale-[0.98] transition-all duration-150"
+            className="px-4 py-2 rounded-xl border border-[#50fa7b]/40 text-[#50fa7b] text-sm font-medium hover:bg-[#50fa7b]/10 active:scale-[0.98] transition-all duration-150 inline-flex items-center gap-1.5"
           >
-            💰 수익 대시보드
+            <Coins size={16} weight="bold" aria-hidden /> 수익 대시보드
           </Link>
           <Link
             href="/quant-lab/builder"
@@ -74,7 +75,7 @@ export default function QuantLabPage() {
       {/* 빈 상태 */}
       {!isLoading && ruleSets.length === 0 && (
         <div className="text-center py-24 border border-dashed border-gray-300 dark:border-[#44475a] rounded-2xl">
-          <div className="text-4xl mb-4">⚗️</div>
+          <div className="flex justify-center mb-4 text-gray-400 dark:text-[#6272a4]"><Flask size={40} weight="duotone" aria-hidden /></div>
           <p className="text-gray-900 dark:text-[#f8f8f2] font-semibold mb-2">아직 룰셋이 없습니다</p>
           <p className="text-gray-500 dark:text-[#6272a4] text-sm mb-6">
             투자 아이디어를 조건식으로 만들고 백테스트로 검증해보세요
@@ -154,12 +155,12 @@ export default function QuantLabPage() {
       {/* 안내 카드 */}
       <div className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { icon: "🔧", title: "1. 룰셋 빌더", desc: "가격·거래량·RSI·MACD 조건을 조합해 나만의 매수/매도 규칙을 만듭니다" },
-          { icon: "📊", title: "2. 백테스트", desc: "과거 캔들 데이터로 전략을 검증합니다. 수수료·슬리피지를 반영해 현실적인 성과를 계산합니다" },
-          { icon: "🏆", title: "3. 신뢰도 점수", desc: "거래 횟수·기간·시장 국면을 기준으로 A~D 신뢰도를 부여해 과최적화를 경고합니다" },
+          { icon: Wrench, title: "1. 룰셋 빌더", desc: "가격·거래량·RSI·MACD 조건을 조합해 나만의 매수/매도 규칙을 만듭니다" },
+          { icon: ChartBar, title: "2. 백테스트", desc: "과거 캔들 데이터로 전략을 검증합니다. 수수료·슬리피지를 반영해 현실적인 성과를 계산합니다" },
+          { icon: Trophy, title: "3. 신뢰도 점수", desc: "거래 횟수·기간·시장 국면을 기준으로 A~D 신뢰도를 부여해 과최적화를 경고합니다" },
         ].map(c => (
           <div key={c.title} className="p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-gray-50 dark:bg-[#282a36]">
-            <div className="text-2xl mb-2">{c.icon}</div>
+            <div className="mb-2 text-gray-500 dark:text-[#6272a4]"><c.icon size={22} weight="bold" aria-hidden /></div>
             <p className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2] mb-1">{c.title}</p>
             <p className="text-xs text-gray-500 dark:text-[#6272a4]">{c.desc}</p>
           </div>

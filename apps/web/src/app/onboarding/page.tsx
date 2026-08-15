@@ -2,32 +2,33 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { type Icon, ChartLineUp, Star, Bell, TestTube, Rocket } from "@phosphor-icons/react";
 
-const STEPS = [
+const STEPS: Array<{ title: string; description: string; icon: Icon }> = [
   {
     title: "monticker에 오신 것을 환영합니다",
     description: "실시간 주식 시세, AI 요약, 맞춤형 알림까지 — 한 곳에서 관리하세요.",
-    icon: "📈",
+    icon: ChartLineUp,
   },
   {
     title: "관심 종목을 추가하세요",
     description: "삼성전자, 카카오 등 원하는 종목을 워치리스트에 담아 빠르게 확인하세요.",
-    icon: "⭐",
+    icon: Star,
   },
   {
     title: "가격 알림을 설정하세요",
     description: "목표가에 도달하면 즉시 푸시 알림을 받을 수 있습니다.",
-    icon: "🔔",
+    icon: Bell,
   },
   {
     title: "Quant Lab으로 전략을 테스트하세요",
     description: "나만의 매매 조건을 설정하고 과거 데이터로 백테스트 해보세요.",
-    icon: "🧪",
+    icon: TestTube,
   },
   {
     title: "준비 완료!",
     description: "지금 바로 시장을 탐색해보세요.",
-    icon: "🚀",
+    icon: Rocket,
   },
 ];
 
@@ -49,7 +50,7 @@ export default function OnboardingPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#0d1117] bg-mesh-dark text-[#f8f8f2] px-6">
       <div key={step} className="max-w-sm w-full space-y-8 text-center animate-fade-up">
-        <div className="text-7xl">{current.icon}</div>
+        <div className="flex justify-center text-[#bd93f9]"><current.icon size={72} weight="duotone" aria-hidden /></div>
         <div className="space-y-3">
           <h1 className="text-2xl font-bold tracking-tight">{current.title}</h1>
           <p className="text-sm text-[#6272a4] leading-relaxed">{current.description}</p>

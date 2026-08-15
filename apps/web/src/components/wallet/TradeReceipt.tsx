@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  type Icon, ArrowLineDown, ArrowLineUp, CheckCircle,
+  HandFist, Plant, Newspaper, Scales, SmileyNervous, Rocket, Users, Drop, Sparkle, Question,
+} from "@phosphor-icons/react";
 import { authFetch } from "@/services/api";
 
 interface Receipt {
@@ -21,17 +25,17 @@ interface Receipt {
   balanceAfter: number | null;
 }
 
-const EMOTIONS = [
-  { value: "CONFIDENT",      label: "확신",           emoji: "💪" },
-  { value: "LONG_TERM",      label: "장기 투자",      emoji: "🌱" },
-  { value: "NEWS_BASED",     label: "뉴스 보고",      emoji: "📰" },
-  { value: "REBALANCING",    label: "비중 조절",      emoji: "⚖️" },
-  { value: "ANXIOUS",        label: "불안",           emoji: "😰" },
-  { value: "FOMO",           label: "급등 놓칠까봐",  emoji: "🚀" },
-  { value: "FOLLOWING",      label: "따라삼",         emoji: "👥" },
-  { value: "AVERAGING_DOWN", label: "물타기",         emoji: "💧" },
-  { value: "INTUITION",      label: "직감",           emoji: "🔮" },
-  { value: "OTHER",          label: "기타",           emoji: "🤷" },
+const EMOTIONS: Array<{ value: string; label: string; icon: Icon }> = [
+  { value: "CONFIDENT",      label: "확신",           icon: HandFist },
+  { value: "LONG_TERM",      label: "장기 투자",      icon: Plant },
+  { value: "NEWS_BASED",     label: "뉴스 보고",      icon: Newspaper },
+  { value: "REBALANCING",    label: "비중 조절",      icon: Scales },
+  { value: "ANXIOUS",        label: "불안",           icon: SmileyNervous },
+  { value: "FOMO",           label: "급등 놓칠까봐",  icon: Rocket },
+  { value: "FOLLOWING",      label: "따라삼",         icon: Users },
+  { value: "AVERAGING_DOWN", label: "물타기",         icon: Drop },
+  { value: "INTUITION",      label: "직감",           icon: Sparkle },
+  { value: "OTHER",          label: "기타",           icon: Question },
 ];
 
 interface Props {
@@ -72,7 +76,9 @@ export default function TradeReceipt({ receipt, onClose }: Props) {
           <>
             {/* 영수증 헤더 */}
             <div className={`px-6 py-5 text-center ${isBuy ? "bg-[#50fa7b]/10" : "bg-[#ff5555]/10"}`}>
-              <div className="text-3xl mb-2">{isBuy ? "📥" : "📤"}</div>
+              <div className={`flex justify-center mb-2 ${isBuy ? "text-[#50fa7b]" : "text-[#ff5555]"}`}>
+                {isBuy ? <ArrowLineDown size={32} weight="bold" aria-hidden /> : <ArrowLineUp size={32} weight="bold" aria-hidden />}
+              </div>
               <p className="text-sm text-gray-500 dark:text-[#6272a4]">{receipt.stockName}</p>
               <p className="text-lg font-bold text-gray-900 dark:text-[#f8f8f2]">
                 {receipt.quantity}주 {isBuy ? "매수" : "매도"} 완료
@@ -118,7 +124,9 @@ export default function TradeReceipt({ receipt, onClose }: Props) {
 
               <div className="flex justify-between items-center">
                 <span className="text-xs text-gray-500 dark:text-[#6272a4]">결제 상태</span>
-                <span className="text-xs text-[#50fa7b] font-medium">✓ {receipt.status}</span>
+                <span className="text-xs text-[#50fa7b] font-medium inline-flex items-center gap-1">
+                  <CheckCircle size={12} weight="bold" aria-hidden /> {receipt.status}
+                </span>
               </div>
             </div>
 
@@ -148,7 +156,7 @@ export default function TradeReceipt({ receipt, onClose }: Props) {
                     ${selectedEmotion === em.value
                       ? "bg-[#bd93f9]/20 border-[#bd93f9] text-[#bd93f9]"
                       : "border-gray-300 dark:border-[#44475a] text-gray-500 dark:text-[#6272a4] hover:border-gray-400 dark:hover:border-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2]"}`}>
-                  <span>{em.emoji}</span>
+                  <em.icon size={16} weight="bold" aria-hidden />
                   <span>{em.label}</span>
                 </button>
               ))}

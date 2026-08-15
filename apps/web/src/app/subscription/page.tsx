@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { type Icon, Plant, Lightning, Microscope, Check } from "@phosphor-icons/react";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
@@ -35,10 +36,10 @@ interface PaymentRecord {
   createdAt: string;
 }
 
-const PLAN_ACCENTS: Record<string, { border: string; badge: string; btn: string; icon: string }> = {
-  FREE:  { border: "border-gray-200 dark:border-[#44475a]",      badge: "bg-gray-100 text-gray-700 dark:bg-[#44475a] dark:text-[#f8f8f2]",        btn: "bg-gray-100 text-gray-700 dark:bg-[#44475a] dark:text-[#f8f8f2] hover:bg-gray-200 dark:hover:bg-[#6272a4]",               icon: "🌱" },
-  PRO:   { border: "border-[#bd93f9]/50",   badge: "bg-[#bd93f9]/20 text-[#bd93f9]",     btn: "bg-[#bd93f9] text-[#282a36] hover:bg-[#ff79c6]",               icon: "⚡" },
-  QUANT: { border: "border-[#50fa7b]/50",   badge: "bg-[#50fa7b]/20 text-[#50fa7b]",     btn: "bg-[#50fa7b] text-[#282a36] hover:bg-[#8be9fd]",               icon: "🔬" },
+const PLAN_ACCENTS: Record<string, { border: string; badge: string; btn: string; icon: Icon }> = {
+  FREE:  { border: "border-gray-200 dark:border-[#44475a]",      badge: "bg-gray-100 text-gray-700 dark:bg-[#44475a] dark:text-[#f8f8f2]",        btn: "bg-gray-100 text-gray-700 dark:bg-[#44475a] dark:text-[#f8f8f2] hover:bg-gray-200 dark:hover:bg-[#6272a4]",               icon: Plant },
+  PRO:   { border: "border-[#bd93f9]/50",   badge: "bg-[#bd93f9]/20 text-[#bd93f9]",     btn: "bg-[#bd93f9] text-[#282a36] hover:bg-[#ff79c6]",               icon: Lightning },
+  QUANT: { border: "border-[#50fa7b]/50",   badge: "bg-[#50fa7b]/20 text-[#50fa7b]",     btn: "bg-[#50fa7b] text-[#282a36] hover:bg-[#8be9fd]",               icon: Microscope },
 };
 
 function won(n: number) {
@@ -70,7 +71,7 @@ function PlanCard({
         </span>
       )}
       <div className="flex items-center gap-2 mb-4">
-        <span className="text-2xl">{accent.icon}</span>
+        <accent.icon size={24} weight="duotone" aria-hidden />
         <div>
           <p className="text-xs text-gray-500 dark:text-[#6272a4]">{plan.name}</p>
           <p className="text-xl font-bold text-gray-900 dark:text-[#f8f8f2]">{won(plan.price)}</p>
@@ -80,7 +81,7 @@ function PlanCard({
       <ul className="flex-1 space-y-2 mb-6">
         {(plan.features ?? []).map((f, i) => (
           <li key={i} className="flex items-start gap-2 text-sm text-gray-500 dark:text-[#6272a4]">
-            <span className="text-[#50fa7b] shrink-0">✓</span>
+            <Check size={14} weight="bold" className="text-[#50fa7b] shrink-0 mt-0.5" aria-hidden />
             <span>{f}</span>
           </li>
         ))}

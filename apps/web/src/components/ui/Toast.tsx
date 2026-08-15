@@ -1,32 +1,33 @@
 "use client";
 
+import { type Icon, CheckCircle, XCircle, Warning, Info, X } from "@phosphor-icons/react";
 import { useToastStore, Toast, ToastType } from "@/hooks/useToast";
 
 const STYLES: Record<
   ToastType,
-  { bar: string; icon: string; title: string; msg: string }
+  { bar: string; icon: Icon; title: string; msg: string }
 > = {
   success: {
     bar: "border-l-4 border-[#0ecb81] bg-[#1a2e26]",
-    icon: "✓",
+    icon: CheckCircle,
     title: "text-[#0ecb81]",
     msg: "text-[#a0c4b0]",
   },
   error: {
     bar: "border-l-4 border-[#f6465d] bg-[#2e1a1e]",
-    icon: "✕",
+    icon: XCircle,
     title: "text-[#f6465d]",
     msg: "text-[#c4a0a6]",
   },
   warning: {
     bar: "border-l-4 border-[#f1fa8c] bg-[#2a2a1a]",
-    icon: "⚠",
+    icon: Warning,
     title: "text-[#f1fa8c]",
     msg: "text-[#c4c4a0]",
   },
   info: {
     bar: "border-l-4 border-[#8be9fd] bg-[#1a2a2e]",
-    icon: "ℹ",
+    icon: Info,
     title: "text-[#8be9fd]",
     msg: "text-[#a0b4c4]",
   },
@@ -40,7 +41,7 @@ function ToastItem({ toast }: { toast: Toast }) {
     <div
       className={`flex items-start gap-3 px-4 py-3 rounded-lg shadow-lg backdrop-blur-sm min-w-[280px] max-w-sm ${s.bar} animate-slide-in`}
     >
-      <span className={`text-lg font-bold mt-0.5 ${s.title}`}>{s.icon}</span>
+      <s.icon size={20} weight="bold" className={`shrink-0 mt-0.5 ${s.title}`} aria-hidden />
       <div className="flex-1 min-w-0">
         <p className={`font-semibold text-sm ${s.title}`}>{toast.title}</p>
         {toast.message && (
@@ -49,10 +50,10 @@ function ToastItem({ toast }: { toast: Toast }) {
       </div>
       <button
         onClick={() => removeToast(toast.id)}
-        className="text-[#6272a4] hover:text-[#f8f8f2] text-lg leading-none ml-1 transition-colors active:scale-90"
+        className="inline-flex items-center justify-center w-6 h-6 -mr-1 -mt-1 text-[#6272a4] hover:text-[#f8f8f2] ml-1 transition-colors active:scale-90"
         aria-label="닫기"
       >
-        ×
+        <X size={14} weight="bold" aria-hidden />
       </button>
     </div>
   );

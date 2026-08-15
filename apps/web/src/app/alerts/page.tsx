@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { Bell } from "@phosphor-icons/react";
 import AlertStats from "@/components/alerts/AlertStats";
 import EmptyState from "@/components/common/EmptyState";
 import { Card } from "@/components/ui/Card";
@@ -40,7 +41,7 @@ export default function AlertsPage() {
         {loading ? (
           <div className="h-32 bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15 bg-[length:200%_100%] animate-shimmer" />
         ) : !alerts.length ? (
-          <EmptyState icon="🔔" title="알림 이력이 없습니다" description="종목 상세 페이지에서 가격 알림을 설정해보세요." />
+          <EmptyState icon={Bell} title="알림 이력이 없습니다" description="종목 상세 페이지에서 가격 알림을 설정해보세요." />
         ) : (
           <ul className="divide-y divide-gray-100 dark:divide-[#44475a]/40">
             {alerts.map(a => (

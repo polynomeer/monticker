@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Check } from "@phosphor-icons/react";
 import { authFetch } from "@/services/api";
 import { getAccessToken } from "@/services/auth";
 
@@ -68,9 +69,9 @@ export default function WatchlistAddButton({ stockId }: Props) {
       <button
         onClick={handleAdd}
         disabled={loading}
-        className="border border-blue-500 dark:border-[#bd93f9] text-blue-600 dark:text-[#bd93f9] rounded px-4 py-1.5 text-sm font-medium hover:bg-blue-50 dark:hover:bg-[#bd93f9]/10 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 whitespace-nowrap transition-all duration-150"
+        className="border border-blue-500 dark:border-[#bd93f9] text-blue-600 dark:text-[#bd93f9] rounded px-4 py-1.5 text-sm font-medium hover:bg-blue-50 dark:hover:bg-[#bd93f9]/10 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 whitespace-nowrap transition-all duration-150 inline-flex items-center gap-1"
       >
-        {added ? "추가됨 ✓" : loading ? "추가 중..." : "관심종목 추가"}
+        {added ? <><Check size={14} weight="bold" aria-hidden /> 추가됨</> : loading ? "추가 중..." : "관심종목 추가"}
       </button>
     </div>
   );

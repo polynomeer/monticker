@@ -1,7 +1,8 @@
+import { type Icon, ChartBar } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 
 interface EmptyStateProps {
-  icon?: string;
+  icon?: Icon;
   title: string;
   description?: string;
   action?: React.ReactNode;
@@ -9,7 +10,7 @@ interface EmptyStateProps {
 }
 
 export function EmptyState({
-  icon = "📊",
+  icon: IconComponent = ChartBar,
   title,
   description,
   action,
@@ -22,9 +23,7 @@ export function EmptyState({
         className
       )}
     >
-      <span className="text-4xl mb-4 opacity-60" aria-hidden>
-        {icon}
-      </span>
+      <IconComponent size={40} weight="duotone" className="mb-4 text-gray-400 dark:text-[#6272a4] opacity-80" aria-hidden />
       <p className="text-gray-900 dark:text-[#f8f8f2] font-semibold text-base mb-1">{title}</p>
       {description && (
         <p className="text-gray-500 dark:text-[#6272a4] text-sm max-w-xs">{description}</p>

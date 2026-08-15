@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Lightbulb } from "@phosphor-icons/react";
 import { authFetch } from "@/services/api";
 import { Card } from "@/components/ui/Card";
 
@@ -153,8 +154,8 @@ function PortfolioOptimizerTab() {
           </div>
 
           {data.suggestion && (
-            <p className="text-xs text-[#bd93f9] p-3 rounded-lg bg-[#bd93f9]/5 border border-[#bd93f9]/20">
-              💡 {data.suggestion}
+            <p className="text-xs text-[#bd93f9] p-3 rounded-lg bg-[#bd93f9]/5 border border-[#bd93f9]/20 inline-flex items-start gap-1.5">
+              <Lightbulb size={14} weight="bold" className="shrink-0 mt-0.5" aria-hidden /> {data.suggestion}
             </p>
           )}
         </Card>

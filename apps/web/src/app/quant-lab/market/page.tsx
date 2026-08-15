@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
+import { Storefront } from "@phosphor-icons/react";
 import Link from "next/link";
 
 interface MarketStrategy {
@@ -77,7 +78,7 @@ export default function StrategyMarketPage() {
         </div>
       ) : (strategies ?? []).length === 0 ? (
         <div className="text-center py-20 space-y-3">
-          <p className="text-4xl">🏪</p>
+          <div className="flex justify-center text-gray-400 dark:text-[#6272a4]"><Storefront size={40} weight="duotone" aria-hidden /></div>
           <p className="font-semibold text-gray-900 dark:text-[#f8f8f2]">아직 공유된 전략이 없습니다</p>
           <p className="text-sm text-gray-500 dark:text-[#6272a4]">내 룰셋을 공유해서 커뮤니티와 함께하세요</p>
           <Link

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { CheckCircle, Prohibit, Check, X } from "@phosphor-icons/react";
 import { authFetch } from "@/services/api";
 import { Card } from "@/components/ui/Card";
 
@@ -52,15 +53,17 @@ function RiskPreview({ result }: { result: RiskCheckResult }) {
     <div className={`mt-3 p-3 rounded-xl border text-xs space-y-2 animate-fade-up
       ${result.approved ? "border-[#50fa7b]/30 bg-[#50fa7b]/5" : "border-[#ff5555]/30 bg-[#ff5555]/5"}`}>
       <div className="flex items-center gap-2 font-semibold">
-        <span>{result.approved ? "✅" : "🚫"}</span>
+        {result.approved
+          ? <CheckCircle size={16} weight="bold" className="text-[#50fa7b]" aria-hidden />
+          : <Prohibit size={16} weight="bold" className="text-[#ff5555]" aria-hidden />}
         <span className={result.approved ? "text-[#50fa7b]" : "text-[#ff5555]"}>
           {result.approved ? "리스크 한도 통과" : result.blockedBy ?? "리스크 한도 초과"}
         </span>
       </div>
       {result.checks.map(c => (
         <div key={c.rule} className="flex items-center justify-between">
-          <span className={c.passed ? "text-gray-500 dark:text-[#6272a4]" : "text-[#ff5555] font-medium"}>
-            {c.passed ? "✓" : "✗"} {RULE_LABEL[c.rule] ?? c.rule}
+          <span className={`inline-flex items-center gap-1 ${c.passed ? "text-gray-500 dark:text-[#6272a4]" : "text-[#ff5555] font-medium"}`}>
+            {c.passed ? <Check size={12} weight="bold" aria-hidden /> : <X size={12} weight="bold" aria-hidden />} {RULE_LABEL[c.rule] ?? c.rule}
           </span>
           <span className={c.passed ? "text-gray-500 dark:text-[#6272a4]" : "text-[#ff5555]"}>{c.detail}</span>
         </div>
@@ -185,7 +188,9 @@ function OrderForm() {
       {/* 체결 결과 */}
       {result && (
         <div className="p-3 rounded-xl border border-[#50fa7b]/30 bg-[#50fa7b]/5 text-xs space-y-1 animate-fade-up">
-          <p className="font-semibold text-[#50fa7b]">✅ {result.message}</p>
+          <p className="font-semibold text-[#50fa7b] inline-flex items-center gap-1.5">
+            <CheckCircle size={14} weight="bold" aria-hidden /> {result.message}
+          </p>
           <p className="text-gray-500 dark:text-[#6272a4]">상태: <span className="text-gray-900 dark:text-[#f8f8f2]">{result.order.status}</span></p>
           {result.fills.map(f => (
             <p key={f.id} className="text-gray-500 dark:text-[#6272a4]">

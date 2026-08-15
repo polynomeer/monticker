@@ -6,6 +6,7 @@ import { PageLayout } from "@/components/ui/PageLayout";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { MagnifyingGlass } from "@phosphor-icons/react";
 
 interface StockResult {
   id: number;
@@ -66,7 +67,7 @@ export default function StockSearchPage() {
 
       {!loading && searched && results.length === 0 && (
         <EmptyState
-          icon="🔍"
+          icon={MagnifyingGlass}
           title="검색 결과가 없습니다"
           description={`"${query}"에 해당하는 종목을 찾지 못했습니다.`}
         />
