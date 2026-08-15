@@ -46,18 +46,18 @@ export default function AlertPanel({ stockId, symbol }: Props) {
 
   return (
     <Card className="p-4">
-      <h3 className="font-semibold text-gray-900 dark:text-[#f8f8f2] mb-3">
+      <h3 className="font-semibold text-gray-900 dark:text-dracula-fg mb-3">
         알림 설정{" "}
-        <span className="text-gray-500 dark:text-[#6272a4] text-sm font-normal">({symbol})</span>
+        <span className="text-gray-500 dark:text-dracula-comment text-sm font-normal">({symbol})</span>
       </h3>
 
       <form onSubmit={handleSave} className="flex flex-col gap-3">
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-gray-700 dark:text-[#f8f8f2]">알림 유형</label>
+          <label className="text-sm font-medium text-gray-700 dark:text-dracula-fg">알림 유형</label>
           <select
             value={ruleType}
             onChange={(e) => setRuleType(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 dark:border-[#44475a] bg-white dark:bg-[#21222c] px-4 py-2.5 text-sm text-gray-900 dark:text-[#f8f8f2] transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:ring-2 focus:ring-[#bd93f9]/50 focus:border-[#bd93f9]"
+            className="w-full rounded-lg border border-gray-300 dark:border-dracula-line bg-white dark:bg-dracula-surface px-4 py-2.5 text-sm text-gray-900 dark:text-dracula-fg transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50 focus:border-dracula-purple"
           >
             <option value="PRICE_ABOVE">가격 이상 알림</option>
             <option value="PRICE_BELOW">가격 이하 알림</option>
@@ -78,7 +78,7 @@ export default function AlertPanel({ stockId, symbol }: Props) {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-lg bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] font-semibold text-sm py-2.5 hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:active:scale-100"
+          className="w-full rounded-lg bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg font-semibold text-sm py-2.5 hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:active:scale-100"
         >
           {loading ? "저장 중..." : "알림 저장"}
         </button>

@@ -72,8 +72,8 @@ export default function BacktestPage() {
   return (
     <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-6 animate-fade-up">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-[#f8f8f2]">백테스팅</h1>
-        <p className="text-sm text-gray-500 dark:text-[#6272a4] mt-1">
+        <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-dracula-fg">백테스팅</h1>
+        <p className="text-sm text-gray-500 dark:text-dracula-comment mt-1">
           과거 데이터에 전략을 적용해 가상 수익률을 검증합니다.
         </p>
       </div>
@@ -82,67 +82,67 @@ export default function BacktestPage() {
       <Card className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* 종목 */}
         <div>
-          <label className="text-xs text-gray-500 dark:text-[#6272a4] mb-1 block">종목</label>
+          <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">종목</label>
           <select value={stockId} onChange={e => setStockId(Number(e.target.value))}
-            className="w-full border-gray-300 dark:border-[#44475a] bg-white dark:bg-[#44475a] text-gray-900 dark:text-[#f8f8f2] rounded-lg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-[#6272a4]">
+            className="w-full border-gray-300 dark:border-dracula-line bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg rounded-lg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-dracula-comment">
             {STOCKS.map(s => <option key={s.id} value={s.id}>{s.name} ({s.symbol})</option>)}
           </select>
         </div>
 
         {/* 전략 */}
         <div>
-          <label className="text-xs text-gray-500 dark:text-[#6272a4] mb-1 block">전략</label>
+          <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">전략</label>
           <select value={strategy} onChange={e => setStrategy(e.target.value)}
-            className="w-full border-gray-300 dark:border-[#44475a] bg-white dark:bg-[#44475a] text-gray-900 dark:text-[#f8f8f2] rounded-lg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-[#6272a4]">
+            className="w-full border-gray-300 dark:border-dracula-line bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg rounded-lg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-dracula-comment">
             {STRATEGIES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
-          <p className="text-[10px] text-gray-400 dark:text-[#6272a4] mt-0.5">
+          <p className="text-[10px] text-gray-400 dark:text-dracula-comment mt-0.5">
             {STRATEGIES.find(s => s.key === strategy)?.desc}
           </p>
         </div>
 
         {/* 날짜 */}
         <div>
-          <label className="text-xs text-gray-500 dark:text-[#6272a4] mb-1 block">시작일</label>
+          <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">시작일</label>
           <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
-            className="w-full border-gray-300 dark:border-[#44475a] bg-white dark:bg-[#44475a] text-gray-900 dark:text-[#f8f8f2] rounded-lg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-[#6272a4]" />
+            className="w-full border-gray-300 dark:border-dracula-line bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg rounded-lg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-dracula-comment" />
         </div>
         <div>
-          <label className="text-xs text-gray-500 dark:text-[#6272a4] mb-1 block">종료일</label>
+          <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">종료일</label>
           <input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
-            className="w-full border-gray-300 dark:border-[#44475a] bg-white dark:bg-[#44475a] text-gray-900 dark:text-[#f8f8f2] rounded-lg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-[#6272a4]" />
+            className="w-full border-gray-300 dark:border-dracula-line bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg rounded-lg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-dracula-comment" />
         </div>
 
         {/* 초기 자본 */}
         <div>
-          <label className="text-xs text-gray-500 dark:text-[#6272a4] mb-1 block">초기 자본 (원)</label>
+          <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">초기 자본 (원)</label>
           <input type="number" value={capital} onChange={e => setCapital(Number(e.target.value))}
-            step={1000000} className="w-full border-gray-300 dark:border-[#44475a] bg-white dark:bg-[#44475a] text-gray-900 dark:text-[#f8f8f2] rounded-lg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-[#6272a4]" />
+            step={1000000} className="w-full border-gray-300 dark:border-dracula-line bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg rounded-lg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-dracula-comment" />
         </div>
 
         {/* 손절/익절 */}
         <div className="flex gap-3">
           <div className="flex-1">
-            <label className="text-xs text-gray-500 dark:text-[#6272a4] mb-1 block">손절 (%)</label>
+            <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">손절 (%)</label>
             <input type="number" value={stopLoss} onChange={e => setStopLoss(Number(e.target.value))}
               step={1} min={1} max={50}
-              className="w-full border-gray-300 dark:border-[#44475a] bg-white dark:bg-[#44475a] text-gray-900 dark:text-[#f8f8f2] rounded-lg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-[#6272a4]" />
+              className="w-full border-gray-300 dark:border-dracula-line bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg rounded-lg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-dracula-comment" />
           </div>
           <div className="flex-1">
-            <label className="text-xs text-gray-500 dark:text-[#6272a4] mb-1 block">익절 (%)</label>
+            <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">익절 (%)</label>
             <input type="number" value={takeProfit} onChange={e => setTakeProfit(Number(e.target.value))}
               step={1} min={1} max={200}
-              className="w-full border-gray-300 dark:border-[#44475a] bg-white dark:bg-[#44475a] text-gray-900 dark:text-[#f8f8f2] rounded-lg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-[#6272a4]" />
+              className="w-full border-gray-300 dark:border-dracula-line bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg rounded-lg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-dracula-comment" />
           </div>
         </div>
 
         {/* 실행 버튼 */}
         <div className="sm:col-span-2">
           <button onClick={handleRun} disabled={isLoading}
-            className="w-full py-2.5 rounded-lg font-semibold text-sm bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:active:scale-100">
+            className="w-full py-2.5 rounded-lg font-semibold text-sm bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:active:scale-100">
             {isLoading ? "시뮬레이션 중..." : "백테스트 실행"}
           </button>
-          {error && <p className="text-xs text-red-500 dark:text-[#f6465d] mt-1 text-center">{(error as Error).message}</p>}
+          {error && <p className="text-xs text-red-500 dark:text-market-down mt-1 text-center">{(error as Error).message}</p>}
         </div>
       </Card>
 

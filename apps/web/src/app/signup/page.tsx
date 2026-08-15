@@ -13,10 +13,10 @@ function passwordStrength(pw: string): { label: string; color: string; width: st
   if (/[A-Z]/.test(pw)) score++;
   if (/[0-9]/.test(pw)) score++;
   if (/[^A-Za-z0-9]/.test(pw)) score++;
-  if (score <= 1) return { label: "약함",   color: "bg-[#ff5555]", width: "25%" };
-  if (score <= 2) return { label: "보통",   color: "bg-[#ffb86c]", width: "50%" };
-  if (score <= 3) return { label: "강함",   color: "bg-[#50fa7b]", width: "75%" };
-  return            { label: "매우 강함", color: "bg-[#50fa7b]", width: "100%" };
+  if (score <= 1) return { label: "약함",   color: "bg-dracula-red", width: "25%" };
+  if (score <= 2) return { label: "보통",   color: "bg-dracula-orange", width: "50%" };
+  if (score <= 3) return { label: "강함",   color: "bg-dracula-green", width: "75%" };
+  return            { label: "매우 강함", color: "bg-dracula-green", width: "100%" };
 }
 
 export default function SignupPage() {
@@ -58,21 +58,21 @@ export default function SignupPage() {
   };
 
   const inputCls = (field: string) =>
-    `border rounded-lg px-4 py-2 w-full transition-all duration-150 focus:outline-none focus:ring-2 hover:border-gray-400 dark:hover:border-[#6272a4] dark:bg-[#44475a] dark:text-[#f8f8f2] dark:placeholder-[#6272a4] ${
+    `border rounded-lg px-4 py-2 w-full transition-all duration-150 focus:outline-none focus:ring-2 hover:border-gray-400 dark:hover:border-dracula-comment dark:bg-dracula-line dark:text-dracula-fg dark:placeholder-dracula-comment ${
       errors[field]
-        ? "border-[#ff5555] focus:ring-[#ff5555]/50"
-        : "border-gray-300 dark:border-[#44475a] focus:ring-[#bd93f9]/50 focus:border-[#bd93f9]"
+        ? "border-dracula-red focus:ring-dracula-red/50"
+        : "border-gray-300 dark:border-dracula-line focus:ring-dracula-purple/50 focus:border-dracula-purple"
     }`;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-[#282a36] bg-mesh-light dark:bg-mesh-dark px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-dracula-bg bg-mesh-light dark:bg-mesh-dark px-4">
       <Card className="p-8" outerClassName="w-full max-w-sm animate-fade-up">
-        <h1 className="text-2xl font-bold mb-6 text-center dark:text-[#f8f8f2]">회원가입</h1>
+        <h1 className="text-2xl font-bold mb-6 text-center dark:text-dracula-fg">회원가입</h1>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
 
           {/* 이메일 */}
           <div>
-            <label htmlFor="email" className="block text-sm font-medium dark:text-[#f8f8f2] mb-1">이메일</label>
+            <label htmlFor="email" className="block text-sm font-medium dark:text-dracula-fg mb-1">이메일</label>
             <input
               id="email" type="email" value={email} onChange={e => setEmail(e.target.value)}
               placeholder="you@example.com" autoComplete="email"
@@ -80,12 +80,12 @@ export default function SignupPage() {
               aria-invalid={!!errors.email}
               className={inputCls("email")}
             />
-            {errors.email && <p id="email-error" className="text-[#ff5555] text-xs mt-1">{errors.email}</p>}
+            {errors.email && <p id="email-error" className="text-dracula-red text-xs mt-1">{errors.email}</p>}
           </div>
 
           {/* 닉네임 */}
           <div>
-            <label htmlFor="nickname" className="block text-sm font-medium dark:text-[#f8f8f2] mb-1">닉네임</label>
+            <label htmlFor="nickname" className="block text-sm font-medium dark:text-dracula-fg mb-1">닉네임</label>
             <input
               id="nickname" type="text" value={nickname} onChange={e => setNickname(e.target.value)}
               placeholder="2~30자" autoComplete="username"
@@ -93,12 +93,12 @@ export default function SignupPage() {
               aria-invalid={!!errors.nickname}
               className={inputCls("nickname")}
             />
-            {errors.nickname && <p id="nickname-error" className="text-[#ff5555] text-xs mt-1">{errors.nickname}</p>}
+            {errors.nickname && <p id="nickname-error" className="text-dracula-red text-xs mt-1">{errors.nickname}</p>}
           </div>
 
           {/* 비밀번호 + 강도 */}
           <div>
-            <label htmlFor="password" className="block text-sm font-medium dark:text-[#f8f8f2] mb-1">비밀번호</label>
+            <label htmlFor="password" className="block text-sm font-medium dark:text-dracula-fg mb-1">비밀번호</label>
             <input
               id="password" type="password" value={password} onChange={e => setPassword(e.target.value)}
               placeholder="8자 이상" autoComplete="new-password"
@@ -108,27 +108,27 @@ export default function SignupPage() {
             />
             {password && (
               <div id="password-strength" className="mt-1.5 space-y-0.5" aria-label={`비밀번호 강도: ${strength.label}`}>
-                <div className="h-1 w-full rounded bg-[#44475a]">
+                <div className="h-1 w-full rounded bg-dracula-line">
                   <div className={`h-1 rounded transition-all duration-300 ${strength.color}`} style={{ width: strength.width }} />
                 </div>
-                <p className="text-xs text-[#6272a4]">강도: <span className="font-medium">{strength.label}</span></p>
+                <p className="text-xs text-dracula-comment">강도: <span className="font-medium">{strength.label}</span></p>
               </div>
             )}
-            {errors.password && <p id="password-error" className="text-[#ff5555] text-xs mt-1">{errors.password}</p>}
+            {errors.password && <p id="password-error" className="text-dracula-red text-xs mt-1">{errors.password}</p>}
           </div>
 
           {errors.form && (
-            <p role="alert" className="text-[#ff5555] text-sm text-center">{errors.form}</p>
+            <p role="alert" className="text-dracula-red text-sm text-center">{errors.form}</p>
           )}
 
           <button type="submit" disabled={loading}
-            className="bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] py-2 rounded-lg hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 font-semibold transition-all duration-150">
+            className="bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg py-2 rounded-lg hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 font-semibold transition-all duration-150">
             {loading ? "처리 중..." : "회원가입"}
           </button>
         </form>
-        <p className="mt-4 text-center text-sm text-gray-500 dark:text-[#6272a4]">
+        <p className="mt-4 text-center text-sm text-gray-500 dark:text-dracula-comment">
           이미 계정이 있으신가요?{" "}
-          <Link href="/login" className="text-blue-600 dark:text-[#bd93f9] hover:underline">로그인</Link>
+          <Link href="/login" className="text-blue-600 dark:text-dracula-purple hover:underline">로그인</Link>
         </p>
       </Card>
     </div>

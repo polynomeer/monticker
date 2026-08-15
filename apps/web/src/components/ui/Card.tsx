@@ -17,7 +17,7 @@ export function Card({ children, className, outerClassName, hover = false }: Car
     <div className={cn("rounded-2xl bg-black/[0.03] dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10 p-1", outerClassName)}>
       <div
         className={cn(
-          "rounded-xl bg-white dark:bg-[#21222c] border border-gray-100 dark:border-white/5",
+          "rounded-xl bg-white dark:bg-dracula-surface border border-gray-100 dark:border-white/5",
           "shadow-bezel-inset-light dark:shadow-bezel-inset",
           hover &&
             "transition-all duration-300 ease-spring hover:-translate-y-0.5 hover:shadow-lg dark:hover:shadow-glow-line",

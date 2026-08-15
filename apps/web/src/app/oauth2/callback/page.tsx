@@ -22,10 +22,10 @@ export default function OAuth2CallbackPage() {
   }, [params, router]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-[#282a36] bg-mesh-light dark:bg-mesh-dark">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-dracula-bg bg-mesh-light dark:bg-mesh-dark">
       <div className="flex flex-col items-center gap-3 animate-fade-up">
-        <div className="w-8 h-8 border-4 border-[#bd93f9] border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm text-gray-500 dark:text-[#6272a4]">로그인 중...</p>
+        <div className="w-8 h-8 border-4 border-dracula-purple border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-gray-500 dark:text-dracula-comment">로그인 중...</p>
       </div>
     </div>
   );

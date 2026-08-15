@@ -361,7 +361,7 @@ export default function EChartsAdapter({
   return (
     <div
       ref={containerRef}
-      className="w-full rounded-lg overflow-hidden border border-gray-200 dark:border-[#44475a]"
+      className="w-full rounded-lg overflow-hidden border border-gray-200 dark:border-dracula-line"
       style={{ height }}
     />
   );

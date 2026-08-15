@@ -134,10 +134,10 @@ export default function VolumeChart({ candles, height = 140 }: Props) {
   if (candles.length === 0) return null;
 
   return (
-    <div className="border border-gray-200 dark:border-[#44475a] rounded-lg overflow-hidden">
+    <div className="border border-gray-200 dark:border-dracula-line rounded-lg overflow-hidden">
       <div className="px-4 pt-3 pb-1 flex items-center justify-between">
-        <span className="text-xs font-medium text-gray-500 dark:text-[#6272a4]">거래량</span>
-        <span className="text-xs text-gray-400 dark:text-[#44475a]">
+        <span className="text-xs font-medium text-gray-500 dark:text-dracula-comment">거래량</span>
+        <span className="text-xs text-gray-400 dark:text-dracula-line">
           최대 {fmtVol(Math.max(...candles.map(c => c.volume ?? 0)))}
         </span>
       </div>

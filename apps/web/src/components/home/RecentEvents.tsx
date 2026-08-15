@@ -13,11 +13,11 @@ interface RecentEvent {
 }
 
 const EVENT_COLOR: Record<string, string> = {
-  PRICE_SPIKE:          "bg-green-50 dark:bg-[#0ecb81]/25 border-green-200 dark:border-[#0ecb81]/25 text-green-800 dark:text-[#0ecb81]",
-  PRICE_DROP:           "bg-red-50 dark:bg-[#f6465d]/25 border-red-200 dark:border-[#f6465d]/25 text-red-800 dark:text-[#f6465d]",
-  VOLUME_SURGE:         "bg-blue-50 dark:bg-[#f1fa8c]/25 border-blue-200 dark:border-[#f1fa8c]/25 text-blue-800 dark:text-[#f1fa8c]",
-  DISCLOSURE_PUBLISHED: "bg-purple-50 dark:bg-[#bd93f9]/25 border-purple-200 dark:border-[#bd93f9]/25 text-purple-800 dark:text-[#bd93f9]",
-  default:              "bg-gray-50 dark:bg-[#44475a] border-gray-200 dark:border-[#6272a4] text-gray-800 dark:text-[#f8f8f2]",
+  PRICE_SPIKE:          "bg-green-50 dark:bg-market-up/25 border-green-200 dark:border-market-up/25 text-green-800 dark:text-market-up",
+  PRICE_DROP:           "bg-red-50 dark:bg-market-down/25 border-red-200 dark:border-market-down/25 text-red-800 dark:text-market-down",
+  VOLUME_SURGE:         "bg-blue-50 dark:bg-dracula-yellow/25 border-blue-200 dark:border-dracula-yellow/25 text-blue-800 dark:text-dracula-yellow",
+  DISCLOSURE_PUBLISHED: "bg-purple-50 dark:bg-dracula-purple/25 border-purple-200 dark:border-dracula-purple/25 text-purple-800 dark:text-dracula-purple",
+  default:              "bg-gray-50 dark:bg-dracula-line border-gray-200 dark:border-dracula-comment text-gray-800 dark:text-dracula-fg",
 };
 
 const EVENT_LABEL: Record<string, string> = {
@@ -46,15 +46,15 @@ export default function RecentEvents() {
   }, []);
 
   return (
-    <div className="border border-gray-200 dark:border-[#44475a] dark:bg-[#282a36] rounded-lg p-4">
-      <h2 className="font-semibold dark:text-[#f8f8f2] mb-3">최근 이벤트</h2>
+    <div className="border border-gray-200 dark:border-dracula-line dark:bg-dracula-bg rounded-lg p-4">
+      <h2 className="font-semibold dark:text-dracula-fg mb-3">최근 이벤트</h2>
       {loading && (
         <div className="space-y-2">
-          {[1,2,3].map(i => <div key={i} className="h-12 bg-gray-100 dark:bg-[#44475a] rounded animate-pulse" />)}
+          {[1,2,3].map(i => <div key={i} className="h-12 bg-gray-100 dark:bg-dracula-line rounded animate-pulse" />)}
         </div>
       )}
       {!loading && events.length === 0 && (
-        <p className="text-gray-400 dark:text-[#6272a4] text-sm py-4 text-center">Worker 실행 후 이벤트가 표시됩니다.</p>
+        <p className="text-gray-400 dark:text-dracula-comment text-sm py-4 text-center">Worker 실행 후 이벤트가 표시됩니다.</p>
       )}
       <ul className="space-y-2">
         {events.map(e => {

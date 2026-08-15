@@ -25,7 +25,7 @@ function ComparePane({ symbol }: { symbol: string }) {
 
   return (
     <div className="animate-fade-up">
-      <p className="text-sm font-semibold text-gray-600 dark:text-[#f8f8f2] mb-1">{symbol}</p>
+      <p className="text-sm font-semibold text-gray-600 dark:text-dracula-fg mb-1">{symbol}</p>
       <StockChart candles={candles} events={events} height={220} />
     </div>
   );
@@ -45,7 +45,7 @@ export default function ComparePage() {
 
   return (
     <div className="max-w-5xl mx-auto p-4 sm:p-6 animate-fade-up">
-      <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-[#f8f8f2] mb-6">종목 비교</h1>
+      <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-dracula-fg mb-6">종목 비교</h1>
 
       <div className="flex flex-wrap gap-2 mb-6">
         <input
@@ -53,18 +53,18 @@ export default function ComparePage() {
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === "Enter" && addSymbol()}
           placeholder="종목 코드 입력 (최대 4개)"
-          className="border border-gray-300 dark:border-[#44475a] dark:bg-[#44475a] dark:text-[#f8f8f2] dark:placeholder-[#6272a4] rounded-lg px-4 py-2 text-sm w-52 transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:focus:ring-[#bd93f9]/50"
+          className="border border-gray-300 dark:border-dracula-line dark:bg-dracula-line dark:text-dracula-fg dark:placeholder-dracula-comment rounded-lg px-4 py-2 text-sm w-52 transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:focus:ring-dracula-purple/50"
         />
-        <button onClick={addSymbol} className="bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 active:scale-[0.98] transition-all duration-150">
+        <button onClick={addSymbol} className="bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 active:scale-[0.98] transition-all duration-150">
           추가
         </button>
         {symbols.map(s => (
-          <span key={s} className="flex items-center gap-1 bg-gray-100 dark:bg-[#44475a] px-3 py-1 rounded-full text-sm text-gray-700 dark:text-[#f8f8f2] animate-fade-up">
+          <span key={s} className="flex items-center gap-1 bg-gray-100 dark:bg-dracula-line px-3 py-1 rounded-full text-sm text-gray-700 dark:text-dracula-fg animate-fade-up">
             {s}
             <button
               onClick={() => setSymbols(prev => prev.filter(x => x !== s))}
               aria-label={`${s} 비교에서 제거`}
-              className="inline-flex items-center justify-center w-6 h-6 -mr-1.5 ml-0.5 text-gray-400 dark:text-[#6272a4] hover:text-gray-600 dark:hover:text-[#f8f8f2] transition-colors"
+              className="inline-flex items-center justify-center w-6 h-6 -mr-1.5 ml-0.5 text-gray-400 dark:text-dracula-comment hover:text-gray-600 dark:hover:text-dracula-fg transition-colors"
             >×</button>
           </span>
         ))}

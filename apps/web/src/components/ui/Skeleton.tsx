@@ -30,7 +30,7 @@ export function SkeletonText({ lines = 3 }: { lines?: number }) {
 
 export function SkeletonCard() {
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#282a36] p-4 space-y-3">
+    <div className="rounded-xl border border-gray-200 dark:border-dracula-line bg-white dark:bg-dracula-bg p-4 space-y-3">
       <div className="flex items-center gap-3">
         <Skeleton className="h-10 w-10 rounded-full" />
         <div className="flex-1 space-y-2">

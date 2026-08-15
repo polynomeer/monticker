@@ -23,10 +23,10 @@ export function EmptyState({
         className
       )}
     >
-      <IconComponent size={40} weight="duotone" className="mb-4 text-gray-400 dark:text-[#6272a4] opacity-80" aria-hidden />
-      <p className="text-gray-900 dark:text-[#f8f8f2] font-semibold text-base mb-1">{title}</p>
+      <IconComponent size={40} weight="duotone" className="mb-4 text-gray-400 dark:text-dracula-comment opacity-80" aria-hidden />
+      <p className="text-gray-900 dark:text-dracula-fg font-semibold text-base mb-1">{title}</p>
       {description && (
-        <p className="text-gray-500 dark:text-[#6272a4] text-sm max-w-xs">{description}</p>
+        <p className="text-gray-500 dark:text-dracula-comment text-sm max-w-xs">{description}</p>
       )}
       {action && <div className="mt-6">{action}</div>}
     </div>

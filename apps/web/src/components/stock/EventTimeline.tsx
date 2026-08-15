@@ -51,7 +51,7 @@ export default function EventTimeline({ stockId }: Props) {
 
   return (
     <Card className="p-4">
-      <h3 className="font-semibold text-gray-900 dark:text-[#f8f8f2] mb-3">이벤트 타임라인</h3>
+      <h3 className="font-semibold text-gray-900 dark:text-dracula-fg mb-3">이벤트 타임라인</h3>
 
       {loading && (
         <div className="space-y-2">
@@ -74,19 +74,19 @@ export default function EventTimeline({ stockId }: Props) {
           {events.map((event) => (
             <li
               key={event.id}
-              className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-[#44475a]/60 bg-gray-50 dark:bg-[#282a36] text-sm hover:border-gray-300 dark:hover:border-[#6272a4]/60 transition-colors"
+              className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-dracula-line/60 bg-gray-50 dark:bg-dracula-bg text-sm hover:border-gray-300 dark:hover:border-dracula-comment/60 transition-colors"
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-gray-900 dark:text-[#f8f8f2] truncate">
+                  <span className="font-medium text-gray-900 dark:text-dracula-fg truncate">
                     {event.title}
                   </span>
-                  <span className="text-xs text-gray-500 dark:text-[#6272a4] shrink-0">
+                  <span className="text-xs text-gray-500 dark:text-dracula-comment shrink-0">
                     {new Date(event.eventTime).toLocaleTimeString("ko-KR")}
                   </span>
                 </div>
                 {event.description && (
-                  <p className="text-xs mt-1 text-gray-500 dark:text-[#6272a4]">{event.description}</p>
+                  <p className="text-xs mt-1 text-gray-500 dark:text-dracula-comment">{event.description}</p>
                 )}
                 <div className="mt-1.5">
                   <Badge variant={EVENT_BADGE[event.eventType] ?? "neutral"}>
@@ -94,7 +94,7 @@ export default function EventTimeline({ stockId }: Props) {
                   </Badge>
                 </div>
               </div>
-              <span className="text-xs font-semibold text-gray-500 dark:text-[#6272a4] shrink-0 tabular-nums">
+              <span className="text-xs font-semibold text-gray-500 dark:text-dracula-comment shrink-0 tabular-nums">
                 {event.importanceScore}
               </span>
             </li>

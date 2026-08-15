@@ -6,17 +6,17 @@ interface Props { result: any; }
 
 function MetricCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
-    <div className="bg-gray-50 dark:bg-[#44475a]/20 rounded-lg p-3">
-      <p className="text-xs text-gray-500 dark:text-[#6272a4]">{label}</p>
-      <p className={`text-xl font-bold tabular-nums ${color ?? "text-gray-900 dark:text-[#f8f8f2]"}`}>{value}</p>
-      {sub && <p className="text-xs text-gray-500 dark:text-[#6272a4] mt-0.5">{sub}</p>}
+    <div className="bg-gray-50 dark:bg-dracula-line/20 rounded-lg p-3">
+      <p className="text-xs text-gray-500 dark:text-dracula-comment">{label}</p>
+      <p className={`text-xl font-bold tabular-nums ${color ?? "text-gray-900 dark:text-dracula-fg"}`}>{value}</p>
+      {sub && <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">{sub}</p>}
     </div>
   );
 }
 
 function fmt(n: number) { return n.toLocaleString("ko-KR", { maximumFractionDigits: 0 }); }
 function pct(n: number) { return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`; }
-function color(n: number) { return n > 0 ? "text-[#ff5050]" : n < 0 ? "text-[#4a8fd4]" : "text-gray-500 dark:text-[#6272a4]"; }
+function color(n: number) { return n > 0 ? "text-[#ff5050]" : n < 0 ? "text-[#4a8fd4]" : "text-gray-500 dark:text-dracula-comment"; }
 
 export default function BacktestResultView({ result }: Props) {
   const { metrics, trades, equityCurve, initialCapital, finalCapital, symbol } = result;
@@ -79,12 +79,12 @@ export default function BacktestResultView({ result }: Props) {
       <Card className="p-4">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <span className="text-sm text-gray-500 dark:text-[#6272a4]">{symbol} — {result.strategy}</span>
-            <p className="text-xs text-gray-400 dark:text-[#44475a]">{result.fromDate} ~ {result.toDate}</p>
+            <span className="text-sm text-gray-500 dark:text-dracula-comment">{symbol} — {result.strategy}</span>
+            <p className="text-xs text-gray-400 dark:text-dracula-line">{result.fromDate} ~ {result.toDate}</p>
           </div>
           <div className="text-right">
             <p className={`text-2xl font-bold tabular-nums ${color(metrics.totalReturn)}`}>{pct(metrics.totalReturn)}</p>
-            <p className="text-xs text-gray-500 dark:text-[#6272a4]">총 수익률</p>
+            <p className="text-xs text-gray-500 dark:text-dracula-comment">총 수익률</p>
           </div>
         </div>
 
@@ -93,47 +93,47 @@ export default function BacktestResultView({ result }: Props) {
           <MetricCard label="최종 자산" value={`₩${fmt(finalCapital)}`}
             sub={`초기 ₩${fmt(initialCapital)}`} color={color(finalCapital - initialCapital)} />
           <MetricCard label="Sharpe Ratio" value={metrics.sharpeRatio.toFixed(2)}
-            color={metrics.sharpeRatio >= 1 ? "text-[#0ecb81]" : metrics.sharpeRatio >= 0 ? "text-gray-900 dark:text-[#f8f8f2]" : "text-[#f6465d]"} />
-          <MetricCard label="최대 낙폭" value={`-${metrics.maxDrawdown.toFixed(1)}%`} color="text-[#f6465d]" />
+            color={metrics.sharpeRatio >= 1 ? "text-market-up" : metrics.sharpeRatio >= 0 ? "text-gray-900 dark:text-dracula-fg" : "text-market-down"} />
+          <MetricCard label="최대 낙폭" value={`-${metrics.maxDrawdown.toFixed(1)}%`} color="text-market-down" />
           <MetricCard label="승률" value={`${metrics.winRate.toFixed(1)}%`}
             sub={`${metrics.profitTrades}/${metrics.totalTrades}건`} />
           <MetricCard label="Profit Factor" value={metrics.profitFactor.toFixed(2)}
-            color={metrics.profitFactor >= 1 ? "text-[#0ecb81]" : "text-[#f6465d]"} />
+            color={metrics.profitFactor >= 1 ? "text-market-up" : "text-market-down"} />
         </div>
       </Card>
 
       {/* 자산 곡선 */}
       <Card className="overflow-hidden">
-        <div className="px-4 pt-3 text-xs text-gray-500 dark:text-[#6272a4] font-medium">자산 곡선</div>
+        <div className="px-4 pt-3 text-xs text-gray-500 dark:text-dracula-comment font-medium">자산 곡선</div>
         <div ref={chartRef} className="w-full" />
       </Card>
 
       {/* 거래 내역 */}
       {trades.length > 0 && (
         <Card className="overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-200 dark:border-[#44475a] bg-gray-50 dark:bg-transparent">
-            <span className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">거래 내역</span>
-            <span className="ml-2 text-xs text-gray-500 dark:text-[#6272a4]">평균 보유 {metrics.avgHoldingDays.toFixed(1)}일</span>
+          <div className="px-4 py-3 border-b border-gray-200 dark:border-dracula-line bg-gray-50 dark:bg-transparent">
+            <span className="text-sm font-semibold text-gray-900 dark:text-dracula-fg">거래 내역</span>
+            <span className="ml-2 text-xs text-gray-500 dark:text-dracula-comment">평균 보유 {metrics.avgHoldingDays.toFixed(1)}일</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
-              <thead><tr className="border-b border-gray-200 dark:border-[#44475a] text-gray-500 dark:text-[#6272a4]">
+              <thead><tr className="border-b border-gray-200 dark:border-dracula-line text-gray-500 dark:text-dracula-comment">
                 {["매수일","매도일","매수가","매도가","수익률","사유"].map(h =>
                   <th key={h} className="px-3 py-2 text-left">{h}</th>)}
               </tr></thead>
               <tbody>
                 {trades.map((t: any, i: number) => (
-                  <tr key={i} className="border-b border-gray-100 dark:border-[#44475a]/40 hover:bg-gray-50 dark:hover:bg-[#44475a]/10 transition-colors">
-                    <td className="px-3 py-2 text-gray-500 dark:text-[#6272a4] tabular-nums">{t.entryDate}</td>
-                    <td className="px-3 py-2 text-gray-500 dark:text-[#6272a4] tabular-nums">{t.exitDate}</td>
-                    <td className="px-3 py-2 font-mono tabular-nums text-gray-900 dark:text-[#f8f8f2]">{fmt(t.entryPrice)}</td>
-                    <td className="px-3 py-2 font-mono tabular-nums text-gray-900 dark:text-[#f8f8f2]">{fmt(t.exitPrice)}</td>
+                  <tr key={i} className="border-b border-gray-100 dark:border-dracula-line/40 hover:bg-gray-50 dark:hover:bg-dracula-line/10 transition-colors">
+                    <td className="px-3 py-2 text-gray-500 dark:text-dracula-comment tabular-nums">{t.entryDate}</td>
+                    <td className="px-3 py-2 text-gray-500 dark:text-dracula-comment tabular-nums">{t.exitDate}</td>
+                    <td className="px-3 py-2 font-mono tabular-nums text-gray-900 dark:text-dracula-fg">{fmt(t.entryPrice)}</td>
+                    <td className="px-3 py-2 font-mono tabular-nums text-gray-900 dark:text-dracula-fg">{fmt(t.exitPrice)}</td>
                     <td className={`px-3 py-2 font-mono tabular-nums font-bold ${color(t.pnlPct)}`}>{pct(t.pnlPct)}</td>
                     <td className="px-3 py-2">
                       <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                        t.exitReason === "TAKE_PROFIT" ? "bg-[#0ecb81]/20 text-[#0ecb81]" :
-                        t.exitReason === "STOP_LOSS"   ? "bg-[#f6465d]/20 text-[#f6465d]" :
-                        "bg-gray-100 text-gray-500 dark:bg-[#44475a] dark:text-[#6272a4]"
+                        t.exitReason === "TAKE_PROFIT" ? "bg-market-up/20 text-market-up" :
+                        t.exitReason === "STOP_LOSS"   ? "bg-market-down/20 text-market-down" :
+                        "bg-gray-100 text-gray-500 dark:bg-dracula-line dark:text-dracula-comment"
                       }`}>{t.exitReason === "TAKE_PROFIT" ? "익절" : t.exitReason === "STOP_LOSS" ? "손절" : t.exitReason === "SIGNAL" ? "신호" : "종료"}</span>
                     </td>
                   </tr>

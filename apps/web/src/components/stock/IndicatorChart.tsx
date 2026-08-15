@@ -169,7 +169,7 @@ export default function IndicatorChart({ candles, showRSI = false, showMACD = fa
   return (
     <div
       ref={containerRef}
-      className="w-full rounded-lg border border-gray-200 dark:border-[#44475a] overflow-hidden"
+      className="w-full rounded-lg border border-gray-200 dark:border-dracula-line overflow-hidden"
       style={{ height }}
     />
   );

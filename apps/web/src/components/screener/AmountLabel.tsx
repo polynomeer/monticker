@@ -7,5 +7,5 @@ export default function AmountLabel({ value }: Props) {
     if (n >= 10_000)            return `${(n / 10_000).toFixed(0)}만`;
     return n.toLocaleString("ko-KR");
   };
-  return <span className="text-sm tabular-nums dark:text-[#f8f8f2]">{fmt(value)}</span>;
+  return <span className="text-sm tabular-nums dark:text-dracula-fg">{fmt(value)}</span>;
 }

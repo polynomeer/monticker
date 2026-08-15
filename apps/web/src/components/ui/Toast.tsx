@@ -8,27 +8,27 @@ const STYLES: Record<
   { bar: string; icon: Icon; title: string; msg: string }
 > = {
   success: {
-    bar: "border-l-4 border-[#0ecb81] bg-[#1a2e26]",
+    bar: "border-l-4 border-market-up bg-[#1a2e26]",
     icon: CheckCircle,
-    title: "text-[#0ecb81]",
+    title: "text-market-up",
     msg: "text-[#a0c4b0]",
   },
   error: {
-    bar: "border-l-4 border-[#f6465d] bg-[#2e1a1e]",
+    bar: "border-l-4 border-market-down bg-[#2e1a1e]",
     icon: XCircle,
-    title: "text-[#f6465d]",
+    title: "text-market-down",
     msg: "text-[#c4a0a6]",
   },
   warning: {
-    bar: "border-l-4 border-[#f1fa8c] bg-[#2a2a1a]",
+    bar: "border-l-4 border-dracula-yellow bg-[#2a2a1a]",
     icon: Warning,
-    title: "text-[#f1fa8c]",
+    title: "text-dracula-yellow",
     msg: "text-[#c4c4a0]",
   },
   info: {
-    bar: "border-l-4 border-[#8be9fd] bg-[#1a2a2e]",
+    bar: "border-l-4 border-dracula-cyan bg-[#1a2a2e]",
     icon: Info,
-    title: "text-[#8be9fd]",
+    title: "text-dracula-cyan",
     msg: "text-[#a0b4c4]",
   },
 };
@@ -50,7 +50,7 @@ function ToastItem({ toast }: { toast: Toast }) {
       </div>
       <button
         onClick={() => removeToast(toast.id)}
-        className="inline-flex items-center justify-center w-6 h-6 -mr-1 -mt-1 text-[#6272a4] hover:text-[#f8f8f2] ml-1 transition-colors active:scale-90"
+        className="inline-flex items-center justify-center w-6 h-6 -mr-1 -mt-1 text-dracula-comment hover:text-dracula-fg ml-1 transition-colors active:scale-90"
         aria-label="닫기"
       >
         <X size={14} weight="bold" aria-hidden />

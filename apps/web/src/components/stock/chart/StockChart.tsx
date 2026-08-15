@@ -31,8 +31,8 @@ export default function StockChart({ candles, events = [], height = 340, vwapDat
   if (candles.length === 0) {
     return (
       <div
-        className="border border-gray-200 dark:border-[#44475a] dark:bg-[#1e1f29]
-                   rounded-lg flex items-center justify-center text-gray-400 dark:text-[#6272a4] text-sm"
+        className="border border-gray-200 dark:border-dracula-line dark:bg-[#1e1f29]
+                   rounded-lg flex items-center justify-center text-gray-400 dark:text-dracula-comment text-sm"
         style={{ height }}
       >
         차트 데이터 없음

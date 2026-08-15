@@ -83,16 +83,16 @@ export default function LoginPage() {
   };
 
   const inputCls = (field: string) =>
-    `border rounded-lg px-4 py-2 w-full transition-all duration-150 focus:outline-none focus:ring-2 hover:border-gray-400 dark:hover:border-[#6272a4] dark:bg-[#44475a] dark:text-[#f8f8f2] dark:placeholder-[#6272a4] ${
+    `border rounded-lg px-4 py-2 w-full transition-all duration-150 focus:outline-none focus:ring-2 hover:border-gray-400 dark:hover:border-dracula-comment dark:bg-dracula-line dark:text-dracula-fg dark:placeholder-dracula-comment ${
       errors[field]
-        ? "border-[#ff5555] focus:ring-[#ff5555]/50"
-        : "border-gray-300 dark:border-[#44475a] focus:ring-[#bd93f9]/50 focus:border-[#bd93f9]"
+        ? "border-dracula-red focus:ring-dracula-red/50"
+        : "border-gray-300 dark:border-dracula-line focus:ring-dracula-purple/50 focus:border-dracula-purple"
     }`;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-[#282a36] bg-mesh-light dark:bg-mesh-dark px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-dracula-bg bg-mesh-light dark:bg-mesh-dark px-4">
       <Card className="p-8" outerClassName="w-full max-w-sm animate-fade-up">
-        <h1 className="text-2xl font-bold mb-6 text-center dark:text-[#f8f8f2]">로그인</h1>
+        <h1 className="text-2xl font-bold mb-6 text-center dark:text-dracula-fg">로그인</h1>
 
         {/* 소셜 로그인 */}
         <div className="flex flex-col gap-2 mb-5">
@@ -100,7 +100,7 @@ export default function LoginPage() {
             // 로컬 개발 mock — OAuth2 리다이렉트 없이 바로 로그인
             <>
               {[
-                { provider: "GOOGLE", label: "Google (Mock)", bg: "bg-white border border-gray-300 dark:bg-[#44475a] dark:border-[#6272a4]", textColor: "text-gray-700 dark:text-[#f8f8f2]" },
+                { provider: "GOOGLE", label: "Google (Mock)", bg: "bg-white border border-gray-300 dark:bg-dracula-line dark:border-dracula-comment", textColor: "text-gray-700 dark:text-dracula-fg" },
                 { provider: "KAKAO",  label: "카카오 (Mock)", bg: "bg-[#FEE500]", textColor: "text-[#191919]" },
                 { provider: "NAVER",  label: "네이버 (Mock)", bg: "bg-[#03C75A]", textColor: "text-white" },
               ].map(({ provider, label, bg, textColor }) => (
@@ -121,8 +121,8 @@ export default function LoginPage() {
               <SocialButton
                 href={`${API_URL}/oauth2/authorization/google`}
                 label="Google로 계속하기"
-                bg="bg-white border border-gray-300 dark:bg-[#44475a] dark:border-[#6272a4]"
-                textColor="text-gray-700 dark:text-[#f8f8f2]"
+                bg="bg-white border border-gray-300 dark:bg-dracula-line dark:border-dracula-comment"
+                textColor="text-gray-700 dark:text-dracula-fg"
                 icon={
                   <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
                     <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
@@ -158,15 +158,15 @@ export default function LoginPage() {
         </div>
 
         <div className="flex items-center gap-2 mb-4">
-          <div className="flex-1 border-t border-gray-200 dark:border-[#44475a]" />
-          <span className="text-xs text-gray-400 dark:text-[#6272a4]">또는</span>
-          <div className="flex-1 border-t border-gray-200 dark:border-[#44475a]" />
+          <div className="flex-1 border-t border-gray-200 dark:border-dracula-line" />
+          <span className="text-xs text-gray-400 dark:text-dracula-comment">또는</span>
+          <div className="flex-1 border-t border-gray-200 dark:border-dracula-line" />
         </div>
 
         {/* 이메일/비밀번호 로그인 */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
           <div>
-            <label htmlFor="email" className="block text-sm font-medium dark:text-[#f8f8f2] mb-1">이메일</label>
+            <label htmlFor="email" className="block text-sm font-medium dark:text-dracula-fg mb-1">이메일</label>
             <input
               id="email" type="email" value={email} onChange={e => setEmail(e.target.value)}
               placeholder="이메일" autoComplete="email"
@@ -174,11 +174,11 @@ export default function LoginPage() {
               aria-invalid={!!errors.email}
               className={inputCls("email")}
             />
-            {errors.email && <p id="email-error" className="text-[#ff5555] text-xs mt-1">{errors.email}</p>}
+            {errors.email && <p id="email-error" className="text-dracula-red text-xs mt-1">{errors.email}</p>}
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium dark:text-[#f8f8f2] mb-1">비밀번호</label>
+            <label htmlFor="password" className="block text-sm font-medium dark:text-dracula-fg mb-1">비밀번호</label>
             <input
               id="password" type="password" value={password} onChange={e => setPassword(e.target.value)}
               placeholder="비밀번호" autoComplete="current-password"
@@ -186,28 +186,28 @@ export default function LoginPage() {
               aria-invalid={!!errors.password}
               className={inputCls("password")}
             />
-            {errors.password && <p id="password-error" className="text-[#ff5555] text-xs mt-1">{errors.password}</p>}
+            {errors.password && <p id="password-error" className="text-dracula-red text-xs mt-1">{errors.password}</p>}
           </div>
 
           {errors.form && (
-            <p role="alert" className="text-[#ff5555] text-sm text-center">{errors.form}</p>
+            <p role="alert" className="text-dracula-red text-sm text-center">{errors.form}</p>
           )}
 
           <button type="submit" disabled={loading}
-            className="bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] py-2 rounded-lg hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 font-semibold transition-all duration-150">
+            className="bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg py-2 rounded-lg hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 font-semibold transition-all duration-150">
             {loading ? "로그인 중..." : "로그인"}
           </button>
 
           <div className="text-right">
-            <Link href="/forgot-password" className="text-xs text-gray-500 dark:text-[#6272a4] hover:text-blue-600 dark:hover:text-[#bd93f9] transition-colors">
+            <Link href="/forgot-password" className="text-xs text-gray-500 dark:text-dracula-comment hover:text-blue-600 dark:hover:text-dracula-purple transition-colors">
               비밀번호를 잊으셨나요?
             </Link>
           </div>
         </form>
 
-        <p className="mt-4 text-center text-sm text-gray-500 dark:text-[#6272a4]">
+        <p className="mt-4 text-center text-sm text-gray-500 dark:text-dracula-comment">
           계정이 없으신가요?{" "}
-          <Link href="/signup" className="text-blue-600 dark:text-[#bd93f9] hover:underline">회원가입</Link>
+          <Link href="/signup" className="text-blue-600 dark:text-dracula-purple hover:underline">회원가입</Link>
         </p>
       </Card>
     </div>

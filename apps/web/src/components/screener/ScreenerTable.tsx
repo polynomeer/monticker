@@ -78,10 +78,10 @@ export default function ScreenerTable({
   return (
     <div className="overflow-x-auto">
       {/* 헤더 — 스크롤과 무관하게 고정 */}
-      <div className="flex items-center border-b border-gray-200 dark:border-[#44475a] px-2 py-2.5 min-w-[720px] bg-gray-50 dark:bg-dracula-line/5">
+      <div className="flex items-center border-b border-gray-200 dark:border-dracula-line px-2 py-2.5 min-w-[720px] bg-gray-50 dark:bg-dracula-line/5">
         {HEADERS.map(h => (
           <div key={h.label}
-            className={`text-xs text-gray-500 dark:text-[#6272a4] font-semibold tracking-wide px-2 ${h.width}`}>
+            className={`text-xs text-gray-500 dark:text-dracula-comment font-semibold tracking-wide px-2 ${h.width}`}>
             {h.label}
           </div>
         ))}
@@ -120,13 +120,13 @@ export default function ScreenerTable({
         <div ref={loadMoreRef} className="h-4" />
         {loadingMore && (
           <div className="text-center py-3">
-            <span className="text-xs text-[#6272a4] animate-pulse">불러오는 중...</span>
+            <span className="text-xs text-dracula-comment animate-pulse">불러오는 중...</span>
           </div>
         )}
       </div>
 
       {/* 행 수 표시 */}
-      <div className="px-4 py-2 text-[10px] text-gray-400 dark:text-[#44475a] border-t border-gray-100 dark:border-[#44475a]/30">
+      <div className="px-4 py-2 text-[10px] text-gray-400 dark:text-dracula-line border-t border-gray-100 dark:border-dracula-line/30">
         {items.length.toLocaleString()}개 표시 중
         {hasMore && " (스크롤하면 더 보기)"}
         &nbsp;·&nbsp;DOM 렌더: {virtualItems.length}행

@@ -53,28 +53,28 @@ export default function Home() {
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-4 sm:mb-6">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 dark:text-[#f8f8f2]">스크리너</h1>
-          <p className="text-xs text-gray-500 dark:text-[#6272a4] mt-1 flex items-center gap-1.5">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 dark:text-dracula-fg">스크리너</h1>
+          <p className="text-xs text-gray-500 dark:text-dracula-comment mt-1 flex items-center gap-1.5">
             랭킹 10초 갱신
-            <span className={`inline-flex items-center gap-1 font-medium ${wsConnected ? "text-[#0ecb81]" : "text-gray-400 dark:text-[#6272a4]"}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${wsConnected ? "bg-[#0ecb81] animate-pulse" : "bg-gray-400 dark:bg-[#6272a4]"}`} />
+            <span className={`inline-flex items-center gap-1 font-medium ${wsConnected ? "text-market-up" : "text-gray-400 dark:text-dracula-comment"}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${wsConnected ? "bg-market-up animate-pulse" : "bg-gray-400 dark:bg-dracula-comment"}`} />
               {wsConnected ? "실시간" : "연결 중..."}
             </span>
           </p>
         </div>
-        <span className="text-xs text-gray-500 dark:text-[#6272a4] tabular-nums">총 {total.toLocaleString()}개 종목</span>
+        <span className="text-xs text-gray-500 dark:text-dracula-comment tabular-nums">총 {total.toLocaleString()}개 종목</span>
       </div>
 
       {/* 탭 */}
-      <div className="flex gap-1 mb-4 border-b border-gray-200 dark:border-[#44475a]">
+      <div className="flex gap-1 mb-4 border-b border-gray-200 dark:border-dracula-line">
         {TABS.map(t => (
           <button
             key={t.key}
             onClick={() => { setTab(t.key); setSort("amount"); }}
             className={`px-4 py-2 text-sm font-medium transition-colors duration-300 ease-spring border-b-2 -mb-px
               ${tab === t.key
-                ? "border-blue-600 dark:border-[#bd93f9] text-blue-600 dark:text-[#bd93f9]"
-                : "border-transparent text-gray-500 dark:text-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2]"
+                ? "border-blue-600 dark:border-dracula-purple text-blue-600 dark:text-dracula-purple"
+                : "border-transparent text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg"
               }`}
           >
             {t.label}
@@ -92,7 +92,7 @@ export default function Home() {
               </Pill>
             ))}
           </div>
-          <div className="w-px bg-gray-200 dark:bg-[#44475a] self-stretch mx-1" />
+          <div className="w-px bg-gray-200 dark:bg-dracula-line self-stretch mx-1" />
           <div className="flex gap-1">
             {SORTS.map(s => (
               <Pill key={s.key} active={sort === s.key} onClick={() => setSort(s.key)}>

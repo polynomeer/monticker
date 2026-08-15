@@ -60,7 +60,7 @@ export default function WatchlistAddButton({ stockId }: Props) {
       <select
         value={selectedGroup ?? ""}
         onChange={e => setSelectedGroup(Number(e.target.value))}
-        className="border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#44475a] text-gray-900 dark:text-[#f8f8f2] rounded px-3 py-1.5 text-sm flex-1 transition-colors hover:border-gray-300 dark:hover:border-[#6272a4]"
+        className="border border-gray-200 dark:border-dracula-line bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg rounded px-3 py-1.5 text-sm flex-1 transition-colors hover:border-gray-300 dark:hover:border-dracula-comment"
       >
         {groups.map(g => (
           <option key={g.id} value={g.id}>{g.name}</option>
@@ -69,7 +69,7 @@ export default function WatchlistAddButton({ stockId }: Props) {
       <button
         onClick={handleAdd}
         disabled={loading}
-        className="border border-blue-500 dark:border-[#bd93f9] text-blue-600 dark:text-[#bd93f9] rounded px-4 py-1.5 text-sm font-medium hover:bg-blue-50 dark:hover:bg-[#bd93f9]/10 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 whitespace-nowrap transition-all duration-150 inline-flex items-center gap-1"
+        className="border border-blue-500 dark:border-dracula-purple text-blue-600 dark:text-dracula-purple rounded px-4 py-1.5 text-sm font-medium hover:bg-blue-50 dark:hover:bg-dracula-purple/10 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 whitespace-nowrap transition-all duration-150 inline-flex items-center gap-1"
       >
         {added ? <><Check size={14} weight="bold" aria-hidden /> 추가됨</> : loading ? "추가 중..." : "관심종목 추가"}
       </button>

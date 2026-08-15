@@ -19,10 +19,10 @@ interface RuleSet {
 }
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
-  DRAFT:      { label: "작성 중",        color: "text-gray-600 bg-gray-100 dark:text-[#6272a4] dark:bg-[#44475a]" },
-  BACKTESTED: { label: "백테스트 완료", color: "text-[#50fa7b] bg-[#50fa7b]/10" },
-  RUNNING:    { label: "운용 중",        color: "text-[#bd93f9] bg-[#bd93f9]/10" },
-  ARCHIVED:   { label: "보관됨",         color: "text-gray-600 bg-gray-100 dark:text-[#6272a4] dark:bg-[#44475a]" },
+  DRAFT:      { label: "작성 중",        color: "text-gray-600 bg-gray-100 dark:text-dracula-comment dark:bg-dracula-line" },
+  BACKTESTED: { label: "백테스트 완료", color: "text-dracula-green bg-dracula-green/10" },
+  RUNNING:    { label: "운용 중",        color: "text-dracula-purple bg-dracula-purple/10" },
+  ARCHIVED:   { label: "보관됨",         color: "text-gray-600 bg-gray-100 dark:text-dracula-comment dark:bg-dracula-line" },
 };
 
 export default function QuantLabPage() {
@@ -51,21 +51,21 @@ export default function QuantLabPage() {
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-[#f8f8f2]">Quant Lab</h1>
-          <p className="text-sm text-gray-500 dark:text-[#6272a4] mt-1">
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-dracula-fg">Quant Lab</h1>
+          <p className="text-sm text-gray-500 dark:text-dracula-comment mt-1">
             나만의 투자 규칙을 만들고, 검증하고, 운용하는 전략 연구소
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Link
             href="/quant-lab/earnings"
-            className="px-4 py-2 rounded-xl border border-[#50fa7b]/40 text-[#50fa7b] text-sm font-medium hover:bg-[#50fa7b]/10 active:scale-[0.98] transition-all duration-150 inline-flex items-center gap-1.5"
+            className="px-4 py-2 rounded-xl border border-dracula-green/40 text-dracula-green text-sm font-medium hover:bg-dracula-green/10 active:scale-[0.98] transition-all duration-150 inline-flex items-center gap-1.5"
           >
             <Coins size={16} weight="bold" aria-hidden /> 수익 대시보드
           </Link>
           <Link
             href="/quant-lab/builder"
-            className="px-5 py-2.5 rounded-xl bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] font-semibold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150"
+            className="px-5 py-2.5 rounded-xl bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg font-semibold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150"
           >
             + 새 룰셋
           </Link>
@@ -74,15 +74,15 @@ export default function QuantLabPage() {
 
       {/* 빈 상태 */}
       {!isLoading && ruleSets.length === 0 && (
-        <div className="text-center py-24 border border-dashed border-gray-300 dark:border-[#44475a] rounded-2xl">
-          <div className="flex justify-center mb-4 text-gray-400 dark:text-[#6272a4]"><Flask size={40} weight="duotone" aria-hidden /></div>
-          <p className="text-gray-900 dark:text-[#f8f8f2] font-semibold mb-2">아직 룰셋이 없습니다</p>
-          <p className="text-gray-500 dark:text-[#6272a4] text-sm mb-6">
+        <div className="text-center py-24 border border-dashed border-gray-300 dark:border-dracula-line rounded-2xl">
+          <div className="flex justify-center mb-4 text-gray-400 dark:text-dracula-comment"><Flask size={40} weight="duotone" aria-hidden /></div>
+          <p className="text-gray-900 dark:text-dracula-fg font-semibold mb-2">아직 룰셋이 없습니다</p>
+          <p className="text-gray-500 dark:text-dracula-comment text-sm mb-6">
             투자 아이디어를 조건식으로 만들고 백테스트로 검증해보세요
           </p>
           <Link
             href="/quant-lab/builder"
-            className="px-6 py-2.5 rounded-xl bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] font-semibold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150"
+            className="px-6 py-2.5 rounded-xl bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg font-semibold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150"
           >
             첫 룰셋 만들기 →
           </Link>
@@ -108,16 +108,16 @@ export default function QuantLabPage() {
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-semibold text-gray-900 dark:text-[#f8f8f2] truncate">{rs.name}</span>
+                    <span className="font-semibold text-gray-900 dark:text-dracula-fg truncate">{rs.name}</span>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${st.color}`}>
                       {st.label}
                     </span>
-                    <span className="text-xs text-gray-500 dark:text-[#6272a4] tabular-nums">v{rs.version}</span>
+                    <span className="text-xs text-gray-500 dark:text-dracula-comment tabular-nums">v{rs.version}</span>
                   </div>
                   {rs.description && (
-                    <p className="text-sm text-gray-500 dark:text-[#6272a4] truncate">{rs.description}</p>
+                    <p className="text-sm text-gray-500 dark:text-dracula-comment truncate">{rs.description}</p>
                   )}
-                  <p className="text-xs text-gray-400 dark:text-[#44475a] mt-1">
+                  <p className="text-xs text-gray-400 dark:text-dracula-line mt-1">
                     수정: {new Date(rs.updatedAt).toLocaleDateString("ko-KR")}
                   </p>
                 </div>
@@ -125,13 +125,13 @@ export default function QuantLabPage() {
                 <div className="flex items-center gap-2 ml-4 shrink-0">
                   <button
                     onClick={() => router.push(`/quant-lab/${rs.id}`)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 dark:bg-[#44475a] text-gray-700 dark:text-[#f8f8f2] hover:bg-blue-600 dark:hover:bg-[#bd93f9] hover:text-white dark:hover:text-[#282a36] active:scale-95 transition-all duration-150"
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg hover:bg-blue-600 dark:hover:bg-dracula-purple hover:text-white dark:hover:text-dracula-bg active:scale-95 transition-all duration-150"
                   >
                     백테스트
                   </button>
                   <button
                     onClick={() => router.push(`/quant-lab/builder?edit=${rs.id}`)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 dark:bg-[#44475a] text-gray-700 dark:text-[#f8f8f2] hover:bg-gray-200 dark:hover:bg-[#6272a4] active:scale-95 transition-all duration-150"
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg hover:bg-gray-200 dark:hover:bg-dracula-comment active:scale-95 transition-all duration-150"
                   >
                     수정
                   </button>
@@ -141,7 +141,7 @@ export default function QuantLabPage() {
                         deleteMutation.mutate(rs.id);
                       }
                     }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-[#ff5555] hover:bg-[#ff5555]/10 active:scale-95 transition-all duration-150"
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-dracula-red hover:bg-dracula-red/10 active:scale-95 transition-all duration-150"
                   >
                     삭제
                   </button>
@@ -159,15 +159,15 @@ export default function QuantLabPage() {
           { icon: ChartBar, title: "2. 백테스트", desc: "과거 캔들 데이터로 전략을 검증합니다. 수수료·슬리피지를 반영해 현실적인 성과를 계산합니다" },
           { icon: Trophy, title: "3. 신뢰도 점수", desc: "거래 횟수·기간·시장 국면을 기준으로 A~D 신뢰도를 부여해 과최적화를 경고합니다" },
         ].map(c => (
-          <div key={c.title} className="p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-gray-50 dark:bg-[#282a36]">
-            <div className="mb-2 text-gray-500 dark:text-[#6272a4]"><c.icon size={22} weight="bold" aria-hidden /></div>
-            <p className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2] mb-1">{c.title}</p>
-            <p className="text-xs text-gray-500 dark:text-[#6272a4]">{c.desc}</p>
+          <div key={c.title} className="p-4 rounded-xl border border-gray-200 dark:border-dracula-line bg-gray-50 dark:bg-dracula-bg">
+            <div className="mb-2 text-gray-500 dark:text-dracula-comment"><c.icon size={22} weight="bold" aria-hidden /></div>
+            <p className="text-sm font-semibold text-gray-900 dark:text-dracula-fg mb-1">{c.title}</p>
+            <p className="text-xs text-gray-500 dark:text-dracula-comment">{c.desc}</p>
           </div>
         ))}
       </div>
 
-      <p className="mt-6 text-xs text-gray-400 dark:text-[#6272a4] text-center">
+      <p className="mt-6 text-xs text-gray-400 dark:text-dracula-comment text-center">
         과거 성과가 미래 수익을 보장하지 않습니다. 실제 투자 판단은 사용자 본인에게 있습니다.
       </p>
     </div>

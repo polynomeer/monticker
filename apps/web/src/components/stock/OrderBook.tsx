@@ -88,10 +88,10 @@ function OrderBook({ stockId }: Props) {
 
   return (
     <div ref={containerRef}
-      className="border border-gray-200 dark:border-[#44475a] dark:bg-[#282a36] rounded-lg overflow-hidden">
-      <div className="px-4 py-2 border-b border-gray-100 dark:border-[#44475a] flex items-center justify-between">
-        <span className="text-xs font-semibold text-gray-600 dark:text-[#6272a4]">호가창</span>
-        <span data-current-price className="text-xs font-mono font-bold dark:text-[#f8f8f2]">
+      className="border border-gray-200 dark:border-dracula-line dark:bg-dracula-bg rounded-lg overflow-hidden">
+      <div className="px-4 py-2 border-b border-gray-100 dark:border-dracula-line flex items-center justify-between">
+        <span className="text-xs font-semibold text-gray-600 dark:text-dracula-comment">호가창</span>
+        <span data-current-price className="text-xs font-mono font-bold dark:text-dracula-fg">
           {d.currentPrice.toLocaleString()}
         </span>
       </div>
@@ -99,25 +99,25 @@ function OrderBook({ stockId }: Props) {
       <div>
         {[...d.asks].reverse().map((level, i) => (
           <div key={i} data-ask className="relative flex items-center justify-between px-3 py-0.5 text-xs">
-            <div data-bar className="absolute right-0 top-0 bottom-0 opacity-20 bg-[#f6465d]"
+            <div data-bar className="absolute right-0 top-0 bottom-0 opacity-20 bg-market-down"
               style={{ width: `${(level.quantity / maxQty) * 100}%` }} />
-            <span data-price className="font-mono text-[#f6465d] z-10">{level.price.toLocaleString()}</span>
-            <span data-qty   className="font-mono dark:text-[#6272a4] z-10">{level.quantity.toLocaleString()}</span>
+            <span data-price className="font-mono text-market-down z-10">{level.price.toLocaleString()}</span>
+            <span data-qty   className="font-mono dark:text-dracula-comment z-10">{level.quantity.toLocaleString()}</span>
           </div>
         ))}
 
-        <div className="flex items-center justify-center py-1 bg-[#44475a]/20 border-y border-[#44475a]/40">
-          <span data-current-price className="text-xs font-bold font-mono dark:text-[#f8f8f2]">
+        <div className="flex items-center justify-center py-1 bg-dracula-line/20 border-y border-dracula-line/40">
+          <span data-current-price className="text-xs font-bold font-mono dark:text-dracula-fg">
             {d.currentPrice.toLocaleString()}
           </span>
         </div>
 
         {d.bids.map((level, i) => (
           <div key={i} data-bid className="relative flex items-center justify-between px-3 py-0.5 text-xs">
-            <div data-bar className="absolute left-0 top-0 bottom-0 opacity-20 bg-[#0ecb81]"
+            <div data-bar className="absolute left-0 top-0 bottom-0 opacity-20 bg-market-up"
               style={{ width: `${(level.quantity / maxQty) * 100}%` }} />
-            <span data-price className="font-mono text-[#0ecb81] z-10">{level.price.toLocaleString()}</span>
-            <span data-qty   className="font-mono dark:text-[#6272a4] z-10">{level.quantity.toLocaleString()}</span>
+            <span data-price className="font-mono text-market-up z-10">{level.price.toLocaleString()}</span>
+            <span data-qty   className="font-mono dark:text-dracula-comment z-10">{level.quantity.toLocaleString()}</span>
           </div>
         ))}
       </div>

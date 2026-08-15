@@ -51,7 +51,7 @@ export default function StockSearchPage() {
         <button
           type="submit"
           disabled={loading}
-          className="px-5 py-2.5 rounded-lg bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] font-semibold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:active:scale-100"
+          className="px-5 py-2.5 rounded-lg bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg font-semibold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:active:scale-100"
         >
           {loading ? "..." : "검색"}
         </button>
@@ -79,16 +79,16 @@ export default function StockSearchPage() {
             <li key={stock.id}>
               <Link
                 href={`/stocks/${stock.symbol}`}
-                className="group flex items-center justify-between p-4 rounded-xl border border-gray-200 dark:border-[#44475a] bg-white dark:bg-[#21222c] hover:border-blue-400 dark:hover:border-[#bd93f9]/60 hover:bg-gray-50 dark:hover:bg-[#282a36] hover:shadow-md active:scale-[0.99] transition-all duration-150"
+                className="group flex items-center justify-between p-4 rounded-xl border border-gray-200 dark:border-dracula-line bg-white dark:bg-dracula-surface hover:border-blue-400 dark:hover:border-dracula-purple/60 hover:bg-gray-50 dark:hover:bg-dracula-bg hover:shadow-md active:scale-[0.99] transition-all duration-150"
               >
                 <div>
-                  <span className="font-semibold text-gray-900 dark:text-[#f8f8f2] group-hover:text-blue-600 dark:group-hover:text-[#bd93f9] transition-colors">{stock.name}</span>
-                  <span className="ml-2 text-sm text-gray-500 dark:text-[#6272a4]">{stock.symbol}</span>
+                  <span className="font-semibold text-gray-900 dark:text-dracula-fg group-hover:text-blue-600 dark:group-hover:text-dracula-purple transition-colors">{stock.name}</span>
+                  <span className="ml-2 text-sm text-gray-500 dark:text-dracula-comment">{stock.symbol}</span>
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   <Badge variant="neutral">{stock.market}</Badge>
                   {stock.sector && (
-                    <span className="text-xs text-gray-500 dark:text-[#6272a4]">{stock.sector}</span>
+                    <span className="text-xs text-gray-500 dark:text-dracula-comment">{stock.sector}</span>
                   )}
                 </div>
               </Link>

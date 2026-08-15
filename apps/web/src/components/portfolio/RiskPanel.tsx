@@ -141,11 +141,11 @@ export default function RiskPanel() {
 
   const sharpeColor =
     data.sharpeRatio >= 1
-      ? "text-[#0ecb81]"
+      ? "text-market-up"
       : data.sharpeRatio >= 0
         ? "text-gray-900 dark:text-gray-100"
-        : "text-[#f6465d]";
-  const betaColor = data.beta <= 1.2 ? "text-gray-900 dark:text-gray-100" : "text-[#f6465d]";
+        : "text-market-down";
+  const betaColor = data.beta <= 1.2 ? "text-gray-900 dark:text-gray-100" : "text-market-down";
 
   return (
     <div className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 rounded-xl p-5 space-y-4 shadow-sm animate-fade-up">
@@ -172,20 +172,20 @@ export default function RiskPanel() {
           label="MDD"
           value={`${data.maxDrawdown.toFixed(1)}%`}
           desc="최대 낙폭"
-          colorClass="text-[#f6465d]"
+          colorClass="text-market-down"
         />
         <RiskBadge label="연변동성" value={`${data.volatility.toFixed(1)}%`} desc="연환산 σ" />
         <RiskBadge
           label="VaR (95%)"
           value={`${data.var95.toFixed(1)}%`}
           desc="1일 최대손실"
-          colorClass="text-[#f6465d]"
+          colorClass="text-market-down"
         />
         <RiskBadge
           label="승률"
           value={`${data.winRate.toFixed(1)}%`}
           desc={`${data.totalTrades}건 거래`}
-          colorClass={data.winRate >= 50 ? "text-[#0ecb81]" : "text-[#f6465d]"}
+          colorClass={data.winRate >= 50 ? "text-market-up" : "text-market-down"}
         />
       </div>
 

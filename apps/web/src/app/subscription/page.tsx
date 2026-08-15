@@ -37,9 +37,9 @@ interface PaymentRecord {
 }
 
 const PLAN_ACCENTS: Record<string, { border: string; badge: string; btn: string; icon: Icon }> = {
-  FREE:  { border: "border-gray-200 dark:border-[#44475a]",      badge: "bg-gray-100 text-gray-700 dark:bg-[#44475a] dark:text-[#f8f8f2]",        btn: "bg-gray-100 text-gray-700 dark:bg-[#44475a] dark:text-[#f8f8f2] hover:bg-gray-200 dark:hover:bg-[#6272a4]",               icon: Plant },
-  PRO:   { border: "border-[#bd93f9]/50",   badge: "bg-[#bd93f9]/20 text-[#bd93f9]",     btn: "bg-[#bd93f9] text-[#282a36] hover:bg-[#ff79c6]",               icon: Lightning },
-  QUANT: { border: "border-[#50fa7b]/50",   badge: "bg-[#50fa7b]/20 text-[#50fa7b]",     btn: "bg-[#50fa7b] text-[#282a36] hover:bg-[#8be9fd]",               icon: Microscope },
+  FREE:  { border: "border-gray-200 dark:border-dracula-line",      badge: "bg-gray-100 text-gray-700 dark:bg-dracula-line dark:text-dracula-fg",        btn: "bg-gray-100 text-gray-700 dark:bg-dracula-line dark:text-dracula-fg hover:bg-gray-200 dark:hover:bg-dracula-comment",               icon: Plant },
+  PRO:   { border: "border-dracula-purple/50",   badge: "bg-dracula-purple/20 text-dracula-purple",     btn: "bg-dracula-purple text-dracula-bg hover:bg-dracula-pink",               icon: Lightning },
+  QUANT: { border: "border-dracula-green/50",   badge: "bg-dracula-green/20 text-dracula-green",     btn: "bg-dracula-green text-dracula-bg hover:bg-dracula-cyan",               icon: Microscope },
 };
 
 function won(n: number) {
@@ -62,26 +62,26 @@ function PlanCard({
 
   return (
     <Card
-      className={`relative flex flex-col p-6 transition-all ${isCurrent ? accent.border + " ring-1 ring-[#bd93f9]/30" : accent.border}`}
+      className={`relative flex flex-col p-6 transition-all ${isCurrent ? accent.border + " ring-1 ring-dracula-purple/30" : accent.border}`}
       hover
     >
       {isCurrent && (
-        <span className="absolute top-4 right-4 text-xs px-2 py-0.5 rounded-full bg-[#bd93f9]/20 text-[#bd93f9] font-medium">
+        <span className="absolute top-4 right-4 text-xs px-2 py-0.5 rounded-full bg-dracula-purple/20 text-dracula-purple font-medium">
           현재 플랜
         </span>
       )}
       <div className="flex items-center gap-2 mb-4">
         <accent.icon size={24} weight="duotone" aria-hidden />
         <div>
-          <p className="text-xs text-gray-500 dark:text-[#6272a4]">{plan.name}</p>
-          <p className="text-xl font-bold text-gray-900 dark:text-[#f8f8f2]">{won(plan.price)}</p>
+          <p className="text-xs text-gray-500 dark:text-dracula-comment">{plan.name}</p>
+          <p className="text-xl font-bold text-gray-900 dark:text-dracula-fg">{won(plan.price)}</p>
         </div>
       </div>
 
       <ul className="flex-1 space-y-2 mb-6">
         {(plan.features ?? []).map((f, i) => (
-          <li key={i} className="flex items-start gap-2 text-sm text-gray-500 dark:text-[#6272a4]">
-            <Check size={14} weight="bold" className="text-[#50fa7b] shrink-0 mt-0.5" aria-hidden />
+          <li key={i} className="flex items-start gap-2 text-sm text-gray-500 dark:text-dracula-comment">
+            <Check size={14} weight="bold" className="text-dracula-green shrink-0 mt-0.5" aria-hidden />
             <span>{f}</span>
           </li>
         ))}
@@ -156,38 +156,38 @@ export default function SubscriptionPage() {
   const currentCode = mySub?.status === "ACTIVE" ? mySub.planCode : null;
 
   const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-    ACTIVE:    { label: "활성", color: "text-[#50fa7b]" },
-    EXPIRED:   { label: "만료", color: "text-[#ff5555]" },
-    CANCELLED: { label: "해지", color: "text-gray-500 dark:text-[#6272a4]" },
+    ACTIVE:    { label: "활성", color: "text-dracula-green" },
+    EXPIRED:   { label: "만료", color: "text-dracula-red" },
+    CANCELLED: { label: "해지", color: "text-gray-500 dark:text-dracula-comment" },
   };
 
   const PAYMENT_LABELS: Record<string, { label: string; color: string }> = {
-    SUCCESS:  { label: "결제 완료", color: "text-[#50fa7b]" },
-    FAILED:   { label: "결제 실패", color: "text-[#ff5555]" },
-    PENDING:  { label: "처리 중",   color: "text-[#ffb86c]" },
-    REFUNDED: { label: "환불",      color: "text-gray-500 dark:text-[#6272a4]" },
+    SUCCESS:  { label: "결제 완료", color: "text-dracula-green" },
+    FAILED:   { label: "결제 실패", color: "text-dracula-red" },
+    PENDING:  { label: "처리 중",   color: "text-dracula-orange" },
+    REFUNDED: { label: "환불",      color: "text-gray-500 dark:text-dracula-comment" },
   };
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 animate-fade-up">
       <div className="mb-8">
-        <h1 className="text-xl font-bold text-gray-900 dark:text-[#f8f8f2]">구독 플랜</h1>
-        <p className="text-xs text-gray-500 dark:text-[#6272a4] mt-0.5">더 강력한 분석 도구로 업그레이드하세요</p>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-dracula-fg">구독 플랜</h1>
+        <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">더 강력한 분석 도구로 업그레이드하세요</p>
       </div>
 
       {/* 현재 구독 상태 배너 */}
       {mySub && (
         <Card className="p-4 flex items-center justify-between gap-4" outerClassName="mb-6">
           <div>
-            <p className="text-xs text-gray-500 dark:text-[#6272a4]">현재 구독</p>
-            <p className="font-semibold text-gray-900 dark:text-[#f8f8f2] mt-0.5">
+            <p className="text-xs text-gray-500 dark:text-dracula-comment">현재 구독</p>
+            <p className="font-semibold text-gray-900 dark:text-dracula-fg mt-0.5">
               {mySub.planCode} 플랜{" "}
               <span className={`text-xs font-normal ${STATUS_LABELS[mySub.status]?.color}`}>
                 {STATUS_LABELS[mySub.status]?.label}
               </span>
             </p>
             {mySub.expiresAt && (
-              <p className="text-xs text-gray-500 dark:text-[#6272a4] mt-0.5">
+              <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">
                 만료일: {new Date(mySub.expiresAt).toLocaleDateString("ko-KR")}
               </p>
             )}
@@ -196,7 +196,7 @@ export default function SubscriptionPage() {
             <button
               onClick={() => cancelMutation.mutate()}
               disabled={cancelMutation.isPending}
-              className="shrink-0 px-3 py-1.5 rounded-lg border border-[#ff5555]/40 text-[#ff5555] text-xs hover:bg-[#ff5555]/10 transition-colors disabled:opacity-40"
+              className="shrink-0 px-3 py-1.5 rounded-lg border border-dracula-red/40 text-dracula-red text-xs hover:bg-dracula-red/10 transition-colors disabled:opacity-40"
             >
               {cancelMutation.isPending ? "처리 중..." : "구독 해지"}
             </button>
@@ -205,11 +205,11 @@ export default function SubscriptionPage() {
       )}
 
       {/* 탭 */}
-      <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-[#44475a]">
+      <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-dracula-line">
         {(["plans", "history"] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px
-              ${activeTab === tab ? "border-blue-600 dark:border-[#bd93f9] text-blue-600 dark:text-[#bd93f9]" : "border-transparent text-gray-500 dark:text-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2]"}`}>
+              ${activeTab === tab ? "border-blue-600 dark:border-dracula-purple text-blue-600 dark:text-dracula-purple" : "border-transparent text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg"}`}>
             {tab === "plans" ? "플랜 선택" : "결제 내역"}
           </button>
         ))}
@@ -243,25 +243,25 @@ export default function SubscriptionPage() {
             {[1,2,3].map(i => <div key={i} className="h-16 rounded-xl bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15 bg-[length:200%_100%] animate-shimmer" />)}
           </div>
         ) : (paymentsData ?? []).length === 0 ? (
-          <div className="text-center py-16 border border-dashed border-gray-300 dark:border-[#44475a] rounded-xl text-gray-500 dark:text-[#6272a4] text-sm">
+          <div className="text-center py-16 border border-dashed border-gray-300 dark:border-dracula-line rounded-xl text-gray-500 dark:text-dracula-comment text-sm">
             결제 내역이 없습니다.
           </div>
         ) : (
           <div className="space-y-2">
             {(paymentsData ?? []).map((p: PaymentRecord) => {
-              const meta = PAYMENT_LABELS[p.status] ?? { label: p.status, color: "text-gray-900 dark:text-[#f8f8f2]" };
+              const meta = PAYMENT_LABELS[p.status] ?? { label: p.status, color: "text-gray-900 dark:text-dracula-fg" };
               return (
                 <Card key={p.id} className="flex items-center gap-3 p-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-900 dark:text-[#f8f8f2]">{p.planCode} 플랜</span>
+                      <span className="text-sm font-medium text-gray-900 dark:text-dracula-fg">{p.planCode} 플랜</span>
                       <span className={`text-xs ${meta.color}`}>{meta.label}</span>
                     </div>
-                    <p className="text-xs text-gray-500 dark:text-[#6272a4] mt-0.5">
+                    <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">
                       {new Date(p.createdAt).toLocaleDateString("ko-KR")} · {p.pgProvider}
                     </p>
                   </div>
-                  <p className={`text-sm font-semibold ${p.status === "SUCCESS" ? "text-[#50fa7b]" : "text-[#ff5555]"}`}>
+                  <p className={`text-sm font-semibold ${p.status === "SUCCESS" ? "text-dracula-green" : "text-dracula-red"}`}>
                     {p.amount.toLocaleString("ko-KR")}원
                   </p>
                 </Card>
@@ -271,7 +271,7 @@ export default function SubscriptionPage() {
         )
       )}
 
-      <p className="text-xs text-gray-500 dark:text-[#6272a4] text-center mt-8">
+      <p className="text-xs text-gray-500 dark:text-dracula-comment text-center mt-8">
         교육 목적 시뮬레이션 서비스입니다. 실제 투자 조언이 아닙니다.
       </p>
     </div>

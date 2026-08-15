@@ -57,7 +57,7 @@ function ConditionRow({ cond, onChange, onRemove }: {
   const meta = INDICATORS.find(i => i.value === cond.indicator);
 
   return (
-    <div className="flex flex-wrap gap-2 items-center p-3 rounded-lg bg-gray-50 dark:bg-[#282a36] border border-gray-200 dark:border-[#44475a]">
+    <div className="flex flex-wrap gap-2 items-center p-3 rounded-lg bg-gray-50 dark:bg-dracula-bg border border-gray-200 dark:border-dracula-line">
       {/* 지표 선택 */}
       <select
         value={cond.indicator}
@@ -65,7 +65,7 @@ function ConditionRow({ cond, onChange, onRemove }: {
           const m = INDICATORS.find(i => i.value === e.target.value)!;
           onChange({ ...cond, indicator: e.target.value, comparator: m.comparators[0], params: {}, value: undefined });
         }}
-        className="rounded-md bg-white dark:bg-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none focus:ring-1 focus:ring-[#bd93f9]"
+        className="rounded-md bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none focus:ring-1 focus:ring-dracula-purple"
       >
         {INDICATORS.map(i => <option key={i.value} value={i.value}>{i.label}</option>)}
       </select>
@@ -76,7 +76,7 @@ function ConditionRow({ cond, onChange, onRemove }: {
           type="number"
           value={cond.params.period ?? 20}
           onChange={e => onChange({ ...cond, params: { ...cond.params, period: +e.target.value } })}
-          className="w-16 rounded-md bg-white dark:bg-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none focus:ring-1 focus:ring-[#bd93f9]"
+          className="w-16 rounded-md bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none focus:ring-1 focus:ring-dracula-purple"
           min={1}
         />
       )}
@@ -85,7 +85,7 @@ function ConditionRow({ cond, onChange, onRemove }: {
       <select
         value={cond.comparator}
         onChange={e => onChange({ ...cond, comparator: e.target.value })}
-        className="rounded-md bg-white dark:bg-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none focus:ring-1 focus:ring-[#bd93f9]"
+        className="rounded-md bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none focus:ring-1 focus:ring-dracula-purple"
       >
         {meta?.comparators.map(c => (
           <option key={c} value={c}>{COMPARATOR_LABEL[c] ?? c}</option>
@@ -99,14 +99,14 @@ function ConditionRow({ cond, onChange, onRemove }: {
             type="number"
             value={Array.isArray(cond.value) ? cond.value[0] : 30}
             onChange={e => onChange({ ...cond, value: [+e.target.value, Array.isArray(cond.value) ? cond.value[1] : 70] })}
-            className="w-16 rounded-md bg-white dark:bg-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none"
+            className="w-16 rounded-md bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none"
           />
-          <span className="text-gray-500 dark:text-[#6272a4] text-xs">~</span>
+          <span className="text-gray-500 dark:text-dracula-comment text-xs">~</span>
           <input
             type="number"
             value={Array.isArray(cond.value) ? cond.value[1] : 70}
             onChange={e => onChange({ ...cond, value: [Array.isArray(cond.value) ? cond.value[0] : 30, +e.target.value] })}
-            className="w-16 rounded-md bg-white dark:bg-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none"
+            className="w-16 rounded-md bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none"
           />
         </>
       ) : (meta as any)?.hasValue ? (
@@ -114,14 +114,14 @@ function ConditionRow({ cond, onChange, onRemove }: {
           type="number"
           value={typeof cond.value === "number" ? cond.value : ""}
           onChange={e => onChange({ ...cond, value: +e.target.value })}
-          className="w-20 rounded-md bg-white dark:bg-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none focus:ring-1 focus:ring-[#bd93f9]"
+          className="w-20 rounded-md bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none focus:ring-1 focus:ring-dracula-purple"
         />
       ) : null}
 
       <button
         onClick={onRemove}
         aria-label="조건 삭제"
-        className="ml-auto inline-flex items-center justify-center w-6 h-6 text-[#ff5555] text-xs hover:opacity-70 active:scale-90 transition-transform"
+        className="ml-auto inline-flex items-center justify-center w-6 h-6 text-dracula-red text-xs hover:opacity-70 active:scale-90 transition-transform"
       ><X size={14} weight="bold" aria-hidden /></button>
     </div>
   );
@@ -212,44 +212,44 @@ export default function BuilderPage() {
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 sm:py-8 animate-fade-up">
       <div className="flex items-center gap-3 mb-8">
-        <button onClick={() => router.back()} className="text-gray-500 dark:text-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2] text-sm transition-colors">← 뒤로</button>
-        <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-[#f8f8f2]">
+        <button onClick={() => router.back()} className="text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg text-sm transition-colors">← 뒤로</button>
+        <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-dracula-fg">
           {editId ? "룰셋 수정" : "새 룰셋 만들기"}
         </h1>
       </div>
 
       {/* 기본 정보 */}
       <Card className="p-5" outerClassName="mb-6">
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2] mb-4">기본 정보</h2>
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-dracula-fg mb-4">기본 정보</h2>
         <div className="space-y-3">
           <input
             type="text"
             placeholder="전략 이름 (예: 거래량 돌파 단기 전략)"
             value={name}
             onChange={e => setName(e.target.value)}
-            className="w-full rounded-lg bg-white dark:bg-[#282a36] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] placeholder-gray-400 dark:placeholder-[#6272a4] px-4 py-2.5 text-sm transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:ring-2 focus:ring-[#bd93f9]/50"
+            className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg placeholder-gray-400 dark:placeholder-dracula-comment px-4 py-2.5 text-sm transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
           />
           <textarea
             placeholder="전략 설명 (선택)"
             value={description}
             onChange={e => setDescription(e.target.value)}
             rows={2}
-            className="w-full rounded-lg bg-white dark:bg-[#282a36] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] placeholder-gray-400 dark:placeholder-[#6272a4] px-4 py-2.5 text-sm resize-none transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:ring-2 focus:ring-[#bd93f9]/50"
+            className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg placeholder-gray-400 dark:placeholder-dracula-comment px-4 py-2.5 text-sm resize-none transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
           />
         </div>
       </Card>
 
       {/* 매수 조건 */}
-      <Card className="p-5 border-[#50fa7b]/30 dark:border-[#50fa7b]/30" outerClassName="mb-6">
+      <Card className="p-5 border-dracula-green/30 dark:border-dracula-green/30" outerClassName="mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-[#50fa7b]">매수 조건</h2>
+          <h2 className="text-sm font-semibold text-dracula-green">매수 조건</h2>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500 dark:text-[#6272a4]">조건 연산자:</span>
+            <span className="text-xs text-gray-500 dark:text-dracula-comment">조건 연산자:</span>
             {(["AND","OR"] as const).map(op => (
               <button
                 key={op}
                 onClick={() => setEntryOp(op)}
-                className={`px-2 py-0.5 rounded text-xs font-medium transition-all duration-150 active:scale-95 ${entryOp === op ? "bg-[#50fa7b] text-[#282a36]" : "bg-gray-100 dark:bg-[#44475a] text-gray-500 dark:text-[#6272a4]"}`}
+                className={`px-2 py-0.5 rounded text-xs font-medium transition-all duration-150 active:scale-95 ${entryOp === op ? "bg-dracula-green text-dracula-bg" : "bg-gray-100 dark:bg-dracula-line text-gray-500 dark:text-dracula-comment"}`}
               >
                 {op}
               </button>
@@ -266,22 +266,22 @@ export default function BuilderPage() {
             />
           ))}
         </div>
-        <button onClick={addEntry} className="mt-3 text-xs text-[#50fa7b] hover:opacity-70 transition-opacity">
+        <button onClick={addEntry} className="mt-3 text-xs text-dracula-green hover:opacity-70 transition-opacity">
           + 조건 추가
         </button>
       </Card>
 
       {/* 매도 조건 */}
-      <Card className="p-5 border-[#ff5555]/30 dark:border-[#ff5555]/30" outerClassName="mb-6">
+      <Card className="p-5 border-dracula-red/30 dark:border-dracula-red/30" outerClassName="mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-[#ff5555]">매도 조건</h2>
+          <h2 className="text-sm font-semibold text-dracula-red">매도 조건</h2>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500 dark:text-[#6272a4]">조건 연산자:</span>
+            <span className="text-xs text-gray-500 dark:text-dracula-comment">조건 연산자:</span>
             {(["AND","OR"] as const).map(op => (
               <button
                 key={op}
                 onClick={() => setExitOp(op)}
-                className={`px-2 py-0.5 rounded text-xs font-medium transition-all duration-150 active:scale-95 ${exitOp === op ? "bg-[#ff5555] text-white" : "bg-gray-100 dark:bg-[#44475a] text-gray-500 dark:text-[#6272a4]"}`}
+                className={`px-2 py-0.5 rounded text-xs font-medium transition-all duration-150 active:scale-95 ${exitOp === op ? "bg-dracula-red text-white" : "bg-gray-100 dark:bg-dracula-line text-gray-500 dark:text-dracula-comment"}`}
               >
                 {op}
               </button>
@@ -298,24 +298,24 @@ export default function BuilderPage() {
             />
           ))}
         </div>
-        <button onClick={addExit} className="mt-3 text-xs text-[#ff5555] hover:opacity-70 transition-opacity">
+        <button onClick={addExit} className="mt-3 text-xs text-dracula-red hover:opacity-70 transition-opacity">
           + 조건 추가
         </button>
       </Card>
 
       {/* 포지션 사이징 */}
       <Card className="p-5" outerClassName="mb-8">
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2] mb-4">포지션 사이징</h2>
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-dracula-fg mb-4">포지션 사이징</h2>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-500 dark:text-[#6272a4]">1회 매수에 총 자본의</span>
+          <span className="text-sm text-gray-500 dark:text-dracula-comment">1회 매수에 총 자본의</span>
           <input
             type="number"
             value={positionPct}
             onChange={e => setPositionPct(+e.target.value)}
             min={1} max={100}
-            className="w-20 rounded-lg bg-white dark:bg-[#282a36] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] px-3 py-1.5 text-sm text-center transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:ring-2 focus:ring-[#bd93f9]/50"
+            className="w-20 rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg px-3 py-1.5 text-sm text-center transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
           />
-          <span className="text-sm text-gray-500 dark:text-[#6272a4]">% 사용</span>
+          <span className="text-sm text-gray-500 dark:text-dracula-comment">% 사용</span>
         </div>
       </Card>
 
@@ -323,7 +323,7 @@ export default function BuilderPage() {
       <button
         onClick={() => saveMutation.mutate()}
         disabled={!name.trim() || entry.length === 0 || exit.length === 0 || saveMutation.isPending}
-        className="w-full py-3 rounded-xl bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100"
+        className="w-full py-3 rounded-xl bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100"
       >
         {saveMutation.isPending ? "저장 중..." : "룰셋 저장 →"}
       </button>

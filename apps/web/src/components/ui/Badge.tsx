@@ -9,11 +9,11 @@ interface BadgeProps {
 }
 
 const VARIANTS: Record<BadgeVariant, string> = {
-  up: "bg-[#0ecb81]/15 text-[#0ecb81] border border-[#0ecb81]/30",
-  down: "bg-[#f6465d]/15 text-[#f6465d] border border-[#f6465d]/30",
-  neutral: "bg-gray-100 text-gray-700 border border-gray-300 dark:bg-[#44475a] dark:text-[#f8f8f2] dark:border-[#6272a4]/30",
-  info: "bg-[#8be9fd]/15 text-[#8be9fd] border border-[#8be9fd]/30",
-  purple: "bg-[#bd93f9]/15 text-[#bd93f9] border border-[#bd93f9]/30",
+  up: "bg-market-up/15 text-market-up border border-market-up/30",
+  down: "bg-market-down/15 text-market-down border border-market-down/30",
+  neutral: "bg-gray-100 text-gray-700 border border-gray-300 dark:bg-dracula-line dark:text-dracula-fg dark:border-dracula-comment/30",
+  info: "bg-dracula-cyan/15 text-dracula-cyan border border-dracula-cyan/30",
+  purple: "bg-dracula-purple/15 text-dracula-purple border border-dracula-purple/30",
 };
 
 export function Badge({ variant = "neutral", children, className }: BadgeProps) {

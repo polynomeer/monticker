@@ -24,10 +24,10 @@ interface BacktestResult {
 }
 
 const RELIABILITY_COLOR: Record<string, string> = {
-  A: "text-[#50fa7b] border-[#50fa7b]",
-  B: "text-[#bd93f9] border-[#bd93f9]",
-  C: "text-[#ffb86c] border-[#ffb86c]",
-  D: "text-[#ff5555] border-[#ff5555]",
+  A: "text-dracula-green border-dracula-green",
+  B: "text-dracula-purple border-dracula-purple",
+  C: "text-dracula-orange border-dracula-orange",
+  D: "text-dracula-red border-dracula-red",
 };
 
 const STOCKS = [
@@ -49,9 +49,9 @@ function fmt(n: number | null | undefined, suffix = "%", digits = 2) {
 
 function MetricCard({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
-    <div className="p-3 rounded-lg bg-gray-50 dark:bg-[#282a36] border border-gray-200 dark:border-[#44475a]">
-      <p className="text-xs text-gray-500 dark:text-[#6272a4] mb-1">{label}</p>
-      <p className={`text-base font-bold tabular-nums ${highlight ? "text-blue-600 dark:text-[#bd93f9]" : "text-gray-900 dark:text-[#f8f8f2]"}`}>{value}</p>
+    <div className="p-3 rounded-lg bg-gray-50 dark:bg-dracula-bg border border-gray-200 dark:border-dracula-line">
+      <p className="text-xs text-gray-500 dark:text-dracula-comment mb-1">{label}</p>
+      <p className={`text-base font-bold tabular-nums ${highlight ? "text-blue-600 dark:text-dracula-purple" : "text-gray-900 dark:text-dracula-fg"}`}>{value}</p>
     </div>
   );
 }
@@ -106,8 +106,8 @@ export default function QuantLabDetailPage() {
     onError: (e: Error) => toast({ type: "error", title: "백테스트 실패", message: e.message }),
   });
 
-  if (rsLoading) return <div className="p-8 text-gray-500 dark:text-[#6272a4]">로딩 중...</div>;
-  if (!ruleSet) return <div className="p-8 text-[#ff5555]">룰셋을 찾을 수 없습니다.</div>;
+  if (rsLoading) return <div className="p-8 text-gray-500 dark:text-dracula-comment">로딩 중...</div>;
+  if (!ruleSet) return <div className="p-8 text-dracula-red">룰셋을 찾을 수 없습니다.</div>;
 
   const latestResult = results[0];
 
@@ -116,13 +116,13 @@ export default function QuantLabDetailPage() {
       {/* 헤더 */}
       <div className="flex items-start justify-between mb-6">
         <div>
-          <button onClick={() => router.push("/quant-lab")} className="text-gray-500 dark:text-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2] text-sm mb-2 block transition-colors">← 보관함</button>
-          <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-[#f8f8f2]">{ruleSet.name}</h1>
-          {ruleSet.description && <p className="text-sm text-gray-500 dark:text-[#6272a4] mt-1">{ruleSet.description}</p>}
+          <button onClick={() => router.push("/quant-lab")} className="text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg text-sm mb-2 block transition-colors">← 보관함</button>
+          <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-dracula-fg">{ruleSet.name}</h1>
+          {ruleSet.description && <p className="text-sm text-gray-500 dark:text-dracula-comment mt-1">{ruleSet.description}</p>}
         </div>
         <button
           onClick={() => router.push(`/quant-lab/builder?edit=${id}`)}
-          className="px-4 py-2 rounded-lg text-xs font-medium bg-gray-100 dark:bg-[#44475a] text-gray-700 dark:text-[#f8f8f2] hover:bg-gray-200 dark:hover:bg-[#6272a4] active:scale-95 transition-all duration-150"
+          className="px-4 py-2 rounded-lg text-xs font-medium bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg hover:bg-gray-200 dark:hover:bg-dracula-comment active:scale-95 transition-all duration-150"
         >
           룰셋 수정
         </button>
@@ -130,50 +130,50 @@ export default function QuantLabDetailPage() {
 
       {/* 백테스트 실행 패널 */}
       <Card className="p-5" outerClassName="mb-8">
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2] mb-4">백테스트 실행</h2>
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-dracula-fg mb-4">백테스트 실행</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
           <div>
-            <label className="text-xs text-gray-500 dark:text-[#6272a4] mb-1 block">종목</label>
+            <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">종목</label>
             <select
               value={stockId}
               onChange={e => setStockId(+e.target.value)}
-              className="w-full rounded-lg bg-white dark:bg-[#282a36] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] px-3 py-2 text-xs transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:ring-2 focus:ring-[#bd93f9]/50"
+              className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg px-3 py-2 text-xs transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
             >
               {STOCKS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-xs text-gray-500 dark:text-[#6272a4] mb-1 block">시작일</label>
+            <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">시작일</label>
             <input
               type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-              className="w-full rounded-lg bg-white dark:bg-[#282a36] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] px-3 py-2 text-xs transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:ring-2 focus:ring-[#bd93f9]/50"
+              className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg px-3 py-2 text-xs transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
             />
           </div>
           <div>
-            <label className="text-xs text-gray-500 dark:text-[#6272a4] mb-1 block">종료일</label>
+            <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">종료일</label>
             <input
               type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
-              className="w-full rounded-lg bg-white dark:bg-[#282a36] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] px-3 py-2 text-xs transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:ring-2 focus:ring-[#bd93f9]/50"
+              className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg px-3 py-2 text-xs transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
             />
           </div>
           <div>
-            <label className="text-xs text-gray-500 dark:text-[#6272a4] mb-1 block">초기 자본 (원)</label>
+            <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">초기 자본 (원)</label>
             <input
               type="number" value={capital} onChange={e => setCapital(+e.target.value)}
-              className="w-full rounded-lg bg-white dark:bg-[#282a36] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] px-3 py-2 text-xs transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:ring-2 focus:ring-[#bd93f9]/50"
+              className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg px-3 py-2 text-xs transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
             />
           </div>
         </div>
         <button
           onClick={() => runMutation.mutate()}
           disabled={runMutation.isPending}
-          className="w-full py-2.5 rounded-xl bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100 inline-flex items-center justify-center gap-1.5"
+          className="w-full py-2.5 rounded-xl bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100 inline-flex items-center justify-center gap-1.5"
         >
           {runMutation.isPending
             ? <><HourglassMedium size={14} weight="bold" aria-hidden /> 백테스트 실행 중...</>
             : <><Play size={14} weight="fill" aria-hidden /> 백테스트 실행</>}
         </button>
-        <p className="mt-2 text-xs text-gray-500 dark:text-[#6272a4] text-center">
+        <p className="mt-2 text-xs text-gray-500 dark:text-dracula-comment text-center">
           수수료 0.015% + 슬리피지 0.1% 반영 · 과거 성과가 미래 수익을 보장하지 않습니다
         </p>
       </Card>
@@ -182,13 +182,13 @@ export default function QuantLabDetailPage() {
       {latestResult && (
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-4">
-            <h2 className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">최신 백테스트 결과</h2>
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-dracula-fg">최신 백테스트 결과</h2>
             {latestResult.reliabilityScore && (
               <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${RELIABILITY_COLOR[latestResult.reliabilityScore] ?? ""}`}>
                 신뢰도 {latestResult.reliabilityScore}
               </span>
             )}
-            <span className="text-xs text-gray-500 dark:text-[#6272a4] ml-auto">
+            <span className="text-xs text-gray-500 dark:text-dracula-comment ml-auto">
               {latestResult.startDate} ~ {latestResult.endDate}
             </span>
           </div>
@@ -222,21 +222,21 @@ export default function QuantLabDetailPage() {
       {/* 이전 결과 목록 */}
       {results.length > 1 && (
         <div>
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2] mb-3">이전 백테스트 이력</h2>
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-dracula-fg mb-3">이전 백테스트 이력</h2>
           <div className="space-y-2">
             {results.slice(1).map((r: BacktestResult) => (
-              <div key={r.id} className="flex items-center justify-between p-3 rounded-lg bg-white dark:bg-[#21222c] border border-gray-200 dark:border-[#44475a] text-xs">
-                <span className="text-gray-500 dark:text-[#6272a4] tabular-nums">{r.startDate} ~ {r.endDate}</span>
-                <span className={`font-bold tabular-nums ${(r.totalReturn ?? 0) >= 0 ? "text-[#50fa7b]" : "text-[#ff5555]"}`}>
+              <div key={r.id} className="flex items-center justify-between p-3 rounded-lg bg-white dark:bg-dracula-surface border border-gray-200 dark:border-dracula-line text-xs">
+                <span className="text-gray-500 dark:text-dracula-comment tabular-nums">{r.startDate} ~ {r.endDate}</span>
+                <span className={`font-bold tabular-nums ${(r.totalReturn ?? 0) >= 0 ? "text-dracula-green" : "text-dracula-red"}`}>
                   {fmt(r.totalReturn)}
                 </span>
-                <span className="text-gray-500 dark:text-[#6272a4] tabular-nums">MDD {fmt(r.mdd)}</span>
+                <span className="text-gray-500 dark:text-dracula-comment tabular-nums">MDD {fmt(r.mdd)}</span>
                 {r.reliabilityScore && (
                   <span className={`font-bold ${RELIABILITY_COLOR[r.reliabilityScore]}`}>
                     {r.reliabilityScore}
                   </span>
                 )}
-                <span className="text-gray-400 dark:text-[#44475a] tabular-nums">{new Date(r.createdAt).toLocaleDateString("ko-KR")}</span>
+                <span className="text-gray-400 dark:text-dracula-line tabular-nums">{new Date(r.createdAt).toLocaleDateString("ko-KR")}</span>
               </div>
             ))}
           </div>
@@ -244,7 +244,7 @@ export default function QuantLabDetailPage() {
       )}
 
       {results.length === 0 && !resultsLoading && (
-        <div className="text-center py-12 text-gray-500 dark:text-[#6272a4] text-sm border border-dashed border-gray-300 dark:border-[#44475a] rounded-xl">
+        <div className="text-center py-12 text-gray-500 dark:text-dracula-comment text-sm border border-dashed border-gray-300 dark:border-dracula-line rounded-xl">
           아직 백테스트 결과가 없습니다. 위에서 실행해보세요.
         </div>
       )}

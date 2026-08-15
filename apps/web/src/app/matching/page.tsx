@@ -32,11 +32,11 @@ interface SubmitOrderResponse {
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 const STATUS_STYLE: Record<string, string> = {
-  PENDING:          "text-[#ffb86c] bg-[#ffb86c]/10",
-  PARTIALLY_FILLED: "text-[#bd93f9] bg-[#bd93f9]/10",
-  FILLED:           "text-[#50fa7b] bg-[#50fa7b]/10",
-  CANCELLED:        "text-gray-500 bg-gray-100 dark:text-[#6272a4] dark:bg-[#44475a]",
-  REJECTED:         "text-[#ff5555] bg-[#ff5555]/10",
+  PENDING:          "text-dracula-orange bg-dracula-orange/10",
+  PARTIALLY_FILLED: "text-dracula-purple bg-dracula-purple/10",
+  FILLED:           "text-dracula-green bg-dracula-green/10",
+  CANCELLED:        "text-gray-500 bg-gray-100 dark:text-dracula-comment dark:bg-dracula-line",
+  REJECTED:         "text-dracula-red bg-dracula-red/10",
 };
 
 const RULE_LABEL: Record<string, string> = {
@@ -51,21 +51,21 @@ function won(n: number) { return n.toLocaleString("ko-KR"); }
 function RiskPreview({ result }: { result: RiskCheckResult }) {
   return (
     <div className={`mt-3 p-3 rounded-xl border text-xs space-y-2 animate-fade-up
-      ${result.approved ? "border-[#50fa7b]/30 bg-[#50fa7b]/5" : "border-[#ff5555]/30 bg-[#ff5555]/5"}`}>
+      ${result.approved ? "border-dracula-green/30 bg-dracula-green/5" : "border-dracula-red/30 bg-dracula-red/5"}`}>
       <div className="flex items-center gap-2 font-semibold">
         {result.approved
-          ? <CheckCircle size={16} weight="bold" className="text-[#50fa7b]" aria-hidden />
-          : <Prohibit size={16} weight="bold" className="text-[#ff5555]" aria-hidden />}
-        <span className={result.approved ? "text-[#50fa7b]" : "text-[#ff5555]"}>
+          ? <CheckCircle size={16} weight="bold" className="text-dracula-green" aria-hidden />
+          : <Prohibit size={16} weight="bold" className="text-dracula-red" aria-hidden />}
+        <span className={result.approved ? "text-dracula-green" : "text-dracula-red"}>
           {result.approved ? "리스크 한도 통과" : result.blockedBy ?? "리스크 한도 초과"}
         </span>
       </div>
       {result.checks.map(c => (
         <div key={c.rule} className="flex items-center justify-between">
-          <span className={`inline-flex items-center gap-1 ${c.passed ? "text-gray-500 dark:text-[#6272a4]" : "text-[#ff5555] font-medium"}`}>
+          <span className={`inline-flex items-center gap-1 ${c.passed ? "text-gray-500 dark:text-dracula-comment" : "text-dracula-red font-medium"}`}>
             {c.passed ? <Check size={12} weight="bold" aria-hidden /> : <X size={12} weight="bold" aria-hidden />} {RULE_LABEL[c.rule] ?? c.rule}
           </span>
-          <span className={c.passed ? "text-gray-500 dark:text-[#6272a4]" : "text-[#ff5555]"}>{c.detail}</span>
+          <span className={c.passed ? "text-gray-500 dark:text-dracula-comment" : "text-dracula-red"}>{c.detail}</span>
         </div>
       ))}
     </div>
@@ -124,26 +124,26 @@ function OrderForm() {
 
   return (
     <Card className="p-5 space-y-4">
-      <h2 className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2]">주문 입력</h2>
+      <h2 className="text-sm font-semibold text-gray-900 dark:text-dracula-fg">주문 입력</h2>
 
       {/* 종목 + 방향 */}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs text-gray-500 dark:text-[#6272a4] mb-1 block">종목</label>
+          <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">종목</label>
           <select value={stockId} onChange={e => setStockId(+e.target.value)}
-            className="w-full rounded-lg bg-white dark:bg-[#282a36] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-sm px-3 py-2 transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:ring-2 focus:ring-[#bd93f9]/50">
+            className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg text-sm px-3 py-2 transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50">
             {STOCKS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         </div>
         <div>
-          <label className="text-xs text-gray-500 dark:text-[#6272a4] mb-1 block">매수/매도</label>
-          <div className="flex rounded-lg overflow-hidden border border-gray-300 dark:border-[#44475a]">
+          <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">매수/매도</label>
+          <div className="flex rounded-lg overflow-hidden border border-gray-300 dark:border-dracula-line">
             {(["BUY","SELL"] as const).map(s => (
               <button key={s} onClick={() => setSide(s)}
                 className={`flex-1 py-2 text-sm font-semibold transition-colors duration-150
                   ${side === s
                     ? s === "BUY" ? "bg-[#ff5050] text-white" : "bg-[#4a8fd4] text-white"
-                    : "bg-white dark:bg-[#282a36] text-gray-500 dark:text-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2]"}`}>
+                    : "bg-white dark:bg-dracula-bg text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg"}`}>
                 {s === "BUY" ? "매수" : "매도"}
               </button>
             ))}
@@ -154,31 +154,31 @@ function OrderForm() {
       {/* 주문 유형 + 수량 */}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs text-gray-500 dark:text-[#6272a4] mb-1 block">주문 유형</label>
-          <div className="flex rounded-lg overflow-hidden border border-gray-300 dark:border-[#44475a]">
+          <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">주문 유형</label>
+          <div className="flex rounded-lg overflow-hidden border border-gray-300 dark:border-dracula-line">
             {(["MARKET","LIMIT"] as const).map(t => (
               <button key={t} onClick={() => setOrderType(t)}
                 className={`flex-1 py-2 text-xs font-semibold transition-colors duration-150
-                  ${orderType === t ? "bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36]" : "bg-white dark:bg-[#282a36] text-gray-500 dark:text-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2]"}`}>
+                  ${orderType === t ? "bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg" : "bg-white dark:bg-dracula-bg text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg"}`}>
                 {t === "MARKET" ? "시장가" : "지정가"}
               </button>
             ))}
           </div>
         </div>
         <div>
-          <label className="text-xs text-gray-500 dark:text-[#6272a4] mb-1 block">수량</label>
+          <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">수량</label>
           <input type="number" min={1} value={quantity} onChange={e => setQuantity(+e.target.value)}
-            className="w-full rounded-lg bg-white dark:bg-[#282a36] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-sm px-3 py-2 transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:ring-2 focus:ring-[#bd93f9]/50" />
+            className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg text-sm px-3 py-2 transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50" />
         </div>
       </div>
 
       {/* 지정가 입력 */}
       {orderType === "LIMIT" && (
         <div>
-          <label className="text-xs text-gray-500 dark:text-[#6272a4] mb-1 block">지정가 (원)</label>
+          <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">지정가 (원)</label>
           <input type="number" value={limitPrice} onChange={e => setLimitPrice(e.target.value)}
             placeholder="예: 70000"
-            className="w-full rounded-lg bg-white dark:bg-[#282a36] border border-gray-300 dark:border-[#44475a] text-gray-900 dark:text-[#f8f8f2] text-sm px-3 py-2 transition-colors hover:border-gray-400 dark:hover:border-[#6272a4] focus:outline-none focus:ring-2 focus:ring-[#bd93f9]/50" />
+            className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg text-sm px-3 py-2 transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50" />
         </div>
       )}
 
@@ -187,15 +187,15 @@ function OrderForm() {
 
       {/* 체결 결과 */}
       {result && (
-        <div className="p-3 rounded-xl border border-[#50fa7b]/30 bg-[#50fa7b]/5 text-xs space-y-1 animate-fade-up">
-          <p className="font-semibold text-[#50fa7b] inline-flex items-center gap-1.5">
+        <div className="p-3 rounded-xl border border-dracula-green/30 bg-dracula-green/5 text-xs space-y-1 animate-fade-up">
+          <p className="font-semibold text-dracula-green inline-flex items-center gap-1.5">
             <CheckCircle size={14} weight="bold" aria-hidden /> {result.message}
           </p>
-          <p className="text-gray-500 dark:text-[#6272a4]">상태: <span className="text-gray-900 dark:text-[#f8f8f2]">{result.order.status}</span></p>
+          <p className="text-gray-500 dark:text-dracula-comment">상태: <span className="text-gray-900 dark:text-dracula-fg">{result.order.status}</span></p>
           {result.fills.map(f => (
-            <p key={f.id} className="text-gray-500 dark:text-[#6272a4]">
+            <p key={f.id} className="text-gray-500 dark:text-dracula-comment">
               체결: {f.quantity}주 @ {won(f.fillPrice)}원
-              <span className="ml-2 text-[#ff5555]">수수료 {won(f.fee)}원</span>
+              <span className="ml-2 text-dracula-red">수수료 {won(f.fee)}원</span>
             </p>
           ))}
         </div>
@@ -204,7 +204,7 @@ function OrderForm() {
       {/* 버튼 */}
       <div className="grid grid-cols-2 gap-2">
         <button onClick={() => riskCheckMutation.mutate()} disabled={riskCheckMutation.isPending}
-          className="py-2.5 rounded-xl border border-[#bd93f9] text-[#bd93f9] text-sm font-semibold hover:bg-[#bd93f9]/10 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100">
+          className="py-2.5 rounded-xl border border-dracula-purple text-dracula-purple text-sm font-semibold hover:bg-dracula-purple/10 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100">
           {riskCheckMutation.isPending ? "확인 중..." : "리스크 사전 확인"}
         </button>
         <button onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending}
@@ -215,7 +215,7 @@ function OrderForm() {
       </div>
 
       {submitMutation.isError && (
-        <p className="text-xs text-[#ff5555]">{(submitMutation.error as Error).message}</p>
+        <p className="text-xs text-dracula-red">{(submitMutation.error as Error).message}</p>
       )}
     </Card>
   );
@@ -243,7 +243,7 @@ function ActiveOrders() {
   });
 
   if (orders.length === 0) return (
-    <div className="p-4 rounded-xl border border-dashed border-gray-300 dark:border-[#44475a] text-center text-xs text-gray-500 dark:text-[#6272a4]">
+    <div className="p-4 rounded-xl border border-dashed border-gray-300 dark:border-dracula-line text-center text-xs text-gray-500 dark:text-dracula-comment">
       미체결 주문 없음
     </div>
   );
@@ -257,11 +257,11 @@ function ActiveOrders() {
               <span className={`font-bold ${o.side === "BUY" ? "text-[#ff5050]" : "text-[#4a8fd4]"}`}>
                 {o.side === "BUY" ? "매수" : "매도"}
               </span>
-              <span className="text-gray-900 dark:text-[#f8f8f2] tabular-nums">{o.quantity}주</span>
-              {o.limitPrice && <span className="text-gray-500 dark:text-[#6272a4] tabular-nums">@ {won(o.limitPrice)}원</span>}
-              <span className="text-gray-500 dark:text-[#6272a4]">{o.orderType === "MARKET" ? "시장가" : "지정가"}</span>
+              <span className="text-gray-900 dark:text-dracula-fg tabular-nums">{o.quantity}주</span>
+              {o.limitPrice && <span className="text-gray-500 dark:text-dracula-comment tabular-nums">@ {won(o.limitPrice)}원</span>}
+              <span className="text-gray-500 dark:text-dracula-comment">{o.orderType === "MARKET" ? "시장가" : "지정가"}</span>
             </div>
-            <div className="text-gray-500 dark:text-[#6272a4] tabular-nums">
+            <div className="text-gray-500 dark:text-dracula-comment tabular-nums">
               체결 {o.filledQty}/{o.quantity}주
               {o.avgFillPrice && <span className="ml-1">평균 {won(o.avgFillPrice)}원</span>}
             </div>
@@ -272,7 +272,7 @@ function ActiveOrders() {
             </span>
             {(o.status === "PENDING" || o.status === "PARTIALLY_FILLED") && (
               <button onClick={() => cancelMutation.mutate(o.id)}
-                className="text-[#ff5555] hover:opacity-70 active:scale-95 transition-transform font-medium">취소</button>
+                className="text-dracula-red hover:opacity-70 active:scale-95 transition-transform font-medium">취소</button>
             )}
           </div>
         </Card>
@@ -296,8 +296,8 @@ export default function MatchingPage() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 animate-fade-up">
       <div className="mb-6">
-        <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-[#f8f8f2]">체결 엔진</h1>
-        <p className="text-xs text-gray-500 dark:text-[#6272a4] mt-0.5">
+        <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-dracula-fg">체결 엔진</h1>
+        <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">
           CLOB 기반 주문서 — 가격 우선 · 시간 우선 매칭 · 부분체결 · 슬리피지
         </p>
       </div>
@@ -311,14 +311,14 @@ export default function MatchingPage() {
         {/* 우: 주문 현황 + 체결 이력 */}
         <div className="space-y-4">
           <div>
-            <h2 className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2] mb-3">미체결 주문</h2>
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-dracula-fg mb-3">미체결 주문</h2>
             <ActiveOrders />
           </div>
 
           <div>
-            <h2 className="text-sm font-semibold text-gray-900 dark:text-[#f8f8f2] mb-3">최근 체결</h2>
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-dracula-fg mb-3">최근 체결</h2>
             {fills.length === 0 ? (
-              <div className="p-4 rounded-xl border border-dashed border-gray-300 dark:border-[#44475a] text-center text-xs text-gray-500 dark:text-[#6272a4]">
+              <div className="p-4 rounded-xl border border-dashed border-gray-300 dark:border-dracula-line text-center text-xs text-gray-500 dark:text-dracula-comment">
                 체결 내역 없음
               </div>
             ) : (
@@ -329,12 +329,12 @@ export default function MatchingPage() {
                       <span className={`font-bold ${f.side === "BUY" ? "text-[#ff5050]" : "text-[#4a8fd4]"}`}>
                         {f.side === "BUY" ? "매수" : "매도"}
                       </span>
-                      <span className="text-gray-900 dark:text-[#f8f8f2] tabular-nums">{f.quantity}주</span>
-                      <span className="text-gray-500 dark:text-[#6272a4] tabular-nums">@ {won(f.fillPrice)}원</span>
+                      <span className="text-gray-900 dark:text-dracula-fg tabular-nums">{f.quantity}주</span>
+                      <span className="text-gray-500 dark:text-dracula-comment tabular-nums">@ {won(f.fillPrice)}원</span>
                     </div>
                     <div className="text-right">
-                      <p className="text-gray-900 dark:text-[#f8f8f2] tabular-nums">{won(f.amount)}원</p>
-                      <p className="text-gray-500 dark:text-[#6272a4] tabular-nums">수수료 {won(f.fee)}원</p>
+                      <p className="text-gray-900 dark:text-dracula-fg tabular-nums">{won(f.amount)}원</p>
+                      <p className="text-gray-500 dark:text-dracula-comment tabular-nums">수수료 {won(f.fee)}원</p>
                     </div>
                   </Card>
                 ))}

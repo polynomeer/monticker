@@ -53,7 +53,7 @@ export default function PriceCard({ symbol }: Props) {
 
   if (!data || !data.hasData) {
     return (
-      <Card className="p-4 text-[#6272a4] text-sm">
+      <Card className="p-4 text-dracula-comment text-sm">
         시세 데이터 없음 (워커가 실행 중이어야 합니다)
       </Card>
     );
@@ -62,18 +62,18 @@ export default function PriceCard({ symbol }: Props) {
   return (
     <Card className="p-4" hover>
       <div className="flex items-baseline gap-3">
-        <span className="text-3xl font-bold tabular-nums text-gray-900 dark:text-[#f8f8f2]">
+        <span className="text-3xl font-bold tabular-nums text-gray-900 dark:text-dracula-fg">
           {data.price?.toLocaleString()}
         </span>
-        <span className="text-sm text-gray-500 dark:text-[#6272a4]">{symbol}</span>
+        <span className="text-sm text-gray-500 dark:text-dracula-comment">{symbol}</span>
       </div>
       {data.volume && (
-        <p className="text-sm text-gray-500 dark:text-[#6272a4] mt-1 tabular-nums">
+        <p className="text-sm text-gray-500 dark:text-dracula-comment mt-1 tabular-nums">
           거래량 {data.volume.toLocaleString()}
         </p>
       )}
       {data.tradeTime && (
-        <p className="text-xs text-gray-400 dark:text-[#44475a] mt-1">
+        <p className="text-xs text-gray-400 dark:text-dracula-line mt-1">
           {new Date(data.tradeTime).toLocaleTimeString("ko-KR")}
         </p>
       )}

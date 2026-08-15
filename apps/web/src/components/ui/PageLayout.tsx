@@ -21,10 +21,10 @@ export function PageLayout({
         <div className="flex items-start justify-between gap-4 mb-6 sm:mb-8">
           <div>
             {title && (
-              <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-[#f8f8f2]">{title}</h1>
+              <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-dracula-fg">{title}</h1>
             )}
             {subtitle && (
-              <p className="mt-1.5 text-sm text-gray-500 dark:text-[#6272a4]">{subtitle}</p>
+              <p className="mt-1.5 text-sm text-gray-500 dark:text-dracula-comment">{subtitle}</p>
             )}
           </div>
           {actions && <div className="flex-shrink-0">{actions}</div>}

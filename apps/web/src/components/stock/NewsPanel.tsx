@@ -10,7 +10,7 @@ interface Props {
 export default function NewsPanel({ stockId: _stockId }: Props) {
   return (
     <Card className="p-4">
-      <h3 className="font-semibold text-gray-900 dark:text-[#f8f8f2] mb-3">관련 뉴스</h3>
+      <h3 className="font-semibold text-gray-900 dark:text-dracula-fg mb-3">관련 뉴스</h3>
       <EmptyState
         icon={Newspaper}
         title="뉴스 수집 예정"

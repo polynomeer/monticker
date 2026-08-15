@@ -12,7 +12,7 @@ interface Portfolio {
 }
 
 function fmt(n: number) { return n.toLocaleString("ko-KR", { maximumFractionDigits: 0 }); }
-function pnlColor(n: number) { return n > 0 ? "text-[#ff5050]" : n < 0 ? "text-[#4a8fd4]" : "dark:text-[#6272a4]"; }
+function pnlColor(n: number) { return n > 0 ? "text-[#ff5050]" : n < 0 ? "text-[#4a8fd4]" : "dark:text-dracula-comment"; }
 function sign(n: number) { return n > 0 ? "+" : ""; }
 
 export default function PortfolioSnapshot() {
@@ -36,28 +36,28 @@ export default function PortfolioSnapshot() {
   const isActive    = hasHoldings || portfolio.totalPnl !== 0;
 
   if (!isActive) return (
-    <div className="border dark:border-[#44475a] dark:bg-[#282a36] rounded-xl p-4">
+    <div className="border dark:border-dracula-line dark:bg-dracula-bg rounded-xl p-4">
       <div className="flex items-center justify-between mb-2">
-        <h2 className="text-sm font-semibold dark:text-[#f8f8f2]">모의 포트폴리오</h2>
-        <Link href="/portfolio" className="text-[10px] dark:text-[#6272a4] hover:dark:text-[#bd93f9]">자세히 →</Link>
+        <h2 className="text-sm font-semibold dark:text-dracula-fg">모의 포트폴리오</h2>
+        <Link href="/portfolio" className="text-[10px] dark:text-dracula-comment hover:dark:text-dracula-purple">자세히 →</Link>
       </div>
-      <p className="text-xs dark:text-[#6272a4] py-1">
-        초기 자본 ₩{fmt(portfolio.cash)} · <Link href="/portfolio" className="hover:dark:text-[#bd93f9]">투자 시작하기 →</Link>
+      <p className="text-xs dark:text-dracula-comment py-1">
+        초기 자본 ₩{fmt(portfolio.cash)} · <Link href="/portfolio" className="hover:dark:text-dracula-purple">투자 시작하기 →</Link>
       </p>
     </div>
   );
 
   return (
-    <div className="border dark:border-[#44475a] dark:bg-[#282a36] rounded-xl p-4">
+    <div className="border dark:border-dracula-line dark:bg-dracula-bg rounded-xl p-4">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold dark:text-[#f8f8f2]">모의 포트폴리오</h2>
-        <Link href="/portfolio" className="text-[10px] dark:text-[#6272a4] hover:dark:text-[#bd93f9]">자세히 →</Link>
+        <h2 className="text-sm font-semibold dark:text-dracula-fg">모의 포트폴리오</h2>
+        <Link href="/portfolio" className="text-[10px] dark:text-dracula-comment hover:dark:text-dracula-purple">자세히 →</Link>
       </div>
 
       <div className="flex items-end justify-between mb-3">
         <div>
-          <p className="text-xs dark:text-[#6272a4]">총 평가금액</p>
-          <p className="text-xl font-bold dark:text-[#f8f8f2]">₩{fmt(portfolio.totalValue)}</p>
+          <p className="text-xs dark:text-dracula-comment">총 평가금액</p>
+          <p className="text-xl font-bold dark:text-dracula-fg">₩{fmt(portfolio.totalValue)}</p>
         </div>
         <div className="text-right">
           <p className={`text-lg font-bold ${pnlColor(portfolio.totalPnl)}`}>
@@ -73,14 +73,14 @@ export default function PortfolioSnapshot() {
         <div className="space-y-1">
           {portfolio.holdings.slice(0, 3).map((h: { symbol: string; name: string; pnl: number; pnlRate: number }) => (
             <div key={h.symbol} className="flex items-center justify-between text-xs">
-              <span className="dark:text-[#6272a4] truncate max-w-[120px]">{h.name}</span>
+              <span className="dark:text-dracula-comment truncate max-w-[120px]">{h.name}</span>
               <span className={`font-mono font-semibold ${pnlColor(h.pnl)}`}>
                 {sign(h.pnlRate)}{h.pnlRate.toFixed(2)}%
               </span>
             </div>
           ))}
           {portfolio.holdings.length > 3 && (
-            <p className="text-[10px] dark:text-[#44475a]">외 {portfolio.holdings.length - 3}종목</p>
+            <p className="text-[10px] dark:text-dracula-line">외 {portfolio.holdings.length - 3}종목</p>
           )}
         </div>
       )}

@@ -49,11 +49,11 @@ export default function WatchlistPage() {
     }
   };
 
-  if (loading) return <div className="p-6 text-gray-500 dark:text-[#6272a4]">불러오는 중...</div>;
+  if (loading) return <div className="p-6 text-gray-500 dark:text-dracula-comment">불러오는 중...</div>;
 
   return (
     <div className="max-w-2xl mx-auto p-4 sm:p-6 animate-fade-up">
-      <h1 className="text-2xl font-bold tracking-tight mb-6 text-gray-900 dark:text-[#f8f8f2]">관심종목</h1>
+      <h1 className="text-2xl font-bold tracking-tight mb-6 text-gray-900 dark:text-dracula-fg">관심종목</h1>
 
       <form onSubmit={handleCreateGroup} className="flex gap-2 mb-8">
         <input
@@ -61,34 +61,34 @@ export default function WatchlistPage() {
           value={newGroupName}
           onChange={(e) => setNewGroupName(e.target.value)}
           placeholder="새 그룹 이름"
-          className="flex-1 border border-gray-300 rounded-lg px-4 py-2 transition-colors hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-[#282a36] dark:border-[#44475a] dark:text-[#f8f8f2] dark:placeholder-[#6272a4] dark:hover:border-[#6272a4] dark:focus:ring-[#bd93f9]/50"
+          className="flex-1 border border-gray-300 rounded-lg px-4 py-2 transition-colors hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-dracula-bg dark:border-dracula-line dark:text-dracula-fg dark:placeholder-dracula-comment dark:hover:border-dracula-comment dark:focus:ring-dracula-purple/50"
         />
         <button
           type="submit"
-          className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 active:scale-[0.98] transition-all duration-150 dark:bg-[#bd93f9] dark:text-[#282a36] dark:hover:opacity-90"
+          className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 active:scale-[0.98] transition-all duration-150 dark:bg-dracula-purple dark:text-dracula-bg dark:hover:opacity-90"
         >
           그룹 추가
         </button>
       </form>
 
       {groups.length === 0 ? (
-        <p className="text-gray-500 dark:text-[#6272a4] text-center py-8">관심종목 그룹이 없습니다.</p>
+        <p className="text-gray-500 dark:text-dracula-comment text-center py-8">관심종목 그룹이 없습니다.</p>
       ) : (
         <div className="space-y-6">
           {groups.map((group) => (
             <Card key={group.id} className="p-4" hover>
-              <h2 className="font-semibold text-lg mb-3 text-gray-900 dark:text-[#f8f8f2]">{group.name}</h2>
+              <h2 className="font-semibold text-lg mb-3 text-gray-900 dark:text-dracula-fg">{group.name}</h2>
               {group.items.length === 0 ? (
-                <p className="text-gray-400 dark:text-[#6272a4] text-sm">종목이 없습니다.</p>
+                <p className="text-gray-400 dark:text-dracula-comment text-sm">종목이 없습니다.</p>
               ) : (
                 <ul className="space-y-2">
                   {group.items.map((item) => (
-                    <li key={item.id} className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-[#44475a] last:border-0">
+                    <li key={item.id} className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-dracula-line last:border-0">
                       <div>
-                        <span className="font-medium dark:text-[#f8f8f2]">{item.name}</span>
-                        <span className="ml-2 text-sm text-gray-500 dark:text-[#6272a4]">{item.symbol}</span>
+                        <span className="font-medium dark:text-dracula-fg">{item.name}</span>
+                        <span className="ml-2 text-sm text-gray-500 dark:text-dracula-comment">{item.symbol}</span>
                       </div>
-                      {item.memo && <span className="text-xs text-gray-400 dark:text-[#6272a4]">{item.memo}</span>}
+                      {item.memo && <span className="text-xs text-gray-400 dark:text-dracula-comment">{item.memo}</span>}
                     </li>
                   ))}
                 </ul>

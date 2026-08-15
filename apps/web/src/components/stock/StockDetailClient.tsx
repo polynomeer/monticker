@@ -54,8 +54,8 @@ export default function StockDetailClient({ stockId, symbol, stockName }: Props)
             <button key={i.value} onClick={() => setInterval(i.value)}
               className={`text-sm px-3 py-1 rounded transition-all duration-150 active:scale-95 ${
                 interval === i.value
-                  ? "bg-blue-600 dark:bg-[#bd93f9] text-white dark:text-[#282a36] font-semibold"
-                  : "bg-gray-100 dark:bg-[#44475a] text-gray-600 dark:text-[#6272a4] hover:bg-gray-200 dark:hover:bg-[#44475a]/70"
+                  ? "bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg font-semibold"
+                  : "bg-gray-100 dark:bg-dracula-line text-gray-600 dark:text-dracula-comment hover:bg-gray-200 dark:hover:bg-dracula-line/70"
               }`}>{i.label}</button>
           ))}
           <div className="ml-auto flex gap-1">
@@ -67,15 +67,15 @@ export default function StockDetailClient({ stockId, symbol, stockName }: Props)
               <button key={key} onClick={toggle}
                 className={`text-xs px-2 py-1 rounded border transition-all duration-150 active:scale-95 ${
                   state
-                    ? "border-[#bd93f9] text-[#bd93f9] bg-[#bd93f9]/10"
-                    : "border-gray-200 dark:border-[#44475a] text-gray-500 dark:text-[#6272a4] hover:border-gray-300 dark:hover:border-[#6272a4]"
+                    ? "border-dracula-purple text-dracula-purple bg-dracula-purple/10"
+                    : "border-gray-200 dark:border-dracula-line text-gray-500 dark:text-dracula-comment hover:border-gray-300 dark:hover:border-dracula-comment"
                 }`}>{key}</button>
             ))}
           </div>
         </div>
 
         {loading ? (
-          <div className="border border-gray-200 dark:border-[#44475a] rounded-lg h-72 flex items-center justify-center text-gray-400 dark:text-[#6272a4] animate-pulse">
+          <div className="border border-gray-200 dark:border-dracula-line rounded-lg h-72 flex items-center justify-center text-gray-400 dark:text-dracula-comment animate-pulse">
             차트 로딩 중...
           </div>
         ) : (

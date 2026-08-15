@@ -14,10 +14,10 @@ interface RecentEvent {
 }
 
 const EVENT_DOT: Record<string, string> = {
-  PRICE_SPIKE:          "bg-[#0ecb81]",
-  PRICE_DROP:           "bg-[#f6465d]",
-  VOLUME_SURGE:         "bg-[#f1fa8c]",
-  DISCLOSURE_PUBLISHED: "bg-[#bd93f9]",
+  PRICE_SPIKE:          "bg-market-up",
+  PRICE_DROP:           "bg-market-down",
+  VOLUME_SURGE:         "bg-dracula-yellow",
+  DISCLOSURE_PUBLISHED: "bg-dracula-purple",
 };
 
 export default function WatchlistSummary() {
@@ -64,17 +64,17 @@ export default function WatchlistSummary() {
   ) as RecentEvent[]).slice(0, 4);
 
   if (!alertedStocks.length) return (
-    <div className="border dark:border-[#44475a] dark:bg-[#282a36] rounded-xl p-4">
-      <h2 className="text-sm font-semibold dark:text-[#f8f8f2] mb-2">관심종목 동향</h2>
-      <p className="text-xs dark:text-[#6272a4] py-2">관심종목에서 최근 이벤트가 없습니다.</p>
+    <div className="border dark:border-dracula-line dark:bg-dracula-bg rounded-xl p-4">
+      <h2 className="text-sm font-semibold dark:text-dracula-fg mb-2">관심종목 동향</h2>
+      <p className="text-xs dark:text-dracula-comment py-2">관심종목에서 최근 이벤트가 없습니다.</p>
     </div>
   );
 
   return (
-    <div className="border dark:border-[#44475a] dark:bg-[#282a36] rounded-xl p-4">
+    <div className="border dark:border-dracula-line dark:bg-dracula-bg rounded-xl p-4">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold dark:text-[#f8f8f2]">관심종목 동향</h2>
-        <Link href="/watchlist" className="text-[10px] dark:text-[#6272a4] hover:dark:text-[#bd93f9]">전체 보기 →</Link>
+        <h2 className="text-sm font-semibold dark:text-dracula-fg">관심종목 동향</h2>
+        <Link href="/watchlist" className="text-[10px] dark:text-dracula-comment hover:dark:text-dracula-purple">전체 보기 →</Link>
       </div>
       <ul className="space-y-2">
         {alertedStocks.map((event: RecentEvent) => {
@@ -83,13 +83,13 @@ export default function WatchlistSummary() {
           return (
             <li key={event.stockId}>
               <Link href={`/stocks/${stock.symbol}`}
-                className="flex items-center gap-3 hover:dark:bg-[#44475a]/20 rounded-lg px-2 py-1.5 transition-colors">
-                <div className={`w-2 h-2 rounded-full shrink-0 ${EVENT_DOT[event.eventType] ?? "bg-[#6272a4]"}`} />
+                className="flex items-center gap-3 hover:dark:bg-dracula-line/20 rounded-lg px-2 py-1.5 transition-colors">
+                <div className={`w-2 h-2 rounded-full shrink-0 ${EVENT_DOT[event.eventType] ?? "bg-dracula-comment"}`} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium dark:text-[#f8f8f2] truncate">{stock.name}</p>
-                  <p className="text-[10px] dark:text-[#6272a4] truncate">{event.title}</p>
+                  <p className="text-sm font-medium dark:text-dracula-fg truncate">{stock.name}</p>
+                  <p className="text-[10px] dark:text-dracula-comment truncate">{event.title}</p>
                 </div>
-                <span className="text-[10px] dark:text-[#44475a] shrink-0">
+                <span className="text-[10px] dark:text-dracula-line shrink-0">
                   {new Date(event.eventTime).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
                 </span>
               </Link>
