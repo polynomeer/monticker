@@ -224,12 +224,14 @@ export default function BuilderPage() {
         <div className="space-y-3">
           <input
             type="text"
+            aria-label="전략 이름"
             placeholder="전략 이름 (예: 거래량 돌파 단기 전략)"
             value={name}
             onChange={e => setName(e.target.value)}
             className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg placeholder-gray-400 dark:placeholder-dracula-comment px-4 py-2.5 text-sm transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
           />
           <textarea
+            aria-label="전략 설명"
             placeholder="전략 설명 (선택)"
             value={description}
             onChange={e => setDescription(e.target.value)}

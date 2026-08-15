@@ -67,6 +67,7 @@ export default function ReplayPage() {
       {/* 날짜 선택 */}
       <div className="mb-6 flex items-center gap-3">
         <input type="date" value={date} onChange={e => setDate(e.target.value)}
+          aria-label="복기할 날짜"
           className="rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
         />
         <span className="text-xs text-gray-500 dark:text-dracula-comment">선택한 날짜의 투자 기록을 복기합니다</span>

@@ -116,6 +116,7 @@ export default function PortfolioPage() {
           <input
             type="text" value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
+            aria-label="종목 매수 검색"
             placeholder="종목명 또는 티커 검색..."
             className="w-full border border-gray-300 dark:border-dracula-line bg-white dark:bg-dracula-line/30 text-gray-900 dark:text-dracula-fg
                        dark:placeholder-dracula-comment rounded-lg px-4 py-2.5 text-sm

@@ -164,6 +164,7 @@ export default function TradeReceipt({ receipt, onClose }: Props) {
 
             <div className="px-6 pb-5 space-y-3">
               <textarea
+                aria-label="거래 메모"
                 placeholder="메모 (선택)"
                 value={memo}
                 onChange={e => setMemo(e.target.value)}

@@ -45,6 +45,7 @@ export default function StockSearchPage() {
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          aria-label="종목명 또는 티커 검색"
           placeholder="삼성전자, AAPL ..."
           className="flex-1"
         />

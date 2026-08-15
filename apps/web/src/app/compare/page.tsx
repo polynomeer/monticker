@@ -52,6 +52,7 @@ export default function ComparePage() {
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === "Enter" && addSymbol()}
+          aria-label="비교할 종목 코드"
           placeholder="종목 코드 입력 (최대 4개)"
           className="border border-gray-300 dark:border-dracula-line dark:bg-dracula-line dark:text-dracula-fg dark:placeholder-dracula-comment rounded-lg px-4 py-2 text-sm w-52 transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:focus:ring-dracula-purple/50"
         />

@@ -175,8 +175,8 @@ function OrderForm() {
       {/* 지정가 입력 */}
       {orderType === "LIMIT" && (
         <div>
-          <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">지정가 (원)</label>
-          <input type="number" value={limitPrice} onChange={e => setLimitPrice(e.target.value)}
+          <label htmlFor="limit-price" className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">지정가 (원)</label>
+          <input id="limit-price" type="number" value={limitPrice} onChange={e => setLimitPrice(e.target.value)}
             placeholder="예: 70000"
             className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg text-sm px-3 py-2 transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50" />
         </div>

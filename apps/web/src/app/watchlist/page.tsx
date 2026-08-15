@@ -60,6 +60,7 @@ export default function WatchlistPage() {
           type="text"
           value={newGroupName}
           onChange={(e) => setNewGroupName(e.target.value)}
+          aria-label="새 관심종목 그룹 이름"
           placeholder="새 그룹 이름"
           className="flex-1 border border-gray-300 rounded-lg px-4 py-2 transition-colors hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-dracula-bg dark:border-dracula-line dark:text-dracula-fg dark:placeholder-dracula-comment dark:hover:border-dracula-comment dark:focus:ring-dracula-purple/50"
         />

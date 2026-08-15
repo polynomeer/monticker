@@ -80,8 +80,9 @@ function PayoutModal({ available, onClose, onSubmit }: {
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="text-xs text-gray-500 dark:text-dracula-comment block mb-1">출금 금액 (원)</label>
+            <label htmlFor="payout-amount" className="text-xs text-gray-500 dark:text-dracula-comment block mb-1">출금 금액 (원)</label>
             <input
+              id="payout-amount"
               type="number"
               required
               min={10000}
@@ -93,8 +94,9 @@ function PayoutModal({ available, onClose, onSubmit }: {
             />
           </div>
           <div>
-            <label className="text-xs text-gray-500 dark:text-dracula-comment block mb-1">은행명</label>
+            <label htmlFor="payout-bank" className="text-xs text-gray-500 dark:text-dracula-comment block mb-1">은행명</label>
             <input
+              id="payout-bank"
               type="text"
               required
               value={form.bankName}
@@ -104,8 +106,9 @@ function PayoutModal({ available, onClose, onSubmit }: {
             />
           </div>
           <div>
-            <label className="text-xs text-gray-500 dark:text-dracula-comment block mb-1">계좌번호</label>
+            <label htmlFor="payout-account" className="text-xs text-gray-500 dark:text-dracula-comment block mb-1">계좌번호</label>
             <input
+              id="payout-account"
               type="text"
               required
               value={form.accountNumber}
@@ -115,8 +118,9 @@ function PayoutModal({ available, onClose, onSubmit }: {
             />
           </div>
           <div>
-            <label className="text-xs text-gray-500 dark:text-dracula-comment block mb-1">예금주</label>
+            <label htmlFor="payout-holder" className="text-xs text-gray-500 dark:text-dracula-comment block mb-1">예금주</label>
             <input
+              id="payout-holder"
               type="text"
               required
               value={form.accountHolder}

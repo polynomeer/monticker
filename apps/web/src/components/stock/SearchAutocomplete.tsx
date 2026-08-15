@@ -42,6 +42,7 @@ export default function SearchAutocomplete() {
         value={query}
         onChange={e => setQuery(e.target.value)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
+        aria-label="종목 검색"
         placeholder="종목 검색..."
         className="border border-gray-300 dark:border-dracula-line rounded-lg px-3 py-1.5 text-sm w-48
                    bg-white dark:bg-dracula-line
