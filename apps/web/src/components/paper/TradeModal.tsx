@@ -104,7 +104,11 @@ export default function TradeModal({ stock, currentPrice, side, maxQuantity, onC
             </div>
             <p className="text-xs text-gray-500 dark:text-[#6272a4] mt-0.5">{stock.symbol}</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 dark:text-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2] text-lg transition-colors">✕</button>
+          <button
+            onClick={onClose}
+            aria-label="닫기"
+            className="inline-flex items-center justify-center w-8 h-8 -mr-1.5 -mt-1 text-gray-400 dark:text-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2] text-lg transition-colors"
+          >✕</button>
         </div>
 
         {/* 현재가 */}

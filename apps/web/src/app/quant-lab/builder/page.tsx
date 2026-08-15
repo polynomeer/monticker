@@ -117,7 +117,11 @@ function ConditionRow({ cond, onChange, onRemove }: {
         />
       ) : null}
 
-      <button onClick={onRemove} className="ml-auto text-[#ff5555] text-xs px-2 hover:opacity-70 active:scale-90 transition-transform">✕</button>
+      <button
+        onClick={onRemove}
+        aria-label="조건 삭제"
+        className="ml-auto inline-flex items-center justify-center w-6 h-6 text-[#ff5555] text-xs hover:opacity-70 active:scale-90 transition-transform"
+      >✕</button>
     </div>
   );
 }

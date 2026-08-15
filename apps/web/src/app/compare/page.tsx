@@ -61,7 +61,11 @@ export default function ComparePage() {
         {symbols.map(s => (
           <span key={s} className="flex items-center gap-1 bg-gray-100 dark:bg-[#44475a] px-3 py-1 rounded-full text-sm text-gray-700 dark:text-[#f8f8f2] animate-fade-up">
             {s}
-            <button onClick={() => setSymbols(prev => prev.filter(x => x !== s))} className="text-gray-400 dark:text-[#6272a4] hover:text-gray-600 dark:hover:text-[#f8f8f2] ml-1 transition-colors">×</button>
+            <button
+              onClick={() => setSymbols(prev => prev.filter(x => x !== s))}
+              aria-label={`${s} 비교에서 제거`}
+              className="inline-flex items-center justify-center w-6 h-6 -mr-1.5 ml-0.5 text-gray-400 dark:text-[#6272a4] hover:text-gray-600 dark:hover:text-[#f8f8f2] transition-colors"
+            >×</button>
           </span>
         ))}
       </div>

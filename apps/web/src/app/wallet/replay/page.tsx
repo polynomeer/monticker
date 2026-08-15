@@ -55,7 +55,11 @@ export default function ReplayPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 sm:py-8 animate-fade-up">
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => router.back()} className="text-gray-500 dark:text-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2] text-sm transition-colors active:scale-95 inline-block">←</button>
+        <button
+          onClick={() => router.back()}
+          aria-label="뒤로가기"
+          className="inline-flex items-center justify-center w-8 h-8 -ml-1 text-gray-500 dark:text-[#6272a4] hover:text-gray-900 dark:hover:text-[#f8f8f2] text-sm transition-colors active:scale-95"
+        >←</button>
         <h1 className="text-xl font-bold text-gray-900 dark:text-[#f8f8f2]">주문 리플레이</h1>
       </div>
 

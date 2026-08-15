@@ -36,7 +36,7 @@ export default function ThemeToggle() {
       {/* 라이트/다크 토글 */}
       <button
         onClick={() => setTheme(isDark ? "light" : "dark")}
-        className="flex items-center justify-center w-8 h-8 rounded-lg
+        className="flex items-center justify-center w-9 h-9 rounded-lg
                    border border-gray-300 dark:border-dracula-line
                    bg-white dark:bg-dracula-bg
                    text-gray-600 dark:text-dracula-yellow

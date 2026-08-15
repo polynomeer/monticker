@@ -42,6 +42,16 @@
   }
 }
 
+/* 모션 최소화 선호 사용자 배려 — 애니메이션/트랜지션을 사실상 순간 전환으로 축소 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 @layer utilities {
   .animate-slide-in {
     animation: slideIn 0.2s ease-out both;
