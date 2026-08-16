@@ -3,32 +3,105 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { CaretDown, Bell } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
 import ThemeToggle from "@/components/ThemeToggle";
-import AuthNav from "@/components/AuthNav";
+import AuthNav, { PROFILE_LINKS } from "@/components/AuthNav";
 import SearchAutocomplete from "@/components/stock/SearchAutocomplete";
+import { useAuth } from "@/hooks/useAuth";
 
-const NAV_LINKS = [
-  { href: "/",              label: "스크리너" },
-  { href: "/backtest",      label: "백테스팅" },
-  { href: "/quant-lab",     label: "Quant Lab" },
-  { href: "/matching",      label: "체결엔진" },
-  { href: "/risk",          label: "리스크" },
-  { href: "/analytics",     label: "Analytics" },
-  { href: "/portfolio",     label: "포트폴리오" },
-  { href: "/watchlist",     label: "관심종목" },
-  { href: "/wallet",        label: "지갑" },
-  { href: "/settlement",    label: "정산" },
-  { href: "/subscription",  label: "구독" },
-  { href: "/alerts",        label: "알림" },
+const SCREENER = { href: "/", label: "스크리너" };
+
+const NAV_GROUPS = [
+  {
+    label: "투자 도구",
+    items: [
+      { href: "/quant-lab", label: "Quant Lab" },
+      { href: "/backtest",  label: "백테스팅" },
+      { href: "/matching",  label: "체결엔진" },
+      { href: "/risk",      label: "리스크" },
+      { href: "/analytics", label: "Analytics" },
+    ],
+  },
+  {
+    label: "내 자산",
+    items: [
+      { href: "/portfolio",  label: "포트폴리오" },
+      { href: "/wallet",     label: "지갑" },
+      { href: "/watchlist",  label: "관심종목" },
+      { href: "/settlement", label: "정산" },
+    ],
+  },
 ];
+
+function isActiveHref(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(href + "/");
+}
+
+function NavGroupButton({
+  group, pathname, open, onToggle,
+}: {
+  group: typeof NAV_GROUPS[number];
+  pathname: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const active = group.items.some(i => isActiveHref(pathname, i.href));
+  return (
+    <div className="relative">
+      <button
+        onClick={onToggle}
+        aria-expanded={open}
+        className={cn(
+          "relative flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-300 ease-spring whitespace-nowrap",
+          active
+            ? "text-gray-900 dark:text-dracula-fg bg-gray-100 dark:bg-dracula-purple/15 font-semibold"
+            : "text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg hover:bg-gray-50 dark:hover:bg-dracula-line/30"
+        )}
+      >
+        {group.label}
+        <CaretDown size={12} weight="bold" className={cn("transition-transform duration-200", open && "rotate-180")} aria-hidden />
+        {active && (
+          <span className="absolute left-3 right-3 -bottom-[1px] h-[2px] rounded-full bg-blue-600 dark:bg-dracula-purple animate-pop-in" />
+        )}
+      </button>
+
+      {open && (
+        <Card outerClassName="absolute left-0 top-full mt-2 w-44 animate-pop-in z-50" className="overflow-hidden">
+          <div className="py-1">
+            {group.items.map(({ href, label }) => {
+              const itemActive = isActiveHref(pathname, href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={cn(
+                    "block px-4 py-2.5 text-sm transition-colors",
+                    itemActive
+                      ? "text-gray-900 dark:text-dracula-fg bg-gray-50 dark:bg-dracula-purple/15 font-semibold"
+                      : "text-gray-700 dark:text-dracula-fg hover:bg-gray-50 dark:hover:bg-dracula-line/30"
+                  )}
+                >
+                  {label}
+                </Link>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
 
 export default function NavBar() {
   const pathname  = usePathname();
-  const [scrolled,  setScrolled]  = useState(false);
-  const [menuOpen,  setMenuOpen]  = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const { isLoggedIn, logout } = useAuth();
+  const [scrolled,   setScrolled]   = useState(false);
+  const [menuOpen,   setMenuOpen]   = useState(false);
+  const [openGroup,  setOpenGroup]  = useState<string | null>(null);
+  const menuRef  = useRef<HTMLDivElement>(null);
+  const groupsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -46,7 +119,17 @@ export default function NavBar() {
     return () => document.removeEventListener("mousedown", handler);
   }, [menuOpen]);
 
-  useEffect(() => setMenuOpen(false), [pathname]);
+  useEffect(() => {
+    if (!openGroup) return;
+    const handler = (e: MouseEvent) => {
+      if (groupsRef.current && !groupsRef.current.contains(e.target as Node))
+        setOpenGroup(null);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [openGroup]);
+
+  useEffect(() => { setMenuOpen(false); setOpenGroup(null); }, [pathname]);
 
   return (
     <nav className={cn(
@@ -72,28 +155,44 @@ export default function NavBar() {
         </div>
 
         {/* 데스크탑 링크 */}
-        <div className="hidden md:flex items-center gap-0.5 ml-2 min-w-0 overflow-x-auto fade-edge-x [scrollbar-width:thin]">
-          {NAV_LINKS.map(({ href, label }) => {
-            const active = pathname === href || pathname.startsWith(href + "/");
-            return (
-              <Link key={href} href={href}
-                className={cn(
-                  "relative px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-300 ease-spring whitespace-nowrap",
-                  active
-                    ? "text-gray-900 dark:text-dracula-fg bg-gray-100 dark:bg-dracula-purple/15 font-semibold"
-                    : "text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg hover:bg-gray-50 dark:hover:bg-dracula-line/30"
-                )}>
-                {label}
-                {active && (
-                  <span className="absolute left-3 right-3 -bottom-[1px] h-[2px] rounded-full bg-blue-600 dark:bg-dracula-purple animate-pop-in" />
-                )}
-              </Link>
-            );
-          })}
+        <div ref={groupsRef} className="hidden md:flex items-center gap-0.5 ml-2 min-w-0">
+          <Link href={SCREENER.href}
+            className={cn(
+              "relative px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-300 ease-spring whitespace-nowrap",
+              isActiveHref(pathname, SCREENER.href)
+                ? "text-gray-900 dark:text-dracula-fg bg-gray-100 dark:bg-dracula-purple/15 font-semibold"
+                : "text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg hover:bg-gray-50 dark:hover:bg-dracula-line/30"
+            )}>
+            {SCREENER.label}
+            {isActiveHref(pathname, SCREENER.href) && (
+              <span className="absolute left-3 right-3 -bottom-[1px] h-[2px] rounded-full bg-blue-600 dark:bg-dracula-purple animate-pop-in" />
+            )}
+          </Link>
+          {NAV_GROUPS.map(group => (
+            <NavGroupButton
+              key={group.label}
+              group={group}
+              pathname={pathname}
+              open={openGroup === group.label}
+              onToggle={() => setOpenGroup(v => (v === group.label ? null : group.label))}
+            />
+          ))}
         </div>
 
-        {/* 우측 — ThemeToggle + AuthNav */}
+        {/* 우측 — 알림 + ThemeToggle + AuthNav */}
         <div className="ml-auto flex items-center gap-2">
+          <Link
+            href="/alerts"
+            aria-label="알림"
+            className={cn(
+              "flex items-center justify-center w-9 h-9 rounded-lg border transition-all duration-300 ease-spring active:scale-95",
+              isActiveHref(pathname, "/alerts")
+                ? "border-blue-600 dark:border-dracula-purple text-blue-600 dark:text-dracula-purple bg-blue-50 dark:bg-dracula-purple/15"
+                : "border-gray-300 dark:border-dracula-line text-gray-600 dark:text-dracula-comment bg-white dark:bg-dracula-bg hover:text-gray-900 dark:hover:text-dracula-fg hover:border-gray-400 dark:hover:border-dracula-comment"
+            )}
+          >
+            <Bell size={17} weight="bold" aria-hidden />
+          </Link>
           <ThemeToggle />
           <div className="hidden md:block">
             <AuthNav />
@@ -117,7 +216,7 @@ export default function NavBar() {
 
             {menuOpen && (
               <Card
-                outerClassName="absolute right-0 top-full mt-2 w-56 animate-pop-in"
+                outerClassName="absolute right-0 top-full mt-2 w-64 animate-pop-in"
                 className="overflow-hidden"
               >
                 {/* 모바일 검색 */}
@@ -126,25 +225,60 @@ export default function NavBar() {
                 </div>
                 {/* 모바일 링크 */}
                 <div className="max-h-[60vh] overflow-y-auto">
-                  {NAV_LINKS.map(({ href, label }, i) => {
-                    const active = pathname === href || pathname.startsWith(href + "/");
-                    return (
-                      <Link key={href} href={href}
-                        style={{ animationDelay: `${i * 30}ms` }}
-                        className={cn(
-                          "block px-4 py-3 text-sm transition-colors animate-fade-up",
-                          active
-                            ? "text-gray-900 dark:text-dracula-fg bg-gray-50 dark:bg-dracula-purple/15 font-semibold"
-                            : "text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg hover:bg-gray-50 dark:hover:bg-dracula-line/30"
-                        )}>
-                        {label}
-                      </Link>
-                    );
-                  })}
+                  <Link href={SCREENER.href}
+                    className={cn(
+                      "block px-4 py-3 text-sm transition-colors animate-fade-up",
+                      isActiveHref(pathname, SCREENER.href)
+                        ? "text-gray-900 dark:text-dracula-fg bg-gray-50 dark:bg-dracula-purple/15 font-semibold"
+                        : "text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg hover:bg-gray-50 dark:hover:bg-dracula-line/30"
+                    )}>
+                    {SCREENER.label}
+                  </Link>
+
+                  {NAV_GROUPS.map(group => (
+                    <div key={group.label}>
+                      <p className="px-4 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-dracula-comment/70">
+                        {group.label}
+                      </p>
+                      {group.items.map(({ href, label }, i) => {
+                        const active = isActiveHref(pathname, href);
+                        return (
+                          <Link key={href} href={href}
+                            style={{ animationDelay: `${i * 30}ms` }}
+                            className={cn(
+                              "block px-4 py-3 text-sm transition-colors animate-fade-up",
+                              active
+                                ? "text-gray-900 dark:text-dracula-fg bg-gray-50 dark:bg-dracula-purple/15 font-semibold"
+                                : "text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg hover:bg-gray-50 dark:hover:bg-dracula-line/30"
+                            )}>
+                            {label}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ))}
                 </div>
-                {/* 모바일 AuthNav */}
-                <div className="px-4 py-3 border-t border-gray-100 dark:border-dracula-line">
-                  <AuthNav />
+                {/* 모바일 프로필 */}
+                <div className="border-t border-gray-100 dark:border-dracula-line py-1">
+                  {isLoggedIn ? (
+                    <>
+                      {PROFILE_LINKS.map(({ href, label, icon: Icon }) => (
+                        <Link key={href} href={href}
+                          className="flex items-center gap-2.5 px-4 py-3 text-sm text-gray-700 dark:text-dracula-fg hover:bg-gray-50 dark:hover:bg-dracula-line/30 transition-colors">
+                          <Icon size={16} weight="bold" aria-hidden />
+                          {label}
+                        </Link>
+                      ))}
+                      <button onClick={logout}
+                        className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-market-down hover:bg-gray-50 dark:hover:bg-dracula-line/30 transition-colors text-left">
+                        로그아웃
+                      </button>
+                    </>
+                  ) : (
+                    <div className="px-4 py-3">
+                      <AuthNav />
+                    </div>
+                  )}
                 </div>
               </Card>
             )}
