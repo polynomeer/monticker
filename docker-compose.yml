@@ -63,6 +63,15 @@ services:
       timeout: 5s
       retries: 5
 
+  # 로컬 개발용 SMTP 캐처 — 실제 발송 없이 http://localhost:8025 에서 이메일 미리보기
+  # (이메일 인증 / 비밀번호 재설정 링크 테스트용, 운영에는 사용하지 않음)
+  mailhog:
+    image: mailhog/mailhog
+    container_name: monticker-mailhog
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI
+
   api:
     build:
       context: ./backend/api
@@ -76,6 +85,11 @@ services:
       DB_PASSWORD: monticker
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      # 기본값은 로컬 mailhog 캐처를 가리킴 — 실제 발송하려면 .env 등으로 덮어쓸 것
+      MAIL_HOST: ${MAIL_HOST:-mailhog}
+      MAIL_PORT: ${MAIL_PORT:-1025}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       # Pinpoint agent 활성화 (--profile pinpoint 와 함께 사용)

@@ -62,6 +62,22 @@ docs/           Product, architecture, decisions
 | `NAVER_CLIENT_ID` | | — | 네이버 애플리케이션 Client ID |
 | `NAVER_CLIENT_SECRET` | | — | 네이버 애플리케이션 Client Secret |
 
+### 이메일(인증/비밀번호 재설정) 로컬 테스트
+
+`MAIL_USERNAME`/`MAIL_PASSWORD` 없이 로컬에서 `./gradlew bootRun`으로 API를 띄우면
+실제 이메일이 발송되지 않고 실패가 조용히 로그로만 남습니다 — 발송 자체를 확인할 방법이 없습니다.
+
+`docker-compose.yml`에 로컬 전용 SMTP 캐처([MailHog](https://github.com/mailhog/MailHog))가 포함되어 있습니다:
+
+```bash
+docker compose up -d mailhog
+MAIL_HOST=localhost MAIL_PORT=1025 ./gradlew bootRun   # backend/api 디렉터리에서
+```
+
+이메일 인증/비밀번호 재설정을 요청하면 실제 발송 없이 http://localhost:8025 에서
+그대로 확인할 수 있습니다. `docker compose --profile full` 로 `api` 컨테이너까지 띄우는
+경우엔 이미 `MAIL_HOST=mailhog`가 기본값으로 연결되어 있어 별도 설정이 필요 없습니다.
+
 ## Docs
 
 - [Product](docs/product.md)
