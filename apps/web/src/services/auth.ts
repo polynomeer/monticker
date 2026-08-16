@@ -1,5 +1,11 @@
 const API = "";
 
+export const AUTH_CHANGED_EVENT = "auth-changed";
+
+function notifyAuthChanged() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
+}
+
 export interface AuthTokens {
   accessToken: string;
   refreshToken: string;
@@ -60,6 +66,7 @@ export async function resetPassword(token: string, newPassword: string): Promise
 export function saveTokens(tokens: AuthTokens) {
   localStorage.setItem("accessToken", tokens.accessToken);
   localStorage.setItem("refreshToken", tokens.refreshToken);
+  notifyAuthChanged();
 }
 
 export function getAccessToken(): string | null {
@@ -69,4 +76,5 @@ export function getAccessToken(): string | null {
 export function clearTokens() {
   localStorage.removeItem("accessToken");
   localStorage.removeItem("refreshToken");
+  notifyAuthChanged();
 }
