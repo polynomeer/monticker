@@ -35,6 +35,28 @@ export async function refreshTokens(refreshToken: string): Promise<AuthTokens> {
   return res.json();
 }
 
+export async function forgotPassword(email: string): Promise<string> {
+  const res = await fetch(`${API}/api/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.message ?? "요청에 실패했습니다.");
+  return data?.message ?? "등록된 이메일이라면 재설정 링크를 발송했습니다.";
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<string> {
+  const res = await fetch(`${API}/api/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, newPassword }),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.message ?? "비밀번호 재설정에 실패했습니다.");
+  return data?.message ?? "비밀번호가 변경되었습니다.";
+}
+
 export function saveTokens(tokens: AuthTokens) {
   localStorage.setItem("accessToken", tokens.accessToken);
   localStorage.setItem("refreshToken", tokens.refreshToken);
