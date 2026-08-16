@@ -86,10 +86,11 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       # 기본값은 로컬 mailhog 캐처를 가리킴 — 실제 발송하려면 .env 등으로 덮어쓸 것
+      # (smtp.auth=true가 고정값이라 MailHog 대상이어도 자격증명 문자열 자체는 있어야 함)
       MAIL_HOST: ${MAIL_HOST:-mailhog}
       MAIL_PORT: ${MAIL_PORT:-1025}
-      MAIL_USERNAME: ${MAIL_USERNAME:-}
-      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_USERNAME: ${MAIL_USERNAME:-test}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-test}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       # Pinpoint agent 활성화 (--profile pinpoint 와 함께 사용)

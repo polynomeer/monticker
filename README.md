@@ -71,8 +71,12 @@ docs/           Product, architecture, decisions
 
 ```bash
 docker compose up -d mailhog
-MAIL_HOST=localhost MAIL_PORT=1025 ./gradlew bootRun   # backend/api 디렉터리에서
+MAIL_HOST=localhost MAIL_PORT=1025 MAIL_USERNAME=test MAIL_PASSWORD=test ./gradlew bootRun   # backend/api 디렉터리에서
 ```
+
+> `application.yml`의 `spring.mail.properties.mail.smtp.auth`가 `true`로 고정돼 있어서,
+> `MAIL_USERNAME`/`MAIL_PASSWORD`를 비워두면 MailHog가 자격증명을 검사하지 않는데도
+> "Authentication failed"로 발송이 실패합니다. 값은 아무 문자열이나 넣으면 됩니다.
 
 이메일 인증/비밀번호 재설정을 요청하면 실제 발송 없이 http://localhost:8025 에서
 그대로 확인할 수 있습니다. `docker compose --profile full` 로 `api` 컨테이너까지 띄우는
