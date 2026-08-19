@@ -351,12 +351,38 @@ PR review pattern:
 .github/workflows/
 ├── backend-ci.yml    # triggered on backend/** changes
 ├── web-ci.yml        # triggered on apps/web/** and packages/** changes
+├── e2e-ci.yml         # triggered on backend/api/**, apps/web/**, packages/** changes
 ├── mobile-ci.yml     # triggered on apps/mobile/** changes
-└── claude.yml        # Claude Code GitHub Actions
+└── pr-review.yml     # Claude review comment on every PR
 ```
 
-Backend CI runs: `./gradlew test`  
-Web CI runs: `pnpm lint`, `pnpm build`
+Every feature must ship with both a unit test and, when it crosses a real
+boundary (DB, Redis, another service, the browser), an integration test.
+Mocking the boundary you're supposed to be testing defeats the point — see
+`test-engineer.md` and the incident below.
+
+| Layer | Where | Runs against | Command |
+|-------|-------|---------------|---------|
+| Unit | `backend/*/src/test` | Mocks (MockK), no Spring context | `./gradlew test` |
+| Integration (backend) | `backend/*/src/integrationTest` | Real Postgres/Redis via **Testcontainers** — never H2, never mocked | `./gradlew integrationTest` |
+| Unit (web) | `apps/web/src/test` | Vitest + Testing Library, mocked `fetch` | `pnpm test` |
+| Integration (e2e, web) | `apps/web/e2e` | Real Next.js server + real API, driven by **Playwright** | `pnpm test:e2e` |
+
+Backend CI runs `./gradlew test` then `./gradlew integrationTest` per module (api,
+worker, trading-service, quant-engine) — each module has an `integrationTest`
+Gradle source set wired for Testcontainers, even before it has tests in it.
+Web CI runs `pnpm lint`, `pnpm test`, `pnpm build`. e2e-ci boots the real API
+(Postgres + Redis service containers) and the real Next.js server together and
+runs Playwright against them — this is the only layer that catches bugs that
+only exist where the two apps actually meet (e.g. a CSP header blocking the
+API's WebSocket handshake).
+
+> **Why this exists**: a Redis cache serializer bug shipped because every
+> existing test mocked Redis, so nothing ever exercised the real
+> serialize→deserialize round trip. It surfaced as intermittent 500s on
+> screener/regime/pattern/portfolio-optimizer in production use. Fixed in
+> `CacheConfig.kt`, with `CacheConfigIntegrationTest` (real Testcontainers
+> Redis) added specifically so this class of bug fails CI instead of shipping.
 
 ---
 

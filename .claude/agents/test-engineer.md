@@ -16,15 +16,32 @@ You are the test engineer for monticker.
 - **Clock must be injected** in all time-dependent logic so tests can control `Instant.now()`.
 
 ### Integration Tests
-- Target: repository queries, Flyway migrations, Redis interactions.
-- Use **Testcontainers** for PostgreSQL (TimescaleDB image) and Redis.
+- Target: repository queries, Flyway migrations, Redis interactions, cache
+  serializers — anything that crosses into Postgres, Redis, or another
+  process. If the test mocks the thing it's supposed to verify, it's a unit
+  test wearing an integration test's name.
+- Location: `backend/<module>/src/integrationTest/kotlin` (a Gradle source
+  set separate from `src/test`, already wired in every backend module's
+  `build.gradle.kts`). Run with `./gradlew integrationTest`, not `test`.
+- Use **Testcontainers** for PostgreSQL (TimescaleDB image) and Redis
+  (`GenericContainer("redis:7-alpine")`, `@Testcontainers` + `@Container`).
 - Never use H2 or in-memory DB — TimescaleDB-specific SQL will silently fail.
-- Annotate with `@SpringBootTest` + `@ActiveProfiles("test")`.
+- See `backend/api/src/integrationTest/kotlin/.../CacheConfigIntegrationTest.kt`
+  for the reference pattern — it exists because a Redis cache serializer bug
+  shipped past every mocked unit test and only a real Redis round-trip caught it.
 
 ### API Tests
 - Target: controller endpoints, request/response contracts, error handling.
 - Use `MockMvc` or `WebTestClient`.
 - Test: happy path, validation errors (400), auth failures (401/403), not-found (404).
+
+### End-to-End Tests (web)
+- Target: anything that only breaks where the real browser meets the real
+  API — CSP headers, WebSocket/SockJS handshakes, auth redirects, cross-origin
+  behavior. Component-level Vitest tests mock `fetch` and never see these.
+- Location: `apps/web/e2e/*.spec.ts`, run with `pnpm test:e2e` (Playwright).
+  Requires a real API + web server running (see `e2e-ci.yml` for the CI setup,
+  or run against your local `dev.sh` stack with `E2E_BASE_URL=http://localhost:3000`).
 
 ## What Needs Tests
 
