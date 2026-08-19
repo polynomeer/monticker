@@ -1,5 +1,8 @@
 package com.monticker.api.common.cache
 
+import com.fasterxml.jackson.annotation.JsonTypeInfo
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator
 import org.springframework.cache.annotation.EnableCaching
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -22,10 +25,22 @@ import java.time.Duration
  *
  * 기본 직렬화: GenericJackson2JsonRedisSerializer (타입 정보 포함)
  * → Redis 에서 inspect 가능하며 역직렬화 시 클래스 정보 보존.
+ *
+ * 주의:
+ * 1) 인자 없는 GenericJackson2JsonRedisSerializer()는 KotlinModule이 등록되지
+ *    않은 자체 ObjectMapper를 사용해 Kotlin data class 역직렬화 시
+ *    InvalidDefinitionException(no Creators)이 발생한다. 반드시 Spring이 관리하는
+ *    (KotlinModule 등록된) ObjectMapper를 주입해서 사용해야 한다.
+ * 2) ObjectMapper를 받는 생성자는 default typing을 자동으로 켜주지 않는다.
+ *    무인자 생성자와 달리 activateDefaultTyping을 직접 호출하지 않으면 값에
+ *    `@class` 타입 힌트가 실리지 않아, 캐시 조회 시 LinkedHashMap으로
+ *    역직렬화되어 ClassCastException이 발생한다.
  */
 @Configuration
 @EnableCaching
-class CacheConfig {
+class CacheConfig(
+    private val objectMapper: ObjectMapper,
+) {
 
     companion object {
         const val SCREENER            = "screener"
@@ -36,7 +51,14 @@ class CacheConfig {
 
     @Bean
     fun cacheManager(connectionFactory: RedisConnectionFactory): RedisCacheManager {
-        val jsonSerializer = GenericJackson2JsonRedisSerializer()
+        // Kotlin data class는 기본적으로 final이라 NON_FINAL 전략으로는 루트 객체에
+        // 타입 정보가 실리지 않는다(따라서 EVERYTHING을 사용해 항상 @class를 남긴다).
+        val redisMapper = objectMapper.copy().activateDefaultTyping(
+            LaissezFaireSubTypeValidator.instance,
+            ObjectMapper.DefaultTyping.EVERYTHING,
+            JsonTypeInfo.As.PROPERTY,
+        )
+        val jsonSerializer = GenericJackson2JsonRedisSerializer(redisMapper)
         val valueSerializer = RedisSerializationContext.SerializationPair.fromSerializer(jsonSerializer)
         val keySerializer   = RedisSerializationContext.SerializationPair.fromSerializer(StringRedisSerializer())
 
