@@ -42,5 +42,10 @@ jobs:
           java-version: "21"
           cache: gradle
 
-      - name: Run tests — ${{ matrix.module }}
+      - name: Unit tests — ${{ matrix.module }}
         run: cd backend/${{ matrix.module }} && ./gradlew test
+
+      # 실제 Postgres/Redis 컨테이너(Testcontainers)로 목킹 없이 검증한다.
+      # GitHub-hosted 러너는 Docker가 기본 설치돼 있어 별도 설정이 필요 없다.
+      - name: Integration tests — ${{ matrix.module }}
+        run: cd backend/${{ matrix.module }} && ./gradlew integrationTest

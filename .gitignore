@@ -57,6 +57,7 @@ logs/
 
 # ── Test / Coverage ───────────────────────────────────────────
 **/test-results/
+**/playwright-report/
 **/jacoco/
 coverage/
 .nyc_output/
