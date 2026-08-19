@@ -17,7 +17,7 @@ describe("AlertPanel", () => {
 
     render(<AlertPanel stockId={1} symbol="005930" />);
 
-    const input = screen.getByPlaceholderText(/목표가/i);
+    const input = screen.getByPlaceholderText(/기준 가격/i);
     await userEvent.type(input, "80000");
     fireEvent.submit(input.closest("form")!);
 
@@ -43,8 +43,8 @@ describe("AlertPanel", () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 500 } as Response);
 
     render(<AlertPanel stockId={1} symbol="005930" />);
-    await userEvent.type(screen.getByPlaceholderText(/목표가/i), "80000");
-    fireEvent.submit(screen.getByPlaceholderText(/목표가/i).closest("form")!);
+    await userEvent.type(screen.getByPlaceholderText(/기준 가격/i), "80000");
+    fireEvent.submit(screen.getByPlaceholderText(/기준 가격/i).closest("form")!);
 
     await waitFor(() => expect(mockToast).toHaveBeenCalledWith(
       expect.objectContaining({ type: "error" })
@@ -55,8 +55,8 @@ describe("AlertPanel", () => {
     mockFetch.mockRejectedValueOnce(new Error("network fail"));
 
     render(<AlertPanel stockId={1} symbol="005930" />);
-    await userEvent.type(screen.getByPlaceholderText(/목표가/i), "80000");
-    fireEvent.submit(screen.getByPlaceholderText(/목표가/i).closest("form")!);
+    await userEvent.type(screen.getByPlaceholderText(/기준 가격/i), "80000");
+    fireEvent.submit(screen.getByPlaceholderText(/기준 가격/i).closest("form")!);
 
     await waitFor(() => expect(mockToast).toHaveBeenCalledWith(
       expect.objectContaining({ type: "error" })
