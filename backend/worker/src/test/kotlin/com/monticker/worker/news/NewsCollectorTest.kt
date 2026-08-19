@@ -2,6 +2,7 @@ package com.monticker.worker.news
 
 import io.mockk.*
 import org.junit.jupiter.api.Test
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.RowMapper
 
@@ -10,7 +11,9 @@ class NewsCollectorTest {
     private val jdbc = mockk<JdbcTemplate>(relaxed = true)
     private val naverClient = mockk<NaverNewsClient>()
     private val sentimentAnalyzer = mockk<NewsSentimentAnalyzer>(relaxed = true)
-    private val collector = NewsCollector(naverClient, jdbc, sentimentAnalyzer)
+    private val bloomFilter = mockk<NewsBloomFilter>(relaxed = true)
+    private val esOps = mockk<ElasticsearchOperations>(relaxed = true)
+    private val collector = NewsCollector(naverClient, jdbc, sentimentAnalyzer, bloomFilter, esOps)
 
     @Test
     fun `uses mock generator when naver not configured`() {

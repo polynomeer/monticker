@@ -4,15 +4,21 @@ import com.monticker.worker.push.ExpoPushSender
 import io.mockk.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations
+import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.RowMapper
+import org.springframework.mail.javamail.JavaMailSender
 import java.math.BigDecimal
 
 class AlertEvaluatorTest {
 
     private val jdbc = mockk<JdbcTemplate>()
     private val pushSender = mockk<ExpoPushSender>(relaxed = true)
-    private val evaluator = AlertEvaluator(jdbc, pushSender)
+    private val esOps = mockk<ElasticsearchOperations>(relaxed = true)
+    private val redis = mockk<StringRedisTemplate>(relaxed = true)
+    private val mailSender = mockk<JavaMailSender>(relaxed = true)
+    private val evaluator = AlertEvaluator(jdbc, pushSender, esOps, redis, mailSender)
 
     @BeforeEach
     fun setup() {
@@ -39,6 +45,7 @@ class AlertEvaluatorTest {
 
         every { jdbc.query(any<String>(), any<RowMapper<AlertRuleRow>>(), 5L) } returns listOf(rule)
         every { jdbc.queryForObject(match<String> { it.contains("COUNT") }, Int::class.java, rule.id) } returns 0
+        every { redis.opsForValue().setIfAbsent(any(), any(), any<java.time.Duration>()) } returns true
         every {
             jdbc.queryForObject(match<String> { it.contains("RETURNING") }, Long::class.java, *anyVararg())
         } returns 42L

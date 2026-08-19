@@ -2,6 +2,7 @@ package com.monticker.worker.disclosure
 
 import io.mockk.*
 import org.junit.jupiter.api.Test
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.RowMapper
 
@@ -9,7 +10,8 @@ class DisclosureCollectorTest {
 
     private val dartClient = mockk<DartClient>()
     private val jdbc       = mockk<JdbcTemplate>(relaxed = true)
-    private val collector  = DisclosureCollector(dartClient, jdbc)
+    private val esOps      = mockk<ElasticsearchOperations>(relaxed = true)
+    private val collector  = DisclosureCollector(dartClient, jdbc, esOps)
 
     private fun stubStockIds(vararg pairs: Pair<String, Long>) {
         every { jdbc.query(any<String>(), any<RowMapper<Pair<String, Long>>>(), *anyVararg()) } returns
@@ -21,6 +23,7 @@ class DisclosureCollectorTest {
         every { dartClient.isConfigured } returns false
         stubStockIds("005930" to 1L, "000660" to 2L, "035420" to 3L, "005380" to 4L, "051910" to 5L)
         every { jdbc.queryForObject(any<String>(), eq(Int::class.java), *anyVararg()) } returns 0
+        every { jdbc.queryForObject(any<String>(), eq(Long::class.java), *anyVararg()) } returns 100L
 
         collector.collect()
 
@@ -58,6 +61,7 @@ class DisclosureCollectorTest {
         )
         stubStockIds("005930" to 1L)
         every { jdbc.queryForObject(any<String>(), eq(Int::class.java), *anyVararg()) } returns 0
+        every { jdbc.queryForObject(any<String>(), eq(Long::class.java), *anyVararg()) } returns 200L
 
         collector.collect()
 

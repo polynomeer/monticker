@@ -8,21 +8,28 @@ import io.mockk.mockk
 import io.mockk.verify
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations
+import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.RowMapper
+import org.springframework.mail.javamail.JavaMailSender
 import java.math.BigDecimal
 
 /**
- * AlertEvaluator 통합 계약 검증.
+ * AlertEvaluator 통합 계약 검증 (mock 기반, 단위 수준).
  *
- * 실제 PostgreSQL(Testcontainers)은 build.gradle.kts에 testcontainers 의존성이 없어
- * 단위 수준에서 전체 흐름을 검증한다. 실제 DB 통합은 별도 @IntegrationTest 슈트로 분리한다.
+ * TODO: build.gradle.kts에 추가된 `integrationTest` 소스셋으로 옮기고 실제
+ * Postgres/Redis Testcontainers를 사용하는 진짜 통합 테스트로 교체한다.
+ * (test-engineer.md 참고: "Never mock the database in integration tests.")
  */
 class AlertEvaluatorIntegrationTest {
 
     private val jdbc = mockk<JdbcTemplate>()
     private val pushSender = mockk<ExpoPushSender>(relaxed = true)
-    private val evaluator = AlertEvaluator(jdbc, pushSender)
+    private val esOps = mockk<ElasticsearchOperations>(relaxed = true)
+    private val redis = mockk<StringRedisTemplate>(relaxed = true)
+    private val mailSender = mockk<JavaMailSender>(relaxed = true)
+    private val evaluator = AlertEvaluator(jdbc, pushSender, esOps, redis, mailSender)
 
     @BeforeEach
     fun setup() {
@@ -41,6 +48,7 @@ class AlertEvaluatorIntegrationTest {
 
         every { jdbc.query(any<String>(), any<RowMapper<AlertRuleRow>>(), 1L) } returns listOf(rule)
         every { jdbc.queryForObject(any<String>(), Int::class.java, rule.id) } returns 0
+        every { redis.opsForValue().setIfAbsent(any(), any(), any<java.time.Duration>()) } returns true
         every {
             jdbc.queryForObject(any<String>(), Long::class.java, *anyVararg())
         } returns 1L
