@@ -23,8 +23,8 @@ class ScreenerRepository(private val jdbc: JdbcTemplate) {
 
         val orderBy = when (sort) {
             "volume" -> "c.volume DESC"
-            "rise"   -> "(c.close - prev.close) / NULLIF(prev.close, 0) DESC NULLS LAST"
-            "fall"   -> "(c.close - prev.close) / NULLIF(prev.close, 0) ASC NULLS LAST"
+            "rise"   -> "(c.close - prev.close) / NULLIF(prev.close, 0) DESC"
+            "fall"   -> "(c.close - prev.close) / NULLIF(prev.close, 0) ASC"
             else     -> "(c.close * c.volume) DESC"
         }
 
@@ -103,8 +103,8 @@ class ScreenerRepository(private val jdbc: JdbcTemplate) {
         val placeholders = stockIds.joinToString(",") { "?" }
         val orderBy = when (sort) {
             "volume" -> "c.volume DESC"
-            "rise"   -> "(c.close - prev.close) / NULLIF(prev.close, 0) DESC NULLS LAST"
-            "fall"   -> "(c.close - prev.close) / NULLIF(prev.close, 0) ASC NULLS LAST"
+            "rise"   -> "(c.close - prev.close) / NULLIF(prev.close, 0) DESC"
+            "fall"   -> "(c.close - prev.close) / NULLIF(prev.close, 0) ASC"
             else     -> "(c.close * c.volume) DESC"
         }
         val sql = """
