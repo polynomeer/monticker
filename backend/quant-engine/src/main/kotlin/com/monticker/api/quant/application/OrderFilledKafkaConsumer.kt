@@ -1,5 +1,6 @@
 package com.monticker.api.quant.application
 
+import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.api.matching.events.OrderFilledEvent
 import org.apache.kafka.clients.consumer.ConsumerRecord
@@ -33,7 +34,17 @@ class OrderFilledKafkaConsumer {
     )
     @KafkaListener(topics = ["trading.order-filled"], groupId = "monticker-quant-engine")
     fun onOrderFilled(record: ConsumerRecord<String, String>) {
-        val event = objectMapper.readValue(record.value(), OrderFilledEvent::class.java)
+        val event = try {
+            objectMapper.readValue(record.value(), OrderFilledEvent::class.java)
+        } catch (ex: JsonProcessingException) {
+            // 잘못된 JSON, 누락된 필수 필드 등 역직렬화 실패는 재시도해도 성공할 수 없는
+            // 영구적 오류다 (RetryableTopic이 재시도/DLT로 보내면 낭비이므로) — 삼키고 로그만 남긴다.
+            log.error(
+                "[Quant] OrderFilled 메시지 역직렬화 실패 — 삼키고 무시. topic={} partition={} offset={} key={} payload={}",
+                record.topic(), record.partition(), record.offset(), record.key(), record.value(), ex,
+            )
+            return
+        }
         log.info("[Quant] OrderFilled (Kafka): userId={} stockId={} side={} qty={} price={}",
             event.userId, event.stockId, event.side, event.quantity, event.fillPrice)
         // 향후 RuleSet 실전 검증(live tracking) 로직 추가 지점
