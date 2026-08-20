@@ -53,4 +53,26 @@ describe("LoginPage", () => {
     render(<LoginPage />);
     expect(screen.getByRole("link", { name: "회원가입" })).toHaveAttribute("href", "/signup");
   });
+
+  it("이메일·비밀번호를 비워두고 제출하면 검증 오류를 표시하고 로그인을 호출하지 않는다", async () => {
+    render(<LoginPage />);
+
+    fireEvent.submit(screen.getByRole("button", { name: /로그인/ }));
+
+    expect(await screen.findByText("이메일을 입력해주세요.")).toBeInTheDocument();
+    expect(screen.getByText("비밀번호를 입력해주세요.")).toBeInTheDocument();
+    expect(mockLogin).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it("이메일만 입력하고 제출하면 비밀번호 오류만 표시한다", async () => {
+    render(<LoginPage />);
+
+    await userEvent.type(screen.getByPlaceholderText("이메일"), "user@example.com");
+    fireEvent.submit(screen.getByRole("button", { name: /로그인/ }));
+
+    expect(await screen.findByText("비밀번호를 입력해주세요.")).toBeInTheDocument();
+    expect(screen.queryByText("이메일을 입력해주세요.")).not.toBeInTheDocument();
+    expect(mockLogin).not.toHaveBeenCalled();
+  });
 });

@@ -18,8 +18,8 @@ beforeEach(() => { mockFetch.mockReset(); });
 describe("PriceCard", () => {
   it("정상 시세를 렌더링한다", async () => {
     mockFetch
-      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(searchResult) } as Response)
-      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(priceResult)  } as Response);
+      .mockResolvedValueOnce(await mockOk(searchResult))
+      .mockResolvedValueOnce(await mockOk(priceResult));
 
     render(<PriceCard symbol="005930" />);
     await waitFor(() => expect(screen.getByText("74,000")).toBeInTheDocument());
@@ -28,15 +28,15 @@ describe("PriceCard", () => {
 
   it("데이터 없을 때 안내 문구를 표시한다", async () => {
     mockFetch
-      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(searchResult)  } as Response)
-      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(noPriceResult) } as Response);
+      .mockResolvedValueOnce(await mockOk(searchResult))
+      .mockResolvedValueOnce(await mockOk(noPriceResult));
 
     render(<PriceCard symbol="005930" />);
     await waitFor(() => expect(screen.getByText(/시세 데이터 없음/)).toBeInTheDocument());
   });
 
   it("검색 결과 없으면 시세 데이터 없음 표시", async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) } as Response);
+    mockFetch.mockResolvedValueOnce(await mockOk([]));
 
     render(<PriceCard symbol="UNKNOWN" />);
     await waitFor(() => expect(screen.getByText(/시세 데이터 없음/)).toBeInTheDocument());
