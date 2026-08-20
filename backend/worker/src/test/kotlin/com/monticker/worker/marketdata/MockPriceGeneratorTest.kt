@@ -6,6 +6,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.RowMapper
+import java.sql.ResultSet
 
 class MockPriceGeneratorTest {
 
@@ -24,9 +25,31 @@ class MockPriceGeneratorTest {
     }
 
     @Test
-    fun `generate가 반환하는 틱은 모두 양수 가격이다`() {
-        // stocks가 비어 있으면 빈 리스트 — forEach는 vacuously true
-        val ticks = generator.generate()
-        ticks.forEach { assertThat(it.price).isPositive() }
+    fun `DB에 로드된 종목마다 실제 종목 메타데이터로 양수 가격의 틱을 생성한다`() {
+        // loadStocks()의 RowMapper<StockMeta>가 반환하는 실제 매핑 결과를 모사한다.
+        // StockMeta는 파일 전용(private) 클래스라 테스트에서 직접 만들 수 없으므로,
+        // JdbcTemplate.query에 전달되는 RowMapper 람다를 실제로 호출시켜 프로덕션 매핑 로직을 그대로 태운다.
+        val loadingJdbc = mockk<JdbcTemplate> {
+            every { query(any<String>(), any<RowMapper<Any>>()) } answers {
+                @Suppress("UNCHECKED_CAST")
+                val mapper = secondArg<RowMapper<Any>>()
+                val rs = mockk<ResultSet>()
+                every { rs.getLong("id") } returns 1L
+                every { rs.getString("symbol") } returns "005930"
+                every { rs.getString("market") } returns "KOSPI"
+                listOf(mapper.mapRow(rs, 0))
+            }
+        }
+        val loadedGenerator = MockPriceGenerator(loadingJdbc)
+        loadedGenerator.loadStocks()
+
+        val ticks = loadedGenerator.generate()
+
+        assertThat(ticks).hasSize(1)
+        val tick = ticks.first()
+        assertThat(tick.stockId).isEqualTo(1L)
+        assertThat(tick.symbol).isEqualTo("005930")
+        assertThat(tick.market).isEqualTo("KOSPI")
+        assertThat(tick.price).isPositive()
     }
 }

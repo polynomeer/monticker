@@ -2,7 +2,6 @@ package com.monticker.worker.detector
 
 import com.monticker.worker.marketdata.GeneratedTick
 import io.mockk.*
-import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.data.redis.core.StringRedisTemplate
@@ -33,18 +32,45 @@ class VolumeSurgeDetectorTest {
     }
 
     @Test
-    fun `writes VOLUME_SURGE event when ratio exceeds 3x`() {
+    fun `writes VOLUME_SURGE event with strong-signal score when ratio reaches 5x`() {
         every { ops.get(match<String> { it.contains("ema") }) } returns "3000.0"
         every { ops.set(any(), any()) } just Runs
         every { writer.write(any()) } returns true
 
         detector.detect(makeTick(volume = 15_000)) // 5× EMA
 
-        verify(exactly = 1) { writer.write(match { it.eventType == DetectedEventType.VOLUME_SURGE }) }
+        verify(exactly = 1) {
+            writer.write(match { it.eventType == DetectedEventType.VOLUME_SURGE && it.importanceScore == 85 })
+        }
     }
 
     @Test
-    fun `does not write event when ratio is below 3x`() {
+    fun `writes VOLUME_SURGE exactly at the 3x ratio boundary with meaningful-signal score`() {
+        // ema=1000.0, volume=3000 → ratio=3000.0/1000.0=3.0 정확히 (경계값, 미만이 아니므로 발동)
+        every { ops.get(match<String> { it.contains("ema") }) } returns "1000.0"
+        every { ops.set(any(), any()) } just Runs
+        every { writer.write(any()) } returns true
+
+        detector.detect(makeTick(volume = 3_000))
+
+        verify(exactly = 1) {
+            writer.write(match { it.eventType == DetectedEventType.VOLUME_SURGE && it.importanceScore == 60 })
+        }
+    }
+
+    @Test
+    fun `does not write when ratio is just under the 3x boundary`() {
+        // ema=1000.0, volume=2999 → ratio=2.999 < 3.0 → 미발동
+        every { ops.get(match<String> { it.contains("ema") }) } returns "1000.0"
+        every { ops.set(any(), any()) } just Runs
+
+        detector.detect(makeTick(volume = 2_999))
+
+        verify(exactly = 0) { writer.write(any()) }
+    }
+
+    @Test
+    fun `does not write event when ratio is well below 3x`() {
         every { ops.get(match<String> { it.contains("ema") }) } returns "10000.0"
         every { ops.set(any(), any()) } just Runs
 
