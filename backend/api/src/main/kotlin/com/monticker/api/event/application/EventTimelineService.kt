@@ -42,7 +42,7 @@ class EventTimelineService(
     }
 
     fun getRecentEvents(limit: Int): List<StockEvent> =
-        eventRepository.findTopByOrderByEventTimeDesc(
+        eventRepository.findByOrderByEventTimeDesc(
             org.springframework.data.domain.PageRequest.of(0, limit)
         )
 }

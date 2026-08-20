@@ -28,5 +28,12 @@ interface StockEventRepository : JpaRepository<StockEvent, Long> {
         to: Instant,
     ): Boolean
 
-    fun findTopByOrderByEventTimeDesc(pageable: Pageable): List<StockEvent>
+    // NOTE: deliberately NOT named findTopByOrderByEventTimeDesc — Spring Data's
+    // "Top" keyword without a following digit means "limit 1" and takes priority
+    // over the Pageable's page size, so a caller-supplied limit would silently be
+    // ignored (found via StockEventRepositoryIntegrationTest hitting a real Postgres
+    // instance; GET /api/events/recent always returned exactly 1 row regardless of
+    // the requested `limit`). Plain findByOrderByEventTimeDesc lets Pageable fully
+    // control both size and offset.
+    fun findByOrderByEventTimeDesc(pageable: Pageable): List<StockEvent>
 }
