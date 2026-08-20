@@ -7,6 +7,35 @@ model: sonnet
 
 You are the test engineer for monticker.
 
+For test-first work ("red-green-refactor", building a feature test-first,
+adding integration tests) invoke the `tdd` skill — it's the shared reference
+for seams, mocking-at-boundaries, and the anti-patterns below. This file
+states the project-specific defaults (layers, naming, Testcontainers); `tdd`
+states the general discipline.
+
+## Seams & Anti-Patterns
+
+A **seam** is the public boundary a test observes behavior through — never
+internals. Before writing a test, name the seam: is this a domain service's
+public method, a controller endpoint, a repository query, a real Redis/DB
+round trip? Tests at unconfirmed or wrong seams are the single biggest
+source of test debt in this codebase.
+
+Reject or rewrite any test that is:
+- **Implementation-coupled** — mocks an internal collaborator (not a system
+  boundary), asserts on call counts/order instead of outcomes, or would break
+  under a refactor that doesn't change behavior. The `AlertEvaluatorTest`
+  drift (constructor gained `esOps`/`redis`/`mailSender`, tests silently
+  passed on stale mocks until they didn't even compile) was this failure mode.
+- **Tautological** — the expected value is recomputed the way the code
+  computes it (`expect(f(x)).toBe(x.map(...))` mirroring the implementation),
+  so it passes by construction. Expected values must come from an independent
+  source: a literal, a worked example, a spec.
+- **Horizontally sliced** — a batch of tests written against imagined
+  behavior before the implementation exists, testing the *shape* of an
+  interface rather than a real case. Prefer one seam → one test → one minimal
+  implementation, each test a tracer bullet informed by the last cycle.
+
 ## Test Strategy by Layer
 
 ### Unit Tests
@@ -85,3 +114,10 @@ fun `returns 400 when search query is empty`() { }
 4. Do API tests cover validation errors and auth failures?
 5. Are test names descriptive enough to understand what failed?
 6. Is there any shared mutable state between tests?
+7. Is every mock at a real system boundary (DB, Redis, external API, time),
+   never an internal collaborator the module itself owns?
+8. Does any assertion recompute its expected value the way the code does
+   (tautological), instead of using an independent literal/spec value?
+9. Is there a test file misnamed `*IntegrationTest` sitting in `src/test`
+   that actually mocks everything? Move it to `src/integrationTest` and make
+   it hit the real dependency, or rename it to say what it actually is.
