@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import ScreenerTable from "@/components/screener/ScreenerTable";
+import WatchlistTicker from "@/components/home/WatchlistTicker";
 import { Card } from "@/components/ui/Card";
 import { useScreener } from "@/hooks/useScreener";
 
@@ -50,6 +51,8 @@ export default function Home() {
 
   return (
     <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8 animate-fade-up">
+      <WatchlistTicker />
+
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-4 sm:mb-6">
         <div>

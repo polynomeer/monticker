@@ -24,6 +24,7 @@ const HEADERS = [
   { label: "거래대금",      width: "w-24 text-right" },
   { label: "매수/매도 비율", width: "w-32" },
   { label: "산업",          width: "w-24" },
+  { label: "",              width: "w-16 shrink-0" },
 ];
 
 export default function ScreenerTable({
@@ -78,7 +79,7 @@ export default function ScreenerTable({
   return (
     <div className="overflow-x-auto">
       {/* 헤더 — 스크롤과 무관하게 고정 */}
-      <div className="flex items-center border-b border-gray-200 dark:border-dracula-line px-2 py-2.5 min-w-[720px] bg-gray-50 dark:bg-dracula-line/5">
+      <div className="flex items-center border-b border-gray-200 dark:border-dracula-line px-2 py-2.5 min-w-[780px] bg-gray-50 dark:bg-dracula-line/5">
         {HEADERS.map(h => (
           <div key={h.label}
             className={`text-xs text-gray-500 dark:text-dracula-comment font-semibold tracking-wide px-2 ${h.width}`}>
@@ -90,7 +91,7 @@ export default function ScreenerTable({
       {/* 가상 스크롤 컨테이너 — 고정 높이로 스크롤 생성 */}
       <div
         ref={scrollRef}
-        className="overflow-y-auto min-w-[720px]"
+        className="overflow-y-auto min-w-[780px]"
         style={{ height: "min(600px, 80vh)" }}
       >
         {/* 전체 높이 공간 확보 (가상화 핵심) */}

@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { Star, Bell } from "@phosphor-icons/react";
 import BuySellBar from "./BuySellBar";
 import ChangeRateBadge from "./ChangeRateBadge";
 import AmountLabel from "./AmountLabel";
+import { useWatchlistIds } from "@/hooks/useWatchlistIds";
 import type { ScreenerItem } from "@/hooks/useScreener";
 
 interface Props { item: ScreenerItem; }
@@ -12,6 +14,8 @@ interface Props { item: ScreenerItem; }
  */
 export default function ScreenerRow({ item }: Props) {
   const isKR = ["KOSPI","KOSDAQ"].includes(item.market);
+  const { isLoggedIn, isWatched, toggle } = useWatchlistIds();
+  const watched = isWatched(item.stockId);
 
   return (
     <div className="group flex items-center h-[52px] px-2 border-b border-dracula-line/30
@@ -65,6 +69,27 @@ export default function ScreenerRow({ item }: Props) {
           </span>
         )}
       </div>
+
+      {/* 관심종목 / 알림 바로가기 — 호버·포커스 시 노출 */}
+      {isLoggedIn && (
+        <div className="w-16 shrink-0 px-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+          <button
+            onClick={() => toggle(item.stockId)}
+            aria-label={watched ? `${item.name} 관심종목 해제` : `${item.name} 관심종목 추가`}
+            aria-pressed={watched}
+            className="p-1.5 rounded-md hover:bg-dracula-line/50 active:scale-90 transition-all duration-150"
+          >
+            <Star size={14} weight={watched ? "fill" : "regular"} className={watched ? "text-dracula-yellow" : "text-dracula-comment"} aria-hidden />
+          </button>
+          <Link
+            href={`/stocks/${item.symbol}?openAlert=1`}
+            aria-label={`${item.name} 알림 만들기`}
+            className="p-1.5 rounded-md hover:bg-dracula-line/50 active:scale-90 transition-all duration-150 inline-flex"
+          >
+            <Bell size={14} weight="regular" className="text-dracula-comment" aria-hidden />
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

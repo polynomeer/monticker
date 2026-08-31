@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import PriceCard from "./PriceCard";
 import StockChart from "./chart/StockChart";
 import IndicatorChart from "./IndicatorChart";
@@ -35,6 +36,15 @@ export default function StockDetailClient({ stockId, symbol, stockName }: Props)
   const { candles, events, loading } = useStockChart(stockId, interval);
   const { data: vwapData } = useVwap(stockId);
   const { price } = useStockPrice(stockId);
+  const searchParams = useSearchParams();
+
+  // 스크리너 등에서 "알림 만들기" 바로가기로 들어온 경우 알림 설정 섹션으로 스크롤
+  useEffect(() => {
+    if (searchParams.get("openAlert") !== "1") return;
+    const el = document.getElementById("alert-panel");
+    if (el) setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "center" }), 300);
+    // searchParams는 마운트 시점 값만 필요 — eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="grid grid-cols-1 gap-4 animate-fade-up">
@@ -104,7 +114,9 @@ export default function StockDetailClient({ stockId, symbol, stockName }: Props)
       <OrderBook stockId={stockId} />
       <EventTimeline stockId={stockId} />
       <NewsPanel stockId={stockId} />
-      <AlertPanel stockId={stockId} symbol={symbol} />
+      <div id="alert-panel">
+        <AlertPanel stockId={stockId} symbol={symbol} />
+      </div>
     </div>
   );
 }
