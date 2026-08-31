@@ -104,8 +104,9 @@ monticker [스크리너](apps/web/src/app/page.tsx)는 지금 pill 토글(전체
 - Key Statistics 그리드(Market cap/P-E/Dividend Yield/52주 고저 등) — 표준적이지만 라벨-값 배치가 깔끔함
 - 회사 프로필 카드(CEO/본사/설립연도/직원수)
 
-**채택할 만한 것**
-- **자연어 요약 문단**은 monticker의 이벤트 중심 정체성과 정확히 맞닿는 지점이다. 이미 `ANTHROPIC_API_KEY`로 AI 요약 인프라가 있으니([external-apis.md](external-apis.md)), 종목 상세 페이지 상단에 "오늘 이 종목에 무슨 일이 있었는지" 한 문단 요약을 붙이는 건 낮은 비용으로 높은 체감 효과를 낼 수 있음
+**채택할 만한 것 → 실제로는 이미 있었음**
+- 조사 당시엔 몰랐지만, [SummaryPanel](apps/web/src/components/stock/SummaryPanel.tsx) + [StockSummaryService](backend/api/src/main/kotlin/com/monticker/api/ai/StockSummaryService.kt)로 이 기능이 이미 종목 상세 페이지에 붙어 있었다. 다만 기존 프롬프트는 이벤트·뉴스 제목만 넣고 있어서 Robinhood 스니펫의 핵심인 "오늘 저점 대비 +0.4%" 같은 가격 기반 문장을 만들 수 없었음 — 가격 데이터(당일 시가·고가·저가, 전일 대비 등락률)를 프롬프트에 추가해 실제로 Robinhood 톤에 맞게 보강함
+- 겸사겸사 발견한 것: [NewsPanel](apps/web/src/components/stock/NewsPanel.tsx)이 "뉴스 수집 예정" 스텁이었는데, AI 요약은 이미 같은 뉴스 데이터를 읽고 있었음(`/api/stocks/{id}/news`가 이미 살아있었음) — 이것도 같이 연결함
 
 **적합하지 않은 것**
 - 극단적 화이트스페이스 미니멀리즘 자체는 Dracula 다크 테마 우선 기조와 안 맞음 — 여백을 넉넉히 쓴다는 태도만 참고
@@ -116,11 +117,11 @@ monticker [스크리너](apps/web/src/app/page.tsx)는 지금 pill 토글(전체
 
 | monticker 페이지 | 참고 서비스 | 적용할 것 | 우선순위 |
 |---|---|---|---|
-| [체결엔진](apps/web/src/app/matching/page.tsx) | qfex/Hyperliquid | 오더북 heatmap 바, 미체결/체결 내역 탭 통합, 매수/매도 스플릿 버튼 | 높음 — 가장 직접적인 대상 |
+| [체결엔진](apps/web/src/app/matching/page.tsx) | qfex/Hyperliquid | 오더북 heatmap 바, 미체결/체결 내역 탭 통합, 매수/매도 스플릿 버튼 | ✅ 완료 |
+| [Stock Detail](apps/web/src/app/stocks/%5Bsymbol%5D/page.tsx) | Robinhood | AI 요약에 가격 동향(당일 등락률·거래범위) 반영, NewsPanel 실데이터 연결 | ✅ 완료 |
 | [스크리너 (홈)](apps/web/src/app/page.tsx) | Finviz | 필터/표시컬럼 분리, 관심종목·알림 바로가기 동선 | 중간 |
 | [SearchAutocomplete](apps/web/src/components/stock/SearchAutocomplete.tsx) | qfex | 카테고리 탭 + 스파크라인 + 1D 변동률 | 중간 |
 | [TradeModal](apps/web/src/components/paper/TradeModal.tsx) | 토스증권 | 수량 퀵버튼(10%/25%/50%/100%) | 낮음 — 작은 개선 |
-| [Stock Detail](apps/web/src/app/stocks/%5Bsymbol%5D/page.tsx) | Robinhood | AI 자연어 요약 문단 | 높음 — 포지셔닝과 직결 |
 | [리스크](apps/web/src/app/risk/page.tsx) / [Analytics](apps/web/src/app/analytics/page.tsx) | 토스증권 | 개인·외국인·기관 순매수 시각화 | 낮음 — 데이터 소스 확보 필요 |
 | 종목 상세 (전반) | TradingView | 차트 위 현재가 기준 매수/매도 퀵 버튼 | 중간 |
 
