@@ -89,6 +89,7 @@ MAIL_HOST=localhost MAIL_PORT=1025 MAIL_USERNAME=test MAIL_PASSWORD=test ./gradl
 - [Workflow](docs/workflow.md)
 - [Data Model](docs/data-model.md)
 - [External APIs](docs/external-apis.md)
+- [UI Benchmarks](docs/ui-benchmarks.md)
 
 ## TimescaleDB Continuous Aggregates
 
