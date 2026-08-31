@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression
 import org.springframework.stereotype.Component
 import java.util.Properties
+import java.util.concurrent.Executors
 
 const val TICKS_TOPIC = "market.ticks"
 
@@ -38,10 +39,17 @@ class TickKafkaProducer(
         }
     )
 
+    // KafkaProducer#send는 콜백을 넘겨도 브로커 메타데이터를 못 받으면 max.block.ms까지
+    // 호출 스레드를 동기 블로킹한다 — MarketTickScheduler는 @Scheduled 스레드 풀을 쓰므로
+    // hot path 탈출: collect() 스레드를 블로킹하지 않음
+    private val publishExecutor = Executors.newSingleThreadExecutor()
+
     fun publish(tick: GeneratedTick) {
-        runCatching {
-            val payload = objectMapper.writeValueAsString(tick)
-            producer.send(ProducerRecord(TICKS_TOPIC, tick.stockId.toString(), payload))
-        }.onFailure { log.warn("틱 Kafka 발행 실패: {}", it.message) }
+        publishExecutor.submit {
+            runCatching {
+                val payload = objectMapper.writeValueAsString(tick)
+                producer.send(ProducerRecord(TICKS_TOPIC, tick.stockId.toString(), payload))
+            }.onFailure { log.warn("틱 Kafka 발행 실패: {}", it.message) }
+        }
     }
 }
