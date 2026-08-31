@@ -40,7 +40,9 @@ qfex는 Hyperliquid의 레이아웃을 그대로 따르는 클론에 가깝다. 
 - 매수/매도 버튼을 대각선 스플릿 하나로 합친 디자인 (버튼 2개 대신 1개, 클릭 위치로 방향 결정)
 - 계산된 값(수수료, 예상 포지션 등)을 "회색 라벨 — 흰 값" 행으로 나열하는 패턴 — 입력값과 시스템이 계산한 값을 시각적으로 구분
 - **Positions/Open Orders/Order History/Trade History를 별도 카드가 아니라 탭 하나로 통합** — 화면 공간을 크게 절약
-- qfex의 심볼 검색 모달: 카테고리 필터 탭(All/관심종목/Equities/...) + 종목당 미니 스파크라인 + 1D 변동률 + 즐겨찾기 별표를 한 줄에
+- qfex의 심볼 검색 모달: 카테고리 필터 탭(All/관심종목/Equities/...) + 종목당 미니 스파크라인 + 1D 변동률 + 즐겨찾기 별표를 한 줄에.
+  카테고리 탭 + 1D 변동률은 [SearchAutocomplete](apps/web/src/components/stock/SearchAutocomplete.tsx)에 적용 완료 — `/api/screener/search`가 이미 가격·등락률을 한 번에 조인해서 반환해서 백엔드 변경 없이 됐다.
+  **스파크라인은 보류**: 결과당 캔들 시리즈를 따로 조회해야 하는데, 키 입력마다 최대 20개 종목 × 캔들 API 호출은 배치 엔드포인트 없이는 N+1이 됨 — 배치 캔들 조회 API가 생기면 재검토.
 
 **적합하지 않은 것**
 - Cross/레버리지 배지, Reduce Only, 청산가(Liquidation Price) 같은 레버리지 파생상품 전용 개념 — monticker는 모의투자(현물)이므로 그대로 가져올 개념 자체가 없음
@@ -84,6 +86,8 @@ monticker [스크리너](apps/web/src/app/page.tsx)는 지금 pill 토글(전체
 **적합하지 않은 것**
 - 5×5 그리드 수준의 다차원 필터(Analyst Recom, Short Float, IPO Date 등)는 미국 주식 펀더멘털 데이터 의존도가 높음. monticker의 실시간성·이벤트 중심 포지셔닝과는 다른 축이라 전면 도입보다는 **점진적으로 필터 축 2~3개만 추가**하는 쪽이 맞음
 
+**착수 보류 — 이유**: `ScreenerItem`(백엔드 도메인)엔 이미 price/changeRate/volume/amount/buyRatio/sector가 다 있고 [ScreenerTable](apps/web/src/components/screener/ScreenerTable.tsx)이 그걸 그대로 다 보여주고 있어서, 지금 당장 "표시 컬럼을 나눠서 전환"해봐야 보여줄 다른 컬럼이 없다. Market Cap·P/E·Dividend Yield처럼 Finviz식 컬럼셋을 만들려면 펀더멘털 데이터를 새로 도메인에 들여와야 하는데, 이건 스키마·데이터 소스 결정이 필요한 별도 작업이라 이 문서 범위를 벗어난다. 필터/컬럼 분리는 그 데이터가 들어온 뒤에 재검토.
+
 ### TradingView — 차트 · 전략 스크립팅 · 소셜
 
 - 차트에 **매수/매도 가격 티켓이 현재가 축에 떠 있는** 패턴(SELL 317.85 / BUY 317.89, 스프레드 표시) — 차트를 보다가 바로 주문할 수 있는 동선
@@ -119,8 +123,8 @@ monticker [스크리너](apps/web/src/app/page.tsx)는 지금 pill 토글(전체
 |---|---|---|---|
 | [체결엔진](apps/web/src/app/matching/page.tsx) | qfex/Hyperliquid | 오더북 heatmap 바, 미체결/체결 내역 탭 통합, 매수/매도 스플릿 버튼 | ✅ 완료 |
 | [Stock Detail](apps/web/src/app/stocks/%5Bsymbol%5D/page.tsx) | Robinhood | AI 요약에 가격 동향(당일 등락률·거래범위) 반영, NewsPanel 실데이터 연결 | ✅ 완료 |
-| [스크리너 (홈)](apps/web/src/app/page.tsx) | Finviz | 필터/표시컬럼 분리, 관심종목·알림 바로가기 동선 | 중간 |
-| [SearchAutocomplete](apps/web/src/components/stock/SearchAutocomplete.tsx) | qfex | 카테고리 탭 + 스파크라인 + 1D 변동률 | 중간 |
+| [SearchAutocomplete](apps/web/src/components/stock/SearchAutocomplete.tsx) | qfex | 카테고리 탭 + 1D 변동률 | ✅ 완료 (스파크라인만 보류) |
+| [스크리너 (홈)](apps/web/src/app/page.tsx) | Finviz | 필터/표시컬럼 분리, 관심종목·알림 바로가기 동선 | 보류 — 펀더멘털 데이터 소스 결정 필요 |
 | [TradeModal](apps/web/src/components/paper/TradeModal.tsx) | 토스증권 | 수량 퀵버튼(10%/25%/50%/100%) | 낮음 — 작은 개선 |
 | [리스크](apps/web/src/app/risk/page.tsx) / [Analytics](apps/web/src/app/analytics/page.tsx) | 토스증권 | 개인·외국인·기관 순매수 시각화 | 낮음 — 데이터 소스 확보 필요 |
 | 종목 상세 (전반) | TradingView | 차트 위 현재가 기준 매수/매도 퀵 버튼 | 중간 |
