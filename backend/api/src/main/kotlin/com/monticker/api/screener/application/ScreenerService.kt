@@ -78,6 +78,16 @@ class ScreenerService(
             ScreenerResult(items, items.size, false)
         }
     }
+
+    /**
+     * 명시적 종목 ID 목록의 시세를 조회한다 (ES 검색 없이).
+     * 관심종목 티커 스트립처럼 "이미 알고 있는 종목들"의 최신 시세가 필요할 때 사용.
+     */
+    fun getByStockIds(stockIds: List<Long>): ScreenerResult {
+        if (stockIds.isEmpty()) return ScreenerResult(emptyList(), 0, false)
+        val items = repo.findItemsByStockIds(stockIds)
+        return ScreenerResult(items, items.size, false)
+    }
 }
 
 data class ScreenerResult(

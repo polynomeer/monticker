@@ -49,6 +49,18 @@ class ScreenerController(private val screenerService: ScreenerService) {
         return ResponseEntity.ok(result.toResponse())
     }
 
+    /**
+     * 명시적 종목 ID 목록의 시세를 조회한다 (관심종목 티커 스트립 등).
+     *
+     * GET /api/screener/quotes?ids=1,2,3
+     */
+    @GetMapping("/quotes")
+    fun getQuotes(@RequestParam ids: String): ResponseEntity<ScreenerResponse> {
+        val stockIds = ids.split(",").mapNotNull { it.trim().toLongOrNull() }.take(50)
+        val result = screenerService.getByStockIds(stockIds)
+        return ResponseEntity.ok(result.toResponse())
+    }
+
     private fun ScreenerResult.toResponse() = ScreenerResponse(
         items     = items.map { ScreenerItemResponse.from(it) },
         total     = total,
