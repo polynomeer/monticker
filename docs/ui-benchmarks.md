@@ -127,16 +127,11 @@ monticker [스크리너](apps/web/src/app/page.tsx)는 지금 pill 토글(전체
 | [스크리너 (홈)](apps/web/src/app/page.tsx) | Finviz | 필터/표시컬럼 분리, 관심종목·알림 바로가기 동선 | 보류 — 펀더멘털 데이터 소스 결정 필요 |
 | [TradeModal](apps/web/src/components/paper/TradeModal.tsx) | 토스증권 | 수량 퀵버튼(25%/50%/75%/100%) | ✅ 완료 |
 | 종목 상세 (전반) | TradingView | 차트 위 현재가 기준 매수/매도 퀵 버튼 | ✅ 완료 |
-| [리스크](apps/web/src/app/risk/page.tsx) / [Analytics](apps/web/src/app/analytics/page.tsx) | 토스증권 | 개인·외국인·기관 순매수 시각화 | 보류 — 데이터 소스 결정 필요 (아래 참고) |
+| [Stock Detail](apps/web/src/components/stock/InvestorFlowPanel.tsx) | 토스증권 | 개인·외국인·기관 순매수 시각화 | ✅ 완료 ([ADR-017](decisions/017-investor-flow-kis-integration.md)) |
 
-### 남은 보류 항목: 개인·외국인·기관 순매수
+### 개인·외국인·기관 순매수 — 완료
 
-이 데이터는 monticker 도메인 어디에도 없다 — 가격·거래량·이벤트·뉴스와는 완전히 다른 데이터(KRX 투자자별 매매동향류)라 목업으로 채워 넣을 수 없다. 실제로 진행하려면:
-1. 데이터 소스 결정 (KRX 공식 API, KIS API의 투자자 동향 엔드포인트 등) — `docs/external-apis.md`에 아직 후보조차 없음
-2. 신규 스키마 + 수집 파이프라인 (worker에 새 모듈)
-3. 그 다음에야 UI
-
-이건 한 세션 안에 끝낼 프론트엔드 작업이 아니라 별도 기능 기획 대상이다. 진행하려면 데이터 소스부터 먼저 결정하고 ADR을 작성해야 한다.
+[ADR-017](decisions/017-investor-flow-kis-integration.md)에서 데이터 소스를 결정했다: 신규 벤더 대신 이미 연동된 KIS API의 `inquire-investor` 엔드포인트를 확장. `KisClient.fetchInvestorTrend` → `InvestorTrendCollector`(일일 배치, KOSPI/KOSDAQ만) → `investor_flow` 테이블(V29) → `GET /api/stocks/{id}/investor-flow` → [InvestorFlowPanel](apps/web/src/components/stock/InvestorFlowPanel.tsx). 당초 리스크/Analytics 후보였으나 종목 자체의 시장 데이터라 종목 상세 페이지(OrderBook 옆)로 배치를 바꿨다 — 이유는 ADR-017 참고. KIS 미설정/무응답 시 모의 데이터로 폴백하되 `is_mocked` 플래그로 프론트에 "모의 데이터" 배지를 띄워 실데이터처럼 보이지 않게 했다.
 
 ## 명시적으로 채택하지 않기로 한 것
 

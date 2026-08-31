@@ -22,7 +22,7 @@
 - URL: https://apiportal.koreainvestment.com
 - Coverage: KOSPI, KOSDAQ, US markets
 - Realtime: WebSocket (실시간 체결, 호가)
-- REST: 현재가, 분봉, 일봉, 시장 지수
+- REST: 현재가, 분봉, 일봉, 시장 지수, 투자자별 매매동향(개인/외국인/기관 순매수, `inquire-investor`, [ADR-017](decisions/017-investor-flow-kis-integration.md))
 - Auth: API key (계좌 개설 필요)
 - Cost: Free (개인 계좌 기준)
 - Notes: **한국 개인 개발자가 가장 많이 사용하는 국내 증권 API**
