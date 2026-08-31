@@ -2,9 +2,17 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { cn } from "@/lib/utils";
 import { CheckCircle, Prohibit, Check, X } from "@phosphor-icons/react";
 import { authFetch } from "@/services/api";
 import { Card } from "@/components/ui/Card";
+import OrderBook from "@/components/stock/OrderBook";
+
+const STOCKS = [
+  { id: 2, label: "삼성전자" }, { id: 3, label: "SK하이닉스" },
+  { id: 9, label: "현대차" },   { id: 10, label: "NAVER" },
+  { id: 5, label: "AAPL" },    { id: 6, label: "NVDA" },
+];
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -74,21 +82,14 @@ function RiskPreview({ result }: { result: RiskCheckResult }) {
 
 // ── Order Form ──────────────────────────────────────────────────────────────
 
-function OrderForm() {
+function OrderForm({ stockId, setStockId }: { stockId: number; setStockId: (id: number) => void }) {
   const qc = useQueryClient();
-  const [stockId, setStockId] = useState(2);
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
   const [orderType, setOrderType] = useState<"MARKET" | "LIMIT">("MARKET");
   const [quantity, setQuantity] = useState(10);
   const [limitPrice, setLimitPrice] = useState("");
   const [riskResult, setRiskResult] = useState<RiskCheckResult | null>(null);
   const [result, setResult] = useState<SubmitOrderResponse | null>(null);
-
-  const STOCKS = [
-    { id: 2, label: "삼성전자" }, { id: 3, label: "SK하이닉스" },
-    { id: 9, label: "현대차" },   { id: 10, label: "NAVER" },
-    { id: 5, label: "AAPL" },    { id: 6, label: "NVDA" },
-  ];
 
   const riskCheckMutation = useMutation({
     mutationFn: async () => {
@@ -137,16 +138,23 @@ function OrderForm() {
         </div>
         <div>
           <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">매수/매도</label>
-          <div className="flex rounded-lg overflow-hidden border border-gray-300 dark:border-dracula-line">
-            {(["BUY","SELL"] as const).map(s => (
-              <button key={s} onClick={() => setSide(s)}
-                className={`flex-1 py-2 text-sm font-semibold transition-colors duration-150
-                  ${side === s
-                    ? s === "BUY" ? "bg-[#ff5050] text-white" : "bg-[#4a8fd4] text-white"
-                    : "bg-white dark:bg-dracula-bg text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg"}`}>
-                {s === "BUY" ? "매수" : "매도"}
-              </button>
-            ))}
+          <div className="relative flex h-9 rounded-lg overflow-hidden border border-gray-300 dark:border-dracula-line">
+            <button onClick={() => setSide("BUY")}
+              style={{ clipPath: "polygon(0 0, 100% 0, 82% 100%, 0 100%)" }}
+              className={cn(
+                "flex-1 pl-3 pr-4 text-sm font-semibold transition-colors duration-150 -mr-3",
+                side === "BUY" ? "bg-[#ff5050] text-white" : "bg-white dark:bg-dracula-bg text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg"
+              )}>
+              매수
+            </button>
+            <button onClick={() => setSide("SELL")}
+              style={{ clipPath: "polygon(18% 0, 100% 0, 100% 100%, 0 100%)" }}
+              className={cn(
+                "flex-1 pl-4 pr-3 text-sm font-semibold transition-colors duration-150",
+                side === "SELL" ? "bg-[#4a8fd4] text-white" : "bg-white dark:bg-dracula-bg text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg"
+              )}>
+              매도
+            </button>
           </div>
         </div>
       </div>
@@ -221,10 +229,12 @@ function OrderForm() {
   );
 }
 
-// ── Active Orders ───────────────────────────────────────────────────────────
+// ── Order History (미체결 주문 / 최근 체결 탭 통합) ──────────────────────────
 
-function ActiveOrders() {
+function OrderHistoryPanel() {
   const qc = useQueryClient();
+  const [tab, setTab] = useState<"orders" | "fills">("orders");
+
   const { data: orders = [] } = useQuery<OrderDto[]>({
     queryKey: ["matching", "orders"],
     queryFn: async () => {
@@ -235,55 +245,6 @@ function ActiveOrders() {
     refetchInterval: 5000,
   });
 
-  const cancelMutation = useMutation({
-    mutationFn: async (orderId: number) => {
-      await authFetch(`/api/matching/orders/${orderId}`, { method: "DELETE" });
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["matching", "orders"] }),
-  });
-
-  if (orders.length === 0) return (
-    <div className="p-4 rounded-xl border border-dashed border-gray-300 dark:border-dracula-line text-center text-xs text-gray-500 dark:text-dracula-comment">
-      미체결 주문 없음
-    </div>
-  );
-
-  return (
-    <div className="space-y-2">
-      {orders.map((o: OrderDto) => (
-        <Card key={o.id} className="flex items-center justify-between p-3 text-xs">
-          <div>
-            <div className="flex items-center gap-2 mb-0.5">
-              <span className={`font-bold ${o.side === "BUY" ? "text-[#ff5050]" : "text-[#4a8fd4]"}`}>
-                {o.side === "BUY" ? "매수" : "매도"}
-              </span>
-              <span className="text-gray-900 dark:text-dracula-fg tabular-nums">{o.quantity}주</span>
-              {o.limitPrice && <span className="text-gray-500 dark:text-dracula-comment tabular-nums">@ {won(o.limitPrice)}원</span>}
-              <span className="text-gray-500 dark:text-dracula-comment">{o.orderType === "MARKET" ? "시장가" : "지정가"}</span>
-            </div>
-            <div className="text-gray-500 dark:text-dracula-comment tabular-nums">
-              체결 {o.filledQty}/{o.quantity}주
-              {o.avgFillPrice && <span className="ml-1">평균 {won(o.avgFillPrice)}원</span>}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLE[o.status] ?? ""}`}>
-              {o.status}
-            </span>
-            {(o.status === "PENDING" || o.status === "PARTIALLY_FILLED") && (
-              <button onClick={() => cancelMutation.mutate(o.id)}
-                className="text-dracula-red hover:opacity-70 active:scale-95 transition-transform font-medium">취소</button>
-            )}
-          </div>
-        </Card>
-      ))}
-    </div>
-  );
-}
-
-// ── Page ────────────────────────────────────────────────────────────────────
-
-export default function MatchingPage() {
   const { data: fills = [] } = useQuery<FillDto[]>({
     queryKey: ["matching", "fills"],
     queryFn: async () => {
@@ -293,8 +254,102 @@ export default function MatchingPage() {
     },
   });
 
+  const cancelMutation = useMutation({
+    mutationFn: async (orderId: number) => {
+      await authFetch(`/api/matching/orders/${orderId}`, { method: "DELETE" });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["matching", "orders"] }),
+  });
+
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 animate-fade-up">
+    <Card className="overflow-hidden">
+      <div className="flex gap-1 px-3 pt-2 border-b border-gray-200 dark:border-dracula-line">
+        {([
+          { key: "orders", label: `미체결 주문 (${orders.length})` },
+          { key: "fills",  label: "최근 체결" },
+        ] as const).map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className={cn(
+              "px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px",
+              tab === t.key
+                ? "border-blue-600 dark:border-dracula-purple text-blue-600 dark:text-dracula-purple"
+                : "border-transparent text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg"
+            )}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="p-3">
+        {tab === "orders" ? (
+          orders.length === 0 ? (
+            <p className="py-8 text-center text-xs text-gray-500 dark:text-dracula-comment">미체결 주문 없음</p>
+          ) : (
+            <div className="space-y-2">
+              {orders.map((o: OrderDto) => (
+                <div key={o.id} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-dracula-bg text-xs">
+                  <div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className={`font-bold ${o.side === "BUY" ? "text-[#ff5050]" : "text-[#4a8fd4]"}`}>
+                        {o.side === "BUY" ? "매수" : "매도"}
+                      </span>
+                      <span className="text-gray-900 dark:text-dracula-fg tabular-nums">{o.quantity}주</span>
+                      {o.limitPrice && <span className="text-gray-500 dark:text-dracula-comment tabular-nums">@ {won(o.limitPrice)}원</span>}
+                      <span className="text-gray-500 dark:text-dracula-comment">{o.orderType === "MARKET" ? "시장가" : "지정가"}</span>
+                    </div>
+                    <div className="text-gray-500 dark:text-dracula-comment tabular-nums">
+                      체결 {o.filledQty}/{o.quantity}주
+                      {o.avgFillPrice && <span className="ml-1">평균 {won(o.avgFillPrice)}원</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLE[o.status] ?? ""}`}>
+                      {o.status}
+                    </span>
+                    {(o.status === "PENDING" || o.status === "PARTIALLY_FILLED") && (
+                      <button onClick={() => cancelMutation.mutate(o.id)}
+                        className="text-dracula-red hover:opacity-70 active:scale-95 transition-transform font-medium">취소</button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        ) : (
+          fills.length === 0 ? (
+            <p className="py-8 text-center text-xs text-gray-500 dark:text-dracula-comment">체결 내역 없음</p>
+          ) : (
+            <div className="space-y-2">
+              {fills.slice(0, 10).map((f: FillDto) => (
+                <div key={f.id} className="flex justify-between items-center p-3 rounded-lg bg-gray-50 dark:bg-dracula-bg text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className={`font-bold ${f.side === "BUY" ? "text-[#ff5050]" : "text-[#4a8fd4]"}`}>
+                      {f.side === "BUY" ? "매수" : "매도"}
+                    </span>
+                    <span className="text-gray-900 dark:text-dracula-fg tabular-nums">{f.quantity}주</span>
+                    <span className="text-gray-500 dark:text-dracula-comment tabular-nums">@ {won(f.fillPrice)}원</span>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-gray-900 dark:text-dracula-fg tabular-nums">{won(f.amount)}원</p>
+                    <p className="text-gray-500 dark:text-dracula-comment tabular-nums">수수료 {won(f.fee)}원</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+      </div>
+    </Card>
+  );
+}
+
+// ── Page ────────────────────────────────────────────────────────────────────
+
+export default function MatchingPage() {
+  const [stockId, setStockId] = useState(2);
+
+  return (
+    <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8 animate-fade-up">
       <div className="mb-6">
         <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-dracula-fg">체결 엔진</h1>
         <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">
@@ -302,46 +357,17 @@ export default function MatchingPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 좌: 주문 입력 */}
-        <div className="space-y-4">
-          <OrderForm />
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6">
+        {/* 좌: 호가창 */}
+        <OrderBook stockId={stockId} />
 
-        {/* 우: 주문 현황 + 체결 이력 */}
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-sm font-semibold text-gray-900 dark:text-dracula-fg mb-3">미체결 주문</h2>
-            <ActiveOrders />
-          </div>
+        {/* 우: 주문 입력 */}
+        <OrderForm stockId={stockId} setStockId={setStockId} />
+      </div>
 
-          <div>
-            <h2 className="text-sm font-semibold text-gray-900 dark:text-dracula-fg mb-3">최근 체결</h2>
-            {fills.length === 0 ? (
-              <div className="p-4 rounded-xl border border-dashed border-gray-300 dark:border-dracula-line text-center text-xs text-gray-500 dark:text-dracula-comment">
-                체결 내역 없음
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {fills.slice(0, 10).map((f: FillDto) => (
-                  <Card key={f.id} className="flex justify-between items-center p-3 text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className={`font-bold ${f.side === "BUY" ? "text-[#ff5050]" : "text-[#4a8fd4]"}`}>
-                        {f.side === "BUY" ? "매수" : "매도"}
-                      </span>
-                      <span className="text-gray-900 dark:text-dracula-fg tabular-nums">{f.quantity}주</span>
-                      <span className="text-gray-500 dark:text-dracula-comment tabular-nums">@ {won(f.fillPrice)}원</span>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-gray-900 dark:text-dracula-fg tabular-nums">{won(f.amount)}원</p>
-                      <p className="text-gray-500 dark:text-dracula-comment tabular-nums">수수료 {won(f.fee)}원</p>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+      {/* 하단: 미체결 주문 / 최근 체결 (탭 통합) */}
+      <div className="mt-6">
+        <OrderHistoryPanel />
       </div>
     </div>
   );
