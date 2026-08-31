@@ -24,7 +24,7 @@ class StockSummaryController(
     fun getSummary(@PathVariable stockId: Long): ResponseEntity<SummaryResponse> {
         return try {
             val stock = stockService.getById(stockId)
-            val summary = stockSummaryService.getSummary(stockId, stock.name)
+            val summary = stockSummaryService.getSummary(stockId, stock.name, stock.symbol)
             ResponseEntity.ok(SummaryResponse(stockId = stockId, summary = summary))
         } catch (e: NoSuchElementException) {
             ResponseEntity.notFound().build()
