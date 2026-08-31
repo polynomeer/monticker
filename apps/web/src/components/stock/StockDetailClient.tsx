@@ -40,12 +40,6 @@ export default function StockDetailClient({ stockId, symbol, stockName }: Props)
     <div className="grid grid-cols-1 gap-4 animate-fade-up">
       <PriceCard symbol={symbol} />
       <WatchlistAddButton stockId={stockId} />
-      <StockTradeButton
-        stockId={stockId}
-        symbol={symbol}
-        name={stockName}
-        currentPrice={price?.price ?? 0}
-      />
       <SummaryPanel stockId={stockId} symbol={symbol} />
 
       <div>
@@ -79,12 +73,23 @@ export default function StockDetailClient({ stockId, symbol, stockName }: Props)
             차트 로딩 중...
           </div>
         ) : (
-          <StockChart
-            candles={candles}
-            events={events}
-            height={300}
-            vwapData={showVwap ? vwapData : undefined}
-          />
+          <div className="relative">
+            <StockChart
+              candles={candles}
+              events={events}
+              height={300}
+              vwapData={showVwap ? vwapData : undefined}
+            />
+            <div className="absolute top-3 right-3 z-10">
+              <StockTradeButton
+                stockId={stockId}
+                symbol={symbol}
+                name={stockName}
+                currentPrice={price?.price ?? 0}
+                floating
+              />
+            </div>
+          </div>
         )}
 
         {!loading && (showRSI || showMACD) && (
