@@ -139,9 +139,17 @@ export default function TradeModal({ stock, currentPrice, side, maxQuantity, onC
             <button onClick={() => setQuantity(q => Math.min(max, q + 1))}
               className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-dracula-line text-gray-900 dark:text-dracula-fg font-bold text-lg hover:opacity-80 active:scale-95 transition-all duration-150">+</button>
           </div>
-          <button onClick={() => setQuantity(max)} className="text-[10px] mt-1 text-gray-500 dark:text-dracula-comment hover:text-blue-600 dark:hover:text-dracula-purple transition-colors">
-            최대 {max}주
-          </button>
+          <div className="flex gap-1.5 mt-2">
+            {[25, 50, 75, 100].map(pct => (
+              <button key={pct}
+                onClick={() => setQuantity(Math.max(1, Math.floor(max * pct / 100)))}
+                disabled={max <= 0}
+                className="flex-1 py-1 rounded-md text-[11px] font-medium bg-gray-100 dark:bg-dracula-line/50 text-gray-600 dark:text-dracula-comment hover:bg-gray-200 dark:hover:bg-dracula-line active:scale-95 transition-all duration-150 disabled:opacity-40 disabled:active:scale-100">
+                {pct}%
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] mt-1 text-gray-500 dark:text-dracula-comment">최대 {max}주</p>
         </div>
 
         {/* 주문 금액 */}
