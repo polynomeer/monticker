@@ -16,7 +16,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 /**
- * ADR-020: candles_1d는 별도 배치가 아니라 CandleAggregator.flush()의 실시간 upsert로
+ * ADR-021: candles_1d는 별도 배치가 아니라 CandleAggregator.flush()의 실시간 upsert로
  * 채워진다. 이 테스트는 그 upsert가 여러 KST 달력일에 걸쳐 온 tick들을 올바른 OHLCV로
  * 굴려 담는지, 그리고 ScreenerRepository가 의존하는 "최신 행=진행 중인 오늘,
  * OFFSET 1=확정된 전일 종가" 전제가 실제로 성립하는지를 검증한다.

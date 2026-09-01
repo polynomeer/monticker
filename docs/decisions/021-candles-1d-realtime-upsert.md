@@ -1,4 +1,4 @@
-# ADR-020: candles_1d 무기록 버그 — CandleAggregator 실시간 upsert로 해결
+# ADR-021: candles_1d 무기록 버그 — CandleAggregator 실시간 upsert로 해결
 
 ## Status
 Accepted
