@@ -1,6 +1,7 @@
 package com.monticker.worker.kafka
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import jakarta.annotation.PreDestroy
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.clients.producer.ProducerRecord
@@ -46,5 +47,10 @@ class TickProcessedKafkaProducer(
                 producer.send(ProducerRecord(TICK_PROCESSED_TOPIC, stockId.toString(), payload))
             }.onFailure { log.warn("tick-processed Kafka 발행 실패: {}", it.message) }
         }
+    }
+
+    @PreDestroy
+    fun shutdown() {
+        publishExecutor.shutdown()
     }
 }

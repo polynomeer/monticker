@@ -2,6 +2,7 @@ package com.monticker.worker.kafka
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.worker.detector.DetectedEvent
+import jakarta.annotation.PreDestroy
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.clients.producer.ProducerRecord
@@ -46,5 +47,10 @@ class EventKafkaProducer(
                 producer.send(ProducerRecord(EVENTS_TOPIC, event.stockId.toString(), payload))
             }.onFailure { log.warn("Kafka 이벤트 발행 실패: {}", it.message) }
         }
+    }
+
+    @PreDestroy
+    fun shutdown() {
+        publishExecutor.shutdown()
     }
 }

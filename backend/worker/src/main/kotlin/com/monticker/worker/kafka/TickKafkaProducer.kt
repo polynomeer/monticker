@@ -2,6 +2,7 @@ package com.monticker.worker.kafka
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.worker.marketdata.GeneratedTick
+import jakarta.annotation.PreDestroy
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.clients.producer.ProducerRecord
@@ -51,5 +52,10 @@ class TickKafkaProducer(
                 producer.send(ProducerRecord(TICKS_TOPIC, tick.stockId.toString(), payload))
             }.onFailure { log.warn("틱 Kafka 발행 실패: {}", it.message) }
         }
+    }
+
+    @PreDestroy
+    fun shutdown() {
+        publishExecutor.shutdown()
     }
 }
