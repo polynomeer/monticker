@@ -194,7 +194,7 @@ class AlertEvaluatorTest {
 
         every { jdbc.query(any<String>(), any<RowMapper<AlertRuleRow>>(), 5L) } returns listOf(rule)
         // 오늘 거래량 100,000 vs 평균 20,000 → 5배(임계 2배 초과)
-        every { jdbc.queryForMap(any<String>(), 5L) } returns mapOf("today_vol" to 100_000L, "avg_vol" to 20_000.0)
+        every { jdbc.queryForMap(any<String>(), 5L, 5L) } returns mapOf("today_vol" to 100_000L, "avg_vol" to 20_000.0)
         stubCooldownAcquired(true)
         stubHistoryInsert(77L)
         every { jdbc.queryForList(any<String>(), String::class.java, rule.userId) } returns
@@ -218,7 +218,7 @@ class AlertEvaluatorTest {
 
         every { jdbc.query(any<String>(), any<RowMapper<AlertRuleRow>>(), 5L) } returns listOf(rule)
         // 오늘 거래량 50,000 vs 평균 30,000 → 1.67배(임계 2배 미만)
-        every { jdbc.queryForMap(any<String>(), 5L) } returns mapOf("today_vol" to 50_000L, "avg_vol" to 30_000.0)
+        every { jdbc.queryForMap(any<String>(), 5L, 5L) } returns mapOf("today_vol" to 50_000L, "avg_vol" to 30_000.0)
 
         evaluator.processAlert(stockId = 5L, price = BigDecimal("71000"))
 

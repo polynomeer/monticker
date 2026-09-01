@@ -6,7 +6,9 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.jdbc.datasource.DataSourceTransactionManager
 import org.springframework.jdbc.datasource.DriverManagerDataSource
+import org.springframework.transaction.PlatformTransactionManager
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
@@ -38,6 +40,7 @@ class CandleAggregatorIntegrationTest {
                 .withPassword("monticker")
 
         lateinit var jdbc: JdbcTemplate
+        lateinit var txManager: PlatformTransactionManager
 
         @JvmStatic
         @BeforeAll
@@ -50,6 +53,7 @@ class CandleAggregatorIntegrationTest {
                 .load()
                 .migrate()
             jdbc = JdbcTemplate(ds)
+            txManager = DataSourceTransactionManager(ds)
         }
     }
 
@@ -83,7 +87,7 @@ class CandleAggregatorIntegrationTest {
 
     @Test
     fun `flush rolls minute ticks into a same-day candles_1d row across multiple minutes`() {
-        val aggregator = CandleAggregator(jdbc)
+        val aggregator = CandleAggregator(jdbc, txManager)
         val stockId = insertStock("ROLL1")
         val day = LocalDate.of(2026, 8, 31)
 
@@ -113,7 +117,7 @@ class CandleAggregatorIntegrationTest {
 
     @Test
     fun `screener-style prevClose query returns yesterday's confirmed close while today's row is still live`() {
-        val aggregator = CandleAggregator(jdbc)
+        val aggregator = CandleAggregator(jdbc, txManager)
         val stockId = insertStock("ROLL2")
         val yesterday = LocalDate.of(2026, 8, 31)
         val today = LocalDate.of(2026, 9, 1)
@@ -187,7 +191,7 @@ class CandleAggregatorIntegrationTest {
             jdbc.queryForObject("SELECT COUNT(*) FROM candles_1d", Int::class.java),
         ).isEqualTo(0)
 
-        CandleAggregator(jdbc).backfillOnStartup()
+        CandleAggregator(jdbc, txManager).backfillOnStartup()
 
         val rows = jdbc.queryForList(
             "SELECT open, high, low, close, volume FROM candles_1d WHERE stock_id = ? ORDER BY candle_time ASC",
@@ -214,7 +218,7 @@ class CandleAggregatorIntegrationTest {
         // backfillOnStartup()의 initialDelay(5s)보다 먼저 오늘자 flush()가 candles_1d에
         // 행을 하나 만들 수 있다. count(*) > 0 가드였다면 이 한 행만으로 "이미 채워짐"으로
         // 오판해 과거 이력을 영원히 스킵했을 시나리오.
-        val aggregator = CandleAggregator(jdbc)
+        val aggregator = CandleAggregator(jdbc, txManager)
         val stockId = insertStock("RACE1")
         val historicalDay = LocalDate.of(2026, 8, 20)
         val today = LocalDate.now(KST)
