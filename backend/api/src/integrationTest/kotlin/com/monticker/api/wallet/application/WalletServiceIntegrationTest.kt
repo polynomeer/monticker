@@ -1,8 +1,7 @@
 package com.monticker.api.wallet.application
 
 import com.monticker.api.common.domain.Money
-import com.monticker.api.paper.domain.PaperAccount
-import com.monticker.api.paper.infrastructure.PaperAccountRepository
+import com.monticker.api.paper.application.PaperAccountQueryService
 import com.monticker.api.support.PostgresIntegrationTest
 import io.mockk.every
 import io.mockk.mockk
@@ -10,7 +9,6 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
 import java.time.Instant
-import java.util.Optional
 
 /**
  * calcHoldingsValue는 portfolio_positions와 candles_1m을 JOIN LATERAL로 묶는 단일 SQL로
@@ -21,7 +19,7 @@ import java.util.Optional
  */
 class WalletServiceIntegrationTest : PostgresIntegrationTest() {
 
-    private val accountRepo = mockk<PaperAccountRepository>()
+    private val accountQueryService = mockk<PaperAccountQueryService>()
     private val ledgerService = mockk<LedgerService>()
 
     private fun createUser(email: String): Long =
@@ -66,11 +64,10 @@ class WalletServiceIntegrationTest : PostgresIntegrationTest() {
         insertCandle(stockWithPrice, close = BigDecimal("60000"))
         // stockWithoutPrice deliberately has no candles_1m row.
 
-        val account = PaperAccount(userId = userId, cash = Money.of("1000000"))
-        every { accountRepo.findByUserId(userId) } returns Optional.of(account)
+        every { accountQueryService.getCashBalance(userId) } returns Money.of("1000000")
         every { ledgerService.getLedger(userId) } returns emptyList()
 
-        val service = WalletService(accountRepo, ledgerService, jdbcTemplate)
+        val service = WalletService(accountQueryService, ledgerService, jdbcTemplate)
         val result = service.getWalletMap(userId)
 
         // holdingsValue = 10 * 60000 (stockWithoutPrice contributes nothing, not even a zero row)
