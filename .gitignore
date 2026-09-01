@@ -20,13 +20,12 @@ apps/mobile/ios/
 # ── Gradle ────────────────────────────────────────────────────
 **/build/
 **/.gradle/
-**/gradle/wrapper/gradle-wrapper.jar
-!**/gradle/wrapper/gradle-wrapper.properties
 
 # ── JVM ───────────────────────────────────────────────────────
 **/*.class
 **/*.jar
 **/*.war
+!**/gradle/wrapper/gradle-wrapper.jar
 
 # ── IDE ───────────────────────────────────────────────────────
 .idea/
