@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.stereotype.Component
 import java.util.Properties
+import java.util.concurrent.Executors
 
 const val EVENTS_TOPIC = "market.events"
 
@@ -34,10 +35,16 @@ class EventKafkaProducer(
         }
     )
 
+    // KafkaProducer#send는 콜백을 넘겨도 브로커 메타데이터를 못 받으면 max.block.ms까지
+    // 호출 스레드를 동기 블로킹한다 — Event Detector 핫 패스 탈출: 호출 스레드를 블로킹하지 않음
+    private val publishExecutor = Executors.newSingleThreadExecutor()
+
     fun publish(event: DetectedEvent) {
-        runCatching {
-            val payload = objectMapper.writeValueAsString(event)
-            producer.send(ProducerRecord(EVENTS_TOPIC, event.stockId.toString(), payload))
-        }.onFailure { log.warn("Kafka 이벤트 발행 실패: {}", it.message) }
+        publishExecutor.submit {
+            runCatching {
+                val payload = objectMapper.writeValueAsString(event)
+                producer.send(ProducerRecord(EVENTS_TOPIC, event.stockId.toString(), payload))
+            }.onFailure { log.warn("Kafka 이벤트 발행 실패: {}", it.message) }
+        }
     }
 }

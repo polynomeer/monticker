@@ -11,6 +11,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression
 import org.springframework.stereotype.Component
 import java.math.BigDecimal
 import java.util.Properties
+import java.util.concurrent.Executors
 
 const val TICK_PROCESSED_TOPIC = "market.tick-processed"
 
@@ -34,10 +35,16 @@ class TickProcessedKafkaProducer(
         }
     )
 
+    // KafkaProducer#send는 콜백을 넘겨도 브로커 메타데이터를 못 받으면 max.block.ms까지
+    // 호출 스레드를 동기 블로킹한다 — Event Detector 핫 패스 탈출: 호출 스레드를 블로킹하지 않음
+    private val publishExecutor = Executors.newSingleThreadExecutor()
+
     fun publish(stockId: Long, price: BigDecimal) {
-        runCatching {
-            val payload = objectMapper.writeValueAsString(TickProcessedMessage(stockId, price))
-            producer.send(ProducerRecord(TICK_PROCESSED_TOPIC, stockId.toString(), payload))
-        }.onFailure { log.warn("tick-processed Kafka 발행 실패: {}", it.message) }
+        publishExecutor.submit {
+            runCatching {
+                val payload = objectMapper.writeValueAsString(TickProcessedMessage(stockId, price))
+                producer.send(ProducerRecord(TICK_PROCESSED_TOPIC, stockId.toString(), payload))
+            }.onFailure { log.warn("tick-processed Kafka 발행 실패: {}", it.message) }
+        }
     }
 }
