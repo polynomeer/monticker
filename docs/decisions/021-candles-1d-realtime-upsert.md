@@ -173,3 +173,40 @@ TimescaleDB CAgg(`candles_1d_cagg`)는 그대로 두되 이번 fix에서 의존�
   문제를 조사 중 발견했다 — `ConsumerRebalanceListener`/체크포인팅이 필요한 아키텍처
   작업이라 버그 수정 스코프를 벗어나 별도 태스크로 분리했다.
 - VOLUME_SURGE의 시간대별 정규화(위 참고).
+
+## 후속 수정 2 (2026-09-01) — quant-engine·trading-service 포크본 대조
+
+위 "스코프 밖으로 남긴 것"에서 분리했던 `backend/quant-engine`·`backend/trading-service`의
+동일 이름 서비스를 개별 대조해 `candle_time < todayStartKst` 필터를 반영했다. 두 모듈은
+공유 라이브러리가 아니라 완전히 분기된 포크본이라 각 파일의 실제 구현에 맞춰 개별 수정했다.
+
+**quant-engine — `BacktestService.kt`**:
+- 예상보다 갈라진 정도가 컸다. `require(...)` 날짜범위 검증뿐 아니라, 쿼리 자체에
+  `candle_time >= ? AND candle_time <= ?` range 필터가 통째로 빠져 있었다 — `BacktestRequest`가
+  `fromDate`/`toDate`를 받긴 하지만 실제 SQL에서는 전혀 쓰이지 않고 종목의 전체 이력을
+  그대로 로드하고 있었다. 이건 "의도적 단순화"가 아니라 사용자가 지정한 기간이 조용히
+  무시되는 별도의 선행 버그로 판단해, api 버전과 동일하게 range 필터 + 검증
+  (`toDate - fromDate ≤ 2년`, `toDate ≥ fromDate`) + `candle_time < todayStartKst`를
+  모두 복원했다.
+
+**trading-service — `RiskRuleQueryService.kt`**: api 버전과 동일한 구조(raw
+`jdbc.queryForList`)라 VaR 쿼리에 `candle_time < todayStartKst` 조건만 추가하면 됐다.
+
+**trading-service — `PaperPortfolioQueryService.kt`**: 사전 조사 단계에서는 `tradeRepo`(JPA)를
+쓰는 걸 보고 candles_1d 읽기도 JPQL을 거칠 거라 추정했으나, 실제로는 `tradeRepo`는
+`paper_trades`/보유종목 집계에만 쓰이고 `getRiskMetrics()`의 candles_1d 읽기는 api 버전과
+동일하게 raw `jdbc.query`였다. 즉 JPA/raw SQL 분기는 candles_1d와 무관 — 다른 세 파일과
+동일한 방식으로 `AND candle_time < ?`만 추가했다.
+
+**trading-service — `RiskRuleQueryService.kt`의 별도 사본은 없음. 대신 새로 발견한
+`RiskController.kt`**: api에는 없는 `getCurrentExposure()` 엔드포인트가 `RiskController.kt`
+자체에 `estimatedVaR` 계산용 raw candles_1d 쿼리를 중복 보유하고 있었다(`RiskRuleQueryService`와
+로직이 거의 동일하지만 별도 코드 경로) — 요청 범위를 벗어난 세 번째 파일 검토 지시에 따라
+확인했고, 동일한 미확정 "오늘" 행 버그가 있어 같이 고쳤다.
+
+quant-engine 쪽에는 `RiskRuleQueryService`/`PaperPortfolioQueryService` 동일 이름 파일이
+없고(둘 다 trading-service에만 존재), trading-service 쪽에는 `BacktestService` 동일 이름
+파일이 없다 — 세 서비스가 두 모듈에 정확히 나뉘어 존재해 대조 범위가 명확했다. 두 모듈
+전체를 `grep candles_1d`로 재확인해 위 4개 파일 외에 candles_1d를 읽는 곳이 없음을 확인했다.
+
+두 모듈 모두 `./gradlew compileKotlin`, `./gradlew test` 통과 확인.
