@@ -3,7 +3,6 @@ package com.monticker.worker.marketdata
 import com.monticker.worker.kafka.TickKafkaProducer
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression
-import org.springframework.scheduling.annotation.EnableScheduling
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 
@@ -16,9 +15,12 @@ import org.springframework.stereotype.Component
  *
  * [Stage 4] 내부 경로와 Go gateway 경로 모두 Kafka를 거친다.
  * CandleAggregator/EventDetector/AlertEvaluator는 TickKafkaConsumer가 담당.
+ *
+ * @EnableScheduling은 여기가 아니라 WorkerApplication에 둔다 — 이 빈은 role/ingestion
+ * 조건에 따라 등록 자체가 스킵될 수 있어서, 스케줄링 활성화를 이 빈에 묶으면 그 조건이
+ * 거짓인 배포에서 다른 모든 @Scheduled 컬렉터까지 함께 죽는다.
  */
 @Component
-@EnableScheduling
 @ConditionalOnExpression(
     "'\${worker.role:all}'.matches('market|all') && '\${ingestion.source:internal}' != 'kafka'"
 )

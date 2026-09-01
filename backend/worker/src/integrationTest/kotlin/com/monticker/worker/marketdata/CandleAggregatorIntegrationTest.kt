@@ -207,4 +207,43 @@ class CandleAggregatorIntegrationTest {
         assertThat((d2["close"] as BigDecimal).toInt()).isEqualTo(65)
         assertThat((d2["volume"] as Number).toLong()).isEqualTo(30L)
     }
+
+    @Test
+    fun `backfillOnStartup still backfills history even when a live flush already wrote today's row first`() {
+        // 재현 대상: MarketTickScheduler(fixedDelay=1s)가 기동 직후부터 tick을 흘리므로,
+        // backfillOnStartup()의 initialDelay(5s)보다 먼저 오늘자 flush()가 candles_1d에
+        // 행을 하나 만들 수 있다. count(*) > 0 가드였다면 이 한 행만으로 "이미 채워짐"으로
+        // 오판해 과거 이력을 영원히 스킵했을 시나리오.
+        val aggregator = CandleAggregator(jdbc)
+        val stockId = insertStock("RACE1")
+        val historicalDay = LocalDate.of(2026, 8, 20)
+        val today = LocalDate.now(KST)
+
+        jdbc.update(
+            """
+            INSERT INTO candles_1m (stock_id, candle_time, open, high, low, close, volume)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            stockId,
+            java.sql.Timestamp.from(historicalDay.atStartOfDay(KST).plusHours(9).toInstant()),
+            BigDecimal(50), BigDecimal(55), BigDecimal(48), BigDecimal(52), 10L,
+        )
+
+        // 오늘자 실시간 flush가 먼저 도착 — candles_1d에 오늘 행 1개가 이미 생긴 상태를 재현
+        aggregator.onTick(tick(stockId, today, 9, 0, 200, 5))
+        aggregator.flushAll()
+        assertThat(
+            jdbc.queryForObject("SELECT COUNT(*) FROM candles_1d WHERE stock_id = ?", Int::class.java, stockId),
+        ).isEqualTo(1)
+
+        aggregator.backfillOnStartup()
+
+        val rows = jdbc.queryForList(
+            "SELECT candle_time, close FROM candles_1d WHERE stock_id = ? ORDER BY candle_time ASC",
+            stockId,
+        )
+        assertThat(rows).hasSize(2)
+        assertThat((rows[0]["close"] as BigDecimal).toInt()).isEqualTo(52) // 백필된 과거 행
+        assertThat((rows[1]["close"] as BigDecimal).toInt()).isEqualTo(200) // 실시간으로 유지되던 오늘 행
+    }
 }
