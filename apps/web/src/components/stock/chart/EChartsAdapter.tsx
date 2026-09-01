@@ -57,7 +57,7 @@ export default function EChartsAdapter({
   const chartRef     = useRef<import("echarts").ECharts | null>(null);
 
   const buildOption = useCallback(
-    (echarts: typeof import("echarts")) => {
+    () => {
       if (!candles.length) return null;
 
       const dates  = candles.map(c => fmtTime(c.time));
@@ -86,7 +86,6 @@ export default function EChartsAdapter({
         .filter(Boolean);
 
       const CHART_H  = height - 100; // 캔들 패널 높이
-      const VOL_H    = 90;           // 볼륨 패널 높이
       const VOL_TOP  = CHART_H + 8;
 
       return {
@@ -317,7 +316,7 @@ export default function EChartsAdapter({
             barMaxWidth: 12,
           },
         ],
-      } satisfies Parameters<typeof echarts.init>[0] extends never ? never : object;
+      };
     },
     [candles, events, height, theme]
   );
@@ -337,7 +336,7 @@ export default function EChartsAdapter({
       });
       chartRef.current = chart;
 
-      const opt = buildOption(echarts);
+      const opt = buildOption();
       if (opt) chart.setOption(opt as Parameters<typeof chart.setOption>[0]);
 
       const onResize = () => {

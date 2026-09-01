@@ -20,6 +20,7 @@ const STRATEGIES = [
 
 interface BacktestResult {
   symbol: string; strategy: string;
+  fromDate: string; toDate: string;
   initialCapital: number; finalCapital: number;
   metrics: {
     totalReturn: number; annualizedReturn: number;

@@ -5,24 +5,25 @@ import com.monticker.api.paper.domain.PaperAccount
 import com.monticker.api.paper.domain.PaperSettlement
 import com.monticker.api.paper.domain.PaperTrade
 import com.monticker.api.paper.domain.SettlementStatus
+import com.monticker.api.paper.events.PaperSettlementCompletedEvent
 import com.monticker.api.paper.infrastructure.PaperAccountRepository
 import com.monticker.api.paper.infrastructure.PaperSettlementRepository
-import com.monticker.api.wallet.application.LedgerService
 import io.mockk.*
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.springframework.context.ApplicationEventPublisher
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.util.Optional
 
 class PaperSettlementServiceTest {
 
-    private val settlementRepo = mockk<PaperSettlementRepository>()
-    private val accountRepo    = mockk<PaperAccountRepository>()
-    private val ledgerService  = mockk<LedgerService>(relaxed = true)
+    private val settlementRepo  = mockk<PaperSettlementRepository>()
+    private val accountRepo     = mockk<PaperAccountRepository>()
+    private val eventPublisher  = mockk<ApplicationEventPublisher>(relaxed = true)
 
-    private val service = PaperSettlementService(settlementRepo, accountRepo, ledgerService)
+    private val service = PaperSettlementService(settlementRepo, accountRepo, eventPublisher)
 
     private val slot = slot<PaperSettlement>()
 
@@ -86,7 +87,7 @@ class PaperSettlementServiceTest {
         assertThat(settlement.settledAt).isNotNull()
         // 수수료+세금 = 1365 차감
         assertThat(account.cash.amount).isEqualByComparingTo(BigDecimal("998635"))
-        verify { ledgerService.recordSettlementComplete(any(), any(), any(), any(), any(), any()) }
+        verify { eventPublisher.publishEvent(any<PaperSettlementCompletedEvent>()) }
     }
 
     @Test
@@ -97,7 +98,7 @@ class PaperSettlementServiceTest {
         service.settle(settlement)
 
         assertThat(settlement.status).isEqualTo(SettlementStatus.FAILED)
-        verify(exactly = 0) { ledgerService.recordSettlementComplete(any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { eventPublisher.publishEvent(any<PaperSettlementCompletedEvent>()) }
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

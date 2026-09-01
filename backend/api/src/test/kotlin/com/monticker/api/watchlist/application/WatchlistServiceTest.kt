@@ -1,8 +1,8 @@
 package com.monticker.api.watchlist.application
 
+import com.monticker.api.stock.application.StockService
 import com.monticker.api.stock.domain.Market
 import com.monticker.api.stock.domain.Stock
-import com.monticker.api.stock.infrastructure.StockRepository
 import com.monticker.api.watchlist.domain.WatchlistGroup
 import com.monticker.api.watchlist.infrastructure.WatchlistGroupRepository
 import com.monticker.api.watchlist.infrastructure.WatchlistItemRepository
@@ -19,10 +19,10 @@ class WatchlistServiceTest {
 
     private val groupRepository = mockk<WatchlistGroupRepository>()
     private val itemRepository = mockk<WatchlistItemRepository>()
-    private val stockRepository = mockk<StockRepository>()
+    private val stockService = mockk<StockService>()
     private val watchlistSearchRepository = mockk<WatchlistSearchRepository>(relaxed = true)
     private val esOps = mockk<ElasticsearchOperations>(relaxed = true)
-    private val service = WatchlistService(groupRepository, itemRepository, stockRepository, watchlistSearchRepository, esOps)
+    private val service = WatchlistService(groupRepository, itemRepository, stockService, watchlistSearchRepository, esOps)
 
     @Test
     fun `createGroup throws when name is blank`() {
@@ -44,7 +44,7 @@ class WatchlistServiceTest {
         val stock = Stock(id = 1L, symbol = "005930", name = "삼성전자", market = Market.KOSPI, exchange = "KRX")
 
         every { groupRepository.findById(1L) } returns Optional.of(group)
-        every { stockRepository.findById(1L) } returns Optional.of(stock)
+        every { stockService.getById(1L) } returns stock
         every { itemRepository.existsByGroupIdAndStockId(1L, 1L) } returns true
 
         assertThatThrownBy { service.addItem(1L, 1L, 1L, null) }

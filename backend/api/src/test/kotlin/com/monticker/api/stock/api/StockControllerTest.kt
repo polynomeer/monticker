@@ -1,5 +1,6 @@
 package com.monticker.api.stock.api
 
+import com.monticker.api.stock.application.StockSearchResult
 import com.monticker.api.stock.application.StockSearchService
 import com.monticker.api.stock.application.StockService
 import com.monticker.api.stock.domain.Market
@@ -16,14 +17,14 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders
 class StockControllerTest {
 
     private val stockService = mockk<StockService>()
-    private val stockSearchService = mockk<StockSearchService>(relaxed = true)
+    private val stockSearchService = mockk<StockSearchService>()
     private val controller = StockController(stockService, stockSearchService)
     private val mockMvc: MockMvc = MockMvcBuilders.standaloneSetup(controller).build()
 
     @Test
     fun `GET search returns matching stocks`() {
-        every { stockService.search("삼성") } returns listOf(
-            Stock(id = 1L, symbol = "005930", name = "삼성전자", market = Market.KOSPI, exchange = "KRX")
+        every { stockSearchService.search("삼성") } returns listOf(
+            StockSearchResult(id = 1L, symbol = "005930", name = "삼성전자", market = "KOSPI", sector = null, score = 1.0f)
         )
 
         mockMvc.perform(get("/api/stocks/search").param("query", "삼성"))

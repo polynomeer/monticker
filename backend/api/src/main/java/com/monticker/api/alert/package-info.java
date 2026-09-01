@@ -1,4 +1,4 @@
 @org.springframework.modulith.ApplicationModule(
-    allowedDependencies = {}
+    allowedDependencies = {"common"}
 )
 package com.monticker.api.alert;

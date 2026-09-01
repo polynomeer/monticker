@@ -5,7 +5,6 @@ import AlertStats from "@/components/alerts/AlertStats";
 import EmptyState from "@/components/common/EmptyState";
 import { Card } from "@/components/ui/Card";
 import { authFetch } from "@/services/api";
-import { useRouter } from "next/navigation";
 
 interface AlertHistory {
   id: number;

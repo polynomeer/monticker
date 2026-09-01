@@ -18,6 +18,10 @@ export interface ScreenerItem {
   amount: number;
   buyRatio: number;
   sellRatio: number;
+  marketCap: number | null;
+  per: number | null;
+  pbr: number | null;
+  isFundamentalsMocked: boolean;
 }
 
 interface ScreenerState {
@@ -37,7 +41,7 @@ interface WsMessage {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
-export function useScreener(tab: string, market: string, sort: string) {
+export function useScreener(tab: string, market: string, sort: string, marketCapTier: string = "all") {
   const [state, setState] = useState<ScreenerState>({
     items: [], total: 0, hasMore: false,
     loading: true, loadingMore: false, wsConnected: false,
@@ -59,7 +63,7 @@ export function useScreener(tab: string, market: string, sort: string) {
 
     try {
       const res = await fetch(
-        `/api/screener?tab=${tab}&market=${market}&sort=${sort}&limit=20&offset=${offset}`,
+        `/api/screener?tab=${tab}&market=${market}&sort=${sort}&limit=20&offset=${offset}&marketCapTier=${marketCapTier}`,
         { signal: abortRef.current.signal }
       );
       if (!res.ok) return;
@@ -88,7 +92,7 @@ export function useScreener(tab: string, market: string, sort: string) {
       if ((e as Error).name !== "AbortError")
         setState(p => ({ ...p, loading: false, loadingMore: false }));
     }
-  }, [tab, market, sort]);
+  }, [tab, market, sort, marketCapTier]);
 
   useEffect(() => {
     offsetRef.current = 0;

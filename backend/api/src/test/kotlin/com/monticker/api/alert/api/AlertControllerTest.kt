@@ -7,8 +7,12 @@ import com.monticker.api.alert.domain.AlertRuleType
 import io.mockk.every
 import io.mockk.justRun
 import io.mockk.mockk
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.http.MediaType
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
@@ -21,6 +25,16 @@ class AlertControllerTest {
     private val controller = AlertController(alertService)
     private val mockMvc: MockMvc = MockMvcBuilders.standaloneSetup(controller).build()
     private val objectMapper = ObjectMapper().apply { findAndRegisterModules() }
+
+    // AlertController.userId()는 SecurityContextHolder에서 principal을 꺼낸다 — standalone MockMvc는
+    // 실제 시큐리티 필터 체인을 안 태우므로 직접 채워줘야 한다.
+    @BeforeEach
+    fun setUpSecurityContext() {
+        SecurityContextHolder.getContext().authentication = UsernamePasswordAuthenticationToken(1L, null, emptyList())
+    }
+
+    @AfterEach
+    fun clearSecurityContext() = SecurityContextHolder.clearContext()
 
     private fun makeRule(id: Long = 1L) = AlertRule(
         id = id, userId = 1L, stockId = 1L,

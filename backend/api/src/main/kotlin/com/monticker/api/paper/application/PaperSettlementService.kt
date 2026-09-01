@@ -4,10 +4,11 @@ import com.monticker.api.paper.domain.PaperSettlement
 import com.monticker.api.paper.domain.PaperTrade
 import com.monticker.api.paper.domain.SettlementCalculator
 import com.monticker.api.paper.domain.SettlementStatus
+import com.monticker.api.paper.events.PaperSettlementCompletedEvent
 import com.monticker.api.paper.infrastructure.PaperAccountRepository
 import com.monticker.api.paper.infrastructure.PaperSettlementRepository
-import com.monticker.api.wallet.application.LedgerService
 import org.slf4j.LoggerFactory
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
@@ -19,7 +20,7 @@ import java.time.LocalDate
 class PaperSettlementService(
     private val settlementRepo: PaperSettlementRepository,
     private val accountRepo: PaperAccountRepository,
-    private val ledgerService: LedgerService,
+    private val eventPublisher: ApplicationEventPublisher,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -73,13 +74,15 @@ class PaperSettlementService(
         settlementRepo.save(settlement)
         accountRepo.save(account)
 
-        ledgerService.recordSettlementComplete(
-            userId       = settlement.userId,
-            settlementId = settlement.id,
-            stockId      = settlement.stockId,
-            fee          = settlement.fee,
-            tax          = settlement.tax,
-            balanceAfter = account.cash.amount,
+        eventPublisher.publishEvent(
+            PaperSettlementCompletedEvent(
+                userId       = settlement.userId,
+                settlementId = settlement.id,
+                stockId      = settlement.stockId,
+                fee          = settlement.fee,
+                tax          = settlement.tax,
+                balanceAfter = account.cash.amount,
+            )
         )
 
         log.info(

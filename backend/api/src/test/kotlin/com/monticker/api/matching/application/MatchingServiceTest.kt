@@ -11,14 +11,12 @@ import com.monticker.api.matching.saga.OrderSagaOrchestrator
 import com.monticker.api.matching.statemachine.OrderStateMachineService
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.slot
 import io.mockk.verify
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.jdbc.core.JdbcTemplate
-import java.math.BigDecimal
 import java.util.Optional
 
 class MatchingServiceTest {
@@ -37,118 +35,22 @@ class MatchingServiceTest {
 
     private val userId = 1L
     private val stockId = 100L
-    private val currentPrice = BigDecimal("1000")
-
-    private fun stubStockExistsAndPrice() {
-        every { jdbc.queryForObject("SELECT COUNT(*) FROM stocks WHERE id = ?", Long::class.java, stockId) } returns 1L
-        every {
-            jdbc.queryForObject(
-                "SELECT close FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1",
-                BigDecimal::class.java, stockId
-            )
-        } returns currentPrice
-    }
-
-    private fun stubAccountCash(cash: BigDecimal = BigDecimal("10000000")) {
-        every {
-            jdbc.queryForObject("SELECT cash FROM paper_accounts WHERE user_id = ?", BigDecimal::class.java, userId)
-        } returns cash
-    }
-
-    private fun approvedRiskResult() = RiskCheckResult(approved = true, blockedBy = null, severity = "APPROVED", checks = emptyList())
-    private fun blockedRiskResult(reason: String = "DailyLossRule") =
-        RiskCheckResult(approved = false, blockedBy = reason, severity = "BLOCKED", checks = emptyList())
-
-    private fun savedOrderSlot(): io.mockk.MockKMatcherScope.() -> Order = { any() }
 
     // REJECTED 케이스는 RiskCheckedAspect 에서 처리 — RiskCheckedAspectTest 참고
+    // 체결/현금예약/오더북 제출 등 실제 주문 처리 로직은 OrderSagaOrchestrator로 이동했다 (ADR-011).
+    // submitOrder는 이제 순수 위임이라 여기서는 위임 자체만 검증하고, 로직 테스트는
+    // OrderSagaOrchestratorTest에서 다룬다.
 
     @Test
-    fun `submitOrder fully fills a MARKET order when risk check passes`() {
-        stubStockExistsAndPrice()
-        stubAccountCash()
-        every { riskChecker.check(userId, stockId, "BUY", 10, currentPrice) } returns approvedRiskResult()
+    fun `submitOrder delegates to the saga orchestrator and returns its response unchanged`() {
+        val req = SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10)
+        val expected = mockk<com.monticker.api.matching.application.SubmitOrderResponse>()
+        every { sagaOrchestrator.execute(userId, req) } returns expected
 
-        val savedOrders = mutableListOf<Order>()
-        every { orderRepo.save(capture(savedOrders)) } answers { savedOrders.last() }
+        val response = service.submitOrder(userId, req)
 
-        val fillSlot = slot<com.monticker.api.matching.domain.Fill>()
-        every { fillRepo.save(capture(fillSlot)) } answers {
-            // simulate generated id
-            com.monticker.api.matching.domain.Fill(
-                id = 1L,
-                orderId = fillSlot.captured.orderId,
-                userId = fillSlot.captured.userId,
-                stockId = fillSlot.captured.stockId,
-                side = fillSlot.captured.side,
-                quantity = fillSlot.captured.quantity,
-                fillPrice = fillSlot.captured.fillPrice,
-                amount = fillSlot.captured.amount,
-                fee = fillSlot.captured.fee,
-            )
-        }
-
-        val response = service.submitOrder(
-            userId,
-            SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10)
-        )
-
-        assertThat(response.order.status).isEqualTo("FILLED")
-        assertThat(response.fills).hasSize(1)
-        assertThat(response.fills[0].fillPrice).isEqualByComparingTo(currentPrice)
-        verify { fillRepo.save(any()) }
-        verify { eventPublisher.publishEvent(any<com.monticker.api.matching.events.OrderFilledEvent>()) }
-    }
-
-    @Test
-    fun `submitOrder leaves LIMIT order unfilled and submits it to order book when price does not cross`() {
-        stubStockExistsAndPrice()
-        stubAccountCash()
-        val limitPrice = BigDecimal("900")
-        every { riskChecker.check(userId, stockId, "BUY", 10, limitPrice) } returns approvedRiskResult()
-
-        val savedOrders = mutableListOf<Order>()
-        every { orderRepo.save(capture(savedOrders)) } answers { savedOrders.last() }
-
-        val response = service.submitOrder(
-            userId,
-            SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "LIMIT", quantity = 10, limitPrice = limitPrice)
-        )
-
-        assertThat(response.order.status).isEqualTo("PENDING")
-        assertThat(response.fills).isEmpty()
-        verify { orderBookService.submit(any()) }
-    }
-
-    @Test
-    fun `submitOrder for MARKET order documents actual no-liquidity behavior — fills at current price regardless of book`() {
-        // NOTE: MatchingService.submitOrder for MARKET orders does NOT consult the
-        // order book at all for fill determination — it always "fills" a MARKET order
-        // at currentPrice directly (see fillPrice `when` block: `req.orderType == "MARKET" -> currentPrice`).
-        // The order book (`orderBookService.submit`) is only invoked for the LIMIT-no-fill path.
-        // So there is no "zero liquidity -> cancelled/rejected" branch for MARKET orders in this service;
-        // it always treats MARKET orders as fillable at currentPrice without checking real liquidity.
-        stubStockExistsAndPrice()
-        stubAccountCash()
-        every { riskChecker.check(userId, stockId, "BUY", 10, currentPrice) } returns approvedRiskResult()
-
-        val savedOrders = mutableListOf<Order>()
-        every { orderRepo.save(capture(savedOrders)) } answers { savedOrders.last() }
-        every { fillRepo.save(any()) } answers {
-            val f = firstArg<com.monticker.api.matching.domain.Fill>()
-            com.monticker.api.matching.domain.Fill(
-                id = 1L, orderId = f.orderId, userId = f.userId, stockId = f.stockId,
-                side = f.side, quantity = f.quantity, fillPrice = f.fillPrice, amount = f.amount, fee = f.fee,
-            )
-        }
-
-        val response = service.submitOrder(
-            userId,
-            SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10)
-        )
-
-        assertThat(response.order.status).isEqualTo("FILLED")
-        verify(exactly = 0) { orderBookService.submit(any()) }
+        assertThat(response).isSameAs(expected)
+        verify { sagaOrchestrator.execute(userId, req) }
     }
 
     @Test

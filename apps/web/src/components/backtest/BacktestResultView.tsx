@@ -2,7 +2,44 @@
 import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/Card";
 
-interface Props { result: any; }
+interface BacktestMetrics {
+  totalReturn: number;
+  sharpeRatio: number;
+  maxDrawdown: number;
+  winRate: number;
+  profitTrades: number;
+  totalTrades: number;
+  profitFactor: number;
+  avgHoldingDays: number;
+}
+
+interface BacktestTrade {
+  entryDate: string;
+  exitDate: string;
+  entryPrice: number;
+  exitPrice: number;
+  pnlPct: number;
+  exitReason: string;
+}
+
+interface EquityPoint {
+  date: string;
+  equity: number;
+}
+
+interface BacktestResult {
+  strategy: string;
+  symbol: string;
+  fromDate: string;
+  toDate: string;
+  initialCapital: number;
+  finalCapital: number;
+  metrics: BacktestMetrics;
+  trades: BacktestTrade[];
+  equityCurve: EquityPoint[];
+}
+
+interface Props { result: BacktestResult; }
 
 function MetricCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
@@ -49,7 +86,7 @@ export default function BacktestResultView({ result }: Props) {
         tooltip: { trigger: "axis", backgroundColor: isDark ? "#282a36" : "#fff",
           borderColor: "#44475a", textStyle: { color: isDark ? "#f8f8f2" : "#374151", fontSize: 11 } },
         grid: { left: 60, right: 16, top: 16, bottom: 28 },
-        xAxis: { type: "category", data: equityCurve.map((p: any) => p.date),
+        xAxis: { type: "category", data: equityCurve.map(p => p.date),
           axisLabel: { color: isDark ? "#6272a4" : "#6b7280", fontSize: 10 },
           axisLine: { lineStyle: { color: isDark ? "#44475a" : "#e5e7eb" } } },
         yAxis: { type: "value", position: "left",
@@ -57,7 +94,7 @@ export default function BacktestResultView({ result }: Props) {
             formatter: (v: number) => `${(v / 10000).toFixed(0)}만` },
           splitLine: { lineStyle: { color: isDark ? "#44475a" : "#e5e7eb", type: "dashed" } } },
         series: [
-          { type: "line", data: equityCurve.map((p: any) => p.equity),
+          { type: "line", data: equityCurve.map(p => p.equity),
             smooth: true, symbol: "none",
             lineStyle: { color: finalCapital >= initialCapital ? "#0ecb81" : "#f6465d", width: 2 },
             areaStyle: { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1,
@@ -122,7 +159,7 @@ export default function BacktestResultView({ result }: Props) {
                   <th key={h} className="px-3 py-2 text-left">{h}</th>)}
               </tr></thead>
               <tbody>
-                {trades.map((t: any, i: number) => (
+                {trades.map((t, i) => (
                   <tr key={i} className="border-b border-gray-100 dark:border-dracula-line/40 hover:bg-gray-50 dark:hover:bg-dracula-line/10 transition-colors">
                     <td className="px-3 py-2 text-gray-500 dark:text-dracula-comment tabular-nums">{t.entryDate}</td>
                     <td className="px-3 py-2 text-gray-500 dark:text-dracula-comment tabular-nums">{t.exitDate}</td>

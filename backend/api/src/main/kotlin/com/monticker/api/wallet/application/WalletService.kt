@@ -1,6 +1,6 @@
 package com.monticker.api.wallet.application
 
-import com.monticker.api.paper.infrastructure.PaperAccountRepository
+import com.monticker.api.paper.application.PaperAccountQueryService
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -19,22 +19,20 @@ data class WalletMapResponse(
 @Service
 @Transactional(readOnly = true)
 class WalletService(
-    private val accountRepo: PaperAccountRepository,
+    private val accountQueryService: PaperAccountQueryService,
     private val ledgerService: LedgerService,
     private val jdbc: JdbcTemplate,
 ) {
 
     fun getWalletMap(userId: Long): WalletMapResponse {
-        val account = accountRepo.findByUserId(userId).orElseGet {
-            com.monticker.api.paper.domain.PaperAccount(userId = userId)
-        }
+        val cash = accountQueryService.getCashBalance(userId)
 
         val holdingsValue = calcHoldingsValue(userId)
-        val totalAssets = account.cash.amount + holdingsValue
+        val totalAssets = cash.amount + holdingsValue
         val recentLedger = ledgerService.getLedger(userId).take(10)
 
         return WalletMapResponse(
-            availableCash = account.cash.amount,
+            availableCash = cash.amount,
             reservedCash = BigDecimal.ZERO,
             holdingsValue = holdingsValue,
             settlementPending = BigDecimal.ZERO,

@@ -1,7 +1,7 @@
 package com.monticker.api.wallet.application
 
-import com.monticker.api.paper.domain.PaperTrade
-import com.monticker.api.paper.infrastructure.PaperTradeRepository
+import com.monticker.api.paper.application.PaperTradeQueryService
+import com.monticker.api.paper.application.PaperTradeSummary
 import com.monticker.api.wallet.domain.EmotionTag
 import com.monticker.api.wallet.domain.EmotionType
 import com.monticker.api.wallet.infrastructure.EmotionTagRepository
@@ -13,14 +13,13 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.jdbc.core.JdbcTemplate
 import java.math.BigDecimal
-import java.util.Optional
 
 class EmotionTagServiceTest {
 
     private val emotionTagRepo = mockk<EmotionTagRepository>()
-    private val tradeRepo = mockk<PaperTradeRepository>()
+    private val tradeQueryService = mockk<PaperTradeQueryService>()
     private val jdbc = mockk<JdbcTemplate>()
-    private val service = EmotionTagService(emotionTagRepo, tradeRepo, jdbc)
+    private val service = EmotionTagService(emotionTagRepo, tradeQueryService, jdbc)
 
     @Test
     fun `saveTag persists a new emotion tag for a trade with no existing tag`() {
@@ -94,7 +93,7 @@ class EmotionTagServiceTest {
             EmotionTag(id = 3L, paperTradeId = 3L, userId = 1L, emotion = EmotionType.LONG_TERM),
         )
         every { emotionTagRepo.findAllByUserIdOrderByCreatedAtDesc(1L) } returns tags
-        every { tradeRepo.findById(any()) } returns Optional.empty()
+        every { tradeQueryService.findById(any()) } returns null
 
         val result = service.getAnalysis(1L)
 
@@ -106,10 +105,10 @@ class EmotionTagServiceTest {
 
     @Test
     fun `getAnalysis computes average return for emotions whose buy trades were later sold`() {
-        val buyTrade = PaperTrade(id = 1L, userId = 1L, stockId = 100L, side = "BUY", quantity = 10, price = BigDecimal("100"), amount = BigDecimal("1000"))
+        val buyTrade = PaperTradeSummary(id = 1L, userId = 1L, stockId = 100L, side = "BUY", quantity = 10, price = BigDecimal("100"), amount = BigDecimal("1000"))
         val tag = EmotionTag(id = 1L, paperTradeId = 1L, userId = 1L, emotion = EmotionType.CONFIDENT)
         every { emotionTagRepo.findAllByUserIdOrderByCreatedAtDesc(1L) } returns listOf(tag)
-        every { tradeRepo.findById(1L) } returns Optional.of(buyTrade)
+        every { tradeQueryService.findById(1L) } returns buyTrade
         every {
             jdbc.queryForObject(match<String> { it.contains("side = 'SELL'") }, BigDecimal::class.java, 1L, 100L, buyTrade.tradedAt)
         } returns BigDecimal("110")
@@ -124,10 +123,10 @@ class EmotionTagServiceTest {
 
     @Test
     fun `getAnalysis leaves avgReturnPct null when the buy trade has not yet been sold`() {
-        val buyTrade = PaperTrade(id = 1L, userId = 1L, stockId = 100L, side = "BUY", quantity = 10, price = BigDecimal("100"), amount = BigDecimal("1000"))
+        val buyTrade = PaperTradeSummary(id = 1L, userId = 1L, stockId = 100L, side = "BUY", quantity = 10, price = BigDecimal("100"), amount = BigDecimal("1000"))
         val tag = EmotionTag(id = 1L, paperTradeId = 1L, userId = 1L, emotion = EmotionType.CONFIDENT)
         every { emotionTagRepo.findAllByUserIdOrderByCreatedAtDesc(1L) } returns listOf(tag)
-        every { tradeRepo.findById(1L) } returns Optional.of(buyTrade)
+        every { tradeQueryService.findById(1L) } returns buyTrade
         every {
             jdbc.queryForObject(any<String>(), BigDecimal::class.java, any(), any(), any())
         } throws org.springframework.dao.EmptyResultDataAccessException(1)
@@ -140,10 +139,10 @@ class EmotionTagServiceTest {
 
     @Test
     fun `getAnalysis ignores tags attached to SELL trades when computing returns`() {
-        val sellTrade = PaperTrade(id = 1L, userId = 1L, stockId = 100L, side = "SELL", quantity = 10, price = BigDecimal("100"), amount = BigDecimal("1000"))
+        val sellTrade = PaperTradeSummary(id = 1L, userId = 1L, stockId = 100L, side = "SELL", quantity = 10, price = BigDecimal("100"), amount = BigDecimal("1000"))
         val tag = EmotionTag(id = 1L, paperTradeId = 1L, userId = 1L, emotion = EmotionType.REBALANCING)
         every { emotionTagRepo.findAllByUserIdOrderByCreatedAtDesc(1L) } returns listOf(tag)
-        every { tradeRepo.findById(1L) } returns Optional.of(sellTrade)
+        every { tradeQueryService.findById(1L) } returns sellTrade
 
         val result = service.getAnalysis(1L)
 

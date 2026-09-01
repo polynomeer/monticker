@@ -4,10 +4,16 @@ import io.jsonwebtoken.Claims
 import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.security.Keys
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.modulith.NamedInterface
 import org.springframework.stereotype.Component
 import java.util.Date
 import javax.crypto.SecretKey
 
+/**
+ * 다른 모듈에서 JWT로부터 사용자 식별자를 추출할 때 사용하는 auth 모듈의 공개 API.
+ * auth.infrastructure의 나머지 타입(OAuth2/필터 내부 구현)은 auth 모듈 내부로 한정된다.
+ */
+@NamedInterface("api")
 @Component
 class JwtTokenProvider(
     @Value("\${jwt.secret}") secret: String,

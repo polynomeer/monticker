@@ -15,4 +15,8 @@ data class ScreenerItem(
     val amount: java.math.BigDecimal, // 거래대금
     val buyRatio: Int,                // Mock: 40~70
     val sellRatio: Int,               // 100 - buyRatio
+    val marketCap: Long?,             // 시가총액 (원 단위) — KOSPI/KOSDAQ만 존재
+    val per: java.math.BigDecimal?,
+    val pbr: java.math.BigDecimal?,
+    val isFundamentalsMocked: Boolean,
 )

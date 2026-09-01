@@ -2,10 +2,6 @@
 node_modules/
 **/node_modules/
 
-# ── pnpm ──────────────────────────────────────────────────────
-pnpm-lock.yaml
-**/pnpm-lock.yaml
-
 # ── Next.js ───────────────────────────────────────────────────
 apps/web/.next/
 apps/web/out/
@@ -20,13 +16,12 @@ apps/mobile/ios/
 # ── Gradle ────────────────────────────────────────────────────
 **/build/
 **/.gradle/
-**/gradle/wrapper/gradle-wrapper.jar
-!**/gradle/wrapper/gradle-wrapper.properties
 
 # ── JVM ───────────────────────────────────────────────────────
 **/*.class
 **/*.jar
 **/*.war
+!**/gradle/wrapper/gradle-wrapper.jar
 
 # ── IDE ───────────────────────────────────────────────────────
 .idea/

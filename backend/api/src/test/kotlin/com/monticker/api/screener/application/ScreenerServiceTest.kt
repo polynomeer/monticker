@@ -21,6 +21,7 @@ class ScreenerServiceTest {
         market = "KOSPI", sector = null, price = BigDecimal("10000"), prevClose = BigDecimal("9900"),
         changeRate = 1.0, changeAmount = BigDecimal("100"), volume = 1000L, amount = BigDecimal("10000000"),
         buyRatio = 55, sellRatio = 45,
+        marketCap = null, per = null, pbr = null, isFundamentalsMocked = false,
     )
 
     @Test

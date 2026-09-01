@@ -1,6 +1,6 @@
 package com.monticker.api.wallet.application
 
-import com.monticker.api.paper.infrastructure.PaperTradeRepository
+import com.monticker.api.paper.application.PaperTradeQueryService
 import com.monticker.api.wallet.domain.EmotionTag
 import com.monticker.api.wallet.domain.EmotionType
 import com.monticker.api.wallet.infrastructure.EmotionTagRepository
@@ -34,7 +34,7 @@ data class EmotionAnalysisResponse(
 @Transactional
 class EmotionTagService(
     private val emotionTagRepo: EmotionTagRepository,
-    private val tradeRepo: PaperTradeRepository,
+    private val tradeQueryService: PaperTradeQueryService,
     private val jdbc: JdbcTemplate,
 ) {
 
@@ -66,7 +66,7 @@ class EmotionTagService(
 
         val stats = grouped.map { (emotion, emotionTags) ->
             val returns = emotionTags.mapNotNull { tag ->
-                val trade = tradeRepo.findById(tag.paperTradeId).orElse(null) ?: return@mapNotNull null
+                val trade = tradeQueryService.findById(tag.paperTradeId) ?: return@mapNotNull null
                 if (trade.side != "BUY") return@mapNotNull null
 
                 val sellPrice = runCatching {
