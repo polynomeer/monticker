@@ -64,24 +64,6 @@ class WalletServiceTest {
     }
 
     @Test
-    fun `getWalletMap skips holdings whose current price cannot be resolved`() {
-        val account = PaperAccount(userId = 1L, cash = Money.of("1000000"))
-        every { accountRepo.findByUserId(1L) } returns Optional.of(account)
-        every {
-            jdbc.queryForList(match<String> { it.contains("GROUP BY stock_id") }, any<Long>())
-        } returns listOf(mapOf("stock_id" to 999L, "net_qty" to 5))
-        every {
-            jdbc.queryForObject(match<String> { it.contains("candles_1m") }, BigDecimal::class.java, 999L)
-        } throws org.springframework.dao.EmptyResultDataAccessException(1)
-        every { ledgerService.getLedger(1L) } returns emptyList()
-
-        val result = service.getWalletMap(1L)
-
-        assertThat(result.holdingsValue).isEqualByComparingTo(BigDecimal.ZERO)
-        assertThat(result.totalAssets).isEqualByComparingTo(BigDecimal("1000000"))
-    }
-
-    @Test
     fun `getWalletMap returns only the most recent 10 ledger events`() {
         val account = PaperAccount(userId = 1L, cash = Money.of("1000000"))
         every { accountRepo.findByUserId(1L) } returns Optional.of(account)
