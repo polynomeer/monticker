@@ -32,13 +32,24 @@ import org.springframework.stereotype.Component
  * role=event: 항상 활성화.
  *             처리 후 market.tick-processed 토픽으로 Kafka 발행해
  *             alert 워커에 전파한다.
+ * role=market/alert: 비활성화. market은 틱을 발행만 하고(MarketTickScheduler),
+ *             alert는 market.tick-processed를 별도 컨슈머 그룹(AlertKafkaConsumer,
+ *             groupId=monticker-alert-worker)으로 소비한다 — 둘 다 market.ticks를
+ *             직접 소비할 이유가 없다.
  *
  * tick.consumer=integration 이면 TickPipelineConfig(Spring Integration EIP)가
  * 대신 처리하므로 이 Bean이 비활성화되어야 한다. role=event 에서는 integration 모드 미사용.
+ *
+ * ADR-022: 이전 조건("role=='event' || tick.consumer=='legacy'")은 tick.consumer가
+ * 어디서도 오버라이드되지 않아(기본값 legacy) role=market/alert에서도 참이 되는 버그가
+ * 있었다 — docker-compose msa 프로필의 worker-market/event/alert 3개 프로세스가 전부
+ * 같은 컨슈머 그룹(monticker-worker)으로 market.ticks를 중복 소비해, 파티션 리밸런스 시
+ * 진행 중이던 캔들이 유실될 수 있었다. role=all 조건을 명시적으로 갈라 이를 막는다.
  */
 @Component
 @ConditionalOnExpression(
-    "'\${worker.role:all}' == 'event' || '\${tick.consumer:legacy}' == 'legacy'"
+    "'\${worker.role:all}' == 'event' || " +
+    "('\${worker.role:all}' == 'all' && '\${tick.consumer:legacy}' == 'legacy')"
 )
 class TickKafkaConsumer(
     private val redisTickWriter: RedisTickWriter,
