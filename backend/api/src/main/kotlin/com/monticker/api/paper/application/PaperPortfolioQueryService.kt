@@ -8,6 +8,8 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.time.Instant
+import java.time.ZoneId
 
 @Service
 @Transactional(readOnly = true)
@@ -124,11 +126,13 @@ class PaperPortfolioQueryService(
         )
 
         val placeholders = stockIds.joinToString(",") { "?" }
+        // candles_1d의 "오늘" 행은 장중 계속 바뀌는 미확정 값이라 샤프비율/변동성 계산에서 제외한다.
+        val todayStartKst = Instant.now().atZone(ZoneId.of("Asia/Seoul")).toLocalDate().atStartOfDay(ZoneId.of("Asia/Seoul")).toInstant()
         val candles = jdbc.query(
             """SELECT stock_id, DATE(candle_time AT TIME ZONE 'Asia/Seoul') AS d, close
-               FROM candles_1d WHERE stock_id IN ($placeholders) ORDER BY d, stock_id""",
+               FROM candles_1d WHERE stock_id IN ($placeholders) AND candle_time < ? ORDER BY d, stock_id""",
             { rs, _ -> Triple(rs.getLong("stock_id"), rs.getDate("d").toLocalDate(), rs.getBigDecimal("close").toDouble()) },
-            *stockIds.toTypedArray(),
+            *stockIds.toTypedArray(), java.sql.Timestamp.from(todayStartKst),
         )
 
         val priceMap = candles.groupBy { it.second }
