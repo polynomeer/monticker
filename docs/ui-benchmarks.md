@@ -86,7 +86,7 @@ monticker [스크리너](apps/web/src/app/page.tsx)는 지금 pill 토글(전체
 **적합하지 않은 것**
 - 5×5 그리드 수준의 다차원 필터(Analyst Recom, Short Float, IPO Date 등)는 미국 주식 펀더멘털 데이터 의존도가 높음. monticker의 실시간성·이벤트 중심 포지셔닝과는 다른 축이라 전면 도입보다는 **점진적으로 필터 축 2~3개만 추가**하는 쪽이 맞음
 
-**착수 보류 — 이유**: `ScreenerItem`(백엔드 도메인)엔 이미 price/changeRate/volume/amount/buyRatio/sector가 다 있고 [ScreenerTable](apps/web/src/components/screener/ScreenerTable.tsx)이 그걸 그대로 다 보여주고 있어서, 지금 당장 "표시 컬럼을 나눠서 전환"해봐야 보여줄 다른 컬럼이 없다. Market Cap·P/E·Dividend Yield처럼 Finviz식 컬럼셋을 만들려면 펀더멘털 데이터를 새로 도메인에 들여와야 하는데, 이건 스키마·데이터 소스 결정이 필요한 별도 작업이라 이 문서 범위를 벗어난다. 필터/컬럼 분리는 그 데이터가 들어온 뒤에 재검토.
+**필터/컬럼 분리 — 완료**: [ADR-018](decisions/018-stock-fundamentals-kis-reuse.md)에서 데이터 소스를 결정했다: 신규 벤더 없이 이미 매초 호출 중인 KIS `inquire-price` 응답에서 버려지던 `per`/`pbr`/`hts_avls`(시가총액) 필드를 파싱. `StockFundamentalsCollector`(일일 배치, KOSPI/KOSDAQ만) → `stock_fundamentals` 스냅샷 테이블(V30) → `GET /api/screener?marketCapTier=large|mid|small`. 스크리너에 시가총액 구간 필터(대형/중형/소형, 서버사이드)와 "표시 컬럼" 토글(기본/밸류에이션, 클라이언트 전용)을 분리해 추가 — "필터=서버, 컬럼=클라이언트"로 원칙을 그대로 구현했다. 배당수익률·성장률 필터는 스코프 밖(ADR-018 참고).
 
 ### TradingView — 차트 · 전략 스크립팅 · 소셜
 
@@ -124,7 +124,7 @@ monticker [스크리너](apps/web/src/app/page.tsx)는 지금 pill 토글(전체
 | [체결엔진](apps/web/src/app/matching/page.tsx) | qfex/Hyperliquid | 오더북 heatmap 바, 미체결/체결 내역 탭 통합, 매수/매도 스플릿 버튼 | ✅ 완료 |
 | [Stock Detail](apps/web/src/app/stocks/%5Bsymbol%5D/page.tsx) | Robinhood | AI 요약에 가격 동향(당일 등락률·거래범위) 반영, NewsPanel 실데이터 연결 | ✅ 완료 |
 | [SearchAutocomplete](apps/web/src/components/stock/SearchAutocomplete.tsx) | qfex | 카테고리 탭 + 1D 변동률 | ✅ 완료 (스파크라인만 보류) |
-| [스크리너 (홈)](apps/web/src/app/page.tsx) | Finviz | 필터/표시컬럼 분리, 관심종목·알림 바로가기 동선 | 보류 — 펀더멘털 데이터 소스 결정 필요 |
+| [스크리너 (홈)](apps/web/src/app/page.tsx) | Finviz | 필터/표시컬럼 분리, 관심종목·알림 바로가기 동선 | ✅ 완료 ([ADR-018](decisions/018-stock-fundamentals-kis-reuse.md)) |
 | [TradeModal](apps/web/src/components/paper/TradeModal.tsx) | 토스증권 | 수량 퀵버튼(25%/50%/75%/100%) | ✅ 완료 |
 | 종목 상세 (전반) | TradingView | 차트 위 현재가 기준 매수/매도 퀵 버튼 | ✅ 완료 |
 | [Stock Detail](apps/web/src/components/stock/InvestorFlowPanel.tsx) | 토스증권 | 개인·외국인·기관 순매수 시각화 | ✅ 완료 ([ADR-017](decisions/017-investor-flow-kis-integration.md)) |
