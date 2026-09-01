@@ -21,7 +21,7 @@
 monticker의 파이프라인은 세 단계로 구성된다.
 
 1. **수집**: Worker가 가격 틱을 생성해 Redis에 캐시한다.
-2. **집계**: Worker의 `CandleAggregator`가 틱을 분 단위로 메모리에서 묶어 `candles_1m`에 upsert한다.
+2. **집계**: Worker의 `CandleAggregator`가 틱을 분 단위로 메모리에서 묶어 `candles_1m`과 `candles_1d`에 함께 upsert한다.
 3. **조회**: API 서버의 `CandleRepository`가 `candles_1m` / `candles_1d` 테이블을 시간 범위 기준으로 조회한다.
 
 > **현재 상태 요약**: `price_ticks` / `candles_1m` / `candles_1d`는 모두 `V4__create_market_data.sql`이 만든 일반 PostgreSQL 테이블이다. TimescaleDB hypertable 전환 스크립트(`infra/docker/init-timescaledb.sql`)는 어떤 환경의 `docker-compose.yml`/CI에서도 실행되지 않으므로, 아래에서 "hypertable"이라고 부르는 내용은 **아직 활성화되지 않은 설계**다. 무엇이 실제로 동작하는지는 9장을 먼저 참고한다.
@@ -54,6 +54,7 @@ monticker의 파이프라인은 세 단계로 구성된다.
                        v
               +--------------------+
               |   candles_1m       |  일반 PostgreSQL 테이블
+              |   candles_1d       |  같은 flush()에서 KST 당일 행도 upsert (ADR-021)
               +--------------------+
 
   [ PriceTickDbWriter ]  ← 어디서도 호출되지 않음 (dead code, 아래 참고)
@@ -71,9 +72,8 @@ monticker의 파이프라인은 세 단계로 구성된다.
 **실제로 동작하는 것과 아닌 것**
 
 - `RedisTickWriter`: 매 틱마다 Redis에 최신가를 기록한다 — 동작 중.
-- `CandleAggregator`: 매 틱마다 `onTick()`이 호출되어 분 단위로 OHLCV를 메모리에서 집계하고, 분이 바뀌면 `candles_1m`에 upsert한다 — 동작 중 (4장 참고).
+- `CandleAggregator`: 매 틱마다 `onTick()`이 호출되어 분 단위로 OHLCV를 메모리에서 집계하고, 분이 바뀌면 `candles_1m`과 `candles_1d`를 함께 upsert한다 — 동작 중 (4장 참고).
 - `PriceTickDbWriter`(`price_ticks` INSERT 담당): 클래스는 구현되어 있지만 `TickKafkaConsumer`/`TickPipelineConfig`/`MarketTickScheduler` 어디에서도 주입·호출되지 않는다. 다이어그램에서 틱 처리 흐름과 분리해 별도로 표시한 이유가 이것이다 — **실질적으로 dead code이며, `price_ticks` 테이블에는 아무것도 적재되지 않는다.**
-- `candles_1d`: 이 테이블에 INSERT하는 코드가 이 브랜치에는 없다. `CandleRepository.findCandles()`가 `candles_1d`를 조회 대상으로 허용하고 있지만, 채워주는 쓰기 경로가 없으므로 실제로는 항상 빈 결과를 반환한다. `candles_1d`를 `CandleAggregator.flush()`에서 실시간 upsert하는 설계는 별도 브랜치(`claude/sleepy-dhawan-48ddcb`)에서 진행 중이며 아직 이 브랜치에 병합되지 않았다 (8장, 9장 참고).
 
 ---
 
@@ -129,8 +129,10 @@ tick(t=09:32:01) → bucket != 09:31 → flush(09:31) → start bucket=09:32
 
 ### flush 시 DB 작업
 
+`flush()`는 `candles_1m`뿐 아니라 같은 트랜잭션 성격으로 `candles_1d`도 함께 upsert한다 — 별도 배치가 아니라 이 실시간 upsert 하나가 두 테이블을 다 채운다. 이 설계의 배경은 [ADR-021](../decisions/021-candles-1d-realtime-upsert.md)에 정리되어 있다.
+
 ```sql
--- CandleAggregator.flush()
+-- CandleAggregator.flush() — candles_1m
 INSERT INTO candles_1m (stock_id, candle_time, open, high, low, close, volume)
 VALUES (?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (stock_id, candle_time) DO UPDATE SET
@@ -140,12 +142,31 @@ ON CONFLICT (stock_id, candle_time) DO UPDATE SET
     volume = candles_1m.volume + EXCLUDED.volume
 ```
 
-`ON CONFLICT ... DO UPDATE` (upsert)를 사용하는 이유는 Worker가 재시작되거나 동일 버킷의 캔들이 두 번 flush될 경우 중복 삽입을 안전하게 처리하기 위해서다. `flush()`는 `candles_1m`만 갱신한다 — `candles_1d`에 대한 INSERT는 없다(2장 참고).
+```sql
+-- CandleAggregator.flush() — candles_1d (같은 flush 안에서 이어서 실행)
+-- dayStart = 분봉의 candle_time을 KST 달력일 자정으로 내림
+INSERT INTO candles_1d (stock_id, candle_time, open, high, low, close, volume)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (stock_id, candle_time) DO UPDATE SET
+    high   = GREATEST(candles_1d.high, EXCLUDED.high),
+    low    = LEAST(candles_1d.low, EXCLUDED.low),
+    close  = EXCLUDED.close,
+    volume = candles_1d.volume + EXCLUDED.volume
+```
+
+`ON CONFLICT ... DO UPDATE` (upsert)를 사용하는 이유는 Worker가 재시작되거나 동일 버킷의 캔들이 두 번 flush될 경우 중복 삽입을 안전하게 처리하기 위해서다. `candles_1d` 쪽 `DO UPDATE`에는 `open`이 빠져 있다 — 그날 첫 flush에서 들어간 시가가 그대로 유지되고, `high`/`low`/`volume`은 분봉과 동일한 병합 규칙(`GREATEST`/`LEAST`/누적합)을 하루 단위로 재사용한다.
+
+`ScreenerRepository`가 전일 종가(`prevClose`)를 `candles_1d`에서 `candle_time DESC LIMIT 1 OFFSET 1`로 조회하기 때문에 — "가장 최근 행 = 진행 중인 오늘, 그 다음 행 = 확정된 전일 종가" — 장마감 후 하루 한 번만 적재하는 배치가 아니라 실시간 upsert가 필요했다는 것이 이 설계의 핵심 근거다(ADR-021 참고).
+
+### 기동 시 백필 — backfillOnStartup()
+
+`candles_1d`가 비어 있는 상태로 배포되면(이 upsert가 들어오기 전까지 쌓인 `candles_1m` 이력이 있는 경우), Worker 기동 5초 후 1회 실행되는 `backfillOnStartup()`이 `candles_1d`의 행 수를 확인하고 0이면 `candles_1m` 전체를 KST 달력일로 `GROUP BY`해 한 번에 채운다. `candles_1d`에 이미 데이터가 있으면 즉시 스킵한다 — role 가드 없이 모든 Worker 인스턴스에서 실행되지만, 정상 상태에서는 `SELECT COUNT(*)` 한 번의 비용만 든다.
 
 ### 메모리 상태의 위험
 
-- **Worker 재시작 시 유실**: `flush()`는 다음 틱이 들어올 때만 호출되므로, 진행 중인 분봉은 메모리에만 있다가 Worker가 재시작되면 사라진다. `flushAll()` 메서드가 정의되어 있지만 shutdown hook이나 스케줄러 어디에서도 호출되지 않아 — 이것도 사실상 미사용 코드다. 재시작 시점의 마지막 분봉 하나가 유실되는 것은 그대로다.
-- **거래 정지·조용한 종목의 지연 flush**: 특정 종목의 틱이 한동안 들어오지 않으면(장중 거래 정지 등), 그 종목의 마지막 버킷은 다음 틱이 들어올 때까지 `candles_1m`에 반영되지 않는다. 실시간 차트에서 "방금 갱신된 분봉 하나가 누락"되는 정도는 허용 가능한 트레이드오프로 보고 있다.
+- **Worker 재시작 시 유실**: `flush()`는 다음 틱이 들어올 때만 호출되므로, 진행 중인 분봉(그리고 그 분봉이 반영할 당일 `candles_1d` 행)은 메모리에만 있다가 Worker가 재시작되면 사라진다. `flushAll()` 메서드가 정의되어 있지만 shutdown hook이나 스케줄러 어디에서도 호출되지 않아 — 이것도 사실상 미사용 코드다. 재시작 시점의 마지막 분봉 하나가 유실되는 것은 그대로다.
+- **거래 정지·조용한 종목의 지연 flush**: 특정 종목의 틱이 한동안 들어오지 않으면(장중 거래 정지 등), 그 종목의 마지막 버킷은 다음 틱이 들어올 때까지 `candles_1m`/`candles_1d`에 반영되지 않는다. 실시간 차트에서 "방금 갱신된 분봉 하나가 누락"되는 정도는 허용 가능한 트레이드오프로 보고 있다.
+- **장중 `candles_1d`의 "오늘" 행은 확정 종가가 아니다**: 조회 시점까지 들어온 마지막 분봉 기준 OHLCV일 뿐, 그날 최종 종가가 아니다. 스크리너·알림처럼 "현재가 대비 실시간 등락"에는 정확히 맞지만, "당일 확정 종가"를 기대하는 배치성 분석(정산 기준가 등)에 그대로 쓰면 오해할 수 있다(ADR-021 Consequences 참고).
 
 ---
 
@@ -237,7 +258,7 @@ fun findCandles(stockId: Long, table: String, from: Instant, to: Instant, limit:
 
 `table` 파라미터를 화이트리스트(`allowed`)로 검증하여 SQL Injection을 방지한다. 동적 테이블명을 쿼리에 직접 삽입하는 방식이므로 이 검증이 없으면 임의 테이블을 노출할 수 있다.
 
-앞서 언급했듯 `candles_1d`는 현재 아무도 쓰지 않으므로, `table = "candles_1d"`로 조회하면 항상 빈 리스트가 반환된다.
+`candles_1d`는 4장의 `CandleAggregator.flush()` 실시간 upsert로 채워지므로, `table = "candles_1d"` 조회도 정상적으로 결과를 반환한다.
 
 ### (참고) Continuous Aggregate 도입 시 필요할 fallback 전략
 
@@ -312,9 +333,9 @@ monticker의 `candles_1m.candle_time`은 `TIMESTAMPTZ`이므로 `time_bucket()`�
 
 ## 8. 운영 고려사항
 
-### candles_1d 백필 — 진행 중인 작업 (별도 브랜치, 미병합)
+### candles_1d 백필
 
-이 브랜치에는 `candles_1d`를 채우는 코드가 전혀 없다(2장, 4장 참고). `candles_1d`를 `CandleAggregator.flush()`에서 `candles_1m`과 함께 실시간 upsert하고, 앱 기동 시 `candles_1d`가 비어 있으면 기존 `candles_1m` 이력을 KST 달력일 기준으로 묶어 한 번에 채우는(`backfillOnStartup()`) 설계가 다른 작업 브랜치(`claude/sleepy-dhawan-48ddcb`)에 구현되어 있으나, 이 브랜치에는 아직 병합되지 않았다. 이 방식은 TimescaleDB Continuous Aggregate와 무관하며, `ScreenerRepository`의 전일 종가(`prevClose`) 조회가 "가장 최근 행 = 진행 중인 오늘, 그 다음 행 = 확정된 전일 종가"를 전제하기 때문에 장마감 후 1회 배치보다 실시간 upsert가 필요하다는 것이 핵심 근거다. 이 결정이 이 브랜치에 병합되면 관련 ADR을 이 저장소의 ADR 번호 규칙에 맞춰 등록해야 한다(현재 `ADR-020`은 스톡 밸류에이션 스코어에 이미 배정되어 있어 번호 충돌이 있다).
+`candles_1d`는 TimescaleDB Continuous Aggregate가 아니라 4장에서 설명한 `CandleAggregator.flush()`의 실시간 upsert로 채워진다. 기존에 `candles_1m` 이력만 있고 `candles_1d`가 비어 있는 상태로 이 변경이 배포되는 경우를 위해 `backfillOnStartup()`이 Worker 기동 시 1회 실행되며, `candles_1d`가 이미 채워져 있으면 곧바로 스킵한다(4장 참고). 이 설계의 배경(EOD 배치 대신 실시간 upsert를 선택한 이유, `ScreenerRepository`/`AlertEvaluator`가 `candles_1d`에 거는 전제)은 [ADR-021](../decisions/021-candles-1d-realtime-upsert.md)에 정리되어 있다.
 
 ### 초기 데이터 적재 (Historical Backfill) — TimescaleDB CAgg 기준, 미가동
 
@@ -385,17 +406,16 @@ WHERE job_id IN (
 |------|-----------|------|------|
 | `price_ticks` DB 저장 | **미구현** — `PriceTickDbWriter`는 존재하지만 어디서도 호출되지 않는 dead code | `PriceTickDbWriter.kt`; `TickKafkaConsumer`/`TickPipelineConfig`에서 미주입 | `price_ticks` 테이블은 항상 비어 있음. 틱 원본은 Redis에만 존재 |
 | `candles_1m` 집계 | **구현되어 동작 중** — `CandleAggregator`가 매 틱마다 메모리에서 분 버킷을 갱신하고, 분이 바뀌면 upsert | `CandleAggregator.kt`; `TickKafkaConsumer.onTick()` / `TickPipelineConfig.candleAggregateFlow` | 실시간 차트가 `candles_1m` 기준으로 정상 동작 |
-| `candles_1d` 집계 | **미구현** (이 브랜치 기준) — 어디에도 INSERT 경로 없음. 실시간 upsert + 기동 시 백필 설계가 별도 브랜치(`claude/sleepy-dhawan-48ddcb`, 미병합)에 있음 | 2장, 8장 참고 | `candles_1d` 조회는 항상 빈 결과. 스크리너 등락률(`prevClose`), `AlertEvaluator`의 VOLUME_SURGE 등 `candles_1d`를 읽는 기능이 죽어 있을 수 있음 |
+| `candles_1d` 집계 | **구현되어 동작 중** — 같은 `flush()`가 KST 당일 행을 실시간 upsert. 기동 시 `backfillOnStartup()`으로 기존 `candles_1m` 이력도 1회 백필 | `CandleAggregator.kt`; [ADR-021](../decisions/021-candles-1d-realtime-upsert.md) | 스크리너 등락률(`prevClose`), `AlertEvaluator`의 VOLUME_SURGE 등 `candles_1d`를 읽는 기능이 정상 동작 |
 | TimescaleDB hypertable 전환 | **미가동** — `init-timescaledb.sql`이 `docker-compose.yml`/CI 어디에도 연결되지 않음 | 3장 | `price_ticks`/`candles_1m`/`candles_1d`는 실제로는 일반 PostgreSQL 테이블. chunk pruning/압축/보존 정책 모두 미적용 |
 | Continuous Aggregate | **미가동** — `V10__create_candle_aggregates.sql`이 hypertable 존재를 전제로 조건부 생성하는데, 그 전제가 항상 거짓 | 5장 | `candles_1m_cagg`/`candles_1d_cagg` 뷰가 생성된 적이 없음 |
 | `CandleRepository` CAgg fallback | **설계만 존재, 미구현** | 6장 | `candles_1m`/`candles_1d` 테이블을 항상 직접 조회 |
 
 ### 단기 로드맵
 
-1. `candles_1d` 실시간 upsert 병합: `claude/sleepy-dhawan-48ddcb` 브랜치의 `CandleAggregator.flush()` 변경(`candles_1d` upsert + `backfillOnStartup()`)을 리뷰 후 병합하고, ADR 번호 충돌(`ADR-020`)을 해소한다.
-2. `PriceTickDbWriter` 처리 방향 결정: (a) `TickKafkaConsumer`/`TickPipelineConfig`에 실제로 연결해 `price_ticks`를 채우거나, (b) 당장 필요하지 않다면 dead code로 명시하고 제거한다. 둘 다 하지 않으면 문서와 코드가 다시 어긋난다.
-3. hypertable 전환 자동화: `init-timescaledb.sql`을 `docker-compose.yml`(로컬)과 CI 파이프라인에 실제로 연결할지 결정한다. 연결하지 않는 한 3, 5, 7, 8장의 TimescaleDB 전용 기능(chunk pruning, CAgg, 보존 정책)은 계속 죽은 설계로 남는다.
-4. (hypertable 전환 이후) Continuous Aggregate 활성화 및 `CandleRepository`에 CAgg/테이블 fallback 로직 추가.
+1. `PriceTickDbWriter` 처리 방향 결정: (a) `TickKafkaConsumer`/`TickPipelineConfig`에 실제로 연결해 `price_ticks`를 채우거나, (b) 당장 필요하지 않다면 dead code로 명시하고 제거한다. 둘 다 하지 않으면 문서와 코드가 다시 어긋난다.
+2. hypertable 전환 자동화: `init-timescaledb.sql`을 `docker-compose.yml`(로컬)과 CI 파이프라인에 실제로 연결할지 결정한다. 연결하지 않는 한 3, 5, 7, 8장의 TimescaleDB 전용 기능(chunk pruning, CAgg, 보존 정책)은 계속 죽은 설계로 남는다.
+3. (hypertable 전환 이후) Continuous Aggregate 활성화 및 `CandleRepository`에 CAgg/테이블 fallback 로직 추가.
 
 ### 장기 방향
 
