@@ -40,12 +40,22 @@ const DEFAULT_ENTRY: Condition[] = [
   { id: "e2", indicator: "VOLUME_RATIO", comparator: "GT", params: { period: 20 }, value: 2 },
   { id: "e3", indicator: "RSI", comparator: "BETWEEN", params: { period: 14 }, value: [30, 70] },
 ];
+interface ParsedRuleDefinition {
+  entryRules?: { operator?: "AND" | "OR"; conditions?: Omit<Condition, "id">[] };
+  exitRules?: { operator?: "AND" | "OR"; conditions?: Omit<Condition, "id">[] };
+  positionSizing?: { value?: number };
+}
+
 const DEFAULT_EXIT: Condition[] = [
   { id: "x1", indicator: "PROFIT_RATE", comparator: "GTE", params: {}, value: 8 },
   { id: "x2", indicator: "LOSS_RATE",   comparator: "LTE", params: {}, value: -4 },
 ];
 
 function uid() { return Math.random().toString(36).slice(2, 8); }
+
+function indicatorHasValue(meta: (typeof INDICATORS)[number] | undefined): boolean {
+  return !!meta && "hasValue" in meta && meta.hasValue;
+}
 
 // ── 조건 행 컴포넌트 ──────────────────────────────────────────────────────────
 
@@ -93,7 +103,7 @@ function ConditionRow({ cond, onChange, onRemove }: {
       </select>
 
       {/* 값 입력 */}
-      {(meta as any)?.hasValue && cond.comparator === "BETWEEN" ? (
+      {indicatorHasValue(meta) && cond.comparator === "BETWEEN" ? (
         <>
           <input
             type="number"
@@ -109,7 +119,7 @@ function ConditionRow({ cond, onChange, onRemove }: {
             className="w-16 rounded-md bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none"
           />
         </>
-      ) : (meta as any)?.hasValue ? (
+      ) : indicatorHasValue(meta) ? (
         <input
           type="number"
           value={typeof cond.value === "number" ? cond.value : ""}
@@ -160,11 +170,11 @@ export default function BuilderPage() {
     setName(existing.name);
     setDescription(existing.description ?? "");
     try {
-      const def = JSON.parse(existing.ruleDefinition);
+      const def: ParsedRuleDefinition = JSON.parse(existing.ruleDefinition);
       setEntryOp(def.entryRules?.operator ?? "AND");
       setExitOp(def.exitRules?.operator ?? "OR");
-      setEntry(def.entryRules?.conditions?.map((c: any, i: number) => ({ ...c, id: `e${i}` })) ?? []);
-      setExit(def.exitRules?.conditions?.map((c: any, i: number) => ({ ...c, id: `x${i}` })) ?? []);
+      setEntry(def.entryRules?.conditions?.map((c, i) => ({ ...c, id: `e${i}` })) ?? []);
+      setExit(def.exitRules?.conditions?.map((c, i) => ({ ...c, id: `x${i}` })) ?? []);
       setPositionPct(def.positionSizing?.value ?? 10);
     } catch {}
   }, [existing]);
@@ -175,11 +185,11 @@ export default function BuilderPage() {
     ruleDefinition: {
       entryRules: {
         operator: entryOp,
-        conditions: entry.map(({ id: _, ...c }) => c),
+        conditions: entry.map(({ id, ...c }) => c),
       },
       exitRules: {
         operator: exitOp,
-        conditions: exit.map(({ id: _, ...c }) => c),
+        conditions: exit.map(({ id, ...c }) => c),
       },
       positionSizing: { type: "FIXED_RATIO", value: positionPct },
     },

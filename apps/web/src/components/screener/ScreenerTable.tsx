@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useRef, useCallback } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import ScreenerRow from "./ScreenerRow";
 import type { ScreenerItem } from "@/hooks/useScreener";

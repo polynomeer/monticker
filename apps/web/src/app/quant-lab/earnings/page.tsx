@@ -321,30 +321,44 @@ export default function EarningsPage() {
               출금 내역이 없습니다.
             </div>
           ) : (
-            <div className="space-y-2">
-              {items.map(p => {
-                const meta = PAYOUT_STATUS[p.status];
-                return (
-                  <Card key={p.id} className="p-4">
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold tabular-nums text-gray-900 dark:text-dracula-fg">{won(p.amount)}</span>
-                          <span className={`text-xs ${meta.color}`}>{meta.label}</span>
+            <>
+              <div className="space-y-2">
+                {items.map(p => {
+                  const meta = PAYOUT_STATUS[p.status];
+                  return (
+                    <Card key={p.id} className="p-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold tabular-nums text-gray-900 dark:text-dracula-fg">{won(p.amount)}</span>
+                            <span className={`text-xs ${meta.color}`}>{meta.label}</span>
+                          </div>
+                          <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">
+                            {p.bankName} {p.accountNumber.slice(-4).padStart(p.accountNumber.length, "•")} ({p.accountHolder})
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-dracula-comment">
+                            신청일: {new Date(p.requestedAt).toLocaleDateString("ko-KR")}
+                            {p.paidAt && ` · 지급일: ${new Date(p.paidAt).toLocaleDateString("ko-KR")}`}
+                          </p>
                         </div>
-                        <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">
-                          {p.bankName} {p.accountNumber.slice(-4).padStart(p.accountNumber.length, "•")} ({p.accountHolder})
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-dracula-comment">
-                          신청일: {new Date(p.requestedAt).toLocaleDateString("ko-KR")}
-                          {p.paidAt && ` · 지급일: ${new Date(p.paidAt).toLocaleDateString("ko-KR")}`}
-                        </p>
                       </div>
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
+                    </Card>
+                  );
+                })}
+              </div>
+              {(payoutsData?.totalPages ?? 1) > 1 && (
+                <div className="flex justify-center gap-3 mt-6">
+                  {payoutPage > 0 && (
+                    <button onClick={() => setPayoutPage(p => p - 1)}
+                      className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg text-sm font-medium hover:bg-gray-200 dark:hover:bg-dracula-comment active:scale-[0.98] transition-all duration-150">이전</button>
+                  )}
+                  {payoutPage < (payoutsData?.totalPages ?? 1) - 1 && (
+                    <button onClick={() => setPayoutPage(p => p + 1)}
+                      className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg text-sm font-medium hover:bg-gray-200 dark:hover:bg-dracula-comment active:scale-[0.98] transition-all duration-150">다음</button>
+                  )}
+                </div>
+              )}
+            </>
           );
         })()
       )}
