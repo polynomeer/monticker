@@ -1,6 +1,6 @@
 package com.monticker.api.analytics.application
 
-import com.monticker.api.quant.infrastructure.QuantBacktestResultRepository
+import com.monticker.api.quant.application.RuleSetService
 import org.springframework.stereotype.Service
 
 data class KellyResult(
@@ -14,7 +14,7 @@ data class KellyResult(
 
 @Service
 class PositionSizerService(
-    private val backtestResultRepository: QuantBacktestResultRepository,
+    private val ruleSetService: RuleSetService,
 ) {
     fun calculateKelly(winRate: Double, avgWinPct: Double, avgLossPct: Double): KellyResult {
         val full = kellyFraction(winRate, avgWinPct, avgLossPct)
@@ -29,14 +29,13 @@ class PositionSizerService(
     }
 
     fun calculateKellyForRuleSet(ruleSetId: String): KellyResult {
-        val results = backtestResultRepository.findAllByRuleSetId(ruleSetId)
-        val latest = results.maxByOrNull { it.createdAt }
+        val latest = ruleSetService.getLatestBacktestResult(ruleSetId)
             ?: return calculateKelly(0.0, 0.0, 0.0).copy(
                 recommendation = "백테스트 결과가 없습니다. 먼저 백테스트를 실행해주세요."
             )
 
-        val winRate = (latest.winRate?.toDouble() ?: 0.0) / 100.0
-        val profitFactor = latest.profitFactor?.toDouble()
+        val winRate = (latest.winRate ?: 0.0) / 100.0
+        val profitFactor = latest.profitFactor
 
         // profitFactor = (winRate * avgWin) / ((1 - winRate) * avgLoss)
         // Without separate avgWin/avgLoss, approximate avgLoss = 1.0 (unit loss) and derive avgWin from profitFactor.

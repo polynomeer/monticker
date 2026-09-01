@@ -6,7 +6,7 @@ import com.monticker.api.auth.infrastructure.CustomOAuth2UserService
 import com.monticker.api.auth.infrastructure.HttpCookieOAuth2AuthorizationRequestRepository
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
 import com.monticker.api.auth.infrastructure.OAuth2SuccessHandler
-import com.monticker.api.common.config.SecurityConfig
+import com.monticker.api.auth.config.SecurityConfig
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.BDDMockito.given

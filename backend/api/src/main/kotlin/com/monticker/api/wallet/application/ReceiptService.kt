@@ -1,6 +1,6 @@
 package com.monticker.api.wallet.application
 
-import com.monticker.api.paper.infrastructure.PaperTradeRepository
+import com.monticker.api.paper.application.PaperTradeQueryService
 import com.monticker.api.wallet.infrastructure.LedgerEventRepository
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
@@ -29,13 +29,13 @@ data class ReceiptResponse(
 @Service
 @Transactional(readOnly = true)
 class ReceiptService(
-    private val tradeRepo: PaperTradeRepository,
+    private val tradeQueryService: PaperTradeQueryService,
     private val ledgerRepo: LedgerEventRepository,
     private val jdbc: JdbcTemplate,
 ) {
 
     fun getReceipt(userId: Long, tradeId: Long): ReceiptResponse {
-        val trade = tradeRepo.findById(tradeId).orElseThrow { NoSuchElementException("거래 없음: $tradeId") }
+        val trade = tradeQueryService.getById(tradeId)
         require(trade.userId == userId) { "접근 권한 없음" }
 
         val stockInfo = jdbc.queryForMap("SELECT symbol, name FROM stocks WHERE id = ?", trade.stockId)

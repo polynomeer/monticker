@@ -1,6 +1,6 @@
 package com.monticker.api.watchlist.application
 
-import com.monticker.api.stock.infrastructure.StockRepository
+import com.monticker.api.stock.application.StockService
 import com.monticker.api.watchlist.domain.WatchlistGroup
 import com.monticker.api.watchlist.domain.WatchlistItem
 import com.monticker.api.watchlist.infrastructure.WatchlistGroupRepository
@@ -18,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional
 class WatchlistService(
     private val groupRepository: WatchlistGroupRepository,
     private val itemRepository: WatchlistItemRepository,
-    private val stockRepository: StockRepository,
+    private val stockService: StockService,
     private val watchlistSearchRepository: WatchlistSearchRepository,
     private val esOps: ElasticsearchOperations,
 ) {
@@ -40,9 +40,7 @@ class WatchlistService(
         }
         require(group.userId == userId) { "Access denied" }
 
-        val stock = stockRepository.findById(stockId).orElseThrow {
-            NoSuchElementException("Stock not found: $stockId")
-        }
+        val stock = stockService.getById(stockId)
 
         check(!itemRepository.existsByGroupIdAndStockId(groupId, stockId)) {
             "Stock already in watchlist"

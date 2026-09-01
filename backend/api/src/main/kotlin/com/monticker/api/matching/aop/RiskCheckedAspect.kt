@@ -1,5 +1,6 @@
-package com.monticker.api.common.aop
+package com.monticker.api.matching.aop
 
+import com.monticker.api.common.aop.RiskLimitException
 import com.monticker.api.matching.application.RiskCheckerService
 import org.aspectj.lang.ProceedingJoinPoint
 import org.aspectj.lang.annotation.Around
@@ -65,5 +66,3 @@ class RiskCheckedAspect(private val riskChecker: RiskCheckerService) {
             names.indexOf(key).takeIf { it >= 0 }?.let { args[it] as? BigDecimal }
         }
 }
-
-class RiskLimitException(rule: String) : RuntimeException("리스크 한도 초과: $rule")

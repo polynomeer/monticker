@@ -1,4 +1,4 @@
 @org.springframework.modulith.ApplicationModule(
-    allowedDependencies = {}
+    allowedDependencies = {"common", "stock::api"}
 )
 package com.monticker.api.screener;

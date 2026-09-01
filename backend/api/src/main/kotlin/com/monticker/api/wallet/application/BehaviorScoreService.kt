@@ -9,6 +9,7 @@ import com.monticker.api.wallet.infrastructure.BehaviorScoreRepository
 import com.monticker.api.wallet.infrastructure.EmotionTagRepository
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.modulith.NamedInterface
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -28,6 +29,10 @@ data class BehaviorScoreResponse(
     val reliabilityNotes: Map<String, Any?>,
 )
 
+/**
+ * batch.score.BehaviorScoreJobConfig에서 배치 작업으로 호출하는 공개 API.
+ */
+@NamedInterface("api")
 @Service
 @Transactional
 class BehaviorScoreService(
