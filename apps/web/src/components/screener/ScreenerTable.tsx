@@ -5,31 +5,34 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import ScreenerRow from "./ScreenerRow";
 import type { ScreenerItem } from "@/hooks/useScreener";
 
+export type ColumnSet = "basic" | "valuation";
+
 interface Props {
   items: ScreenerItem[];
   loading: boolean;
   loadingMore: boolean;
   hasMore: boolean;
   onLoadMore: () => void;
+  columnSet?: ColumnSet;
 }
 
 const ROW_HEIGHT = 52;   // px — ScreenerRow 고정 높이
 const OVERSCAN   = 5;    // 뷰포트 위아래 여분 렌더 행 수
 
-const HEADERS = [
-  { label: "#",            width: "w-10"  },
-  { label: "종목명",        width: "flex-1 min-w-[160px]" },
-  { label: "현재가",        width: "w-28 text-right" },
-  { label: "등락률",        width: "w-28 text-right" },
-  { label: "거래대금",      width: "w-24 text-right" },
-  { label: "매수/매도 비율", width: "w-32" },
-  { label: "산업",          width: "w-24" },
-  { label: "",              width: "w-16 shrink-0" },
-];
+// 공통 컬럼(항상 표시) + 컬럼셋별로 바뀌는 중간 3칸 — ScreenerRow의 렌더링과 순서·개수를 맞춰야 함
+const HEAD_COMMON       = [{ label: "#", width: "w-10" }, { label: "종목명", width: "flex-1 min-w-[160px]" }, { label: "현재가", width: "w-28 text-right" }, { label: "등락률", width: "w-28 text-right" }];
+const HEAD_BASIC_EXTRA  = [{ label: "거래대금", width: "w-24 text-right" }, { label: "매수/매도 비율", width: "w-32" }, { label: "산업", width: "w-24" }];
+const HEAD_VALUATION_EXTRA = [{ label: "시가총액", width: "w-24 text-right" }, { label: "PER", width: "w-16 text-right" }, { label: "PBR", width: "w-16 text-right" }];
+const HEAD_TRAILING     = [{ label: "", width: "w-16 shrink-0" }];
 
 export default function ScreenerTable({
-  items, loading, loadingMore, hasMore, onLoadMore,
+  items, loading, loadingMore, hasMore, onLoadMore, columnSet = "basic",
 }: Props) {
+  const HEADERS = [
+    ...HEAD_COMMON,
+    ...(columnSet === "valuation" ? HEAD_VALUATION_EXTRA : HEAD_BASIC_EXTRA),
+    ...HEAD_TRAILING,
+  ];
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // ── 가상화 ────────────────────────────────────────────────
@@ -111,7 +114,7 @@ export default function ScreenerTable({
                   height: ROW_HEIGHT,
                 }}
               >
-                <ScreenerRow item={item} />
+                <ScreenerRow item={item} columnSet={columnSet} />
               </div>
             );
           })}

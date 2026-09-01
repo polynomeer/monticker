@@ -1,18 +1,19 @@
 import Link from "next/link";
-import { Star, Bell } from "@phosphor-icons/react";
+import { Star, Bell, Info } from "@phosphor-icons/react";
 import BuySellBar from "./BuySellBar";
 import ChangeRateBadge from "./ChangeRateBadge";
 import AmountLabel from "./AmountLabel";
 import { useWatchlistIds } from "@/hooks/useWatchlistIds";
 import type { ScreenerItem } from "@/hooks/useScreener";
+import type { ColumnSet } from "./ScreenerTable";
 
-interface Props { item: ScreenerItem; }
+interface Props { item: ScreenerItem; columnSet?: ColumnSet; }
 
 /**
  * div 기반 행 — TanStack Virtual의 absolute 포지셔닝과 호환.
  * 헤더의 HEADERS 배열과 width 클래스를 동일하게 맞춰야 정렬됨.
  */
-export default function ScreenerRow({ item }: Props) {
+export default function ScreenerRow({ item, columnSet = "basic" }: Props) {
   const isKR = ["KOSPI","KOSDAQ"].includes(item.market);
   const { isLoggedIn, isWatched, toggle } = useWatchlistIds();
   const watched = isWatched(item.stockId);
@@ -51,24 +52,50 @@ export default function ScreenerRow({ item }: Props) {
         <ChangeRateBadge rate={item.changeRate} amount={item.changeAmount} />
       </div>
 
-      {/* 거래대금 */}
-      <div className="w-24 px-2 text-right shrink-0">
-        <AmountLabel value={item.amount} />
-      </div>
+      {columnSet === "basic" ? (
+        <>
+          {/* 거래대금 */}
+          <div className="w-24 px-2 text-right shrink-0">
+            <AmountLabel value={item.amount} />
+          </div>
 
-      {/* 매수/매도 비율 */}
-      <div className="w-32 px-2 shrink-0">
-        <BuySellBar buy={item.buyRatio} sell={item.sellRatio} />
-      </div>
+          {/* 매수/매도 비율 */}
+          <div className="w-32 px-2 shrink-0">
+            <BuySellBar buy={item.buyRatio} sell={item.sellRatio} />
+          </div>
 
-      {/* 산업 */}
-      <div className="w-24 px-2 shrink-0">
-        {item.sector && (
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-dracula-line text-dracula-comment whitespace-nowrap">
-            {item.sector}
-          </span>
-        )}
-      </div>
+          {/* 산업 */}
+          <div className="w-24 px-2 shrink-0">
+            {item.sector && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-dracula-line text-dracula-comment whitespace-nowrap">
+                {item.sector}
+              </span>
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          {/* 시가총액 */}
+          <div className="w-24 px-2 text-right shrink-0 flex items-center justify-end gap-1">
+            {item.isFundamentalsMocked && (
+              <span title="KIS API 미설정 또는 응답 없음 — 모의 데이터">
+                <Info size={10} weight="bold" className="text-dracula-orange shrink-0" aria-hidden />
+              </span>
+            )}
+            {item.marketCap != null ? <AmountLabel value={item.marketCap} /> : <span className="text-xs text-dracula-comment">-</span>}
+          </div>
+
+          {/* PER */}
+          <div className="w-16 px-2 text-right shrink-0">
+            <span className="text-xs tabular-nums dark:text-dracula-fg">{item.per != null ? item.per.toFixed(2) : "-"}</span>
+          </div>
+
+          {/* PBR */}
+          <div className="w-16 px-2 text-right shrink-0">
+            <span className="text-xs tabular-nums dark:text-dracula-fg">{item.pbr != null ? item.pbr.toFixed(2) : "-"}</span>
+          </div>
+        </>
+      )}
 
       {/* 관심종목 / 알림 바로가기 — 호버·포커스 시 노출 */}
       {isLoggedIn && (
