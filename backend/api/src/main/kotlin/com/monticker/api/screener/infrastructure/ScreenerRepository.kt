@@ -10,16 +10,18 @@ import java.math.RoundingMode
 class ScreenerRepository(private val jdbc: JdbcTemplate) {
 
     fun findItems(
-        market: String,   // all | domestic | overseas
-        sort: String,     // amount | volume | rise | fall
+        market: String,        // all | domestic | overseas
+        sort: String,          // amount | volume | rise | fall
         limit: Int,
         offset: Int,
+        marketCapTier: String = "all",  // all | large | mid | small
     ): List<ScreenerItem> {
         val marketFilter = when (market) {
             "domestic" -> "AND s.market IN ('KOSPI', 'KOSDAQ')"
             "overseas" -> "AND s.market IN ('NASDAQ', 'NYSE')"
             else       -> ""
         }
+        val tierFilter = marketCapTierFilter(marketCapTier)
 
         val orderBy = when (sort) {
             "volume" -> "c.volume DESC"
@@ -38,7 +40,8 @@ class ScreenerRepository(private val jdbc: JdbcTemplate) {
                 COALESCE(c.close, 0)              AS price,
                 COALESCE(c.volume, 0)             AS volume,
                 COALESCE(c.close * c.volume, 0)   AS amount,
-                prev.close                        AS prev_close
+                prev.close                        AS prev_close,
+                sf.market_cap, sf.per, sf.pbr, sf.is_mocked AS fundamentals_mocked
             FROM stocks s
             LEFT JOIN LATERAL (
                 SELECT close, volume
@@ -54,41 +57,57 @@ class ScreenerRepository(private val jdbc: JdbcTemplate) {
                 ORDER BY candle_time DESC
                 LIMIT 1 OFFSET 1
             ) prev ON true
+            LEFT JOIN stock_fundamentals sf ON sf.stock_id = s.id
             WHERE s.is_active = true
             $marketFilter
+            $tierFilter
             ORDER BY $orderBy NULLS LAST
             LIMIT ? OFFSET ?
         """.trimIndent()
 
-        return jdbc.query(sql, { rs, rowNum ->
-            val price     = rs.getBigDecimal("price") ?: BigDecimal.ZERO
-            val prevClose = rs.getBigDecimal("prev_close")
-            val changeRate = if (prevClose != null && prevClose > BigDecimal.ZERO) {
-                price.subtract(prevClose).divide(prevClose, 6, RoundingMode.HALF_UP)
-                    .multiply(BigDecimal("100")).toDouble()
-            } else 0.0
-            val changeAmount = if (prevClose != null) price.subtract(prevClose) else BigDecimal.ZERO
-            val volume = rs.getLong("volume")
-            val amount = rs.getBigDecimal("amount") ?: BigDecimal.ZERO
-            val buyRatio = (40 + (rs.getLong("stock_id") * 7 + volume) % 31).toInt()
+        return jdbc.query(sql, { rs, rowNum -> mapRow(rs, offset + rowNum + 1) }, limit, offset)
+    }
 
-            ScreenerItem(
-                rank         = offset + rowNum + 1,
-                stockId      = rs.getLong("stock_id"),
-                symbol       = rs.getString("symbol"),
-                name         = rs.getString("name"),
-                market       = rs.getString("market"),
-                sector       = rs.getString("sector"),
-                price        = price,
-                prevClose    = prevClose,
-                changeRate   = changeRate,
-                changeAmount = changeAmount,
-                volume       = volume,
-                amount       = amount,
-                buyRatio     = buyRatio,
-                sellRatio    = 100 - buyRatio,
-            )
-        }, limit, offset)
+    private fun marketCapTierFilter(tier: String): String = when (tier) {
+        "large" -> "AND sf.market_cap >= 1000000000000"                                  // 1조원 이상
+        "mid"   -> "AND sf.market_cap >= 100000000000 AND sf.market_cap < 1000000000000" // 1000억~1조
+        "small" -> "AND sf.market_cap < 100000000000"                                    // 1000억 미만
+        else    -> ""
+    }
+
+    private fun mapRow(rs: java.sql.ResultSet, rank: Int): ScreenerItem {
+        val price     = rs.getBigDecimal("price") ?: BigDecimal.ZERO
+        val prevClose = rs.getBigDecimal("prev_close")
+        val changeRate = if (prevClose != null && prevClose > BigDecimal.ZERO) {
+            price.subtract(prevClose).divide(prevClose, 6, RoundingMode.HALF_UP)
+                .multiply(BigDecimal("100")).toDouble()
+        } else 0.0
+        val changeAmount = if (prevClose != null) price.subtract(prevClose) else BigDecimal.ZERO
+        val volume = rs.getLong("volume")
+        val amount = rs.getBigDecimal("amount") ?: BigDecimal.ZERO
+        val buyRatio = (40 + (rs.getLong("stock_id") * 7 + volume) % 31).toInt()
+        val marketCap = rs.getLong("market_cap").let { if (rs.wasNull()) null else it }
+
+        return ScreenerItem(
+            rank         = rank,
+            stockId      = rs.getLong("stock_id"),
+            symbol       = rs.getString("symbol"),
+            name         = rs.getString("name"),
+            market       = rs.getString("market"),
+            sector       = rs.getString("sector"),
+            price        = price,
+            prevClose    = prevClose,
+            changeRate   = changeRate,
+            changeAmount = changeAmount,
+            volume       = volume,
+            amount       = amount,
+            buyRatio     = buyRatio,
+            sellRatio    = 100 - buyRatio,
+            marketCap    = marketCap,
+            per          = rs.getBigDecimal("per"),
+            pbr          = rs.getBigDecimal("pbr"),
+            isFundamentalsMocked = rs.getBoolean("fundamentals_mocked"),
+        )
     }
 
     /**
@@ -117,7 +136,8 @@ class ScreenerRepository(private val jdbc: JdbcTemplate) {
                 COALESCE(c.close, 0)              AS price,
                 COALESCE(c.volume, 0)             AS volume,
                 COALESCE(c.close * c.volume, 0)   AS amount,
-                prev.close                        AS prev_close
+                prev.close                        AS prev_close,
+                sf.market_cap, sf.per, sf.pbr, sf.is_mocked AS fundamentals_mocked
             FROM stocks s
             LEFT JOIN LATERAL (
                 SELECT close, volume
@@ -133,53 +153,28 @@ class ScreenerRepository(private val jdbc: JdbcTemplate) {
                 ORDER BY candle_time DESC
                 LIMIT 1 OFFSET 1
             ) prev ON true
+            LEFT JOIN stock_fundamentals sf ON sf.stock_id = s.id
             WHERE s.id IN ($placeholders)
             ORDER BY $orderBy NULLS LAST
         """.trimIndent()
 
-        val rows = jdbc.query(sql, { rs, rowNum ->
-            val price     = rs.getBigDecimal("price") ?: BigDecimal.ZERO
-            val prevClose = rs.getBigDecimal("prev_close")
-            val changeRate = if (prevClose != null && prevClose > BigDecimal.ZERO) {
-                price.subtract(prevClose).divide(prevClose, 6, RoundingMode.HALF_UP)
-                    .multiply(BigDecimal("100")).toDouble()
-            } else 0.0
-            val changeAmount = if (prevClose != null) price.subtract(prevClose) else BigDecimal.ZERO
-            val volume = rs.getLong("volume")
-            val amount = rs.getBigDecimal("amount") ?: BigDecimal.ZERO
-            val buyRatio = (40 + (rs.getLong("stock_id") * 7 + volume) % 31).toInt()
-            ScreenerItem(
-                rank         = rowNum + 1,
-                stockId      = rs.getLong("stock_id"),
-                symbol       = rs.getString("symbol"),
-                name         = rs.getString("name"),
-                market       = rs.getString("market"),
-                sector       = rs.getString("sector"),
-                price        = price,
-                prevClose    = prevClose,
-                changeRate   = changeRate,
-                changeAmount = changeAmount,
-                volume       = volume,
-                amount       = amount,
-                buyRatio     = buyRatio,
-                sellRatio    = 100 - buyRatio,
-            )
-        }, *stockIds.toTypedArray())
+        val rows = jdbc.query(sql, { rs, rowNum -> mapRow(rs, rowNum + 1) }, *stockIds.toTypedArray())
 
         // ES 관련도 순서 유지: sort=amount/volume/rise/fall 이면 시세 기준 정렬 유지,
         // 그 외(query 검색)에서 호출 시 ES 점수 순으로 재정렬
-        val idOrder = stockIds.withIndex().associate { (i, id) -> id to i }
         return rows.mapIndexed { idx, item -> item.copy(rank = idx + 1) }
     }
 
-    fun count(market: String): Int {
+    fun count(market: String, marketCapTier: String = "all"): Int {
         val marketFilter = when (market) {
-            "domestic" -> "AND market IN ('KOSPI', 'KOSDAQ')"
-            "overseas" -> "AND market IN ('NASDAQ', 'NYSE')"
+            "domestic" -> "AND s.market IN ('KOSPI', 'KOSDAQ')"
+            "overseas" -> "AND s.market IN ('NASDAQ', 'NYSE')"
             else       -> ""
         }
+        val tierFilter = marketCapTierFilter(marketCapTier)
+        val joinFundamentals = if (tierFilter.isNotEmpty()) "LEFT JOIN stock_fundamentals sf ON sf.stock_id = s.id" else ""
         return jdbc.queryForObject(
-            "SELECT COUNT(*) FROM stocks WHERE is_active = true $marketFilter",
+            "SELECT COUNT(*) FROM stocks s $joinFundamentals WHERE s.is_active = true $marketFilter $tierFilter",
             Int::class.java
         ) ?: 0
     }

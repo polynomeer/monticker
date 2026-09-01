@@ -26,8 +26,9 @@ class ScreenerController(private val screenerService: ScreenerService) {
         @RequestParam(defaultValue = "amount")   sort: String,
         @RequestParam(defaultValue = "20")       limit: Int,
         @RequestParam(defaultValue = "0")        offset: Int,
+        @RequestParam(defaultValue = "all")      marketCapTier: String,
     ): ResponseEntity<ScreenerResponse> {
-        val result = screenerService.getItems(tab, market, sort, limit, offset)
+        val result = screenerService.getItems(tab, market, sort, limit, offset, marketCapTier)
         return ResponseEntity.ok(result.toResponse())
     }
 
@@ -90,6 +91,10 @@ data class ScreenerItemResponse(
     val amount: BigDecimal,
     val buyRatio: Int,
     val sellRatio: Int,
+    val marketCap: Long?,
+    val per: BigDecimal?,
+    val pbr: BigDecimal?,
+    val isFundamentalsMocked: Boolean,
 ) {
     companion object {
         fun from(i: ScreenerItem) = ScreenerItemResponse(
@@ -106,6 +111,10 @@ data class ScreenerItemResponse(
             amount       = i.amount,
             buyRatio     = i.buyRatio,
             sellRatio    = i.sellRatio,
+            marketCap    = i.marketCap,
+            per          = i.per,
+            pbr          = i.pbr,
+            isFundamentalsMocked = i.isFundamentalsMocked,
         )
     }
 }

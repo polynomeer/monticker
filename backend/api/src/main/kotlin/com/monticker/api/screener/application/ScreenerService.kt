@@ -22,27 +22,29 @@ class ScreenerService(
      */
     @Cacheable(
         cacheNames = [CacheConfig.SCREENER],
-        key = "#tab + ':' + #market + ':' + #sort + ':' + #limit + ':' + #offset",
+        key = "#tab + ':' + #market + ':' + #sort + ':' + #limit + ':' + #offset + ':' + #marketCapTier",
     )
     fun getItems(
-        tab: String    = "realtime",
-        market: String = "all",
-        sort: String   = "amount",
-        limit: Int     = 20,
-        offset: Int    = 0,
+        tab: String           = "realtime",
+        market: String        = "all",
+        sort: String          = "amount",
+        limit: Int            = 20,
+        offset: Int           = 0,
+        marketCapTier: String = "all",
     ): ScreenerResult {
         return Tracing.span("screener.getItems", mapOf(
-            "screener.tab"    to tab,
-            "screener.market" to market,
-            "screener.sort"   to sort,
-            "screener.offset" to offset,
+            "screener.tab"           to tab,
+            "screener.market"        to market,
+            "screener.sort"          to sort,
+            "screener.offset"        to offset,
+            "screener.marketCapTier" to marketCapTier,
         )) { span ->
             val effectiveSort = when (tab) {
                 "movers" -> if (sort == "fall") "fall" else "rise"
                 else     -> sort
             }
-            val items = repo.findItems(market, effectiveSort, limit.coerceIn(1, 50), offset)
-            val total = repo.count(market)
+            val items = repo.findItems(market, effectiveSort, limit.coerceIn(1, 50), offset, marketCapTier)
+            val total = repo.count(market, marketCapTier)
             span.setAttribute("screener.resultCount", items.size.toLong())
             ScreenerResult(items, total, offset + items.size < total)
         }
