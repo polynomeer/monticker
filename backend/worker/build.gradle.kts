@@ -82,6 +82,10 @@ val integrationTest = tasks.register<Test>("integrationTest") {
 	classpath = sourceSets["integrationTest"].runtimeClasspath
 	useJUnitPlatform()
 	shouldRunAfter(tasks.test)
+	// worker는 스키마를 직접 소유하지 않는다(flyway.enabled=false, ddl-auto=validate로
+	// api 모듈이 마이그레이션한 스키마를 검증만 함) — PostgresIntegrationTest가 통합
+	// 테스트용 컨테이너를 api와 동일한 마이그레이션으로 채울 수 있도록 그 경로를 넘겨준다.
+	systemProperty("monticker.apiMigrationsDir", file("../api/src/main/resources/db/migration").absolutePath)
 }
 
 kotlin {
