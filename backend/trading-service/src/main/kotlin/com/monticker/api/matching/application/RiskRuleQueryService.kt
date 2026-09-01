@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.Instant
+import java.time.ZoneId
 
 @Service
 @Transactional(readOnly = true)
@@ -89,10 +90,13 @@ class RiskRuleQueryService(
         )
         val varValue = if (stockIds.isNotEmpty()) {
             val placeholders = stockIds.joinToString(",") { "?" }
+            // candles_1d의 "오늘" 행은 장중 계속 바뀌는 미확정 값이라 VaR 수익률 계산에서 제외한다.
+            val todayStartKst = Instant.now().atZone(ZoneId.of("Asia/Seoul")).toLocalDate().atStartOfDay(ZoneId.of("Asia/Seoul")).toInstant()
             val rows = jdbc.queryForList(
-                """SELECT stock_id, close FROM candles_1d WHERE stock_id IN ($placeholders)
+                """SELECT stock_id, close FROM candles_1d
+                   WHERE stock_id IN ($placeholders) AND candle_time < ?
                    ORDER BY stock_id, candle_time DESC LIMIT ${stockIds.size * 20}""",
-                *stockIds.toTypedArray(),
+                *stockIds.toTypedArray(), java.sql.Timestamp.from(todayStartKst),
             )
             val allReturns = rows.groupBy { (it["stock_id"] as Number).toLong() }.values.flatMap { r ->
                 r.map { (it["close"] as BigDecimal).toDouble() }
