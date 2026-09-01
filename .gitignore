@@ -2,10 +2,6 @@
 node_modules/
 **/node_modules/
 
-# ── pnpm ──────────────────────────────────────────────────────
-pnpm-lock.yaml
-**/pnpm-lock.yaml
-
 # ── Next.js ───────────────────────────────────────────────────
 apps/web/.next/
 apps/web/out/
