@@ -1,4 +1,4 @@
-package com.monticker.api.common.config
+package com.monticker.api.auth.config
 
 import com.monticker.api.auth.infrastructure.CustomOAuth2UserService
 import com.monticker.api.auth.infrastructure.HttpCookieOAuth2AuthorizationRequestRepository

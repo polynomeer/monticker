@@ -9,11 +9,16 @@ import com.monticker.api.wallet.application.LedgerService
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
+import org.springframework.modulith.NamedInterface
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.math.RoundingMode
 
+/**
+ * quant 모듈(StrategyMarketController)이 전략 구독 시 크리에이터 수익을 정산할 때 호출하는 공개 API.
+ */
+@NamedInterface("api")
 @Service
 class CreatorEarningsService(
     private val earningRepo: CreatorEarningRepository,

@@ -3,9 +3,10 @@ package com.monticker.api.paper.application
 import com.monticker.api.common.domain.Price
 import com.monticker.api.paper.domain.PaperAccount
 import com.monticker.api.paper.domain.PaperTrade
+import com.monticker.api.paper.events.PaperTradeExecutedEvent
 import com.monticker.api.paper.infrastructure.PaperAccountRepository
 import com.monticker.api.paper.infrastructure.PaperTradeRepository
-import com.monticker.api.wallet.application.LedgerService
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -17,7 +18,7 @@ class PaperTradingService(
     private val accountRepo: PaperAccountRepository,
     private val tradeRepo: PaperTradeRepository,
     private val jdbc: JdbcTemplate,
-    private val ledgerService: LedgerService,
+    private val eventPublisher: ApplicationEventPublisher,
     private val portfolioQueryService: PaperPortfolioQueryService,
     private val projection: PortfolioPositionProjection,
     private val settlementService: PaperSettlementService,
@@ -43,7 +44,7 @@ class PaperTradingService(
         val trade = tradeRepo.save(PaperTrade(userId = userId, stockId = stockId, side = "BUY",
             quantity = quantity, price = price.amount, amount = amount.amount))
         projection.onBuy(userId, stockId, quantity, amount.amount)
-        ledgerService.recordBuy(userId, trade.id, stockId, amount.amount, account.cash.amount)
+        eventPublisher.publishEvent(PaperTradeExecutedEvent(userId, trade.id, stockId, "BUY", amount.amount, account.cash.amount))
         settlementService.createPending(trade)
         return TradeResultResponse("BUY", stockId, quantity, price.amount, amount.amount, account.cash.amount, trade.id)
     }
@@ -62,7 +63,7 @@ class PaperTradingService(
         val trade = tradeRepo.save(PaperTrade(userId = userId, stockId = stockId, side = "SELL",
             quantity = quantity, price = price.amount, amount = amount.amount))
         projection.onSell(userId, stockId, quantity)
-        ledgerService.recordSell(userId, trade.id, stockId, amount.amount, account.cash.amount)
+        eventPublisher.publishEvent(PaperTradeExecutedEvent(userId, trade.id, stockId, "SELL", amount.amount, account.cash.amount))
         settlementService.createPending(trade)
         return TradeResultResponse("SELL", stockId, quantity, price.amount, amount.amount, account.cash.amount, trade.id)
     }

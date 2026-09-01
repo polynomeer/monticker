@@ -3,6 +3,7 @@ package com.monticker.api.wallet.application
 import com.monticker.api.wallet.domain.LedgerEvent
 import com.monticker.api.wallet.domain.LedgerEventType
 import com.monticker.api.wallet.infrastructure.LedgerEventRepository
+import org.springframework.modulith.NamedInterface
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -21,6 +22,10 @@ data class LedgerEventDto(
     val createdAt: Instant,
 )
 
+/**
+ * ADR-013/016: 원장 기록 진입점 — brokerage/subscription/settlement 정산 도메인에서 호출하는 공개 API.
+ */
+@NamedInterface("api")
 @Service
 @Transactional
 class LedgerService(

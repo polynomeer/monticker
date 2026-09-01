@@ -127,6 +127,14 @@ class RuleSetService(
         return backtestResultRepository.findAllByRuleSetId(id).map { it.toResponse() }
     }
 
+    /**
+     * analytics 모듈(PositionSizerService)이 Kelly 포지션 사이징 계산에 사용하는 조회 API.
+     */
+    fun getLatestBacktestResult(ruleSetId: String): QuantBacktestResponse? =
+        backtestResultRepository.findAllByRuleSetId(ruleSetId)
+            .maxByOrNull { it.createdAt }
+            ?.toResponse()
+
     // ─── Helpers ───────────────────────────────────────────────────────────────
 
     private fun loadDailyCandles(stockId: Long, from: LocalDate, to: LocalDate): List<DailyCandle> =

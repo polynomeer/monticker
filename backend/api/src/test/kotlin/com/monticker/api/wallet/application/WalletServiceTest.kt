@@ -1,22 +1,20 @@
 package com.monticker.api.wallet.application
 
 import com.monticker.api.common.domain.Money
-import com.monticker.api.paper.domain.PaperAccount
-import com.monticker.api.paper.infrastructure.PaperAccountRepository
+import com.monticker.api.paper.application.PaperAccountQueryService
 import io.mockk.every
 import io.mockk.mockk
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.jdbc.core.JdbcTemplate
 import java.math.BigDecimal
-import java.util.Optional
 
 class WalletServiceTest {
 
-    private val accountRepo = mockk<PaperAccountRepository>()
+    private val accountQueryService = mockk<PaperAccountQueryService>()
     private val ledgerService = mockk<LedgerService>()
     private val jdbc = mockk<JdbcTemplate>()
-    private val service = WalletService(accountRepo, ledgerService, jdbc)
+    private val service = WalletService(accountQueryService, ledgerService, jdbc)
 
     // calcHoldingsValue는 portfolio_positions ↔ candles_1m LATERAL JOIN을 단일 집계 쿼리(SUM)로
     // DB에서 직접 계산한다 — 종목별 순회(queryForList + per-stock queryForObject)가 아니다.
@@ -30,8 +28,7 @@ class WalletServiceTest {
 
     @Test
     fun `getWalletMap sums available cash and holdings value into total assets`() {
-        val account = PaperAccount(userId = 1L, cash = Money.of("5000000"))
-        every { accountRepo.findByUserId(1L) } returns Optional.of(account)
+        every { accountQueryService.getCashBalance(1L) } returns Money.of("5000000")
         stubHoldingsValue(1L, BigDecimal("600000"))
         every { ledgerService.getLedger(1L) } returns emptyList()
 
@@ -44,8 +41,7 @@ class WalletServiceTest {
 
     @Test
     fun `getWalletMap reports zero reserved cash and zero settlement pending in the mock environment`() {
-        val account = PaperAccount(userId = 1L, cash = Money.of("1000000"))
-        every { accountRepo.findByUserId(1L) } returns Optional.of(account)
+        every { accountQueryService.getCashBalance(1L) } returns Money.of("1000000")
         stubHoldingsValue(1L, BigDecimal.ZERO)
         every { ledgerService.getLedger(1L) } returns emptyList()
 
@@ -57,7 +53,7 @@ class WalletServiceTest {
 
     @Test
     fun `getWalletMap creates a default account when the user has none yet`() {
-        every { accountRepo.findByUserId(2L) } returns Optional.empty()
+        every { accountQueryService.getCashBalance(2L) } returns Money.INITIAL_BALANCE
         stubHoldingsValue(2L, BigDecimal.ZERO)
         every { ledgerService.getLedger(2L) } returns emptyList()
 
@@ -69,8 +65,7 @@ class WalletServiceTest {
 
     @Test
     fun `getWalletMap returns only the most recent 10 ledger events`() {
-        val account = PaperAccount(userId = 1L, cash = Money.of("1000000"))
-        every { accountRepo.findByUserId(1L) } returns Optional.of(account)
+        every { accountQueryService.getCashBalance(1L) } returns Money.of("1000000")
         stubHoldingsValue(1L, BigDecimal.ZERO)
         val manyEvents = (1..15).map {
             LedgerEventDto(

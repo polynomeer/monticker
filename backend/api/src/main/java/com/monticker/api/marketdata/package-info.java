@@ -1,4 +1,4 @@
 @org.springframework.modulith.ApplicationModule(
-    allowedDependencies = {}
+    allowedDependencies = {"stock::api", "stock::domain"}
 )
 package com.monticker.api.marketdata;
