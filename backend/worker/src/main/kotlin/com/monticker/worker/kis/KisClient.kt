@@ -19,6 +19,13 @@ data class KisPrice(
     val high: java.math.BigDecimal,
     val low: java.math.BigDecimal,
     val open: java.math.BigDecimal,
+    // 펀더멘털 — inquire-price 응답에 이미 포함되어 있어 별도 호출 없이 같이 받는다 (ADR-018).
+    // hts_avls(시가총액)는 KIS 관례상 억원 단위 문자열로 추정 — 실제 KIS 키로 미검증, 사용 전 재확인할 것.
+    val per: java.math.BigDecimal? = null,
+    val pbr: java.math.BigDecimal? = null,
+    val eps: java.math.BigDecimal? = null,
+    val bps: java.math.BigDecimal? = null,
+    val marketCapEok: Long? = null,
 )
 
 /** 하루치 투자자별(개인/외국인/기관계) 순매수 수량·대금. */
@@ -116,6 +123,11 @@ class KisClient(
                 high   = out["stck_hgpr"]?.asText()?.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO,
                 low    = out["stck_lwpr"]?.asText()?.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO,
                 open   = out["stck_oprc"]?.asText()?.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO,
+                per          = out["per"]?.asText()?.toBigDecimalOrNull(),
+                pbr          = out["pbr"]?.asText()?.toBigDecimalOrNull(),
+                eps          = out["eps"]?.asText()?.toBigDecimalOrNull(),
+                bps          = out["bps"]?.asText()?.toBigDecimalOrNull(),
+                marketCapEok = out["hts_avls"]?.asText()?.toLongOrNull(),
             )
         } catch (e: Exception) {
             log.error("KIS fetchPrice failed for {}: {}", symbol, e.message)
