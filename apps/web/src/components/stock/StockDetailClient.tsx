@@ -13,6 +13,7 @@ import SummaryPanel from "./SummaryPanel";
 import WatchlistAddButton from "./WatchlistAddButton";
 import OrderBook from "./OrderBook";
 import InvestorFlowPanel from "./InvestorFlowPanel";
+import StockScoreCard from "./StockScoreCard";
 import StockTradeButton from "@/components/paper/StockTradeButton";
 import { useStockChart } from "@/hooks/useStockChart";
 import { useVwap } from "@/hooks/useVwap";
@@ -113,6 +114,7 @@ export default function StockDetailClient({ stockId, symbol, stockName }: Props)
       {!loading && candles.length > 0 && <VolumeChart candles={candles} height={140} />}
 
       <OrderBook stockId={stockId} />
+      <StockScoreCard stockId={stockId} />
       <InvestorFlowPanel stockId={stockId} />
       <EventTimeline stockId={stockId} />
       <NewsPanel stockId={stockId} />
