@@ -95,17 +95,26 @@ class AlertEvaluator(
             "VOLUME_SURGE" -> {
                 val surgeRatio = (condition["surgeRatio"] as? Number)?.toDouble() ?: 2.0
                 val period     = (condition["period"] as? Number)?.toInt() ?: 20
+                // 이전 쿼리는 비집계 컬럼(c.volume)과 집계(AVG(c2.volume))를 GROUP BY 없이
+                // 섞은 무효 SQL이라 매번 예외를 던졌고 processAlert()의 바깥 try/catch가
+                // 조용히 삼켜 이 규칙이 한 번도 발동한 적이 없었다. 두 값을 독립된 스칼라
+                // 서브쿼리로 분리해 유효한 SQL로 고친다.
+                // 참고: today_vol은 장 초반일수록 avg_vol(확정된 전체 거래일 평균)보다
+                // 구조적으로 작게 나온다 — 시간대별 정규화는 하지 않았으므로 장 후반에
+                // 갈수록 더 신뢰할 수 있는 값이 된다.
                 val row = jdbc.queryForMap(
-                    """SELECT c.volume AS today_vol,
-                              AVG(c2.volume) AS avg_vol
-                       FROM candles_1d c
-                       JOIN candles_1d c2 ON c2.stock_id = c.stock_id
-                          AND c2.candle_time >= NOW() - INTERVAL '$period days'
-                          AND c2.candle_time < DATE_TRUNC('day', NOW() AT TIME ZONE 'Asia/Seoul')
-                       WHERE c.stock_id = ?
-                         AND c.candle_time >= DATE_TRUNC('day', NOW() AT TIME ZONE 'Asia/Seoul')
-                       LIMIT 1""",
-                    rule.stockId,
+                    """
+                    SELECT
+                        (SELECT volume FROM candles_1d
+                           WHERE stock_id = ? AND candle_time >= DATE_TRUNC('day', NOW() AT TIME ZONE 'Asia/Seoul')
+                        ) AS today_vol,
+                        (SELECT AVG(volume) FROM candles_1d
+                           WHERE stock_id = ?
+                             AND candle_time >= NOW() - INTERVAL '$period days'
+                             AND candle_time < DATE_TRUNC('day', NOW() AT TIME ZONE 'Asia/Seoul')
+                        ) AS avg_vol
+                    """,
+                    rule.stockId, rule.stockId,
                 )
                 val todayVol = (row["today_vol"] as? Number)?.toLong() ?: 0L
                 val avgVol   = (row["avg_vol"] as? Number)?.toDouble() ?: 1.0
