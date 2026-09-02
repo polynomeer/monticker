@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: monticker
       POSTGRES_PASSWORD: monticker
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -24,7 +24,7 @@ services:
       - xpack.security.enabled=false
       - ES_JAVA_OPTS=-Xms512m -Xmx512m
     ports:
-      - "9200:9200"
+      - "${ELASTICSEARCH_PORT:-9200}:9200"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     healthcheck:
@@ -41,7 +41,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: monticker
       MONGO_INITDB_DATABASE: monticker
     ports:
-      - "27017:27017"
+      - "${MONGODB_PORT:-27017}:27017"
     volumes:
       - mongodb_data:/data/db
     healthcheck:
@@ -54,7 +54,7 @@ services:
     image: redis:7-alpine
     container_name: monticker-redis
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -154,14 +154,14 @@ services:
     image: apache/kafka:3.8.0
     container_name: monticker-kafka
     ports:
-      - "9092:9092"
-      - "29092:29092"
+      - "${KAFKA_PORT:-9092}:9092"
+      - "${KAFKA_EXTERNAL_PORT:-29092}:29092"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       # 컨테이너 내부망(kafka:9092)과 호스트(localhost:29092) 양쪽에서 접근 가능하도록 리스너 분리
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,EXTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:${KAFKA_EXTERNAL_PORT:-29092}
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
@@ -201,7 +201,7 @@ services:
       dockerfile: Dockerfile
     container_name: monticker-broadcast-gateway
     ports:
-      - "9090:9090"
+      - "${BROADCAST_GW_PORT:-9090}:9090"
     environment:
       KAFKA_BROKERS: kafka:9092
     depends_on:
@@ -219,7 +219,7 @@ services:
       dockerfile: Dockerfile
     container_name: monticker-quant-engine
     ports:
-      - "8082:8082"
+      - "${QUANT_ENGINE_PORT:-8082}:8082"
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/monticker
       DB_USER: monticker
@@ -250,7 +250,7 @@ services:
       dockerfile: Dockerfile
     container_name: monticker-trading-service
     ports:
-      - "8083:8083"
+      - "${TRADING_SERVICE_PORT:-8083}:8083"
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/monticker
       DB_USER: monticker
@@ -389,8 +389,8 @@ services:
     image: jaegertracing/all-in-one:1.57
     container_name: monticker-jaeger
     ports:
-      - "16686:16686"   # Jaeger UI
-      - "4318:4318"     # OTLP HTTP (api/worker → jaeger)
+      - "${JAEGER_UI_PORT:-16686}:16686"   # Jaeger UI
+      - "${OTLP_PORT:-4318}:4318"          # OTLP HTTP (api/worker → jaeger)
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
     healthcheck:
