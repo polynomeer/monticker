@@ -171,7 +171,9 @@ TimescaleDB CAgg(`candles_1d_cagg`)는 그대로 두되 이번 fix에서 의존�
   같은 Kafka 컨슈머 그룹으로 `TickKafkaConsumer`를 동시 실행 중이라(`tick.consumer`
   기본값이 어디서나 `legacy`), 파티션 리밸런스 시 진행 중이던 캔들이 유실될 수 있는
   문제를 조사 중 발견했다 — `ConsumerRebalanceListener`/체크포인팅이 필요한 아키텍처
-  작업이라 버그 수정 스코프를 벗어나 별도 태스크로 분리했다.
+  작업이라 버그 수정 스코프를 벗어나 별도 태스크로 분리했다. → [ADR-022](022-tick-consumer-msa-role-gating.md)에서
+  해결: 조사 결과 세 role 중 실제로 `market.ticks`를 소비해야 하는 건 `role=event`
+  하나뿐이라, 리밸런스 리스너 대신 활성화 조건을 좁혀 중복 소비 자체를 제거했다.
 - VOLUME_SURGE의 시간대별 정규화(위 참고).
 
 ## 후속 수정 2 (2026-09-01) — quant-engine·trading-service 포크본 대조
