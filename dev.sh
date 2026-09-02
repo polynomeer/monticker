@@ -297,7 +297,11 @@ echo ""
 echo "4/4  Starting Web (port ${WEB_PORT})..."
 cd "$ROOT/apps/web"
 pnpm install --ignore-scripts --frozen-lockfile 2>/dev/null || true
-npx next dev -p "$WEB_PORT" > "$ROOT/logs/web.log" 2>&1 &
+# .env.local의 NEXT_PUBLIC_API_URL은 8080 고정값이다 — API_PORT가 충돌로 다른 값으로
+# 해석됐는데 이걸 안 넘기면, 브라우저의 /api/* 요청이 실제로는 monticker API가 아니라
+# 우연히 8080을 쓰고 있는 다른 프로세스로 흘러들어가 알 수 없는 401/에러가 난다.
+# Next.js는 이미 process.env에 설정된 NEXT_PUBLIC_* 값을 .env.local보다 우선한다.
+NEXT_PUBLIC_API_URL="http://localhost:${API_PORT}" npx next dev -p "$WEB_PORT" > "$ROOT/logs/web.log" 2>&1 &
 WEB_PID=$!
 
 web_ready() { /usr/bin/curl -sf "http://localhost:${WEB_PORT}" > /dev/null 2>&1; }
