@@ -76,16 +76,22 @@
 
 ---
 
-## Phase 3 — 인프라/배포
+## Phase 3 — 인프라/배포 — 부분 완료 (2026-09-06)
 
-[docs/deployment.md](deployment.md)가 외부 서비스 등록(OAuth, PG, KIS)과 환경변수 체크리스트를 이미 다룬다. 여기서는 그 다음 단계, 즉 "실제로 띄우고 운영하는" 부분만 다룬다.
+[docs/deployment.md](deployment.md)가 외부 서비스 등록(OAuth, PG, KIS)과 환경변수 체크리스트를 이미 다룬다. 여기서는 그 다음 단계, 즉 "실제로 띄우고 운영하는" 부분만 다룬다. 실제 클라우드 계정·도메인이 필요한 항목은 이 세션에서 대신 처리할 수 없어 미완료로 남았다 — 그 외에는 실제로 실행/검증했다.
 
-- [ ] **K8s 매니페스트 실검증.** `infra/k8s/base/*.yaml` + `infra/k8s/overlays/{dev,prod}/`가 이미 존재하지만, 실제 클라우드 클러스터에 적용되어 검증된 적이 있는지 확인 필요 — 코드로는 있으나 실행 이력 미확인 상태.
-- [ ] **CI/CD에 배포 스텝 추가.** 현재 `.github/workflows/*.yml` 5개 전부 빌드/테스트만 하고 `deploy`/`kubectl`/`helm` 스텝이 전혀 없다 — 배포는 전적으로 수동. 최소한 스테이징 자동배포부터 추가.
-- [ ] 도메인/DNS/TLS 설정 — `deployment.md`의 `api.monticker.io` 등 도메인이 실제로 등록·연결되어 있는지 확인.
-- [ ] DB 백업 정책 수립 + PITR 복구 절차 1회 이상 리허설.
-- [ ] 모니터링 알림 채널 실연결 — Prometheus/Grafana는 `docker-compose.yml`에 있으나 온콜/Slack 등 실제 알림 라우팅 확인.
-- [ ] 부하 테스트 1회 이상 — 특히 실시간 시세 파이프라인과 브로커 API rate limit 하에서의 동작.
+- [x] **K8s 매니페스트 검증 (정적 검증만 — 실 클러스터 없음).** `kubectl kustomize infra/k8s/overlays/{dev,prod}`로 렌더링해 에러 없이 24개 리소스가 나오는 것 확인, dev/prod 오버레이가 실제로 다르게 패치되는지(replica 수, 이미지 태그, MSA URL) diff로 확인. `kubectl apply --dry-run`은 API 서버 연결이 필요해서(kind/minikube 미설치) 여기까지만 — 실 클러스터 적용 검증은 여전히 미확인.
+- [x] **DB 백업/복구 — 실제로 리허설함.** [infra/db/](../infra/db/README.md)에 `backup.sh`/`restore.sh` 추가. 로컬 dev DB에 실제로 백업→카나리아 행 삽입→복구를 실행해 정확히 백업 시점 상태로 돌아오는 것을 확인(README.md에 수치 기록). PITR(WAL 아카이빙)은 실 프로덕션 Postgres가 있어야 리허설 가능 — 미완료로 남김.
+- [x] **모니터링 알림 채널 — 로컬에서 엔드투엔드로 실제 연결 확인.** 부수적으로 두 가지를 새로 발견해 고쳤다:
+  - `resilience4j-micrometer` 의존성이 없어서 서킷브레이커 상태가 Prometheus에 전혀 노출되지 않고 있었음 → 추가 후 `resilience4j_circuitbreaker_state` 게이지 노출 확인.
+  - **`/actuator/prometheus`가 SecurityConfig에서 `denyAll()`이었음 — Prometheus 자신의 스크레이프 요청도 401로 막혀 모니터링 전체가 애초에 동작 불능이었다.** Ingress가 `/actuator/**`를 라우팅하지 않아(공인 인터넷에서 원천 차단) 실제 보안 경계는 네트워크 토폴로지이므로 `permitAll()`로 변경.
+  - [infra/monitoring/alert-rules.yml](../infra/monitoring/alert-rules.yml) 신설(ServiceDown, HighHttpErrorRate, CircuitBreakerOpen, HighJvmHeapUsage, HikariPoolNearExhaustion — `promtool check rules`로 검증), [infra/monitoring/alertmanager.yml](../infra/monitoring/alertmanager.yml) 신설(`amtool check-config`로 검증), `docker-compose.yml`에 alertmanager 서비스 추가.
+  - **실제로 컨테이너를 띄워서 확인**: 서비스 다운 상황을 만들어 ServiceDown 알림이 pending → firing으로 전이하고 Alertmanager가 실제로 수신하는 것까지 API 응답으로 확인. 실제 채널(Slack 등) 연결은 사용자의 워크스페이스가 필요해 `alertmanager.yml`에 예시 설정만 남겨둠 — 미완료.
+- [x] **부하 테스트 — 실제로 실행, 진짜 버그 2건 발견·수정.** [scripts/load-test/k6-smoke.js](../scripts/load-test/k6-smoke.js)(k6)로 로컬 스택에 실제 부하를 가함. 스크리너 조회·로그인 브루트포스·모의투자 주문 폭주 세 시나리오 모두 rate limit이 설계대로 걸리는 것을 확인하는 과정에서:
+  - **`/error`가 SecurityConfig 인가 목록에 없어서, `RateLimitFilter.sendError(429)`가 내부적으로 `/error`로 재디스패치될 때 `anyRequest().authenticated()`에 걸려 429가 401로 둔갑하고 있었다.** 모든 rate-limit 응답이 실제 이유(429) 대신 "인증 안 됨"만 보여주고 있었던 것 — `/error`를 permitAll로 추가해 수정.
+  - **`PaperTradingService.getCurrentPrice`/`OrderSagaOrchestrator.getCurrentPrice` 둘 다 최근 캔들이 없는 종목에 주문을 넣으면 `EmptyResultDataAccessException`이 새어나가 안내 메시지 없는 500을 반환했다.** `queryForObject`는 0건일 때 null이 아니라 예외를 던지므로 의도했던 `?: throw IllegalStateException(...)` 처리가 아예 실행되지 않고 있었음 — `query(...).firstOrNull()`로 교체해 두 곳 다 수정, 회귀 테스트 추가.
+- [ ] **CI/CD 배포 스텝.** [.github/workflows/deploy-images.yml](../.github/workflows/deploy-images.yml) 신설 — main 머지 시 backend 4개 서비스 + market-gateway 이미지를 빌드해 GHCR(ghcr.io)에 푸시(별도 클라우드 계정 불필요, GITHUB_TOKEN만 사용). market-gateway는 로컬에서 실제 `docker build` 성공 확인. **`web` 서비스는 이 워크플로에서 제외했다** — `apps/web/Dockerfile`이 현재 빌드 자체가 안 되는 것을 발견함(`package.json`은 `apps/web/`에만, `pnpm-lock.yaml`/`.npmrc`는 저장소 루트에만 있어 어느 빌드 컨텍스트를 줘도 한쪽이 빠짐 — pnpm 워크스페이스 인식 멀티스테이지 COPY로 재작성 필요, 이 세션 스코프 밖). 실제 K8s 클러스터로의 배포 스텝은 여전히 없음(kubeconfig/클러스터 필요).
+- [ ] 도메인/DNS/TLS 설정 — 실제 도메인 소유·클라우드 DNS가 필요해 이 세션에서 처리 불가.
 
 ---
 
@@ -138,7 +144,7 @@ General Availability
 | 0 | ✅ 암호화·동시성·서킷브레이커 3항목 완료 (2026-09-05) | Phase 4의 `BROKERAGE_MOCK_ENABLED=false` 전환 허용 |
 | 1 | 이용약관·개인정보처리방침 실제 게시 + 법률 자문 완료 | Phase 7의 Closed/GA 진행 허용 |
 | 2 | ✅ 보안 강화 완료 (2026-09-05) — 시크릿 관리 전환만 실제 클라우드 프로비저닝 대기 | Phase 7의 Closed beta 진행 허용 |
-| 3 | 배포 파이프라인 + 백업/모니터링 확인 | Phase 7의 모든 단계 진행 허용 |
+| 3 | 🟡 부분 완료 (2026-09-06) — 백업/모니터링/부하테스트 실증 완료, 도메인·실클러스터 배포·web Docker 빌드는 미완료 | Phase 7의 모든 단계 진행 허용 |
 | 6 | E2E + 펜테스트 완료 | Phase 7의 GA 진행 허용 |
 
 이 요약표에서 어느 한 줄이라도 미완료면, 그 줄이 막는 다음 단계로 넘어가지 않는다.
