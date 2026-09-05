@@ -1,0 +1,75 @@
+version: 2
+updates:
+  # apps/web + apps/mobile + packages/* — single pnpm workspace, one lockfile at root
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      dev-dependencies:
+        dependency-type: "development"
+    open-pull-requests-limit: 10
+
+  # 4개의 독립된 Gradle 루트 프로젝트 — 각자 별도 build.gradle.kts/gradlew를 가짐
+  - package-ecosystem: "gradle"
+    directory: "/backend/api"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "gradle"
+    directory: "/backend/worker"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "gradle"
+    directory: "/backend/trading-service"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "gradle"
+    directory: "/backend/quant-engine"
+    schedule:
+      interval: "weekly"
+
+  # 시세 수집 게이트웨이 (Go)
+  - package-ecosystem: "gomod"
+    directory: "/services/market-gateway"
+    schedule:
+      interval: "weekly"
+
+  # 컨테이너 베이스 이미지
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "docker"
+    directory: "/backend/api"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "docker"
+    directory: "/backend/worker"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "docker"
+    directory: "/backend/trading-service"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "docker"
+    directory: "/backend/quant-engine"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "docker"
+    directory: "/apps/web"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "docker"
+    directory: "/services/market-gateway"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "docker"
+    directory: "/services/broadcast-gateway"
+    schedule:
+      interval: "weekly"
+
+  # CI 워크플로 자체의 액션 버전
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
