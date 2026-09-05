@@ -44,15 +44,18 @@
 ## Phase 1 — 법무·컴플라이언스 (전문가 검토 필요)
 
 > 아래 항목은 "검토가 필요하다"는 안내이며, 법률적 결론이 아니다. 실제 진행 전 변호사/법무 자문을 거친다.
+> Claude가 자문 없이 완료할 수 없는 항목(사업자 등록, 4개 법률 검토)은 [docs/legal-review-brief.md](legal-review-brief.md)에
+> 자문용 브리핑(사실관계 + 질문지)만 준비해 두었다 — **체크박스는 실제 자문 결과가 반영된 뒤에만 체크한다.**
 
-- [ ] **사업자 등록.** 개인사업자/법인 여부 결정 → 사업자 등록. 구독 판매·전략 마켓 운영 시 통신판매업 신고 필요 가능성 검토.
-- [ ] **이용약관 작성 및 게시** (`/terms`) — 현재 `apps/web/src/app`에 해당 라우트가 존재하지 않는다.
-- [ ] **개인정보처리방침 작성 및 게시** (`/privacy`) — **현재 깨진 링크다.** `CookieBanner.tsx:29`가 `<Link href="/privacy">개인정보처리방침</Link>`으로 링크하지만 `apps/web/src/app/privacy` 디렉터리 자체가 없다. 회원가입 동의 흐름이 실제로는 존재하지 않는 페이지를 가리키고 있다 — 법적 요건 이전에 당장 고쳐야 할 버그이기도 하다.
-- [ ] **자본시장법 검토 — BYOK 모델의 인가 대상 여부.** monticker가 사용자 본인 명의 계좌의 API 키만 사용하는 구조([ADR-023](decisions/023-commercialization-pivot.md) BYOK 원칙)가 투자중개업 인가 없이 운영 가능한지 법률 자문. (ADR-023 "Revisit When"에 동일 항목 기록됨 — 여기서 실행 항목으로 승격.)
-- [ ] **유사투자자문업 신고 대상 여부.** [docs/domain/quant-lab-positioning.md](domain/quant-lab-positioning.md)가 이미 제품 설계로 "종목 추천"이 아니라 "전략 실행 도구"로 포지셔닝했지만, 이것이 신고 의무 자체를 없애는지는 별도 법률 검토 필요.
-- [ ] **전자금융거래법.** 토스페이먼츠 PG 연동(이미 [docs/deployment.md](deployment.md) §2)은 PG사가 라이선스를 보유하므로 monticker 자체 라이선스 이슈는 낮을 가능성이 높으나, 정산대행/에스크로 여부 확인.
-- [ ] **개인정보 국외 이전 고지.** `StockSummaryService`(`ai/StockSummaryService.kt`)가 뉴스/이벤트 텍스트를 Anthropic Claude API(해외)로 전송한다 — 개인정보 자체는 아니지만, 처리방침에 국외 이전 관련 고지가 필요한지 확인.
-- [ ] **투자자문 아님 고지 문구의 법적 충분성 검토.** 현재 "과거 성과가 미래 수익을 보장하지 않습니다" 수준의 문구(product.md)가 실제 법적 면책으로 충분한지 확인.
+- [ ] **사업자 등록.** 개인사업자/법인 여부 결정 → 사업자 등록. 구독 판매·전략 마켓 운영 시 통신판매업 신고 필요 가능성 검토. → 일반 절차 안내는 [legal-review-brief.md §3](legal-review-brief.md#3-사업자-등록--일반-절차-정보-참고용-최종-선택은-세무사법무사-상담-권장), 최종 형태 선택은 세무사·법무사 상담 필요.
+- [x] **이용약관 작성 및 게시** (`/terms`) — [apps/web/src/app/terms/page.tsx](../apps/web/src/app/terms/page.tsx) 초안 게시 완료(2026-09-05). 12개 조 구성, 확정 안 된 항목은 주황색 표시. `CookieBanner`에서 "이용약관" 링크 추가.
+- [x] **개인정보처리방침 작성 및 게시** (`/privacy`) — 완료(2026-09-05, 이전 커밋). 깨진 링크였던 문제 해결됨.
+- [ ] **자본시장법 검토 — BYOK 모델의 인가 대상 여부.** → 자문 질문지 준비 완료: [legal-review-brief.md §2-1](legal-review-brief.md#2-1-증권사-연동byok이-투자중개업-인가-대상인가). 실제 자문 대기.
+- [ ] **유사투자자문업 신고 대상 여부.** → 자문 질문지 준비 완료: [legal-review-brief.md §2-2](legal-review-brief.md#2-2-quant-lab--전략-마켓이-유사투자자문업-신고-대상인가). 실제 자문 대기.
+- [ ] **전자금융거래법.** → 자문 질문지 준비 완료: [legal-review-brief.md §2-3](legal-review-brief.md#2-3-전자금융거래법--결제정산-구조에-회사-자체-라이선스가-필요한가). 실제 자문 대기.
+- [ ] **개인정보 국외 이전 고지.** `/privacy`에 Anthropic 위탁 사실은 이미 명시해 두었으나, 법적으로 별도 고지 형식이 필요한지는 미확인 → [legal-review-brief.md §2-5](legal-review-brief.md#2-5-개인정보-국외-이전-고지). 실제 자문 대기.
+- [ ] **투자자문 아님 고지 문구의 법적 충분성 검토.** `/terms` 제5·6·11조, `/privacy`에 초안 문구는 반영했으나 법적 충분성은 미확인 → [legal-review-brief.md §2-4](legal-review-brief.md#2-4-이용약관개인정보처리방침-문구의-법적-충분성). 실제 자문 대기.
+- [ ] **통신판매업 신고 필요 여부.** → [legal-review-brief.md §2-6](legal-review-brief.md#2-6-통신판매업-신고-필요-여부). 실제 자문 대기.
 
 ---
 

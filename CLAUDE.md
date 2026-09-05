@@ -54,6 +54,7 @@ Accepted | Deprecated | Superseded by ADR-NNN
 
 - [docs/product.md](docs/product.md) — product identity, feature axes, product scope, key design decisions
 - [docs/launch-plan.md](docs/launch-plan.md) — commercial launch checklist: tech debt gates, legal/compliance, security, infra, phased rollout
+- [docs/legal-review-brief.md](docs/legal-review-brief.md) — briefing pack (facts + question list, not legal advice) to hand an actual lawyer for Phase 1 sign-off
 - [docs/architecture.md](docs/architecture.md) — system architecture, tech stack, module boundaries, API design
 - [docs/workflow.md](docs/workflow.md) — Claude Code development workflow, subagents, hooks, CI/CD
 - [docs/data-model.md](docs/data-model.md) — full DB schema (PostgreSQL, TimescaleDB, Redis key conventions)
