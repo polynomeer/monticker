@@ -1,5 +1,7 @@
 package com.monticker.api.brokerage.infrastructure
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -30,9 +32,11 @@ import java.time.format.DateTimeFormatter
 @ConditionalOnProperty("app.brokerage.mock.enabled", havingValue = "false")
 class KisBrokerageClient(
     @Value("\${app.kis.base-url}") private val baseUrl: String,
+    cbRegistry: CircuitBreakerRegistry,
 ) : BrokerageClient {
 
     private val log = LoggerFactory.getLogger(javaClass)
+    private val cb = cbRegistry.circuitBreaker("kis")
     private val DATE_FMT = DateTimeFormatter.ofPattern("yyyyMMdd")
 
     private val restClient = RestClient.builder()
@@ -44,20 +48,25 @@ class KisBrokerageClient(
 
     override fun issueToken(appKey: String, appSecret: String): BrokerageToken {
         return try {
-            val body = mapOf(
-                "grant_type" to "client_credentials",
-                "appkey"     to appKey,
-                "appsecret"  to appSecret,
-            )
-            val resp = restClient.post()
-                .uri("/oauth2/tokenP")
-                .body(body)
-                .retrieve()
-                .body(KisTokenResponse::class.java)
-                ?: throw IllegalStateException("KIS 토큰 응답이 없습니다.")
+            cb.executeCallable {
+                val body = mapOf(
+                    "grant_type" to "client_credentials",
+                    "appkey"     to appKey,
+                    "appsecret"  to appSecret,
+                )
+                val resp = restClient.post()
+                    .uri("/oauth2/tokenP")
+                    .body(body)
+                    .retrieve()
+                    .body(KisTokenResponse::class.java)
+                    ?: throw IllegalStateException("KIS 토큰 응답이 없습니다.")
 
-            log.info("[KIS] 토큰 발급 성공: expiresIn={}초", resp.expiresIn)
-            BrokerageToken(accessToken = resp.accessToken, expiresIn = resp.expiresIn)
+                log.info("[KIS] 토큰 발급 성공: expiresIn={}초", resp.expiresIn)
+                BrokerageToken(accessToken = resp.accessToken, expiresIn = resp.expiresIn)
+            }
+        } catch (e: CallNotPermittedException) {
+            log.warn("[CircuitBreaker:kis] 요청 차단됨 — 토큰 발급 건너뜀")
+            throw IllegalStateException("KIS API 장애로 서킷브레이커가 열려 있습니다. 잠시 후 다시 시도하세요.", e)
         } catch (e: RestClientException) {
             log.error("[KIS] 토큰 발급 실패: {}", e.message)
             throw IllegalStateException("KIS 토큰 발급 실패: ${e.message}", e)
@@ -68,35 +77,40 @@ class KisBrokerageClient(
 
     override fun submitOrder(token: BrokerageToken, request: BrokerageOrderRequest): BrokerageOrderResult {
         return try {
-            // TR_ID: 현금 매수 TTTC0802U, 현금 매도 TTTC0801U
-            val trId = if (request.side == "BUY") "TTTC0802U" else "TTTC0801U"
+            cb.executeCallable {
+                // TR_ID: 현금 매수 TTTC0802U, 현금 매도 TTTC0801U
+                val trId = if (request.side == "BUY") "TTTC0802U" else "TTTC0801U"
 
-            val body = mapOf(
-                "CANO"      to "",           // 계좌번호 앞 8자리 (BrokerageService에서 account 정보로 채움)
-                "ACNT_PRDT_CD" to "01",     // 계좌상품코드
-                "PDNO"      to request.symbol,
-                "ORD_DVSN"  to if (request.orderType == "MARKET") "01" else "00", // 01=시장가, 00=지정가
-                "ORD_QTY"   to request.quantity.toString(),
-                "ORD_UNPR"  to (request.limitPrice?.toString() ?: "0"),
-            )
+                val body = mapOf(
+                    "CANO"      to "",           // 계좌번호 앞 8자리 (BrokerageService에서 account 정보로 채움)
+                    "ACNT_PRDT_CD" to "01",     // 계좌상품코드
+                    "PDNO"      to request.symbol,
+                    "ORD_DVSN"  to if (request.orderType == "MARKET") "01" else "00", // 01=시장가, 00=지정가
+                    "ORD_QTY"   to request.quantity.toString(),
+                    "ORD_UNPR"  to (request.limitPrice?.toString() ?: "0"),
+                )
 
-            val resp = restClient.post()
-                .uri("/uapi/domestic-stock/v1/trading/order-cash")
-                .header("authorization", "Bearer ${token.accessToken}")
-                .header("tr_id", trId)
-                .header("custtype", "P")
-                .body(body)
-                .retrieve()
-                .body(KisOrderResponse::class.java)
+                val resp = restClient.post()
+                    .uri("/uapi/domestic-stock/v1/trading/order-cash")
+                    .header("authorization", "Bearer ${token.accessToken}")
+                    .header("tr_id", trId)
+                    .header("custtype", "P")
+                    .body(body)
+                    .retrieve()
+                    .body(KisOrderResponse::class.java)
 
-            if (resp?.rtCd == "0") {
-                val pgOrderId = resp.output?.odno ?: "UNKNOWN"
-                log.info("[KIS] 주문 접수: trId={} odno={}", trId, pgOrderId)
-                BrokerageOrderResult(pgOrderId = pgOrderId, status = "SUBMITTED")
-            } else {
-                log.warn("[KIS] 주문 거부: rtCd={} msg={}", resp?.rtCd, resp?.msg1)
-                BrokerageOrderResult(pgOrderId = "REJECTED_${System.currentTimeMillis()}", status = "REJECTED", rejectReason = resp?.msg1)
+                if (resp?.rtCd == "0") {
+                    val pgOrderId = resp.output?.odno ?: "UNKNOWN"
+                    log.info("[KIS] 주문 접수: trId={} odno={}", trId, pgOrderId)
+                    BrokerageOrderResult(pgOrderId = pgOrderId, status = "SUBMITTED")
+                } else {
+                    log.warn("[KIS] 주문 거부: rtCd={} msg={}", resp?.rtCd, resp?.msg1)
+                    BrokerageOrderResult(pgOrderId = "REJECTED_${System.currentTimeMillis()}", status = "REJECTED", rejectReason = resp?.msg1)
+                }
             }
+        } catch (e: CallNotPermittedException) {
+            log.warn("[CircuitBreaker:kis] 요청 차단됨 — 주문 제출 건너뜀")
+            BrokerageOrderResult(pgOrderId = "CB_OPEN_${System.currentTimeMillis()}", status = "REJECTED", rejectReason = "KIS API 서킷브레이커 OPEN")
         } catch (e: RestClientException) {
             log.error("[KIS] 주문 실패: {}", e.message)
             BrokerageOrderResult(pgOrderId = "ERR_${System.currentTimeMillis()}", status = "REJECTED", rejectReason = e.message)
@@ -107,28 +121,36 @@ class KisBrokerageClient(
 
     override fun getOrderStatus(token: BrokerageToken, pgOrderId: String): BrokerageOrderStatus {
         return try {
-            val resp = restClient.get()
-                .uri("/uapi/domestic-stock/v1/trading/inquire-psbl-rvsecncl?CANO=&ACNT_PRDT_CD=01&CTX_AREA_FK100=&CTX_AREA_NK100=&INQR_DVSN_1=0&INQR_DVSN_2=0")
-                .header("authorization", "Bearer ${token.accessToken}")
-                .header("tr_id", "TTTC8036R")
-                .retrieve()
-                .body(KisOrderStatusResponse::class.java)
+            cb.executeCallable {
+                val resp = restClient.get()
+                    .uri("/uapi/domestic-stock/v1/trading/inquire-psbl-rvsecncl?CANO=&ACNT_PRDT_CD=01&CTX_AREA_FK100=&CTX_AREA_NK100=&INQR_DVSN_1=0&INQR_DVSN_2=0")
+                    .header("authorization", "Bearer ${token.accessToken}")
+                    .header("tr_id", "TTTC8036R")
+                    .retrieve()
+                    .body(KisOrderStatusResponse::class.java)
 
-            val item = resp?.output1?.firstOrNull { it.odno == pgOrderId }
-                ?: return BrokerageOrderStatus(pgOrderId, "SUBMITTED", 0, null)
+                val item = resp?.output1?.firstOrNull { it.odno == pgOrderId }
 
-            val status = when (item.ordSttsDvsnName) {
-                "전량체결" -> "FILLED"
-                "일부체결" -> "PARTIALLY_FILLED"
-                "취소"     -> "CANCELLED"
-                else        -> "SUBMITTED"
+                if (item == null) {
+                    BrokerageOrderStatus(pgOrderId, "SUBMITTED", 0, null)
+                } else {
+                    val status = when (item.ordSttsDvsnName) {
+                        "전량체결" -> "FILLED"
+                        "일부체결" -> "PARTIALLY_FILLED"
+                        "취소"     -> "CANCELLED"
+                        else        -> "SUBMITTED"
+                    }
+                    BrokerageOrderStatus(
+                        pgOrderId    = pgOrderId,
+                        status       = status,
+                        filledQty    = item.tot_ccld_qty?.toIntOrNull() ?: 0,
+                        avgFillPrice = item.avg_prvs?.toBigDecimalOrNull(),
+                    )
+                }
             }
-            BrokerageOrderStatus(
-                pgOrderId    = pgOrderId,
-                status       = status,
-                filledQty    = item.tot_ccld_qty?.toIntOrNull() ?: 0,
-                avgFillPrice = item.avg_prvs?.toBigDecimalOrNull(),
-            )
+        } catch (e: CallNotPermittedException) {
+            log.warn("[CircuitBreaker:kis] 요청 차단됨 — 주문 조회 건너뜀")
+            BrokerageOrderStatus(pgOrderId, "SUBMITTED", 0, null)
         } catch (e: RestClientException) {
             log.error("[KIS] 주문 조회 실패: {}", e.message)
             BrokerageOrderStatus(pgOrderId, "SUBMITTED", 0, null)
@@ -139,26 +161,31 @@ class KisBrokerageClient(
 
     override fun getSettlements(token: BrokerageToken, date: LocalDate): List<BrokerageSettlementItem> {
         return try {
-            val dateStr = date.format(DATE_FMT)
-            val resp = restClient.get()
-                .uri("/uapi/domestic-stock/v1/trading/inquire-account-balance?CANO=&ACNT_PRDT_CD=01&AFHR_FLPR_YN=N&OFL_YN=&INQR_DVSN=02&UNPR_DVSN=01&FUND_STTL_ICLD_YN=N&FNCG_AMT_AUTO_RDPT_YN=N&PRCS_DVSN=00&CTX_AREA_FK100=&CTX_AREA_NK100=")
-                .header("authorization", "Bearer ${token.accessToken}")
-                .header("tr_id", "TTTC8434R")
-                .retrieve()
-                .body(KisSettlementResponse::class.java)
+            cb.executeCallable {
+                val dateStr = date.format(DATE_FMT)
+                val resp = restClient.get()
+                    .uri("/uapi/domestic-stock/v1/trading/inquire-account-balance?CANO=&ACNT_PRDT_CD=01&AFHR_FLPR_YN=N&OFL_YN=&INQR_DVSN=02&UNPR_DVSN=01&FUND_STTL_ICLD_YN=N&FNCG_AMT_AUTO_RDPT_YN=N&PRCS_DVSN=00&CTX_AREA_FK100=&CTX_AREA_NK100=")
+                    .header("authorization", "Bearer ${token.accessToken}")
+                    .header("tr_id", "TTTC8434R")
+                    .retrieve()
+                    .body(KisSettlementResponse::class.java)
 
-            resp?.output1?.filter { it.sttl_dt == dateStr }?.map { item ->
-                BrokerageSettlementItem(
-                    pgOrderId  = item.odno ?: "",
-                    symbol     = item.pdno ?: "",
-                    side       = if ((item.sll_buy_dvsn_cd ?: "02") == "02") "BUY" else "SELL",
-                    quantity   = item.ccld_qty?.toIntOrNull() ?: 0,
-                    fillPrice  = item.ccld_unpr?.toBigDecimalOrNull() ?: BigDecimal.ZERO,
-                    fee        = item.bfee?.toBigDecimalOrNull() ?: BigDecimal.ZERO,
-                    tax        = item.tl_tax?.toBigDecimalOrNull() ?: BigDecimal.ZERO,
-                    settleDate = date,
-                )
-            } ?: emptyList()
+                resp?.output1?.filter { it.sttl_dt == dateStr }?.map { item ->
+                    BrokerageSettlementItem(
+                        pgOrderId  = item.odno ?: "",
+                        symbol     = item.pdno ?: "",
+                        side       = if ((item.sll_buy_dvsn_cd ?: "02") == "02") "BUY" else "SELL",
+                        quantity   = item.ccld_qty?.toIntOrNull() ?: 0,
+                        fillPrice  = item.ccld_unpr?.toBigDecimalOrNull() ?: BigDecimal.ZERO,
+                        fee        = item.bfee?.toBigDecimalOrNull() ?: BigDecimal.ZERO,
+                        tax        = item.tl_tax?.toBigDecimalOrNull() ?: BigDecimal.ZERO,
+                        settleDate = date,
+                    )
+                } ?: emptyList()
+            }
+        } catch (e: CallNotPermittedException) {
+            log.warn("[CircuitBreaker:kis] 요청 차단됨 — 정산 조회 건너뜀")
+            emptyList()
         } catch (e: RestClientException) {
             log.error("[KIS] 정산 조회 실패: {}", e.message)
             emptyList()
@@ -169,26 +196,31 @@ class KisBrokerageClient(
 
     override fun getBalance(token: BrokerageToken): BrokerageBalance {
         return try {
-            val resp = restClient.get()
-                .uri("/uapi/domestic-stock/v1/trading/inquire-balance?CANO=&ACNT_PRDT_CD=01&AFHR_FLPR_YN=N&OFL_YN=&INQR_DVSN=02&UNPR_DVSN=01&FUND_STTL_ICLD_YN=N&FNCG_AMT_AUTO_RDPT_YN=N&PRCS_DVSN=00&CTX_AREA_FK100=&CTX_AREA_NK100=")
-                .header("authorization", "Bearer ${token.accessToken}")
-                .header("tr_id", "TTTC8434R")
-                .retrieve()
-                .body(KisBalanceResponse::class.java)
+            cb.executeCallable {
+                val resp = restClient.get()
+                    .uri("/uapi/domestic-stock/v1/trading/inquire-balance?CANO=&ACNT_PRDT_CD=01&AFHR_FLPR_YN=N&OFL_YN=&INQR_DVSN=02&UNPR_DVSN=01&FUND_STTL_ICLD_YN=N&FNCG_AMT_AUTO_RDPT_YN=N&PRCS_DVSN=00&CTX_AREA_FK100=&CTX_AREA_NK100=")
+                    .header("authorization", "Bearer ${token.accessToken}")
+                    .header("tr_id", "TTTC8434R")
+                    .retrieve()
+                    .body(KisBalanceResponse::class.java)
 
-            val summary = resp?.output2?.firstOrNull()
-            BrokerageBalance(
-                cash           = summary?.dnca_tot_amt?.toBigDecimalOrNull() ?: BigDecimal.ZERO,
-                totalEvaluated = summary?.tot_evlu_amt?.toBigDecimalOrNull() ?: BigDecimal.ZERO,
-                holdings       = resp?.output1?.map { h ->
-                    BrokerageHolding(
-                        symbol       = h.pdno ?: "",
-                        quantity     = h.hldg_qty?.toIntOrNull() ?: 0,
-                        avgPrice     = h.pchs_avg_pric?.toBigDecimalOrNull() ?: BigDecimal.ZERO,
-                        currentPrice = h.prpr?.toBigDecimalOrNull() ?: BigDecimal.ZERO,
-                    )
-                } ?: emptyList(),
-            )
+                val summary = resp?.output2?.firstOrNull()
+                BrokerageBalance(
+                    cash           = summary?.dnca_tot_amt?.toBigDecimalOrNull() ?: BigDecimal.ZERO,
+                    totalEvaluated = summary?.tot_evlu_amt?.toBigDecimalOrNull() ?: BigDecimal.ZERO,
+                    holdings       = resp?.output1?.map { h ->
+                        BrokerageHolding(
+                            symbol       = h.pdno ?: "",
+                            quantity     = h.hldg_qty?.toIntOrNull() ?: 0,
+                            avgPrice     = h.pchs_avg_pric?.toBigDecimalOrNull() ?: BigDecimal.ZERO,
+                            currentPrice = h.prpr?.toBigDecimalOrNull() ?: BigDecimal.ZERO,
+                        )
+                    } ?: emptyList(),
+                )
+            }
+        } catch (e: CallNotPermittedException) {
+            log.warn("[CircuitBreaker:kis] 요청 차단됨 — 잔고 조회 건너뜀")
+            BrokerageBalance(BigDecimal.ZERO, BigDecimal.ZERO, emptyList())
         } catch (e: RestClientException) {
             log.error("[KIS] 잔고 조회 실패: {}", e.message)
             BrokerageBalance(BigDecimal.ZERO, BigDecimal.ZERO, emptyList())

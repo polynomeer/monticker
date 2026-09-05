@@ -1,5 +1,6 @@
 package com.monticker.api.brokerage.domain
 
+import com.monticker.api.common.security.EncryptedStringConverter
 import jakarta.persistence.*
 import java.time.Instant
 
@@ -26,7 +27,8 @@ class BrokerageAccount(
     @Enumerated(EnumType.STRING)
     val accountType: BrokerageAccountType = BrokerageAccountType.REAL,
 
-    // AES-256 암호화 저장 (현재는 Mock이므로 평문 허용)
+    // AES-256-GCM 암호화 저장 (EncryptedStringConverter) — docs/launch-plan.md Phase 0
+    @Convert(converter = EncryptedStringConverter::class)
     @Column(name = "access_token", columnDefinition = "TEXT")
     var accessToken: String? = null,
 

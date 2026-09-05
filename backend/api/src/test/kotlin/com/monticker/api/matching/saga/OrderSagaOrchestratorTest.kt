@@ -49,10 +49,18 @@ class OrderSagaOrchestratorTest {
         } returns currentPrice
     }
 
-    private fun stubAccountCash(cash: BigDecimal = BigDecimal("10000000")) {
+    /**
+     * reserveCash()는 이제 "확인 후 차감"이 아니라 `UPDATE ... WHERE cash >= ?` 하나로
+     * 원자화되어 있으므로(동시성 레이스 방지), 테스트도 그 UPDATE의 반환 행 수(성공 시 1,
+     * 잔고 부족 시 0)를 스텁한다 — 더 이상 SELECT cash를 직접 스텁하지 않는다.
+     */
+    private fun stubAccountCash(sufficient: Boolean = true) {
         every {
-            jdbc.queryForObject("SELECT cash FROM paper_accounts WHERE user_id = ?", BigDecimal::class.java, userId)
-        } returns cash
+            jdbc.update(
+                match<String> { it.startsWith("UPDATE paper_accounts SET cash = cash -") },
+                any<BigDecimal>(), userId, any<BigDecimal>(),
+            )
+        } returns if (sufficient) 1 else 0
     }
 
     private fun stubOrderAndFillSaves() {
@@ -132,7 +140,7 @@ class OrderSagaOrchestratorTest {
     @Test
     fun `execute rejects a BUY order when cash is insufficient and runs compensation`() {
         stubStockExistsAndPrice()
-        stubAccountCash(cash = BigDecimal("100"))
+        stubAccountCash(sufficient = false)
 
         org.assertj.core.api.Assertions.assertThatThrownBy {
             orchestrator.execute(

@@ -46,6 +46,11 @@ app:
       # 신청: https://apiportal.koreainvestment.com
       # 실거래: https://openapi.koreainvestment.com:9443
       base-url: ${KIS_BASE_URL:https://openapi.koreainvestment.com:9443}
+  security:
+    # 생성: openssl rand -base64 32   (application.yml의 로컬 개발용 기본값과 절대 같으면 안 됨)
+    # Secret Manager/Vault로 관리 권장 — 이 키가 유출되면 저장된 모든 브로커 크리덴셜이 유출된다.
+    # 키를 교체하면 기존에 암호화된 값은 더 이상 복호화할 수 없다 — 재연동 필요.
+    credential-encryption-key: ${CREDENTIAL_ENCRYPTION_KEY}
 
 anthropic:
   api-key: ${ANTHROPIC_API_KEY}

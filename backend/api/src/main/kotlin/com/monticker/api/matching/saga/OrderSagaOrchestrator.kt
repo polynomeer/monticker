@@ -95,10 +95,8 @@ class OrderSagaOrchestrator(
         // STEP 2: RESERVE_CASH (BUY 전용)
         saga.currentStep = SagaStep.CASH_RESERVED
         val reserveAmount: BigDecimal? = if (req.side == "BUY") {
-            val cash = getAccountCash(userId)
             val toReserve = estimatedPrice.toMoney(req.quantity)
-            require(cash >= toReserve) { "잔고 부족: 필요 $toReserve, 보유 $cash" }
-            adjustCash(userId, toReserve.amount.negate())
+            require(reserveCash(userId, toReserve.amount)) { "잔고 부족: 필요 $toReserve" }
             saga.reservedAmount = toReserve.amount
             toReserve.amount
         } else null
@@ -256,15 +254,28 @@ class OrderSagaOrchestrator(
             BigDecimal::class.java, stockId,
         )?.let { Price.of(it) } ?: throw IllegalStateException("현재가 조회 불가: stockId=$stockId")
 
-    private fun getAccountCash(userId: Long): Money =
-        jdbc.queryForObject("SELECT cash FROM paper_accounts WHERE user_id = ?", BigDecimal::class.java, userId)
-            ?.let { Money.of(it) } ?: run {
-            jdbc.update(
-                "INSERT INTO paper_accounts (user_id, cash, created_at, updated_at) VALUES (?, 10000000, now(), now()) ON CONFLICT (user_id) DO NOTHING",
-                userId
-            )
-            Money.INITIAL_BALANCE
-        }
+    private fun ensureAccountExists(userId: Long) {
+        jdbc.update(
+            "INSERT INTO paper_accounts (user_id, cash, created_at, updated_at) VALUES (?, 10000000, now(), now()) ON CONFLICT (user_id) DO NOTHING",
+            userId
+        )
+    }
+
+    /**
+     * 잔고 확인과 차감을 하나의 UPDATE로 원자화한다. 두 요청이 "잔고 확인 → 차감"을
+     * 별도 문장으로 수행하면(과거 구현) 동시에 들어온 두 주문이 같은 잔고를 보고 각자
+     * 통과 판정을 내려 잔고가 마이너스로 떨어질 수 있다(TOCTOU). `cash >= ?` 조건을
+     * UPDATE의 WHERE 절에 넣으면 행 잠금이 걸린 시점의 최신 값으로 판정되므로,
+     * 두 번째 요청은 첫 번째 요청이 커밋한 이후의 실제 잔고를 기준으로 재평가된다.
+     */
+    private fun reserveCash(userId: Long, amount: BigDecimal): Boolean {
+        ensureAccountExists(userId)
+        val updated = jdbc.update(
+            "UPDATE paper_accounts SET cash = cash - ?, updated_at = now() WHERE user_id = ? AND cash >= ?",
+            amount, userId, amount,
+        )
+        return updated > 0
+    }
 
     private fun adjustCash(userId: Long, delta: BigDecimal) {
         jdbc.update("UPDATE paper_accounts SET cash = cash + ?, updated_at = now() WHERE user_id = ?", delta, userId)

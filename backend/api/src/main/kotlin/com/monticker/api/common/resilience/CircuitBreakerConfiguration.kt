@@ -51,8 +51,20 @@ class CircuitBreakerConfiguration {
                 .build()
         )
 
+        // 브로커 실주문 API (KIS/Toss) — 실계좌·실주문이 걸리므로 장애 시 스레드 풀 고갈보다
+        // 빠른 차단이 우선. 신규 브로커 어댑터를 추가할 때도 이 이름 패턴을 따른다.
+        registry.circuitBreaker("kis",
+            CircuitBreakerConfig.custom()
+                .failureRateThreshold(50f)
+                .slidingWindowSize(6)
+                .waitDurationInOpenState(Duration.ofSeconds(30))
+                .permittedNumberOfCallsInHalfOpenState(2)
+                .recordExceptions(Exception::class.java)
+                .build()
+        )
+
         // 상태 전이 이벤트 로깅
-        listOf("tradingService", "quantEngine", "yahooFinance").forEach { name ->
+        listOf("tradingService", "quantEngine", "yahooFinance", "kis").forEach { name ->
             registry.circuitBreaker(name).eventPublisher
                 .onStateTransition { e ->
                     log.warn("[CircuitBreaker:{}] {} → {}",
