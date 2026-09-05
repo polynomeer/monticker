@@ -26,6 +26,8 @@ export default function CookieBanner() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between">
           <p className="text-sm text-gray-700 dark:text-dracula-fg">
             monticker는 서비스 개선을 위해 필수 쿠키를 사용합니다.{" "}
+            <Link href="/terms" className="text-blue-600 dark:text-dracula-purple hover:underline">이용약관</Link>
+            {" · "}
             <Link href="/privacy" className="text-blue-600 dark:text-dracula-purple hover:underline">개인정보처리방침</Link>
           </p>
           <div className="flex gap-2 shrink-0">
