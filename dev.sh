@@ -37,7 +37,7 @@ cleanup() {
     docker compose --profile msa stop 2>/dev/null || true
   elif [ "$WITH_KAFKA" = true ]; then
     docker compose --profile kafka stop 2>/dev/null || true
-    docker compose stop postgres redis jaeger 2>/dev/null || true
+    docker compose stop postgres redis jaeger mailhog 2>/dev/null || true
   elif [ "$WITH_PINPOINT" = true ]; then
     docker compose --profile pinpoint stop 2>/dev/null || true
   else
@@ -117,6 +117,8 @@ resolve_port 27017; MONGODB_PORT=$RESOLVED_PORT
 resolve_port 9200;  ELASTICSEARCH_PORT=$RESOLVED_PORT
 resolve_port 16686; JAEGER_UI_PORT=$RESOLVED_PORT
 resolve_port 4318;  OTLP_PORT=$RESOLVED_PORT
+resolve_port 1025;  MAILHOG_SMTP_PORT=$RESOLVED_PORT
+resolve_port 8025;  MAILHOG_WEB_PORT=$RESOLVED_PORT
 resolve_port 8080;  API_PORT=$RESOLVED_PORT
 resolve_port 8081;  WORKER_PORT=$RESOLVED_PORT
 resolve_port 3000;  WEB_PORT=$RESOLVED_PORT
@@ -130,6 +132,7 @@ if [ "$WITH_MSA" = true ]; then
   resolve_port 8083; TRADING_SERVICE_PORT=$RESOLVED_PORT
 fi
 export POSTGRES_PORT REDIS_PORT MONGODB_PORT ELASTICSEARCH_PORT JAEGER_UI_PORT OTLP_PORT \
+       MAILHOG_SMTP_PORT MAILHOG_WEB_PORT \
        KAFKA_PORT KAFKA_EXTERNAL_PORT BROADCAST_GW_PORT QUANT_ENGINE_PORT TRADING_SERVICE_PORT
 
 # ── 프로세스 대기 (타임아웃 + 실시간 로그) ─────────────────────
@@ -184,29 +187,29 @@ mkdir -p "$ROOT/logs"
 echo ""
 
 if [ "$WITH_MSA" = true ]; then
-  echo "1/4  Starting infra (MSA 모드: postgres + redis + jaeger + kafka + quant-engine + trading-service)..."
+  echo "1/4  Starting infra (MSA 모드: postgres + redis + jaeger + mailhog + kafka + quant-engine + trading-service)..."
   echo -e "  ${CYAN}Building MSA service images (변경 없으면 캐시 사용)...${NC}"
   docker compose --profile msa build --quiet 2>&1 || {
     echo -e "${YELLOW}[WARN] 일부 이미지 빌드 실패. 계속 진행합니다.${NC}"
   }
-  docker compose up -d postgres redis mongodb elasticsearch jaeger 2>&1 | grep -v "^$" || true
+  docker compose up -d postgres redis mongodb elasticsearch jaeger mailhog 2>&1 | grep -v "^$" || true
   docker compose --profile msa up -d --no-build 2>&1 | grep -v "^$" || true
 
 elif [ "$WITH_KAFKA" = true ]; then
-  echo "1/4  Starting infra (Kafka 모드: postgres + redis + mongodb + jaeger + kafka + market-gateway + broadcast-gateway)..."
+  echo "1/4  Starting infra (Kafka 모드: postgres + redis + mongodb + jaeger + mailhog + kafka + market-gateway + broadcast-gateway)..."
   echo -e "  ${CYAN}Building kafka service images (변경 없으면 캐시 사용)...${NC}"
   docker compose --profile kafka build --quiet 2>&1 || true
-  docker compose up -d postgres redis mongodb elasticsearch jaeger 2>&1 | grep -v "^$" || true
+  docker compose up -d postgres redis mongodb elasticsearch jaeger mailhog 2>&1 | grep -v "^$" || true
   docker compose --profile kafka up -d --no-build 2>&1 | grep -v "^$" || true
 
 elif [ "$WITH_PINPOINT" = true ]; then
-  echo "1/4  Starting infra (postgres + redis + mongodb + jaeger + pinpoint)..."
-  docker compose up -d postgres redis mongodb elasticsearch jaeger 2>&1 | grep -v "^$" || true
+  echo "1/4  Starting infra (postgres + redis + mongodb + jaeger + mailhog + pinpoint)..."
+  docker compose up -d postgres redis mongodb elasticsearch jaeger mailhog 2>&1 | grep -v "^$" || true
   docker compose --profile pinpoint up -d 2>&1 | grep -v "^$" || true
 
 else
-  echo "1/4  Starting infra (postgres + redis + mongodb + jaeger)..."
-  docker compose up -d postgres redis mongodb elasticsearch jaeger 2>&1 | grep -v "^$" || true
+  echo "1/4  Starting infra (postgres + redis + mongodb + jaeger + mailhog)..."
+  docker compose up -d postgres redis mongodb elasticsearch jaeger mailhog 2>&1 | grep -v "^$" || true
 fi
 
 postgres_ready() { docker compose exec postgres pg_isready -U monticker -q 2>/dev/null; }
@@ -218,6 +221,10 @@ wait_for "mongodb" "/dev/null" mongodb_ready "" 60
 # ES는 JVM 워밍업으로 느림 — 타임아웃 120s
 elasticsearch_ready() { docker compose ps elasticsearch 2>/dev/null | grep -q "healthy"; }
 wait_for "elasticsearch" "/dev/null" elasticsearch_ready "" 120
+
+# mailhog 이미지는 healthcheck가 없어 docker compose ps로는 확인 불가 — Web UI API로 직접 확인
+mailhog_ready() { /usr/bin/curl -sf "http://localhost:${MAILHOG_WEB_PORT}/api/v2/messages" > /dev/null 2>&1; }
+wait_for "mailhog" "/dev/null" mailhog_ready "" 30
 
 if [ "$WITH_KAFKA" = true ]; then
   # healthcheck 통과 여부로 확인 (이미지별 bin 경로 차이 회피)
@@ -254,6 +261,10 @@ API_ENV="$API_ENV DB_URL=jdbc:postgresql://localhost:${POSTGRES_PORT}/monticker 
 API_ENV="$API_ENV MONGODB_URI=mongodb://monticker:monticker@localhost:${MONGODB_PORT}/monticker?authSource=admin"
 API_ENV="$API_ENV ELASTICSEARCH_URI=http://localhost:${ELASTICSEARCH_PORT}"
 API_ENV="$API_ENV ALLOWED_ORIGINS=http://localhost:${WEB_PORT} APP_BASE_URL=http://localhost:${WEB_PORT}"
+# API가 bare-metal(gradlew bootRun)로 뜨므로 도커 내부 호스트명 "mailhog"가 아니라
+# 호스트에 노출된 포트로 접속한다. smtp.auth=true가 고정값이라 자격증명 문자열
+# 자체는 있어야 하지만 MailHog는 인증을 실제로 검사하지 않는다 — 아무 값이나 무방.
+API_ENV="$API_ENV MAIL_HOST=localhost MAIL_PORT=${MAILHOG_SMTP_PORT} MAIL_USERNAME=test MAIL_PASSWORD=test"
 if [ "$WITH_MSA" = true ]; then
   API_ENV="$API_ENV TRADING_SERVICE_URL=http://localhost:${TRADING_SERVICE_PORT} QUANT_ENGINE_URL=http://localhost:${QUANT_ENGINE_PORT}"
 fi
@@ -317,6 +328,7 @@ echo "  Web    → http://localhost:${WEB_PORT}"
 echo "  API    → http://localhost:${API_PORT}"
 echo "  Worker → http://localhost:${WORKER_PORT}"
 echo "  Jaeger → http://localhost:${JAEGER_UI_PORT}"
+echo "  MailHog → http://localhost:${MAILHOG_WEB_PORT}  (이메일 인증 / 비밀번호 재설정 링크 미리보기)"
 if [ "$WITH_KAFKA" = true ]; then
 echo "  Kafka  → localhost:${KAFKA_PORT}"
 echo "  Broadcast-GW → ws://localhost:${BROADCAST_GW_PORT}/ws"
