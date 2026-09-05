@@ -527,13 +527,13 @@ Investment Wallet (upcoming)
 | 소셜 커뮤니티 | 검토 중 — 우선순위 낮음 |
 | 가상 투자 미션 / 친구 대결 리그 | 검토 중 — 우선순위 낮음 |
 
-### 상용화 선행 과제 (기능 추가 전에 먼저 고쳐야 하는 것)
+### 상용화 선행 과제 — ✅ 완료 (2026-09-05, [launch-plan.md Phase 0](launch-plan.md))
 
-실제 돈/실제 브로커 계정이 걸리기 전에 반드시 해결해야 하는 기존 기술 부채:
+실제 돈/실제 브로커 계정이 걸리기 전에 반드시 해결해야 했던 기존 기술 부채. 셋 다 해결됨:
 
-- 현금 예약(`OrderSagaOrchestrator.adjustCash`)이 row lock/버전 없는 plain `UPDATE` — paper trading에서는 무해하지만 실계좌 연동 시 동시성 레이스가 실제 금전 사고로 이어질 수 있음
-- `KisBrokerageClient`에 resilience4j 서킷브레이커가 없음 — `TradingServiceClient`/`YahooFinanceOrderBookProvider`가 쓰는 패턴을 브로커 클라이언트에도 적용해야 함 (신규 `TossBrokerageClient`는 처음부터 이 패턴을 따른다)
-- API 키/시크릿(사용자별 브로커 credential) 암호화 저장 — 현재 스키마/설계에 없음, BYOK 모델 전제 조건
+- ~~현금 예약이 row lock/버전 없는 plain `UPDATE`~~ → `OrderSagaOrchestrator.reserveCash`가 확인+차감을 원자적 조건부 `UPDATE` 하나로 통합, 실제 동시성 하에서 검증(`CashReservationConcurrencyIntegrationTest`)
+- ~~`KisBrokerageClient`에 resilience4j 서킷브레이커가 없음~~ → `"kis"` 브레이커 등록 및 5개 메서드 전체 적용
+- ~~API 키/시크릿 암호화 저장 없음~~ → `EncryptedStringConverter`(AES-256-GCM)를 `BrokerageAccount.accessToken`에 적용
 
 ---
 

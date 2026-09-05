@@ -31,13 +31,13 @@
 
 ---
 
-## Phase 0 — 선행 기술 부채 (실거래 연동 전 필수, 블로킹)
+## Phase 0 — 선행 기술 부채 (실거래 연동 전 필수, 블로킹) — ✅ 완료 (2026-09-05)
 
 [ADR-023](decisions/023-commercialization-pivot.md)에서 식별된 항목. 모의투자에서는 무해했지만 실제 브로커 계좌·실제 돈이 걸리면 사고로 직결된다.
 
-- [ ] **브로커 크리덴셜 암호화 저장.** `BrokerageAccount.kt`(`backend/api/.../brokerage/domain/BrokerageAccount.kt`)의 `accessToken` 필드 주석이 현재 이렇게 되어 있다: `// AES-256 암호화 저장 (현재는 Mock이므로 평문 허용)`. `V27__create_settlement_system.sql:145`의 컬럼 주석도 동일. 즉 **암호화가 코드에 없다는 사실이 이미 문서화되어 있다** — JPA `AttributeConverter` + KMS/Vault 키 관리로 실제 AES-256 컬럼 암호화 구현.
-- [ ] **현금 예약 동시성.** `OrderSagaOrchestrator.adjustCash`(`matching/saga/OrderSagaOrchestrator.kt`)가 row lock/optimistic version 없는 plain `UPDATE ... SET cash = cash + ?`. 실계좌 동시 주문 시 레이스 컨디션 → row lock(`SELECT ... FOR UPDATE`) 또는 낙관적 락(`@Version`) 추가.
-- [ ] **서킷브레이커 공백.** `CircuitBreakerConfiguration.kt`(`common/resilience/`)에 `tradingService`/`quantEngine`/`yahooFinance`는 등록되어 있으나 `kis`/`brokerage`가 없다. `KisBrokerageClient`에 자체 재시도/서킷브레이커가 전혀 없음 — 등록 및 적용. 신규 `TossBrokerageClient`는 처음부터 이 패턴을 따른다.
+- [x] **브로커 크리덴셜 암호화 저장.** `EncryptedStringConverter`(`common/security/EncryptedStringConverter.kt`, AES-256-GCM, Spring-managed JPA `AttributeConverter`)를 `BrokerageAccount.accessToken`에 적용. 키는 `app.security.credential-encryption-key`(env: `CREDENTIAL_ENCRYPTION_KEY`) — 프로덕션은 `application-prod.yml`에서 기본값 없이 필수 주입, 로컬 개발용 기본값과 다른 별도 키 사용 필수. 단위 테스트(`EncryptedStringConverterTest`, 5건)로 왕복 정확성·IV 랜덤성·평문 비노출을 검증했고, 실제 Spring 컨텍스트 기동으로 Hibernate 빈 컨테이너 연동도 확인했다(BeanCreationException 없음).
+- [x] **현금 예약 동시성.** `OrderSagaOrchestrator.reserveCash`가 확인과 차감을 `UPDATE paper_accounts SET cash = cash - ? WHERE user_id = ? AND cash >= ?` 하나의 원자적 문장으로 통합 — 과거의 "SELECT로 확인 → 별도 UPDATE로 차감" TOCTOU 레이스를 제거했다. 실제 Postgres(Testcontainers)에 10개 스레드를 동시 투입해 잔고가 절대 마이너스로 떨어지지 않음을 증명하는 통합 테스트(`CashReservationConcurrencyIntegrationTest`) 추가.
+- [x] **서킷브레이커 공백.** `CircuitBreakerConfiguration`에 `"kis"` 브레이커 등록, `KisBrokerageClient`의 5개 메서드(토큰 발급/주문/조회/정산/잔고) 전부 `cb.executeCallable { ... }`로 래핑 — `CallNotPermittedException` 시 기존 REJECTED/빈 값 폴백과 동일한 안전한 기본값 반환. 신규 `TossBrokerageClient`는 이 파일의 패턴(`"kis"` → `"toss"`)을 그대로 따르면 된다.
 
 ---
 
@@ -125,7 +125,7 @@ General Availability
 
 | Phase | 게이트 조건 | 다음 단계 진행 가능 조건 |
 |---|---|---|
-| 0 | 암호화·동시성·서킷브레이커 3항목 완료 | Phase 4의 `BROKERAGE_MOCK_ENABLED=false` 전환 허용 |
+| 0 | ✅ 암호화·동시성·서킷브레이커 3항목 완료 (2026-09-05) | Phase 4의 `BROKERAGE_MOCK_ENABLED=false` 전환 허용 |
 | 1 | 이용약관·개인정보처리방침 실제 게시 + 법률 자문 완료 | Phase 7의 Closed/GA 진행 허용 |
 | 2 | 보안 점검 1회 이상 완료 | Phase 7의 Closed beta 진행 허용 |
 | 3 | 배포 파이프라인 + 백업/모니터링 확인 | Phase 7의 모든 단계 진행 허용 |

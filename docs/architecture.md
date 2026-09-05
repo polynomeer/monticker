@@ -461,9 +461,9 @@ BrokerageClient  (interface — broker-agnostic DTOs: order/status/settlement/ba
 ```
 
 - **Provider selection is config-driven** (`app.brokerage.mock.enabled`, per-user provider choice), never hardcoded — `BrokerageService` never knows which broker it's talking to.
-- **Every implementation must register a named resilience4j circuit breaker** (see [Circuit Breaker](#circuit-breaker) below) the way `TradingServiceClient`/`YahooFinanceOrderBookProvider` do. `KisBrokerageClient` currently does not — this is a known gap to close before relying on it for real orders, and `TossBrokerageClient` must not repeat it.
-- **User-supplied broker credentials (appKey/appSecret) must be encrypted at rest.** No such encryption exists yet — this is a blocking prerequisite for real-money BYOK, not an optional hardening pass.
-- **Cash reservation must be safe under concurrency before real money is at stake.** `OrderSagaOrchestrator.adjustCash` is currently a plain `UPDATE` with no row lock or optimistic version — acceptable for paper trading's fake cash, not acceptable once a real brokerage account is behind it.
+- **Every implementation must register a named resilience4j circuit breaker** (see [Circuit Breaker](#circuit-breaker) below) the way `TradingServiceClient`/`YahooFinanceOrderBookProvider` do. `KisBrokerageClient` now does (breaker name `"kis"`, registered in `CircuitBreakerConfiguration`) — `TossBrokerageClient` should reuse the same pattern under `"toss"`.
+- **User-supplied broker credentials (appKey/appSecret) are encrypted at rest** via `EncryptedStringConverter` (AES-256-GCM, `common/security/`) applied to `BrokerageAccount.accessToken`. Key comes from `app.security.credential-encryption-key` — production must override the dev default.
+- **Cash reservation is safe under concurrency.** `OrderSagaOrchestrator.reserveCash` does the balance check and the debit in one atomic `UPDATE ... WHERE cash >= ?` instead of a separate SELECT-then-UPDATE — proven under real concurrent load in `CashReservationConcurrencyIntegrationTest` (Testcontainers Postgres, 10 concurrent threads against a shared account).
 
 ---
 

@@ -120,6 +120,16 @@ monticker의 제품 스코프를 **MVP → 상용 서비스(production/commercia
   (matching/brokerage/analytics/quant)를 그대로 확장하는 것이므로 구조적 재설계
   리스크는 낮다.
 
+## 후속 수정 (2026-09-05) — Consequences의 선행 기술 부채 3건 해결
+
+[docs/launch-plan.md](../launch-plan.md) Phase 0으로 승격했던 세 항목을 모두 처리했다:
+
+- 브로커 크리덴셜 암호화: `EncryptedStringConverter`(AES-256-GCM, `common/security/`)를 `BrokerageAccount.accessToken`에 적용. 키는 `app.security.credential-encryption-key`.
+- 현금 예약 동시성: `OrderSagaOrchestrator.reserveCash`가 확인·차감을 `UPDATE ... WHERE cash >= ?` 하나로 원자화. `CashReservationConcurrencyIntegrationTest`(Testcontainers, 10스레드 동시 실행)로 오버드래프트 불가능함을 실증.
+- 서킷브레이커: `CircuitBreakerConfiguration`에 `"kis"` 등록, `KisBrokerageClient`의 5개 메서드 전부 `cb.executeCallable`로 래핑.
+
+세부 내역은 [launch-plan.md Phase 0](../launch-plan.md)과 [architecture.md의 Brokerage Adapter 섹션](../architecture.md#brokerage-adapter--byok-model) 참고. 이 ADR 자체의 Decision/Reasons는 변경 없음 — Consequences에 예고했던 선행 조건이 충족됐을 뿐이다.
+
 ## Revisit When
 
 - 사용자 수·거래량이 늘어 실제로 "투자중개업" 라이선스 경계에 걸리는지 법률 자문이
