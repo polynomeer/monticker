@@ -59,6 +59,12 @@ class AuthController(
         }
     }
 
+    @PostMapping("/logout")
+    fun logout(@RequestBody req: RefreshRequest): ResponseEntity<Void> {
+        authService.logout(req.refreshToken)
+        return ResponseEntity.noContent().build()
+    }
+
     @PostMapping("/forgot-password")
     fun forgotPassword(@RequestBody req: EmailRequest): ResponseEntity<MessageResponse> {
         authService.forgotPassword(req.email)

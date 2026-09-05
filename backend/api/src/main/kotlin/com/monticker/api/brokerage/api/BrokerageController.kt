@@ -5,6 +5,7 @@ import com.monticker.api.brokerage.application.BrokerageService
 import com.monticker.api.brokerage.domain.*
 import com.monticker.api.brokerage.infrastructure.BrokerageBalance
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRequest
+import com.monticker.api.common.aop.RateLimited
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.web.PageableDefault
@@ -92,8 +93,9 @@ class BrokerageController(
     private fun userId(token: String) =
         jwtTokenProvider.getUserId(token.removePrefix("Bearer "))
 
-    // 계좌 연동
+    // 계좌 연동 — appKey/appSecret을 반복 시도할 여지를 막는다. 연동은 자주 일어나는 작업이 아니다.
     @PostMapping("/connect")
+    @RateLimited(limit = 10, windowSec = 3600, keyPrefix = "brokerage.connect")
     fun connect(
         @RequestHeader("Authorization") token: String,
         @RequestBody req: ConnectRequest,
@@ -128,8 +130,11 @@ class BrokerageController(
         )
     }
 
-    // 주문 제출
+    // 주문 제출 — 매칭 엔진의 모의투자 주문(matching.order)과 동일한 한도. 실브로커 API 자체에도
+    // 별도 rate limit이 있으므로(KIS/Toss), 여기서 과다 요청을 먼저 걸러야 사용자의 API 키가
+    // 브로커 쪽에서 차단되는 사고를 막을 수 있다.
     @PostMapping("/orders")
+    @RateLimited(limit = 30, windowSec = 60, keyPrefix = "brokerage.order")
     fun submitOrder(
         @RequestHeader("Authorization") token: String,
         @RequestBody req: OrderRequest,

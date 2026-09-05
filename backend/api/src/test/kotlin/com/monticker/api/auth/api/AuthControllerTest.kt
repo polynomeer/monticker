@@ -98,4 +98,16 @@ class AuthControllerTest {
             status { isBadRequest() }
         }
     }
+
+    @Test
+    fun `로그아웃 - refreshToken을 넘기면 204를 반환하고 해당 토큰만 폐기한다`() {
+        mvc.post("/api/auth/logout") {
+            contentType = MediaType.APPLICATION_JSON
+            content = objectMapper.writeValueAsString(mapOf("refreshToken" to "some-refresh-token"))
+            with(csrf())
+        }.andExpect {
+            status { isNoContent() }
+        }
+        org.mockito.Mockito.verify(authService).logout("some-refresh-token")
+    }
 }
