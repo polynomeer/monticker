@@ -253,6 +253,7 @@ API_ENV="OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:${OTLP_PORT} PINPOINT_ENAB
 API_ENV="$API_ENV DB_URL=jdbc:postgresql://localhost:${POSTGRES_PORT}/monticker REDIS_HOST=localhost REDIS_PORT=${REDIS_PORT}"
 API_ENV="$API_ENV MONGODB_URI=mongodb://monticker:monticker@localhost:${MONGODB_PORT}/monticker?authSource=admin"
 API_ENV="$API_ENV ELASTICSEARCH_URI=http://localhost:${ELASTICSEARCH_PORT}"
+API_ENV="$API_ENV ALLOWED_ORIGINS=http://localhost:${WEB_PORT} APP_BASE_URL=http://localhost:${WEB_PORT}"
 if [ "$WITH_MSA" = true ]; then
   API_ENV="$API_ENV TRADING_SERVICE_URL=http://localhost:${TRADING_SERVICE_PORT} QUANT_ENGINE_URL=http://localhost:${QUANT_ENGINE_PORT}"
 fi
