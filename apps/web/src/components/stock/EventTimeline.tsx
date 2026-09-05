@@ -30,9 +30,11 @@ const EVENT_BADGE: Record<string, BadgeVariant> = {
 
 interface Props {
   stockId: number;
+  /** 카드 테두리/제목 없이 내용만 렌더링 (탭 전환형 컨테이너에 임베드할 때) */
+  bare?: boolean;
 }
 
-export default function EventTimeline({ stockId }: Props) {
+export default function EventTimeline({ stockId, bare = false }: Props) {
   const [events, setEvents] = useState<StockEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -49,9 +51,9 @@ export default function EventTimeline({ stockId }: Props) {
     // fetchEvents is stable per stockId — eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stockId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return (
-    <Card className="p-4">
-      <h3 className="font-semibold text-gray-900 dark:text-dracula-fg mb-3">이벤트 타임라인</h3>
+  const content = (
+    <>
+      {!bare && <h3 className="font-semibold text-gray-900 dark:text-dracula-fg mb-3">이벤트 타임라인</h3>}
 
       {loading && (
         <div className="space-y-2">
@@ -101,6 +103,9 @@ export default function EventTimeline({ stockId }: Props) {
           ))}
         </ul>
       )}
-    </Card>
+    </>
   );
+
+  if (bare) return <div>{content}</div>;
+  return <Card className="p-4">{content}</Card>;
 }
