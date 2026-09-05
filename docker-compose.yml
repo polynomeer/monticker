@@ -347,10 +347,13 @@ services:
   prometheus:
     image: prom/prometheus:v2.51.2
     container_name: monticker-prometheus
+    depends_on:
+      - alertmanager
     ports:
       - "9091:9090"   # 9090은 broadcast-gateway와 충돌 — 호스트 포트만 변경
     volumes:
       - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/monitoring/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -359,6 +362,23 @@ services:
       - '--web.enable-lifecycle'
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:9090/-/healthy || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: monticker-alertmanager
+    ports:
+      - "${ALERTMANAGER_PORT:-9093}:9093"
+    volumes:
+      - ./infra/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9093/-/healthy || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -491,5 +511,6 @@ volumes:
   mongodb_data:
   elasticsearch_data:
   prometheus_data:
+  alertmanager_data:
   grafana_data:
   pinpoint_hbase_data:
