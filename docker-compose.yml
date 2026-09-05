@@ -421,8 +421,10 @@ services:
 
   web:
     build:
-      context: ./apps/web
-      dockerfile: Dockerfile
+      # apps/web/Dockerfile은 저장소 루트를 빌드 컨텍스트로 요구한다(pnpm 워크스페이스
+      # lockfile이 루트에만 있음 — Dockerfile 상단 주석 참고).
+      context: .
+      dockerfile: apps/web/Dockerfile
     container_name: monticker-web
     ports:
       - "3000:3000"
