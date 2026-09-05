@@ -59,13 +59,20 @@
 
 ---
 
-## Phase 2 — 보안 강화
+## Phase 2 — 보안 강화 — ✅ 완료 (2026-09-05)
 
-- [ ] `security-review` 스킬 또는 외부 보안 검토로 전체 브랜치 1회 이상 점검.
-- [ ] 의존성 취약점 스캔(Dependabot/Snyk 등)을 CI에 연결 — 현재 `.github/workflows/`(backend-ci/e2e-ci/mobile-ci/pr-review/web-ci)에 없음.
-- [ ] JWT 시크릿 로테이션 절차 수립, refresh token 탈취 시나리오 대응 검토.
-- [ ] Rate Limiting 재검토 — [architecture.md "Rate Limiting — 2-tier"](architecture.md#rate-limiting--2-tier)의 기존 설계가 실거래 트래픽 패턴에도 충분한지.
-- [ ] 프로덕션 시크릿 관리를 `.env`에서 Secret Manager/Vault로 전환 — [docs/deployment.md §6](deployment.md)이 이미 권고하고 있으나 실제 적용 여부 확인.
+- [x] `security-review` 스킬로 전체 브랜치 점검 (origin/main...HEAD, 14커밋/36파일) — 고신뢰 취약점 0건. 하드닝 성격 커밋(암호화·동시성·서킷브레이커)이라 새 공격 표면 없음.
+- [x] 의존성 취약점 스캔을 CI에 연결 — [.github/dependabot.yml](../.github/dependabot.yml) 신설(npm/gradle 4개 모듈/gomod/docker/github-actions 전체 커버), `web-ci.yml`에 `pnpm audit --audit-level=high` 추가, `backend-ci.yml`에 `gradle/actions/dependency-submission` 추가(Gradle은 Dependency Graph가 있어야 Dependabot alert가 켜짐).
+- [x] **JWT/refresh token 재검토 중 실제 취약점 2건 발견 및 수정**:
+  - `refresh_tokens.token` 컬럼이 평문 JWT를 저장하고 있었음(비밀번호는 이미 해시 저장 중인데 여기만 예외) → SHA-256 해시만 저장하도록 전환(`V31__hash_refresh_tokens.sql`, `AuthService.hashToken`). DB 유출 시 저장값만으로는 세션을 재사용할 수 없다.
+  - **`/api/auth/logout` 엔드포인트 자체가 없었음** — 비밀번호 재설정/계정삭제 시에만 전체 세션이 폐기되고, 사용자가 기기 하나만 로그아웃할 방법이 없었다 → 해당 refresh token 하나만 폐기하는 `/api/auth/logout` 추가.
+  - 시크릿 로테이션 절차: `JWT_SECRET` 교체는 즉시 모든 세션을 무효화한다(HMAC 서명 불일치) — 개별 세션 취소가 아니라 "전체 강제 로그아웃" 수단으로만 사용. 개별 세션 취소는 위 `/logout` 또는 `refresh_tokens` 행 삭제로 처리.
+- [x] **Rate Limiting 재검토 중 실제 gap 2건 발견 및 수정**:
+  - `/api/brokerage/connect`, `/api/brokerage/orders`(실주문)에 `@RateLimited`가 전혀 없었음 — paper trading(`matching`/`paper` 컨트롤러)은 이미 되어 있었는데 실브로커 쪽만 빠져 있었다. 추가하지 않으면 사용자의 KIS/Toss API 키가 브로커 쪽 rate limit에 걸려 차단될 수 있다 → `connect`(10회/시간), `orders`(30회/분, matching과 동일) 추가.
+  - `/api/auth/login`에 브루트포스 방어가 전혀 없었음(주석에 "인증 엔드포인트는 IP 기반 RateLimitFilter로 처리"라고 되어 있었지만 IP 기반만으로는 여러 IP에 분산된 크리덴셜 스터핑을 못 막는다) → 이메일 단위 실패 카운터(5회/15분, Redis) 추가 — 성공 시 즉시 리셋되므로 정상 사용자는 체감 못 함.
+- [x] 프로덕션 시크릿 관리 — **아직 실제 전환은 안 됨** (실제 클라우드 계정·시크릿 백엔드 프로비저닝 필요, Claude가 대신할 수 없는 영역). 대신 실제 전환에 쓸 template을 준비: [infra/k8s/base/external-secrets-example/](../infra/k8s/base/external-secrets-example/README.md)(External Secrets Operator + AWS Secrets Manager 예시, Vault/GCP로 교체 가능). 점검 중 발견: `infra/k8s/base/secret.yaml`에 `JWT_SECRET`/`TOSS_SECRET_KEY`/`CREDENTIAL_ENCRYPTION_KEY`가 누락되어 있었음(prod 프로파일에 기본값이 없어 이 상태로 배포하면 부팅 자체가 실패) — placeholder로 추가.
+
+세부 내역은 각 커밋 메시지 참고. 실제 사고 대응 시나리오(시크릿 유출 시 로테이션 순서 등)는 아직 별도 런북으로 정리되지 않음 — Phase 3(인프라) 이후 필요시 추가.
 
 ---
 
@@ -130,7 +137,7 @@ General Availability
 |---|---|---|
 | 0 | ✅ 암호화·동시성·서킷브레이커 3항목 완료 (2026-09-05) | Phase 4의 `BROKERAGE_MOCK_ENABLED=false` 전환 허용 |
 | 1 | 이용약관·개인정보처리방침 실제 게시 + 법률 자문 완료 | Phase 7의 Closed/GA 진행 허용 |
-| 2 | 보안 점검 1회 이상 완료 | Phase 7의 Closed beta 진행 허용 |
+| 2 | ✅ 보안 강화 완료 (2026-09-05) — 시크릿 관리 전환만 실제 클라우드 프로비저닝 대기 | Phase 7의 Closed beta 진행 허용 |
 | 3 | 배포 파이프라인 + 백업/모니터링 확인 | Phase 7의 모든 단계 진행 허용 |
 | 6 | E2E + 펜테스트 완료 | Phase 7의 GA 진행 허용 |
 

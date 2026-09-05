@@ -180,5 +180,5 @@ java -jar monticker-api.jar --spring.profiles.active=prod
   openssl rand -base64 48
   ```
 - `*_MOCK_ENABLED` 환경변수는 절대 프로덕션에서 `true`로 설정 금지
-- 토스페이먼츠 라이브 키 / KIS 앱 시크릿은 Secret Manager나 Vault로 관리 권장
+- 토스페이먼츠 라이브 키 / KIS 앱 시크릿 / `CREDENTIAL_ENCRYPTION_KEY`는 Secret Manager나 Vault로 관리 권장 — 실제 전환 템플릿은 [infra/k8s/base/external-secrets-example/](../infra/k8s/base/external-secrets-example/README.md) 참고. 아직 `infra/k8s/base/secret.yaml`은 값을 직접 채워 넣는 평문 placeholder Secret이다(실제 프로덕션 값은 커밋된 적 없음) — 실제 클라우드 시크릿 백엔드를 프로비저닝하기 전까지는 이 상태다.
 - OAuth 리디렉션 URI는 각 콘솔에 등록된 URI와 정확히 일치해야 함
