@@ -513,7 +513,7 @@ Investment Wallet (upcoming)
 
 ### 상용화 로드맵 — 순차 활성화 대상 (구 "Exclude from MVP")
 
-이 항목들은 더 이상 "제외"가 아니라 다음에 착수할 작업이다. [ADR-023](decisions/023-commercialization-pivot.md) 참조.
+이 항목들은 더 이상 "제외"가 아니라 다음에 착수할 작업이다. [ADR-023](decisions/023-commercialization-pivot.md) 참조. 기능 단위가 아니라 법무·보안·인프라를 포함한 출시 전체 체크리스트는 [docs/launch-plan.md](launch-plan.md) 참고.
 
 | 기능 | 비고 |
 |------|------|
