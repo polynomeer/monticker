@@ -41,12 +41,14 @@ class OrderSagaOrchestratorTest {
 
     private fun stubStockExistsAndPrice() {
         every { jdbc.queryForObject("SELECT COUNT(*) FROM stocks WHERE id = ?", Long::class.java, stockId) } returns 1L
+        // getCurrentPrice는 이제 queryForObject가 아니라 query+firstOrNull을 쓴다(0건일 때
+        // EmptyResultDataAccessException을 던지지 않고 그냥 빈 리스트를 받기 위함).
         every {
-            jdbc.queryForObject(
+            jdbc.query(
                 "SELECT close FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1",
-                BigDecimal::class.java, stockId,
+                any<org.springframework.jdbc.core.RowMapper<BigDecimal>>(), stockId,
             )
-        } returns currentPrice
+        } returns listOf(currentPrice)
     }
 
     /**
@@ -152,5 +154,28 @@ class OrderSagaOrchestratorTest {
         // CASH_RESERVED 단계까지 못 갔으므로 (require 실패가 CASH_RESERVED 진입 이전) 주문/체결 저장은 없어야 함
         verify(exactly = 0) { orderRepo.save(any()) }
         verify(exactly = 0) { fillRepo.save(any()) }
+    }
+
+    @Test
+    fun `execute throws a business IllegalStateException, not a raw DB exception, when the stock has no recent candle`() {
+        // 부하 테스트로 실제 재현된 버그: query()가 0건일 때 queryForObject처럼
+        // EmptyResultDataAccessException을 던지지 않고 빈 리스트를 반환하는지 확인한다 —
+        // 그래야 "?: throw IllegalStateException"이 실제로 실행되어 GlobalExceptionHandler가
+        // 이걸 안내 메시지 없는 500이 아니라 409로 분류할 수 있다.
+        every { jdbc.queryForObject("SELECT COUNT(*) FROM stocks WHERE id = ?", Long::class.java, stockId) } returns 1L
+        every {
+            jdbc.query(
+                "SELECT close FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1",
+                any<org.springframework.jdbc.core.RowMapper<BigDecimal>>(), stockId,
+            )
+        } returns emptyList()
+
+        org.assertj.core.api.Assertions.assertThatThrownBy {
+            orchestrator.execute(
+                userId,
+                SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10),
+            )
+        }.isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("현재가")
     }
 }

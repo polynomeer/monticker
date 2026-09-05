@@ -248,11 +248,16 @@ class OrderSagaOrchestrator(
 
     // ── 헬퍼 ──────────────────────────────────────────────────────────────────
 
+    // queryForObject는 0건이면 null이 아니라 EmptyResultDataAccessException을 던져 아래
+    // "?: throw IllegalStateException"이 무력화된다(부하 테스트로 실제 확인 — 최근 캔들이
+    // 없는 종목 주문이 안내 메시지 없는 500으로 샜다. PaperTradingService에 있던 동일 버그
+    // 참고). query+firstOrNull은 0건이어도 예외 없이 빈 리스트를 준다.
     private fun getCurrentPrice(stockId: Long): Price =
-        jdbc.queryForObject(
+        jdbc.query(
             "SELECT close FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1",
-            BigDecimal::class.java, stockId,
-        )?.let { Price.of(it) } ?: throw IllegalStateException("현재가 조회 불가: stockId=$stockId")
+            { rs, _ -> rs.getBigDecimal("close") },
+            stockId,
+        ).firstOrNull()?.let { Price.of(it) } ?: throw IllegalStateException("현재가 조회 불가: stockId=$stockId")
 
     private fun ensureAccountExists(userId: Long) {
         jdbc.update(

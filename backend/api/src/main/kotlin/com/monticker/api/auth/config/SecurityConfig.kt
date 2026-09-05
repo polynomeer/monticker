@@ -41,6 +41,11 @@ class SecurityConfig(
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED) }
             .authorizeHttpRequests { auth ->
                 auth
+                    // 부하 테스트 중 발견: RateLimitFilter.sendError(429)가 Tomcat의 에러 페이지
+                    // 해석을 위해 /error로 내부 재디스패치를 트리거하는데, /error가 이 목록에 없어
+                    // anyRequest().authenticated()에 걸려 401로 되돌아갔다 — 클라이언트는 항상 진짜
+                    // 이유(429 rate limit) 대신 인증 안 됨만 보게 되는 상태였다.
+                    .requestMatchers("/error").permitAll()
                     .requestMatchers("/api/auth/**").permitAll()
                     .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/stocks/**").permitAll()
@@ -49,7 +54,12 @@ class SecurityConfig(
                     .requestMatchers("/api/backtest/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/latency/**").permitAll()
                     .requestMatchers("/actuator/health", "/actuator/info").permitAll()
-                    .requestMatchers("/actuator/metrics", "/actuator/prometheus").denyAll()
+                    // /actuator/metrics, /actuator/prometheus는 한때 denyAll이었는데, 그러면
+                    // Prometheus의 스크레이프 요청도 401로 막혀 모니터링 전체가 죽어 있었다.
+                    // Ingress(infra/k8s/base/ingress.yaml)는 /api, /ws, / 만 라우팅하고 /actuator/**는
+                    // 아예 라우팅하지 않으므로 공인 인터넷에서는 원천적으로 도달 불가능하다 — 실제
+                    // 보안 경계는 여기(Spring Security)가 아니라 네트워크 토폴로지다. 아래 permitAll에
+                    // 이미 포함되지만, 왜 안전한지 남겨둔다.
                     .requestMatchers("/actuator/**").permitAll()
                     .requestMatchers("/ws/**").permitAll()
                     .anyRequest().authenticated()
