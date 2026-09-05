@@ -2,13 +2,15 @@
 
 > Read this when: implementing a collector worker, wiring up a new data provider, or selecting an API key to configure.
 
+**Product stage:** MVP is complete, monticker is commercializing ([ADR-023](decisions/023-commercialization-pivot.md)). "Recommendation" sections below are the baseline/default choice for commercial operation, not an MVP-only stopgap — real-provider integration (not Mock) is the target.
+
 ## Decision Criteria
 
 | Factor | Notes |
 |--------|-------|
 | Real-time support | WebSocket or polling interval |
 | Korean market coverage | KOSPI / KOSDAQ required |
-| US market coverage | NASDAQ / NYSE optional for MVP |
+| US market coverage | NASDAQ / NYSE optional (Toss covers KR+US in one API — see §2) |
 | Cost | Free tier / per-call / monthly |
 | Auth | API key, OAuth, or open |
 | Reliability | SLA, uptime history |
@@ -58,7 +60,7 @@
 - No official API. Use via `yfinance` Python library or third-party wrappers.
 - Not recommended for production — no SLA, ToS restrictions.
 
-### **MVP Recommendation**
+### **Recommendation**
 
 ```
 Korean markets:  KIS Developers (WebSocket + REST)
@@ -68,7 +70,35 @@ EOD / history:   KRX 정보데이터시스템
 
 ---
 
-## 2. News Data
+## 2. Brokerage / Order Execution (실주문 체결)
+
+**BYOK model** ([ADR-023](decisions/023-commercialization-pivot.md), [Architecture § Brokerage Adapter](architecture.md#brokerage-adapter--byok-model)): monticker holds no brokerage license itself. Every provider below is called with credentials the end user issues on their own brokerage account — monticker is the API client, never the broker of record.
+
+### KIS Developers (한국투자증권 OpenAPI) — already integrated
+
+- Already used for price/investor-flow/fundamentals collection (see §1 below) and has an order-execution client (`KisBrokerageClient`, `backend/api/.../brokerage/infrastructure/`).
+- Order-related: 주문 생성/정정/취소, 주문 체결 조회, 잔고/매수가능금액 조회.
+- Auth: per-user appKey/appSecret (계좌 개설 필요).
+
+### Toss Securities Open API (토스증권 Open API) — planned
+
+- URL: https://developers.tossinvest.com/docs
+- Coverage: KR + US stocks in one API — 현재가/호가/체결/캔들, 보유자산, 주문(정정·취소 포함), 조건주문(SINGLE/OCO/OTO), 환율, 시장 캘린더, 투자자별 매매동향, 공매도·신용·대차.
+- Realtime: REST confirmed; WebSocket support is inconsistently documented as of writing (index page lists it, overview/market-data pages say REST-only / WebSocket "추후 지원") — **design any market-data adapter behind an interface so a REST-polling implementation can be swapped for WebSocket later without touching consumers** (mirrors the `StockPriceProvider` interface pattern below).
+- Auth: per-user API key, plus a `clientOrderId`-style idempotency mechanism for order submission — reuse the existing `X-Idempotency-Key` / `IdempotencyFilter` pattern (`common/idempotency/`) rather than inventing a second one.
+- Rate limiting: per-endpoint-group limits, current usage returned in response headers — wrap `TossBrokerageClient` with a token bucket / backoff and register a named resilience4j circuit breaker (`"toss"`) in `CircuitBreakerConfiguration`, the way `TradingServiceClient`/`YahooFinanceOrderBookProvider` already do. Do not copy `KisBrokerageClient`'s current lack of one.
+- Implementation shape: implement the existing `BrokerageClient` interface (`brokerage/infrastructure/BrokerageClient.kt`) — `BrokerageService` depends on the interface only, so no other code changes. Conditional-order (OCO/OTO) support needs new interface methods since `BrokerageClient` currently has none for it.
+
+### **Recommendation**
+
+```
+실주문 실행:  KIS (already wired) + Toss (new TossBrokerageClient, same interface)
+공통 원칙:    BYOK — 사용자 계좌 API 키만 사용, monticker 명의 주문 없음
+```
+
+---
+
+## 3. News Data
 
 ### Naver News Search API (네이버 검색 API)
 
@@ -96,7 +126,7 @@ EOD / history:   KRX 정보데이터시스템
 - Cost: Free (개발용, 100 req/day) / paid
 - Notes: 영문 뉴스 보완용. 국내 주요 뉴스 커버리지 미흡.
 
-### **MVP Recommendation**
+### **Recommendation**
 
 ```
 Primary:    Naver News Search API  (국내 종목 뉴스 수집)
@@ -105,7 +135,7 @@ Supplement: BigKinds               (감성 분석 필요 시)
 
 ---
 
-## 3. Disclosure Data (공시)
+## 4. Disclosure Data (공시)
 
 ### DART OpenAPI (금융감독원 전자공시시스템)
 
@@ -120,7 +150,7 @@ Supplement: BigKinds               (감성 분석 필요 시)
   - `재무정보`: 재무제표
 - Notes: **국내 공시 데이터의 유일한 공식 소스**. 반드시 사용.
 
-### **MVP Recommendation**
+### **Recommendation**
 
 ```
 DART OpenAPI (필수)
@@ -128,7 +158,7 @@ DART OpenAPI (필수)
 
 ---
 
-## 4. Market Index / Sector Data
+## 5. Market Index / Sector Data
 
 ### KIS Developers
 
@@ -138,7 +168,7 @@ DART OpenAPI (필수)
 
 - 시장별 지수 히스토리
 
-### **MVP Recommendation**
+### **Recommendation**
 
 ```
 KIS Developers (지수 API 병행 사용)
@@ -146,7 +176,7 @@ KIS Developers (지수 API 병행 사용)
 
 ---
 
-## 5. AI / NLP
+## 6. AI / NLP
 
 ### Claude API (Anthropic)
 
@@ -156,7 +186,7 @@ KIS Developers (지수 API 병행 사용)
 - Cost: per-token pricing (see https://www.anthropic.com/pricing)
 - Notes: **AI Insight Worker의 기본 provider로 사용**. 투자 추천은 생성하지 않도록 system prompt에 명시.
 
-### **MVP Recommendation**
+### **Recommendation**
 
 ```
 Claude API (Anthropic)
@@ -167,7 +197,7 @@ Claude API (Anthropic)
 
 ---
 
-## 6. Push Notifications
+## 7. Push Notifications
 
 ### Firebase Cloud Messaging (FCM)
 
@@ -181,10 +211,10 @@ Claude API (Anthropic)
 - Auth: Apple Developer certificate
 - Cost: Free (Apple Developer Program membership required)
 
-### **MVP Recommendation**
+### **Recommendation**
 
 ```
-Mobile MVP 이전까지는 불필요.
+모바일 출시 이전까지는 불필요.
 Web push (FCM) → 모바일 추가 시 APNs 연동.
 ```
 
@@ -209,7 +239,7 @@ interface DisclosureProvider {
 }
 ```
 
-MVP starts with real providers. If rate-limited during development, swap to a `MockStockPriceProvider`.
+Use real providers by default. If rate-limited during development, swap to a `MockStockPriceProvider`.
 
 ---
 
@@ -218,10 +248,11 @@ MVP starts with real providers. If rate-limited during development, swap to a `M
 | Provider | Action Required |
 |----------|----------------|
 | KIS Developers | 계좌 개설 → API 신청 → App key 발급 |
+| Toss Securities Open API | developers.tossinvest.com 앱 등록 → API key 발급 (사용자별 BYOK — 서비스 소유 키가 아니라 각 사용자가 본인 계좌로 발급) |
 | KRX 데이터시스템 | 회원가입 → API key 발급 |
 | Naver Search API | developers.naver.com 앱 등록 → Client ID/Secret |
 | DART OpenAPI | opendart.fss.or.kr 회원가입 → API key 발급 |
 | Anthropic Claude | console.anthropic.com → API key 발급 |
 | Firebase (FCM) | Firebase 프로젝트 생성 → 서비스 계정 키 발급 |
 
-All keys must be stored in `.env` (never committed). Reference via environment variables only.
+All service-owned keys must be stored in `.env` (never committed), referenced via environment variables only. User-owned BYOK broker credentials (KIS/Toss) are a different case — they belong to each user's account and must be encrypted at rest in the database, never in `.env` (see [ADR-023](decisions/023-commercialization-pivot.md)).

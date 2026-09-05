@@ -4,12 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**monticker** — an MIT-licensed project by augboot. The repository is currently in its initial state with no source code committed yet.
+**monticker** — an MIT-licensed event-centric stock observation platform with a built-in quant strategy lab and investment wallet, by augboot. See [docs/product.md](docs/product.md) for product identity and full service structure, [docs/architecture.md](docs/architecture.md) for module boundaries and infra.
 
-Once development begins, update this file with:
-- Build, lint, and test commands
-- Architecture overview and key entry points
-- Any non-obvious conventions or constraints
+**Product stage: MVP is complete. The project is now in active commercialization** ([ADR-023](docs/decisions/023-commercialization-pivot.md)) — real brokerage order execution (BYOK model via KIS/Toss Securities Open API), Quant Lab UI, Strategy Market, and guarded AI-assisted trading are in scope going forward, not excluded. Treat every new feature and refactor as production-track: real user money and real broker credentials will eventually be in play, so security, compliance, and concurrency-safety bars apply from the start, not as a later hardening pass.
 
 ## Architecture Decision Records (ADRs)
 

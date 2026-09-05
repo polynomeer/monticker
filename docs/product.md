@@ -1,6 +1,10 @@
 # monticker — Product
 
-> Read this when: deciding what to build, scoping a feature, or checking MVP boundaries.
+> Read this when: deciding what to build, scoping a feature, or checking product scope.
+
+## Product Stage
+
+**MVP is complete. monticker is now in active commercialization** — see [ADR-023](decisions/023-commercialization-pivot.md). The "Exclude from MVP" list that used to live in this document is retired; those items are now roadmap items with real target phases (below), not out-of-scope. Every new feature should be built to production/commercial bar (security, compliance, concurrency-safety, observability), not MVP bar.
 
 ## Product Identity
 
@@ -488,9 +492,9 @@ Investment Wallet (upcoming)
 
 ---
 
-## MVP Scope
+## Product Scope
 
-### Done
+### 상용화 이전 완료분 (구 "MVP Done")
 
 ```
 ├── 회원가입 / 로그인 (JWT)
@@ -507,16 +511,29 @@ Investment Wallet (upcoming)
 └── VWAP · RSI · MACD 오버레이
 ```
 
-### Exclude from MVP
+### 상용화 로드맵 — 순차 활성화 대상 (구 "Exclude from MVP")
 
-```
-실제 주문 체결
-Quant Lab 룰셋 빌더 UI
-Strategy Market
-AI 자동 매수/매도
-소셜 커뮤니티
-가상 투자 미션 / 친구 대결 리그
-```
+이 항목들은 더 이상 "제외"가 아니라 다음에 착수할 작업이다. [ADR-023](decisions/023-commercialization-pivot.md) 참조.
+
+| 기능 | 비고 |
+|------|------|
+| 실제 주문 체결 | **BYOK 모델** — monticker는 자체 브로커 라이선스를 보유하지 않는다. 사용자가 본인 명의 증권 계좌의 API 키(Toss Securities Open API / KIS Open API)를 연결하고, monticker는 그 키로 사용자를 대신해 API를 호출하는 클라이언트로만 동작한다. 기존 `BrokerageClient` 인터페이스(`KisBrokerageClient`/`MockBrokerageClient`)에 `TossBrokerageClient`를 추가하는 형태로 구현 — 새 OMS를 만들지 않는다 |
+| 실시간 시세 파이프라인 실데이터 전환 | 현재 `market.ticks` Kafka 토픽은 Mock/Go 합성 데이터로만 채워짐 — Toss/KIS 실시세 producer로 교체 |
+| Quant Lab 룰셋 빌더 UI | 백엔드 룰 엔진·백테스트·포워드테스트는 이미 구현됨 — UI만 남음 |
+| Strategy Market | 룰셋 보호(서버사이드 실행, fingerprint) 메커니즘은 이미 설계됨 |
+| 리밸런싱 실행 자동화 | `PortfolioOptimizerService`의 목표 비중 계산은 이미 있음 — 현재 보유 대비 diff → 임계값 초과분만 기존 OMS/브로커 계층으로 주문하는 실행 로직이 없음 |
+| 조건주문 (OCO/OTO, TP/SL) | `Order` 도메인은 현재 MARKET/LIMIT만 지원 — 기존 OMS를 대체하지 않고 그 위에 얹는 감시 컴포넌트로 설계 |
+| AI 자동 매수/매도 | **가드레일 필수** — LLM은 주문 제안(Order Proposal)만 생성하고, 리스크 검증 → 사용자 승인 → 기존 Order Executor(OMS) 경유 없이는 절대 자동 실행하지 않는다. "감정 태그 ≠ 투자 조언" 원칙과 동일한 선을 지킨다 |
+| 소셜 커뮤니티 | 검토 중 — 우선순위 낮음 |
+| 가상 투자 미션 / 친구 대결 리그 | 검토 중 — 우선순위 낮음 |
+
+### 상용화 선행 과제 (기능 추가 전에 먼저 고쳐야 하는 것)
+
+실제 돈/실제 브로커 계정이 걸리기 전에 반드시 해결해야 하는 기존 기술 부채:
+
+- 현금 예약(`OrderSagaOrchestrator.adjustCash`)이 row lock/버전 없는 plain `UPDATE` — paper trading에서는 무해하지만 실계좌 연동 시 동시성 레이스가 실제 금전 사고로 이어질 수 있음
+- `KisBrokerageClient`에 resilience4j 서킷브레이커가 없음 — `TradingServiceClient`/`YahooFinanceOrderBookProvider`가 쓰는 패턴을 브로커 클라이언트에도 적용해야 함 (신규 `TossBrokerageClient`는 처음부터 이 패턴을 따른다)
+- API 키/시크릿(사용자별 브로커 credential) 암호화 저장 — 현재 스키마/설계에 없음, BYOK 모델 전제 조건
 
 ---
 
@@ -555,3 +572,5 @@ AI 자동 매수/매도
 5. **Order book provider chain**: KIS realtime → Yahoo Finance (15m delay) → Mock.
 6. **원장(ledger) 패턴**: Investment Wallet의 모든 잔고 변경은 이벤트 로그로 기록. 잔고는 이벤트를 replay해서 계산 가능해야 함.
 7. **감정 태그 ≠ 투자 조언**: 교육용 피드백으로만 제공. "이 종목을 팔아라" 형태의 추천 금지.
+8. **BYOK 브로커 연동** ([ADR-023](decisions/023-commercialization-pivot.md)): monticker는 자체 브로커 라이선스를 보유하지 않는다. 실주문은 항상 사용자 본인 명의 계좌(Toss/KIS)의 API 키로 실행되며, monticker는 그 키를 대신 사용하는 클라이언트로만 동작한다.
+9. **AI는 제안, 실행은 사용자 승인 후 기존 리스크·주문 엔진 경유**: LLM이 주문을 직접 실행하지 않는다. `Order Proposal → Risk Validation → User Confirmation → Order Executor` 흐름을 벗어나지 않는다.

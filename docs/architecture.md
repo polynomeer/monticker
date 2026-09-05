@@ -2,6 +2,8 @@
 
 > Read this when: designing a module, adding a new table, wiring up a new worker, or making any infrastructure decision.
 
+**Product stage:** MVP is complete; monticker is now in active commercialization ([ADR-023](decisions/023-commercialization-pivot.md)). Real brokerage order execution (BYOK via Toss/KIS Open API) and real market-data feeds are on the near-term roadmap, not out of scope — design new modules to be production-safe (concurrency, credential handling, resilience) from the start.
+
 ## Core Principle
 
 monticker is **event-centric**, not price-centric.
@@ -440,6 +442,28 @@ Connect: `ws://localhost:8080/ws` (SockJS fallback)
 | `/topic/stocks/{stockId}` | 종목별 실시간 가격 |
 | `/topic/market` | 전체 시장 요약 |
 | `/topic/signals/{userId}` | 룰셋 신호 알림 (Quant Lab) |
+
+---
+
+## Brokerage Adapter — BYOK Model
+
+monticker does not hold its own brokerage license. Real order execution always runs against the end user's own linked brokerage account — monticker is an API client acting on the user's behalf with the user's own credentials ("bring your own key"), never a broker itself. See [ADR-023](decisions/023-commercialization-pivot.md).
+
+```
+BrokerageService (api/brokerage/application)
+      │  depends on interface only
+      ▼
+BrokerageClient  (interface — broker-agnostic DTOs: order/status/settlement/balance)
+      │
+      ├── MockBrokerageClient   @Primary in dev (app.brokerage.mock.enabled=true)
+      ├── KisBrokerageClient    한국투자증권 Open API — user-issued appKey/appSecret
+      └── TossBrokerageClient   토스증권 Open API — planned, same interface
+```
+
+- **Provider selection is config-driven** (`app.brokerage.mock.enabled`, per-user provider choice), never hardcoded — `BrokerageService` never knows which broker it's talking to.
+- **Every implementation must register a named resilience4j circuit breaker** (see [Circuit Breaker](#circuit-breaker) below) the way `TradingServiceClient`/`YahooFinanceOrderBookProvider` do. `KisBrokerageClient` currently does not — this is a known gap to close before relying on it for real orders, and `TossBrokerageClient` must not repeat it.
+- **User-supplied broker credentials (appKey/appSecret) must be encrypted at rest.** No such encryption exists yet — this is a blocking prerequisite for real-money BYOK, not an optional hardening pass.
+- **Cash reservation must be safe under concurrency before real money is at stake.** `OrderSagaOrchestrator.adjustCash` is currently a plain `UPDATE` with no row lock or optimistic version — acceptable for paper trading's fake cash, not acceptable once a real brokerage account is behind it.
 
 ---
 
@@ -1282,3 +1306,14 @@ portfolio_positions (
 | [ADR-010](decisions/010-bloom-filter-news-deduplication.md) | Guava Bloom Filter for News URL Deduplication | Accepted |
 | [ADR-011](decisions/011-order-saga-orchestration.md) | Orchestration-based Saga for Order Processing | Accepted |
 | [ADR-012](decisions/012-cqrs-portfolio-positions-read-model.md) | CQRS Read Model Table for Portfolio Positions | Accepted |
+| [ADR-013](decisions/013-append-only-ledger-wallet.md) | Append-Only Ledger for Wallet | Accepted |
+| [ADR-014](decisions/014-t2-paper-settlement-scheduler.md) | T+2 Business Day Settlement for Paper Trading | Accepted |
+| [ADR-015](decisions/015-conditional-mock-real-client.md) | @ConditionalOnProperty for Mock/Real Client Switching | Accepted |
+| [ADR-016](decisions/016-subscription-creator-revenue-sharing.md) | Subscription Plan and Creator Revenue Sharing Model | Accepted |
+| [ADR-017](decisions/017-investor-flow-kis-integration.md) | 개인·외국인·기관 순매수(투자자 동향) 데이터 — KIS API 확장 | Accepted |
+| [ADR-018](decisions/018-stock-fundamentals-kis-reuse.md) | 시가총액·PER·PBR 스크리너 필터 — KIS 응답 필드 재사용 + 스냅샷 테이블 | Accepted |
+| [ADR-019](decisions/019-spring-modulith-boundary-conventions.md) | Spring Modulith 모듈 경계 규칙 확립 | Accepted |
+| [ADR-020](decisions/020-stock-valuation-score.md) | 종목 스코어(Snowflake 참고) v1 — 밸류에이션 1축만 실데이터 | Accepted |
+| [ADR-021](decisions/021-candles-1d-realtime-upsert.md) | candles_1d 무기록 버그 — CandleAggregator 실시간 upsert로 해결 | Accepted |
+| [ADR-022](decisions/022-tick-consumer-msa-role-gating.md) | msa 프로필 3중 market.ticks 중복 소비 제거 | Accepted |
+| [ADR-023](decisions/023-commercialization-pivot.md) | MVP 졸업 — 상용 서비스 전환 (BYOK 브로커 연동, 실시세, AI 가드레일) | Accepted |
