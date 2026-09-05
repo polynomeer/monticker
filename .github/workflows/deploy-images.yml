@@ -41,11 +41,11 @@ jobs:
           - service: market-gateway
             context: services/market-gateway
             dockerfile: services/market-gateway/Dockerfile
-          # web은 일부러 뺐다 — apps/web/Dockerfile이 현재 빌드 자체가 안 된다(확인됨: 로컬에서
-          # `docker build -f apps/web/Dockerfile .` 실행 시 `package.json`은 apps/web/에만,
-          # `pnpm-lock.yaml`/`.npmrc`는 저장소 루트에만 있어서 어느 빌드 컨텍스트를 줘도 한쪽이
-          # 없다). pnpm 워크스페이스 인식 멀티스테이지 COPY로 다시 짜야 하는 별도 작업 —
-          # docs/launch-plan.md Phase 3에 기록.
+          # web은 pnpm 워크스페이스 루트(lockfile 위치)가 빌드 컨텍스트여야 한다 — apps/web/
+          # 단독으로는 pnpm-lock.yaml/.npmrc를 못 찾는다(apps/web/Dockerfile 상단 주석 참고).
+          - service: web
+            context: .
+            dockerfile: apps/web/Dockerfile
     steps:
       - uses: actions/checkout@v4
 
