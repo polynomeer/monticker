@@ -47,6 +47,12 @@ class SecurityConfig(
                     // 이유(429 rate limit) 대신 인증 안 됨만 보게 되는 상태였다.
                     .requestMatchers("/error").permitAll()
                     .requestMatchers("/api/auth/**").permitAll()
+                    // 토스페이먼츠 서버가 직접 호출하는 콜백이라 사용자 JWT를 들고 올 수 없다 —
+                    // anyRequest().authenticated()에 걸려 있으면 실제 웹훅이 전부 401로 막힌다
+                    // (실제 재현: PG_MOCK_ENABLED=false로 부팅해 직접 curl로 확인). 인증은 이
+                    // 엔드포인트 자체가 PgClient.getPaymentStatus()로 PG에 재조회해서 한다 —
+                    // JWT가 아니라 그게 이 엔드포인트의 진짜 보안 경계다.
+                    .requestMatchers("/api/subscription/payment/webhook").permitAll()
                     .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/stocks/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/events/**").permitAll()

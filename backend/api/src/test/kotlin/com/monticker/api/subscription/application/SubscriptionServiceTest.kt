@@ -68,6 +68,36 @@ class SubscriptionServiceTest {
         }
     }
 
+    // ── activateConfirmedSubscription ────────────────────────────────────────
+    // 실제로 있던 버그: PaymentWebhookController가 토스 confirm으로 결제를 이미 성공시킨
+    // 뒤 subscribe()를 호출했는데, subscribe()가 내부적으로 pgClient.requestPayment()를 또
+    // 호출했다. TossPgClient.requestPayment()는 웹훅 플로우를 쓰라는 스텁이라 항상 실패를
+    // 반환하므로, 실제로 결제된 고객의 구독이 활성화되지 않고 PaymentRecord만 FAILED로
+    // 남았다. activateConfirmedSubscription()은 pgClient를 아예 다시 호출하지 않아야 한다.
+
+    @Test
+    fun `activateConfirmedSubscription은 pgClient를 다시 호출하지 않고 바로 구독을 활성화한다`() {
+        val proPlan = makePlan(PlanCode.PRO, price = BigDecimal("9900"))
+        val record  = makePaymentRecord(proPlan)
+        val sub     = makeSubscription(proPlan)
+        val spyPgClient = spyk(pgClient)
+        val serviceWithSpy = SubscriptionService(planRepo, subscriptionRepo, paymentRepo, spyPgClient, ledgerService)
+
+        every { planRepo.findByCode(PlanCode.PRO) } returns Optional.of(proPlan)
+        every { subscriptionRepo.findByUserId(1L) } returns Optional.of(sub)
+        every { paymentRepo.save(any()) }            returns record
+        every { subscriptionRepo.save(any()) }        returns sub
+
+        val result = serviceWithSpy.activateConfirmedSubscription(
+            userId = 1L, planCode = PlanCode.PRO, pgTransactionId = "toss_already_confirmed_tx",
+        )
+
+        assertThat(result.success).isTrue()
+        assertThat(result.paymentId).isEqualTo(record.id)
+        verify(exactly = 0) { spyPgClient.requestPayment(any()) }
+        verify { ledgerService.recordSubscriptionPayment(1L, "PRO", BigDecimal("9900"), any()) }
+    }
+
     // ── cancel ────────────────────────────────────────────────────────────────
 
     @Test

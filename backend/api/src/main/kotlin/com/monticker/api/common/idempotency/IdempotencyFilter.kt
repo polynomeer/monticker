@@ -16,8 +16,9 @@ import java.time.Duration
 /**
  * X-Idempotency-Key 헤더 기반 멱등성 보장 필터.
  *
- * POST /api/paper/buy|sell, POST /api/matching/orders 에서 동일 키로 재요청이 들어오면
- * 이전 응답을 그대로 반환한다. 중복 주문 방지용.
+ * POST /api/paper/buy|sell, /api/matching/orders, /api/subscription/payment/confirm 에서
+ * 동일 키로 재요청이 들어오면 이전 응답을 그대로 반환한다. 중복 주문/중복 결제 확정 방지용
+ * (특히 결제 confirm은 네트워크 타임아웃으로 프론트가 재시도하기 쉬운 엔드포인트라 필요하다).
  *
  * Redis 키: idempotency:{userId}:{X-Idempotency-Key}
  * TTL: 24시간
@@ -34,6 +35,7 @@ class IdempotencyFilter(
         "/api/paper/buy",
         "/api/paper/sell",
         "/api/matching/orders",
+        "/api/subscription/payment/confirm",
     )
 
     override fun shouldNotFilter(request: HttpServletRequest): Boolean {

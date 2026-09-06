@@ -23,4 +23,7 @@ class MockPgClient : PgClient {
         log.info("[MockPG] 환불 성공: txId={} amount={}", pgTransactionId, amount)
         return RefundResult(success = true)
     }
+
+    override fun getPaymentStatus(paymentKey: String): PaymentStatusResult =
+        PaymentStatusResult(found = true, status = "DONE", totalAmount = BigDecimal.ZERO)
 }

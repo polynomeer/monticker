@@ -56,22 +56,50 @@ class SubscriptionService(
         )
 
         return if (result.success) {
-            record.markSuccess(result.pgTransactionId!!)
-            paymentRepo.save(record)
-
-            val subscription = getOrCreateSubscription(userId, plan)
-            subscription.upgrade(plan, expiresAt = Instant.now().plus(30, ChronoUnit.DAYS))
-            subscriptionRepo.save(subscription)
-
-            log.info("구독 활성화: userId={} plan={} txId={}", userId, planCode, result.pgTransactionId)
-            ledgerService.recordSubscriptionPayment(userId, planCode.name, plan.price, record.id)
-            SubscribeResult.success(planCode, paymentId = record.id)
+            activatePaidPlan(userId, plan, record, result.pgTransactionId!!)
         } else {
             record.markFailed(result.failureReason ?: "PG 결제 실패")
             paymentRepo.save(record)
             log.warn("결제 실패: userId={} plan={} reason={}", userId, planCode, result.failureReason)
             SubscribeResult.failure(planCode, result.failureReason ?: "결제 처리 중 오류가 발생했습니다.")
         }
+    }
+
+    /**
+     * 토스페이먼츠 confirm 플로우 전용(PaymentWebhookController.confirm 참고). 프론트가
+     * 토스 SDK로 결제를 이미 완료했고, 컨트롤러가 tossPgClient.confirmPayment()로 그 결제를
+     * 이미 확정한 뒤 호출한다.
+     *
+     * subscribe()처럼 pgClient.requestPayment()를 다시 호출하면 안 된다 —
+     * TossPgClient.requestPayment()는 "웹훅 플로우를 쓰라"는 스텁이라 항상 실패를 반환하므로,
+     * 여기서 다시 호출하면 방금 실제로 성공한 결제인데도 구독이 활성화되지 않고 PaymentRecord만
+     * FAILED로 남는다 — 실제 코드에 있던 버그(고객은 결제됐는데 서비스는 활성화 안 됨).
+     */
+    @Transactional
+    fun activateConfirmedSubscription(userId: Long, planCode: PlanCode, pgTransactionId: String): SubscribeResult {
+        val plan = planRepo.findByCode(planCode).orElseThrow {
+            IllegalArgumentException("존재하지 않는 플랜: $planCode")
+        }
+        val record = paymentRepo.save(PaymentRecord(userId = userId, plan = plan, amount = plan.price))
+        return activatePaidPlan(userId, plan, record, pgTransactionId)
+    }
+
+    private fun activatePaidPlan(
+        userId: Long,
+        plan: SubscriptionPlan,
+        record: PaymentRecord,
+        pgTransactionId: String,
+    ): SubscribeResult {
+        record.markSuccess(pgTransactionId)
+        paymentRepo.save(record)
+
+        val subscription = getOrCreateSubscription(userId, plan)
+        subscription.upgrade(plan, expiresAt = Instant.now().plus(30, ChronoUnit.DAYS))
+        subscriptionRepo.save(subscription)
+
+        log.info("구독 활성화: userId={} plan={} txId={}", userId, plan.code, pgTransactionId)
+        ledgerService.recordSubscriptionPayment(userId, plan.code.name, plan.price, record.id)
+        return SubscribeResult.success(plan.code, paymentId = record.id)
     }
 
     @Transactional

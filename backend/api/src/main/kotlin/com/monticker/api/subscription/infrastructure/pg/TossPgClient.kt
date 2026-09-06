@@ -28,7 +28,11 @@ import java.util.Base64
 @Component
 @ConditionalOnProperty("app.pg.mock.enabled", havingValue = "false")
 class TossPgClient(
-    @Value("\${app.toss.secret-key}") private val secretKey: String,
+    // 실제 프로퍼티 경로는 app.pg.toss.secret-key다(application.yml/application-prod.yml 참고).
+    // "app.toss.secret-key"로 잘못 참조되어 있었던 적이 있다 — 그 경로는 어디에도 정의돼
+    // 있지 않아서 PG_MOCK_ENABLED=false로 부팅하면 항상 PlaceholderResolutionException으로
+    // 죽었다(실제 재현: 로컬에서 PG_MOCK_ENABLED=false로 부팅해서 확인).
+    @Value("\${app.pg.toss.secret-key}") private val secretKey: String,
 ) : PgClient {
 
     private val log = LoggerFactory.getLogger(javaClass)
@@ -99,6 +103,24 @@ class TossPgClient(
         } catch (e: RestClientException) {
             log.error("[TossPG] 환불 실패: paymentKey={} error={}", pgTransactionId, e.message)
             RefundResult(success = false, failureReason = e.message)
+        }
+    }
+
+    /**
+     * 웹훅 바디를 믿지 않고 PG에 직접 재조회해 권위 있는 상태를 얻는다 (PgClient.getPaymentStatus 참고).
+     */
+    override fun getPaymentStatus(paymentKey: String): PaymentStatusResult {
+        return try {
+            val response = restClient.get()
+                .uri("/v1/payments/$paymentKey")
+                .retrieve()
+                .body(TossConfirmResponse::class.java)
+                ?: return PaymentStatusResult(found = false)
+
+            PaymentStatusResult(found = true, status = response.status, totalAmount = response.totalAmount.toBigDecimal())
+        } catch (e: RestClientException) {
+            log.error("[TossPG] 결제 상태 조회 실패: paymentKey={} error={}", paymentKey, e.message)
+            PaymentStatusResult(found = false)
         }
     }
 
