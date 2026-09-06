@@ -1,5 +1,7 @@
 package com.monticker.api.subscription.api
 
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.fasterxml.jackson.module.kotlin.readValue
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
 import com.monticker.api.subscription.application.SubscribeResult
 import com.monticker.api.subscription.application.SubscriptionService
@@ -18,7 +20,7 @@ data class PlanResponse(
     val name: String,
     val price: BigDecimal,
     val currency: String,
-    val features: String,
+    val features: List<String>,
 )
 
 data class SubscriptionResponse(
@@ -47,6 +49,8 @@ class SubscriptionController(
     private val subscriptionService: SubscriptionService,
     private val jwtTokenProvider: JwtTokenProvider,
 ) {
+    private val mapper = jacksonObjectMapper()
+
     private fun userId(token: String) =
         jwtTokenProvider.getUserId(token.removePrefix("Bearer "))
 
@@ -95,7 +99,8 @@ class SubscriptionController(
     }
 
     private fun SubscriptionPlan.toResponse() = PlanResponse(
-        id = id, code = code.name, name = name, price = price, currency = currency, features = features,
+        id = id, code = code.name, name = name, price = price, currency = currency,
+        features = mapper.readValue<List<String>>(features),
     )
 
     private fun UserSubscription.toResponse() = SubscriptionResponse(
