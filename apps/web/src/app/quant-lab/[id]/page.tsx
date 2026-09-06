@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTheme } from "next-themes";
 import { HourglassMedium, Play } from "@phosphor-icons/react";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
@@ -13,6 +14,17 @@ interface RuleSet {
   version: number; status: string; ruleDefinition: string;
 }
 
+interface QuantTradeRecord {
+  entryDate: string; exitDate: string;
+  entryPrice: number; exitPrice: number;
+  quantity: number; pnl: number; pnlPct: number;
+  exitReason: string;
+}
+
+interface QuantEquityPoint {
+  date: string; equity: number; drawdown: number;
+}
+
 interface BacktestResult {
   id: number; stockId: number; startDate: string; endDate: string;
   initialCapital: number; finalCapital: number;
@@ -21,7 +33,12 @@ interface BacktestResult {
   tradeCount: number | null; avgHoldingDays: number | null;
   benchmarkReturn: number | null; excessReturn: number | null;
   reliabilityScore: string | null; createdAt: string;
+  trades: QuantTradeRecord[]; equityCurve: QuantEquityPoint[];
 }
+
+const EXIT_REASON_LABEL: Record<string, string> = {
+  SIGNAL: "청산 신호", END: "기간 종료",
+};
 
 const RELIABILITY_COLOR: Record<string, string> = {
   A: "text-dracula-green border-dracula-green",
@@ -47,6 +64,79 @@ function fmt(n: number | null | undefined, suffix = "%", digits = 2) {
   return n > 0 ? `+${s}${suffix}` : `${s}${suffix}`;
 }
 
+function won(n: number) {
+  return n.toLocaleString("ko-KR", { maximumFractionDigits: 0 });
+}
+
+function EquityCurveChart({ equityCurve, isDark }: { equityCurve: QuantEquityPoint[]; isDark: boolean }) {
+  const chartRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!chartRef.current || equityCurve.length === 0) return;
+    let disposed = false;
+    let chart: import("echarts").ECharts | undefined;
+    let onResize: (() => void) | undefined;
+    import("echarts").then(echarts => {
+      if (disposed || !chartRef.current) return;
+      const existing = echarts.getInstanceByDom(chartRef.current);
+      if (existing) existing.dispose();
+
+      chart = echarts.init(chartRef.current, undefined, { renderer: "canvas", height: 220 });
+      const rising = equityCurve[equityCurve.length - 1].equity >= equityCurve[0].equity;
+
+      chart.setOption({
+        backgroundColor: "transparent",
+        animation: false,
+        tooltip: {
+          trigger: "axis",
+          backgroundColor: isDark ? "#282a36" : "#fff",
+          borderColor: "#44475a",
+          textStyle: { color: isDark ? "#f8f8f2" : "#374151", fontSize: 11 },
+          formatter: (params: unknown) => {
+            const p = (params as Array<{ axisValue: string; data: number }>)[0];
+            const point = equityCurve.find(e => e.date === p.axisValue);
+            return `${p.axisValue}<br/>자산 ${won(p.data)}원${point ? `<br/>낙폭 ${point.drawdown.toFixed(2)}%` : ""}`;
+          },
+        },
+        grid: { left: 64, right: 16, top: 16, bottom: 28 },
+        xAxis: {
+          type: "category", data: equityCurve.map(p => p.date),
+          axisLabel: { color: isDark ? "#6272a4" : "#6b7280", fontSize: 10 },
+          axisLine: { lineStyle: { color: isDark ? "#44475a" : "#e5e7eb" } },
+        },
+        yAxis: {
+          type: "value", position: "left",
+          axisLabel: {
+            color: isDark ? "#6272a4" : "#6b7280", fontSize: 10,
+            formatter: (v: number) => `${(v / 10000).toFixed(0)}만`,
+          },
+          splitLine: { lineStyle: { color: isDark ? "#44475a" : "#e5e7eb", type: "dashed" } },
+        },
+        series: [{
+          type: "line", data: equityCurve.map(p => p.equity),
+          smooth: true, symbol: "none",
+          lineStyle: { color: rising ? "#0ecb81" : "#f6465d", width: 2 },
+          areaStyle: {
+            color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [
+              { offset: 0, color: rising ? "#0ecb8133" : "#f6465d33" },
+              { offset: 1, color: "transparent" },
+            ] },
+          },
+        }],
+      });
+      onResize = () => chart?.resize();
+      window.addEventListener("resize", onResize);
+    });
+    return () => {
+      disposed = true;
+      if (onResize) window.removeEventListener("resize", onResize);
+      chart?.dispose();
+    };
+  }, [equityCurve, isDark]);
+
+  return <div ref={chartRef} className="w-full" />;
+}
+
 function MetricCard({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className="p-3 rounded-lg bg-gray-50 dark:bg-dracula-bg border border-gray-200 dark:border-dracula-line">
@@ -61,6 +151,7 @@ export default function QuantLabDetailPage() {
   const router = useRouter();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { resolvedTheme } = useTheme();
 
   const [stockId, setStockId] = useState(1);
   const [startDate, setStartDate] = useState("2024-01-01");
@@ -215,6 +306,57 @@ export default function QuantLabDetailPage() {
               {latestResult.reliabilityScore === "C" && " — 거래 횟수가 적어 통계적 신뢰도가 제한적입니다. 더 긴 기간으로 테스트하세요."}
               {latestResult.reliabilityScore === "D" && " — 거래 횟수가 매우 적습니다. 과최적화 위험이 높습니다."}
             </div>
+          )}
+
+          {/* 자산 곡선 */}
+          {latestResult.equityCurve.length > 0 && (
+            <Card className="overflow-hidden mt-4">
+              <div className="px-4 pt-3 text-xs font-medium text-gray-500 dark:text-dracula-comment">자산 곡선</div>
+              <EquityCurveChart equityCurve={latestResult.equityCurve} isDark={resolvedTheme === "dark"} />
+            </Card>
+          )}
+
+          {/* 거래 내역 */}
+          {latestResult.trades.length > 0 && (
+            <Card className="overflow-hidden mt-4">
+              <div className="px-4 py-3 border-b border-gray-200 dark:border-dracula-line bg-gray-50 dark:bg-transparent">
+                <span className="text-sm font-semibold text-gray-900 dark:text-dracula-fg">거래 내역</span>
+                <span className="ml-2 text-xs text-gray-500 dark:text-dracula-comment">{latestResult.trades.length}건</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-200 dark:border-dracula-line text-gray-500 dark:text-dracula-comment">
+                      {["매수일", "매도일", "매수가", "매도가", "수량", "손익", "수익률", "사유"].map(h => (
+                        <th key={h} className="px-3 py-2 text-left">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {latestResult.trades.map((t, i) => (
+                      <tr key={i} className="border-b border-gray-100 dark:border-dracula-line/40 hover:bg-gray-50 dark:hover:bg-dracula-line/10 transition-colors">
+                        <td className="px-3 py-2 text-gray-500 dark:text-dracula-comment tabular-nums">{t.entryDate}</td>
+                        <td className="px-3 py-2 text-gray-500 dark:text-dracula-comment tabular-nums">{t.exitDate}</td>
+                        <td className="px-3 py-2 font-mono tabular-nums text-gray-900 dark:text-dracula-fg">{won(t.entryPrice)}</td>
+                        <td className="px-3 py-2 font-mono tabular-nums text-gray-900 dark:text-dracula-fg">{won(t.exitPrice)}</td>
+                        <td className="px-3 py-2 font-mono tabular-nums text-gray-500 dark:text-dracula-comment">{t.quantity}</td>
+                        <td className={`px-3 py-2 font-mono tabular-nums font-bold ${t.pnl >= 0 ? "text-dracula-green" : "text-dracula-red"}`}>
+                          {t.pnl >= 0 ? "+" : ""}{won(t.pnl)}
+                        </td>
+                        <td className={`px-3 py-2 font-mono tabular-nums font-bold ${t.pnlPct >= 0 ? "text-dracula-green" : "text-dracula-red"}`}>
+                          {fmt(t.pnlPct)}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-500 dark:bg-dracula-line dark:text-dracula-comment">
+                            {EXIT_REASON_LABEL[t.exitReason] ?? t.exitReason}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
           )}
         </div>
       )}
