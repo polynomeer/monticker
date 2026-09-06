@@ -101,6 +101,21 @@ https://api.monticker.io/api/subscription/payment/webhook
 
 이벤트: `PAYMENT_STATUS_CHANGED`, `DEPOSIT_CALLBACK` (가상계좌 입금)
 
+### 2-5. 정기결제(자동 갱신) — 빌링키
+
+confirm 플로우와 별개의 API다. 프론트에서 아래 순서로 호출한다:
+
+```
+1. GET  /api/subscription/billing/customer-key  → customerKey 발급/재사용
+2. 토스 SDK: tossPayments.requestBillingAuth('CARD', {customerKey, successUrl, failUrl})
+3. successUrl 리다이렉트로 {authKey, customerKey} 수신
+4. POST /api/subscription/billing/register {authKey, customerKey}
+   → 백엔드가 /v1/billing/authorizations/issue로 billingKey 발급받아 암호화 저장
+```
+
+이후 월 갱신 배치가 저장된 billingKey로 `/v1/billing/{billingKey}`를 호출해 자동 청구한다.
+카드 조회/해지는 `GET`/`DELETE /api/subscription/billing`.
+
 ---
 
 ## 3. KIS Open API (한국투자증권) 연동
