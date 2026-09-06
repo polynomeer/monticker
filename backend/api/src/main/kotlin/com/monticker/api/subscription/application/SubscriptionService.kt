@@ -3,9 +3,11 @@ package com.monticker.api.subscription.application
 import com.monticker.api.subscription.domain.*
 import com.monticker.api.subscription.infrastructure.PaymentRecordRepository
 import com.monticker.api.subscription.infrastructure.SubscriptionPlanRepository
+import com.monticker.api.subscription.infrastructure.UserBillingKeyRepository
 import com.monticker.api.subscription.infrastructure.UserSubscriptionRepository
 import com.monticker.api.subscription.infrastructure.pg.PgClient
 import com.monticker.api.subscription.infrastructure.pg.PaymentRequest
+import com.monticker.api.subscription.infrastructure.pg.PaymentResult
 import com.monticker.api.wallet.application.LedgerService
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Page
@@ -22,6 +24,7 @@ class SubscriptionService(
     private val paymentRepo: PaymentRecordRepository,
     private val pgClient: PgClient,
     private val ledgerService: LedgerService,
+    private val billingKeyRepo: UserBillingKeyRepository,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -120,6 +123,13 @@ class SubscriptionService(
     /**
      * 월 갱신 배치에서 호출 — 만료 예정 구독을 재결제 시도.
      * 3회 실패 시 FREE로 다운그레이드.
+     *
+     * 예전에는 여기서도 pgClient.requestPayment()를 호출했는데, TossPgClient에서는 그게
+     * 항상 실패하는 스텁이라(실제 결제는 confirm/billing 전용 API로만 가능) 실제 운영에서는
+     * 정기결제가 단 한 번도 성공할 수 없는 구조였다 — 애초에 자동결제 자체가 구현되어 있지
+     * 않았던 것. 이제는 등록된 빌링키(UserBillingKey)로 pgClient.chargeBilling()을 호출한다.
+     * 빌링키가 없으면(자동결제 카드 미등록) 결제 시도 자체가 불가능하므로 결제 실패로
+     * 취급해 기존 3회 실패 다운그레이드 로직을 그대로 태운다.
      */
     @Transactional
     fun renewSubscription(subscription: UserSubscription): RenewResult {
@@ -129,9 +139,18 @@ class SubscriptionService(
         val record = paymentRepo.save(
             PaymentRecord(userId = subscription.userId, plan = plan, amount = plan.price)
         )
-        val result = pgClient.requestPayment(
-            PaymentRequest(userId = subscription.userId, planCode = plan.code.name, amount = plan.price)
-        )
+        val billingKey = billingKeyRepo.findByUserId(subscription.userId).orElse(null)
+        val result = if (billingKey == null) {
+            PaymentResult(success = false, failureReason = "등록된 자동결제 카드가 없습니다.")
+        } else {
+            pgClient.chargeBilling(
+                billingKey  = billingKey.billingKeyValue,
+                customerKey = billingKey.customerKey,
+                amount      = plan.price,
+                orderId     = "renewal_${subscription.id}_${System.currentTimeMillis()}",
+                orderName   = "${plan.name} 정기결제",
+            )
+        }
 
         return if (result.success) {
             record.markSuccess(result.pgTransactionId!!)

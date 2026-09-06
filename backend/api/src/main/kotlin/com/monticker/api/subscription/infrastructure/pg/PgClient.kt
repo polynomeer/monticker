@@ -26,9 +26,37 @@ data class PaymentStatusResult(
     val totalAmount: BigDecimal? = null,
 )
 
+data class BillingKeyResult(
+    val success: Boolean,
+    val billingKey: String? = null,
+    val cardCompany: String? = null,
+    val cardLast4: String? = null,
+    val failureReason: String? = null,
+)
+
 interface PgClient {
     fun requestPayment(request: PaymentRequest): PaymentResult
     fun requestRefund(pgTransactionId: String, amount: BigDecimal): RefundResult
+
+    /**
+     * 정기결제 카드 등록. 프론트가 토스 SDK의 requestBillingAuth() 위젯으로 카드 인증을 마치면
+     * successUrl로 {authKey, customerKey}가 리다이렉트되고, 그 값을 이 메서드로 넘겨 실제
+     * billingKey를 발급받는다(토스: POST /v1/billing/authorizations/issue). authKey는
+     * 1회용이라 재사용 불가 — 발급받은 billingKey를 저장해야 한다.
+     */
+    fun issueBillingKey(authKey: String, customerKey: String): BillingKeyResult
+
+    /**
+     * 저장된 billingKey로 자동결제를 실행한다(토스: POST /v1/billing/{billingKey}).
+     * 정기결제 갱신 배치(SubscriptionService.renewSubscription)에서 호출한다.
+     */
+    fun chargeBilling(
+        billingKey: String,
+        customerKey: String,
+        amount: BigDecimal,
+        orderId: String,
+        orderName: String,
+    ): PaymentResult
 
     /**
      * PG 서버에 직접 물어서 얻는 "권위 있는" 결제 상태. 토스페이먼츠의 일반 결제 상태 웹훅

@@ -3,13 +3,17 @@ package com.monticker.api.subscription.application
 import com.monticker.api.subscription.domain.*
 import com.monticker.api.subscription.infrastructure.PaymentRecordRepository
 import com.monticker.api.subscription.infrastructure.SubscriptionPlanRepository
+import com.monticker.api.subscription.infrastructure.UserBillingKeyRepository
 import com.monticker.api.subscription.infrastructure.UserSubscriptionRepository
 import com.monticker.api.subscription.infrastructure.pg.MockPgClient
+import com.monticker.api.subscription.infrastructure.pg.PaymentResult
 import com.monticker.api.wallet.application.LedgerService
 import io.mockk.*
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.springframework.data.domain.Pageable
+import org.springframework.data.domain.PageImpl
 import java.math.BigDecimal
 import java.util.Optional
 
@@ -20,8 +24,9 @@ class SubscriptionServiceTest {
     private val paymentRepo      = mockk<PaymentRecordRepository>()
     private val pgClient         = MockPgClient()          // 실제 Mock PG 사용
     private val ledgerService    = mockk<LedgerService>(relaxed = true)
+    private val billingKeyRepo   = mockk<UserBillingKeyRepository>()
 
-    private val service = SubscriptionService(planRepo, subscriptionRepo, paymentRepo, pgClient, ledgerService)
+    private val service = SubscriptionService(planRepo, subscriptionRepo, paymentRepo, pgClient, ledgerService, billingKeyRepo)
 
     // ── subscribe ─────────────────────────────────────────────────────────────
 
@@ -81,7 +86,7 @@ class SubscriptionServiceTest {
         val record  = makePaymentRecord(proPlan)
         val sub     = makeSubscription(proPlan)
         val spyPgClient = spyk(pgClient)
-        val serviceWithSpy = SubscriptionService(planRepo, subscriptionRepo, paymentRepo, spyPgClient, ledgerService)
+        val serviceWithSpy = SubscriptionService(planRepo, subscriptionRepo, paymentRepo, spyPgClient, ledgerService, billingKeyRepo)
 
         every { planRepo.findByCode(PlanCode.PRO) } returns Optional.of(proPlan)
         every { subscriptionRepo.findByUserId(1L) } returns Optional.of(sub)
@@ -96,6 +101,83 @@ class SubscriptionServiceTest {
         assertThat(result.paymentId).isEqualTo(record.id)
         verify(exactly = 0) { spyPgClient.requestPayment(any()) }
         verify { ledgerService.recordSubscriptionPayment(1L, "PRO", BigDecimal("9900"), any()) }
+    }
+
+    // ── renewSubscription ────────────────────────────────────────────────────
+    // 실제로 있던 (기능이 아예 없던) 문제: 정기결제는 confirm과 다른 별도 API(빌링키)가
+    // 필요한데, renewSubscription()은 pgClient.requestPayment()를 호출하고 있었다 —
+    // TossPgClient에서는 그게 항상 실패하는 스텁이라 실제 운영에서는 자동 갱신이 절대
+    // 성공할 수 없었다. 이제는 저장된 빌링키로 pgClient.chargeBilling()을 호출한다.
+
+    @Test
+    fun `renewSubscription은 등록된 빌링키가 없으면 결제를 시도조차 하지 않고 실패 처리한다`() {
+        val proPlan = makePlan(PlanCode.PRO, price = BigDecimal("9900"))
+        val sub     = makeSubscription(proPlan)
+        val record  = makePaymentRecord(proPlan).also { it.status = PaymentStatus.PENDING }
+
+        every { billingKeyRepo.findByUserId(1L) } returns Optional.empty()
+        every { paymentRepo.save(any()) }          returns record
+        every {
+            paymentRepo.findAllByUserIdOrderByCreatedAtDesc(1L, Pageable.ofSize(3))
+        } returns PageImpl(listOf(record))
+
+        val result = service.renewSubscription(sub)
+
+        assertThat(result).isEqualTo(RenewResult.Failed)
+        assertThat(record.status).isEqualTo(PaymentStatus.FAILED)
+        assertThat(record.failureReason).contains("등록된 자동결제 카드가 없습니다")
+    }
+
+    @Test
+    fun `renewSubscription은 등록된 빌링키로 chargeBilling을 호출해 자동 갱신에 성공한다`() {
+        val proPlan = makePlan(PlanCode.PRO, price = BigDecimal("9900"))
+        val sub     = makeSubscription(proPlan)
+        val record  = makePaymentRecord(proPlan).also { it.status = PaymentStatus.PENDING }
+        val billingKey = UserBillingKey(
+            id = 1L, userId = 1L, customerKey = "cust_1", billingKeyValue = "billing_key_1",
+        )
+        val spyPgClient = spyk(pgClient)
+        val serviceWithSpy = SubscriptionService(planRepo, subscriptionRepo, paymentRepo, spyPgClient, ledgerService, billingKeyRepo)
+
+        every { billingKeyRepo.findByUserId(1L) } returns Optional.of(billingKey)
+        every { paymentRepo.save(any()) }          returns record
+        every { subscriptionRepo.save(any()) }     returns sub
+
+        val result = serviceWithSpy.renewSubscription(sub)
+
+        assertThat(result).isEqualTo(RenewResult.Renewed)
+        verify {
+            spyPgClient.chargeBilling(
+                billingKey = "billing_key_1", customerKey = "cust_1", amount = BigDecimal("9900"),
+                orderId = any(), orderName = any(),
+            )
+        }
+        verify(exactly = 0) { spyPgClient.requestPayment(any()) }
+    }
+
+    @Test
+    fun `renewSubscription은 3회 연속 실패하면 FREE로 다운그레이드한다`() {
+        val proPlan  = makePlan(PlanCode.PRO, price = BigDecimal("9900"))
+        val freePlan = makePlan(PlanCode.FREE, price = BigDecimal.ZERO)
+        val sub      = makeSubscription(proPlan)
+        val record   = makePaymentRecord(proPlan).also { it.status = PaymentStatus.PENDING }
+        val pastFailures = listOf(
+            makePaymentRecord(proPlan).also { it.status = PaymentStatus.FAILED },
+            makePaymentRecord(proPlan).also { it.status = PaymentStatus.FAILED },
+        )
+
+        every { billingKeyRepo.findByUserId(1L) }  returns Optional.empty()
+        every { paymentRepo.save(any()) }           returns record
+        every {
+            paymentRepo.findAllByUserIdOrderByCreatedAtDesc(1L, Pageable.ofSize(3))
+        } returns PageImpl(pastFailures + record)
+        every { planRepo.findByCode(PlanCode.FREE) } returns Optional.of(freePlan)
+        every { subscriptionRepo.save(any()) }        returns sub
+
+        val result = service.renewSubscription(sub)
+
+        assertThat(result).isEqualTo(RenewResult.Downgraded)
+        assertThat(sub.plan.code).isEqualTo(PlanCode.FREE)
     }
 
     // ── cancel ────────────────────────────────────────────────────────────────
