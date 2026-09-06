@@ -99,6 +99,7 @@ class PositionSizerServiceTest {
         winRate = winRate, profitFactor = profitFactor,
         tradeCount = null, avgHoldingDays = null, benchmarkReturn = null, excessReturn = null,
         reliabilityScore = null, createdAt = java.time.Instant.now().toString(),
+        trades = emptyList(), equityCurve = emptyList(),
     )
 
     @Test

@@ -1,6 +1,7 @@
 package com.monticker.api.quant.application
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.readValue
 import com.monticker.api.quant.domain.*
 import com.monticker.api.quant.infrastructure.QuantBacktestResultRepository
 import com.monticker.api.quant.infrastructure.RuleSetRepository
@@ -238,6 +239,8 @@ class RuleSetService(
         excessReturn     = excessReturn?.toDouble(),
         reliabilityScore = reliabilityScore,
         createdAt        = createdAt.toString(),
+        trades           = tradesJson?.let { objectMapper.readValue<List<QuantTradeRecord>>(it) } ?: emptyList(),
+        equityCurve      = equityCurveJson?.let { objectMapper.readValue<List<QuantEquityPoint>>(it) } ?: emptyList(),
     )
 }
 
@@ -298,4 +301,6 @@ data class QuantBacktestResponse(
     val excessReturn: Double?,
     val reliabilityScore: String?,
     val createdAt: String,
+    val trades: List<QuantTradeRecord>,
+    val equityCurve: List<QuantEquityPoint>,
 )
