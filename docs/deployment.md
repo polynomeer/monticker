@@ -80,7 +80,11 @@ PG_MOCK_ENABLED=false
     |← 결제 완료 (paymentKey)─|                          |
     |                         |                          |
     |── POST /api/subscription/payment/confirm ─────────→|
-    |     {paymentKey, orderId, amount, planCode, userId} |
+    |     Authorization: Bearer {JWT}                     |
+    |     {paymentKey, orderId, amount, planCode}         |
+    |     (userId는 바디로 안 받는다 — JWT에서만 추출.      |
+    |      과거엔 바디의 userId를 믿어서 broken object-level|
+    |      authorization이었음 — 지금은 고쳐짐)             |
     |                         |── /v1/payments/confirm ─→|
     |                         |← 200 {status: "DONE"} ──|
     |                         |                          |

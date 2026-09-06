@@ -95,13 +95,22 @@
 
 ---
 
-## Phase 4 — 결제/정산 실사용 전환
+## Phase 4 — 결제/정산 실사용 전환 — 부분 완료 (2026-09-06)
 
 [docs/settlement.md](settlement.md)의 4종 정산(페이퍼/전략마켓/구독/증권사) 설계를 Mock에서 Real로 전환하는 단계.
 
-- [ ] `PG_MOCK_ENABLED=false` 전환 전 토스페이먼츠 라이브 키 발급 + 웹훅 실검증([deployment.md §2](deployment.md)).
-- [ ] `BROKERAGE_MOCK_ENABLED=false` 전환은 **Phase 0(암호화·동시성·서킷브레이커) + Phase 1(법률 검토) 완료 후에만** — 순서를 건너뛰지 않는다.
-- [ ] Creator 수익 정산([ADR-016](decisions/016-subscription-creator-revenue-sharing.md))의 실제 세무 처리(원천징수 등) 확인.
+- [x] **토스페이먼츠 웹훅 실검증 — 코드를 실제로 파보니 진짜 결제 흐름 자체가 깨져 있었다.** `PG_MOCK_ENABLED=false`로 직접 부팅해서 재현·수정한 것들:
+  - **`TossPgClient`가 아예 부팅이 안 됐다** — `@Value("${app.toss.secret-key}")`가 실제 설정 경로(`app.pg.toss.secret-key`)와 다른 이름을 참조하고 있어 `PlaceholderResolutionException`으로 컨텍스트 시작 자체가 실패했다. 즉 지금까지 `PG_MOCK_ENABLED=false`로는 애초에 한 번도 뜬 적이 없었을 가능성이 높다.
+  - **`/api/subscription/payment/webhook`이 인증 필수였다** — 토스 서버가 사용자 JWT를 들고 올 수 없으니 실제 웹훅은 전부 401로 막혔을 것. `permitAll`로 변경하고, 인증은 이 엔드포인트 자체가 PG에 재조회해서 하도록 함.
+  - **웹훅 바디를 그대로 신뢰하고 있었다** — 토스 개발자센터 문서 확인 결과 일반 결제상태 웹훅(PAYMENT_STATUS_CHANGED 등)에는 서명이 없다(서명은 payout.changed/seller.changed 전용). `PgClient.getPaymentStatus()`를 추가해 웹훅을 "트리거"로만 쓰고 PG 재조회 값을 권위 있는 상태로 취급하도록 변경 — 실제로 가짜 시크릿 키로 부팅해 진짜 토스 API가 401을 돌려주는 것까지 확인.
+  - **`PaymentWebhookController.confirm()`이 결제는 됐는데 구독은 활성화 안 되는 버그가 있었다** — 토스 confirm으로 결제를 이미 성공시킨 뒤 `subscriptionService.subscribe()`를 호출했는데, 이 메서드가 내부적으로 `pgClient.requestPayment()`를 또 호출한다. `TossPgClient.requestPayment()`는 웹훅 플로우를 쓰라는 스텁이라 항상 실패를 반환하므로, **고객은 실제로 결제됐는데 구독은 활성화되지 않고 PaymentRecord만 FAILED로 남는** 상태였다. `subscriptionService.activateConfirmedSubscription()`을 신설해 이미 확정된 결제를 재시도 없이 바로 활성화하도록 분리.
+  - **`confirm()`이 broken object-level authorization이었다** — `userId`를 요청 바디에서 그대로 받았다. 로그인한 사용자가 바디에 임의의 `userId`를 넣으면 남의 계정에 구독을 활성화시킬 수 있었다. `SubscriptionController`의 다른 엔드포인트와 동일하게 JWT에서만 추출하도록 수정.
+  - `/api/subscription/payment/confirm`에 `IdempotencyFilter` 적용 추가 — 네트워크 재시도로 confirm이 중복 호출되는 상황 방지.
+  - 회귀 테스트 3건 추가, 전체 스위트 378/378.
+- [ ] **토스페이먼츠 라이브 키 발급** — 실제 사업자·상점 계정이 필요해 이 세션에서 처리 불가([deployment.md §2](deployment.md)).
+- [ ] **실제 정기결제(자동 갱신) — 이번에 고치지 않음, 별도 설계 필요.** `SubscriptionService.renewSubscription()`(월 갱신 배치)도 `activateConfirmedSubscription()`과 같은 이유로 실제 Toss 환경에서는 항상 실패한다 — 하지만 이건 같은 버그가 아니라 **애초에 구현되지 않은 기능**이다: 토스페이먼츠의 정기결제는 confirm 플로우가 아니라 별도의 빌링키(자동결제용 카드 등록) API가 필요하다. 프론트에 빌링키 등록 위젯 추가, 빌링키 저장(브로커 API 키처럼 암호화 필요 — `EncryptedStringConverter` 재사용 가능), `TossPgClient`에 `POST /v1/billing/{billingKey}` 호출 추가가 필요한 별도 기능 단위 작업 — 이번 세션 스코프 밖.
+- [ ] `BROKERAGE_MOCK_ENABLED=false` 전환은 **Phase 0(완료) + Phase 1(법률 검토, 아직 미완료) 완료 후에만** — 순서를 건너뛰지 않는다.
+- [ ] Creator 수익 정산([ADR-016](decisions/016-subscription-creator-revenue-sharing.md))의 실제 세무 처리(원천징수 등) — 세무사 상담 필요, Claude가 대신할 수 없는 영역.
 
 ---
 
@@ -145,6 +154,7 @@ General Availability
 | 1 | 이용약관·개인정보처리방침 실제 게시 + 법률 자문 완료 | Phase 7의 Closed/GA 진행 허용 |
 | 2 | ✅ 보안 강화 완료 (2026-09-05) — 시크릿 관리 전환만 실제 클라우드 프로비저닝 대기 | Phase 7의 Closed beta 진행 허용 |
 | 3 | 🟡 부분 완료 (2026-09-06) — 백업/모니터링/부하테스트/이미지 빌드·푸시 실증 완료, 도메인·실클러스터 배포는 미완료 | Phase 7의 모든 단계 진행 허용 |
+| 4 | 🟡 부분 완료 (2026-09-06) — 웹훅/결제 코드 버그 6건 수정, 라이브 키·정기결제·세무 처리는 미완료 | 실제 유료 결제·구독 오픈 허용 (라이브 키 발급 전까지는 mock 유지) |
 | 6 | E2E + 펜테스트 완료 | Phase 7의 GA 진행 허용 |
 
 이 요약표에서 어느 한 줄이라도 미완료면, 그 줄이 막는 다음 단계로 넘어가지 않는다.
