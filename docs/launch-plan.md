@@ -108,13 +108,14 @@
   - `/api/subscription/payment/confirm`에 `IdempotencyFilter` 적용 추가 — 네트워크 재시도로 confirm이 중복 호출되는 상황 방지.
   - 회귀 테스트 3건 추가, 전체 스위트 378/378.
 - [ ] **토스페이먼츠 라이브 키 발급** — 실제 사업자·상점 계정이 필요해 이 세션에서 처리 불가([deployment.md §2](deployment.md)).
-- [x] **실제 정기결제(자동 갱신) — 백엔드 구현 완료.** 토스페이먼츠 정기결제는 confirm 플로우와 무관한 별도 빌링키 API라는 걸 [공식 문서](https://docs.tosspayments.com/guides/v2/billing/integration)로 확인 후 구현:
+- [x] **실제 정기결제(자동 갱신) — 백엔드+프론트엔드 구현 완료.** 토스페이먼츠 정기결제는 confirm 플로우와 무관한 별도 빌링키 API라는 걸 [공식 문서](https://docs.tosspayments.com/guides/v2/billing/integration)로 확인 후 구현:
   - `user_billing_keys` 테이블 신설(V32) — `billing_key`는 `EncryptedStringConverter`로 AES-256-GCM 암호화 저장(브로커 API 키와 동일한 민감도로 취급).
   - `PgClient`에 `issueBillingKey()`(authKey↔billingKey 교환, `POST /v1/billing/authorizations/issue`)와 `chargeBilling()`(`POST /v1/billing/{billingKey}`) 추가 — Toss/Mock 양쪽 구현.
   - `BillingController` 신설(`/api/subscription/billing/{customer-key,register,GET,DELETE}`) — mock/real 양쪽 모드에서 동작, JWT에서만 userId 추출(바디 신뢰 안 함).
   - `SubscriptionService.renewSubscription()`을 저장된 빌링키로 `chargeBilling()`을 호출하도록 수정 — 빌링키가 없으면 결제 실패로 취급해 기존 3회 실패 다운그레이드 로직을 그대로 태움.
   - 실제로 부팅해서 회원가입→customer-key 발급→카드 등록(mock)→DB 조회로 암호화 저장 확인→해지까지 curl로 검증. 검증 중 `deregister()`가 `@Transactional` 없이 `deleteByUserId`를 호출해 500이 나는 버그를 발견·수정("파생 delete 쿼리는 `deleteById()`와 달리 리포지토리 프록시가 자체 트랜잭션을 안 열어준다").
-  - **프론트엔드(`apps/web`) 미구현** — 토스 SDK `requestBillingAuth()` 위젯 호출과 successUrl 콜백 처리 UI는 아직 없다. 백엔드 API는 준비됐으니 프론트 작업만 남음.
+  - **프론트엔드(`apps/web`) 위젯 연동 완료.** `@tosspayments/tosspayments-sdk`(공식 V2 JS SDK) 도입, `next.config.ts` CSP에 `js.tosspayments.com`(script) / `*.tosspayments.com`(iframe, connect) 허용 추가. `/subscription` 페이지에 "정기결제 카드" 섹션 신설 — 등록 시 `getOrCreateCustomerKey()` → `loadTossPayments(clientKey).payment({customerKey}).requestBillingAuth({method:"CARD", successUrl, failUrl})`로 토스 호스팅 카드 등록 위젯을 띄우고, `/subscription/billing/callback` 페이지가 성공(`authKey`/`customerKey`) · 실패(`code`/`message`) 리다이렉트를 구분해 처리한다. 브라우저에서 회원가입 → 위젯 오픈(CSP 위반 없음 확인) → mock 콜백으로 등록/해지까지 실제 렌더링으로 검증 완료. 토스 호스팅 카드입력 iframe 자체(PCI 격리 영역)는 이 세션의 브라우저 자동화 도구가 중첩 크로스오리진 iframe에 합성 입력을 전달하지 못해 직접 타이핑 검증은 못 했다 — 우리 코드가 책임지는 경계(SDK 호출, CSP, 콜백 처리)까지는 전부 라이브로 확인됨.
+  - **검증 중 무관한 기존 버그 발견·수정**: `SubscriptionController.PlanResponse.features`가 엔티티의 `jsonb` 컬럼(실제로는 JSON 배열 문자열)을 파싱 없이 그대로 `String`으로 내려보내고 있어, `GET /api/subscription/plans` 응답이 `"features": "[\"a\", \"b\"]"` 형태의 문자열이었다. 프론트 `PlanCard`는 `plan.features.map(...)`으로 배열을 기대하므로 `/subscription` 페이지 전체가 `TypeError: ...map is not a function`으로 죽어 있었다(이 정기결제 카드 UI 검증 전부터 있던 버그, 정기결제 기능과 무관). `jacksonObjectMapper().readValue<List<String>>(features)`로 파싱해 `PlanResponse.features: List<String>`으로 수정.
 - [ ] `BROKERAGE_MOCK_ENABLED=false` 전환은 **Phase 0(완료) + Phase 1(법률 검토, 아직 미완료) 완료 후에만** — 순서를 건너뛰지 않는다.
 - [ ] Creator 수익 정산([ADR-016](decisions/016-subscription-creator-revenue-sharing.md))의 실제 세무 처리(원천징수 등) — 세무사 상담 필요, Claude가 대신할 수 없는 영역.
 
@@ -160,7 +161,7 @@ General Availability
 | 1 | 이용약관·개인정보처리방침 실제 게시 + 법률 자문 완료 | Phase 7의 Closed/GA 진행 허용 |
 | 2 | ✅ 보안 강화 완료 (2026-09-05) — 시크릿 관리 전환만 실제 클라우드 프로비저닝 대기 | Phase 7의 Closed beta 진행 허용 |
 | 3 | 🟡 부분 완료 (2026-09-06) — 백업/모니터링/부하테스트/이미지 빌드·푸시 실증 완료, 도메인·실클러스터 배포는 미완료 | Phase 7의 모든 단계 진행 허용 |
-| 4 | 🟡 부분 완료 (2026-09-06) — 웹훅/결제 버그 6건 + 정기결제 백엔드 구현 완료, 라이브 키·프론트 위젯·세무 처리는 미완료 | 실제 유료 결제·구독 오픈 허용 (라이브 키 발급 전까지는 mock 유지) |
+| 4 | 🟡 부분 완료 (2026-09-06) — 웹훅/결제 버그 6건 + 정기결제 백엔드·프론트엔드 위젯 연동 완료, 라이브 키 발급·세무 처리는 미완료 | 실제 유료 결제·구독 오픈 허용 (라이브 키 발급 전까지는 mock 유지) |
 | 6 | E2E + 펜테스트 완료 | Phase 7의 GA 진행 허용 |
 
 이 요약표에서 어느 한 줄이라도 미완료면, 그 줄이 막는 다음 단계로 넘어가지 않는다.

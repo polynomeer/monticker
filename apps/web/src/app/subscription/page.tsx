@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { type Icon, Plant, Lightning, Microscope, Check } from "@phosphor-icons/react";
+import { type Icon, Plant, Lightning, Microscope, Check, CreditCard } from "@phosphor-icons/react";
 import { authFetch } from "@/services/api";
+import { getBillingStatus, getOrCreateCustomerKey, deregisterBillingKey, type BillingStatus } from "@/services/billing";
 import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
 
@@ -123,6 +124,42 @@ export default function SubscriptionPage() {
     enabled: activeTab === "history",
   });
 
+  const { data: billingStatus, isLoading: billingLoading } = useQuery<BillingStatus>({
+    queryKey: ["subscription", "billing"],
+    queryFn: getBillingStatus,
+  });
+
+  const registerCardMutation = useMutation({
+    mutationFn: async () => {
+      const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY;
+      if (!clientKey) throw new Error("결제 설정이 올바르지 않습니다. 잠시 후 다시 시도해주세요.");
+
+      const customerKey = await getOrCreateCustomerKey();
+      const { loadTossPayments } = await import("@tosspayments/tosspayments-sdk");
+      const tossPayments = await loadTossPayments(clientKey);
+      const payment = tossPayments.payment({ customerKey });
+
+      // 성공/실패 모두 같은 콜백 페이지로 리다이렉트된다 — 토스가 성공 시 authKey/customerKey를,
+      // 실패 시 code/message를 쿼리 파라미터로 붙여준다(callback 페이지가 구분해서 처리).
+      await payment.requestBillingAuth({
+        method: "CARD",
+        successUrl: `${window.location.origin}/subscription/billing/callback`,
+        failUrl: `${window.location.origin}/subscription/billing/callback`,
+      });
+      // requestBillingAuth는 페이지를 토스로 리다이렉트한다 — 여기 이후 코드는 실행되지 않는다.
+    },
+    onError: (e: Error) => toast({ type: "error", title: "카드 등록 실패", message: e.message }),
+  });
+
+  const deregisterCardMutation = useMutation({
+    mutationFn: deregisterBillingKey,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["subscription", "billing"] });
+      toast({ type: "success", title: "해지 완료", message: "자동결제 카드가 해지되었습니다." });
+    },
+    onError: (e: Error) => toast({ type: "error", title: "해지 실패", message: e.message }),
+  });
+
   const subscribeMutation = useMutation({
     mutationFn: (planCode: string) =>
       authFetch("/api/subscription/subscribe", {
@@ -203,6 +240,44 @@ export default function SubscriptionPage() {
           )}
         </Card>
       )}
+
+      {/* 정기결제 카드 */}
+      <Card className="p-4 flex items-center justify-between gap-4" outerClassName="mb-6">
+        <div className="flex items-center gap-3">
+          <CreditCard size={22} weight="duotone" className="text-gray-400 dark:text-dracula-comment shrink-0" aria-hidden />
+          <div>
+            <p className="text-xs text-gray-500 dark:text-dracula-comment">자동결제 카드</p>
+            {billingLoading ? (
+              <p className="text-sm text-gray-400 dark:text-dracula-comment mt-0.5">불러오는 중...</p>
+            ) : billingStatus?.registered ? (
+              <p className="font-semibold text-gray-900 dark:text-dracula-fg mt-0.5">
+                {billingStatus.cardCompany} 끝자리 {billingStatus.cardLast4}
+              </p>
+            ) : (
+              <p className="text-sm text-gray-500 dark:text-dracula-comment mt-0.5">
+                등록된 카드가 없습니다 — 유료 플랜 자동 갱신을 위해 등록해주세요.
+              </p>
+            )}
+          </div>
+        </div>
+        {billingStatus?.registered ? (
+          <button
+            onClick={() => deregisterCardMutation.mutate()}
+            disabled={deregisterCardMutation.isPending}
+            className="shrink-0 px-3 py-1.5 rounded-lg border border-dracula-red/40 text-dracula-red text-xs hover:bg-dracula-red/10 transition-colors disabled:opacity-40"
+          >
+            {deregisterCardMutation.isPending ? "처리 중..." : "카드 해지"}
+          </button>
+        ) : (
+          <button
+            onClick={() => registerCardMutation.mutate()}
+            disabled={registerCardMutation.isPending || billingLoading}
+            className="shrink-0 px-3 py-1.5 rounded-lg bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg text-xs font-semibold hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40"
+          >
+            {registerCardMutation.isPending ? "이동 중..." : "카드 등록"}
+          </button>
+        )}
+      </Card>
 
       {/* 탭 */}
       <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-dracula-line">
