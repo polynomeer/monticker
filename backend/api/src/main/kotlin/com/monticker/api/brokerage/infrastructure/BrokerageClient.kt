@@ -10,6 +10,18 @@ data class BrokerageToken(
     val expiresIn: Long,           // seconds
 )
 
+/**
+ * ADR-025 — issueToken() 이후의 모든 인증 호출에 실어야 하는 값 전부를 묶는다.
+ * KIS는 authorization/tr_id뿐 아니라 매 요청마다 appkey/appsecret 헤더와 계좌번호(CANO/
+ * ACNT_PRDT_CD)를 요구하므로, 발급받은 토큰만으로는 실제 호출이 불가능하다.
+ */
+data class BrokerageCredentials(
+    val token: BrokerageToken,
+    val appKey: String,
+    val appSecret: String,
+    val accountNumber: String,
+)
+
 data class BrokerageOrderRequest(
     val symbol: String,
     val side: String,              // BUY | SELL
@@ -59,8 +71,8 @@ data class BrokerageHolding(
 
 interface BrokerageClient {
     fun issueToken(appKey: String, appSecret: String): BrokerageToken
-    fun submitOrder(token: BrokerageToken, request: BrokerageOrderRequest): BrokerageOrderResult
-    fun getOrderStatus(token: BrokerageToken, pgOrderId: String): BrokerageOrderStatus
-    fun getSettlements(token: BrokerageToken, date: LocalDate): List<BrokerageSettlementItem>
-    fun getBalance(token: BrokerageToken): BrokerageBalance
+    fun submitOrder(credentials: BrokerageCredentials, request: BrokerageOrderRequest): BrokerageOrderResult
+    fun getOrderStatus(credentials: BrokerageCredentials, pgOrderId: String): BrokerageOrderStatus
+    fun getSettlements(credentials: BrokerageCredentials, date: LocalDate): List<BrokerageSettlementItem>
+    fun getBalance(credentials: BrokerageCredentials): BrokerageBalance
 }

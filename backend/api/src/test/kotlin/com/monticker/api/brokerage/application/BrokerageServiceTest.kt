@@ -12,6 +12,9 @@ import com.monticker.api.brokerage.infrastructure.BrokerageOrderRepository
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRequest
 import com.monticker.api.brokerage.infrastructure.BrokerageSettlementRepository
 import com.monticker.api.brokerage.infrastructure.MockBrokerageClient
+import com.monticker.api.common.aop.RiskLimitException
+import com.monticker.api.risk.application.RiskCheckResult
+import com.monticker.api.risk.application.RiskCheckerService
 import com.monticker.api.wallet.application.LedgerService
 import io.mockk.*
 import org.assertj.core.api.Assertions.assertThat
@@ -30,8 +33,21 @@ class BrokerageServiceTest {
     private val orderRepo      = mockk<BrokerageOrderRepository>()
     private val settlementRepo = mockk<BrokerageSettlementRepository>()
     private val ledgerService  = mockk<LedgerService>(relaxed = true)
+    private val riskChecker    = mockk<RiskCheckerService>()
 
-    private val service = BrokerageService(mockClient, accountRepo, orderRepo, settlementRepo, ledgerService)
+    private val service = BrokerageService(mockClient, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc)
+
+    private val approvedRisk = RiskCheckResult(approved = true, blockedBy = null, severity = "APPROVED", checks = emptyList())
+
+    /**
+     * resolveStockId()가 실제로 종목을 찾은 것처럼 만들어 리스크 게이트가 항상 평가되게
+     * 하고, buildPortfolioSnapshot()의 최근 주문 수 조회도 기본값(0건)으로 응답시킨다 —
+     * 안 해두면 relaxed 목이 Long으로 캐스팅 불가능한 값을 돌려줘서 ClassCastException이 난다.
+     */
+    private fun stubStockLookup(stockId: Long = 1L) {
+        every { jdbc.queryForObject("SELECT id FROM stocks WHERE symbol = ?", Long::class.java, any()) } returns stockId
+        every { jdbc.queryForObject(any<String>(), eq(Long::class.java), any(), any()) } returns 0L
+    }
 
     // ── connect ───────────────────────────────────────────────────────────────
 
@@ -46,6 +62,9 @@ class BrokerageServiceTest {
         val saved = accountSlot.captured
         assertThat(saved.accessToken).startsWith("mock_token_")
         assertThat(saved.tokenExpiresAt).isNotNull()
+        // ADR-025 — appKey/appSecret도 저장돼야 이후의 모든 KIS 호출이 가능하다.
+        assertThat(saved.appKey).isEqualTo("key")
+        assertThat(saved.appSecret).isEqualTo("secret")
     }
 
     // ── submitOrder (MARKET) ──────────────────────────────────────────────────
@@ -59,6 +78,8 @@ class BrokerageServiceTest {
         every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
         every { orderRepo.save(capture(orderSlot)) }          returns makeOrder()
         every { settlementRepo.save(capture(settlSlot)) }     returns makeSettlement()
+        stubStockLookup()
+        every { riskChecker.checkBrokerageOrder(any(), any(), any(), any(), any(), any()) } returns approvedRisk
 
         // DB에서 현재가 조회 — Mock 클라이언트가 JdbcTemplate 호출
         every { jdbc.queryForObject(any<String>(), eq(BigDecimal::class.java), any()) } returns BigDecimal("70000")
@@ -82,11 +103,48 @@ class BrokerageServiceTest {
 
         every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
         every { orderRepo.save(capture(orderSlot)) }          returns makeOrder()
-        every { jdbc.queryForObject(any<String>(), eq(BigDecimal::class.java), any()) } throws RuntimeException("DB error")
+        stubStockLookup()
+        every { riskChecker.checkBrokerageOrder(any(), any(), any(), any(), any(), any()) } returns approvedRisk
+        // 리스크 스냅샷 조립에 쓰는 brokerage_orders 조회는 정상 응답시키고,
+        // 현재가 조회(candles_1m)만 실패시켜 실제로 검증하려는 경로만 건드린다.
+        every { jdbc.queryForObject(match<String> { it.contains("brokerage_orders") }, eq(BigDecimal::class.java), any()) } returns BigDecimal.ZERO
+        every { jdbc.queryForObject(match<String> { it.contains("candles_1m") }, eq(BigDecimal::class.java), any()) } throws RuntimeException("DB error")
 
         service.submitOrder(1L, BrokerageOrderRequest("005930", "BUY", "MARKET", 10))
 
         assertThat(orderSlot.captured.status).isEqualTo(BrokerageOrderStatus.REJECTED)
+    }
+
+    @Test
+    fun `리스크 게이트가 막으면 증권사에 주문을 보내지 않는다`() {
+        val account = makeAccount()
+        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
+        stubStockLookup()
+        every { jdbc.queryForObject(any<String>(), eq(BigDecimal::class.java), any()) } returns BigDecimal("70000")
+        every { riskChecker.checkBrokerageOrder(any(), any(), any(), any(), any(), any()) } returns
+            RiskCheckResult(approved = false, blockedBy = "DailyLossRule", severity = "BLOCKED", checks = emptyList())
+
+        assertThrows<RiskLimitException> {
+            service.submitOrder(1L, BrokerageOrderRequest("005930", "BUY", "MARKET", 10))
+        }
+
+        verify(exactly = 0) { orderRepo.save(any()) }
+    }
+
+    @Test
+    fun `종목을 찾을 수 없으면 리스크 체크를 건너뛰고 주문은 진행한다`() {
+        val account   = makeAccount()
+        val orderSlot = slot<BrokerageOrder>()
+        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
+        every { orderRepo.save(capture(orderSlot)) } returns makeOrder()
+        every { settlementRepo.save(any()) } returns makeSettlement()
+        every { jdbc.queryForObject("SELECT id FROM stocks WHERE symbol = ?", Long::class.java, any()) } throws RuntimeException("not found")
+        every { jdbc.queryForObject(any<String>(), eq(BigDecimal::class.java), any()) } returns BigDecimal("70000")
+
+        service.submitOrder(1L, BrokerageOrderRequest("999999", "BUY", "MARKET", 10))
+
+        assertThat(orderSlot.captured.stockId).isNull()
+        verify(exactly = 0) { riskChecker.checkBrokerageOrder(any(), any(), any(), any(), any(), any()) }
     }
 
     // ── settle ────────────────────────────────────────────────────────────────
@@ -139,6 +197,7 @@ class BrokerageServiceTest {
     private fun makeAccount() = BrokerageAccount(
         id = 1L, userId = 1L, accountNumber = "12345678",
         accessToken = "mock_token_test", tokenExpiresAt = java.time.Instant.now().plusSeconds(86400),
+        appKey = "test-app-key", appSecret = "test-app-secret",
     )
 
     private fun makeOrder(status: BrokerageOrderStatus = BrokerageOrderStatus.SUBMITTED) = BrokerageOrder(

@@ -1,10 +1,10 @@
-package com.monticker.api.matching.aop
+package com.monticker.api.risk.aop
 
 import com.monticker.api.common.aop.RiskChecked
 import com.monticker.api.common.aop.RiskLimitException
-import com.monticker.api.matching.application.RiskCheckerService
-import com.monticker.api.matching.application.RiskCheckResult
-import com.monticker.api.matching.application.RuleResult
+import com.monticker.api.risk.application.RiskCheckerService
+import com.monticker.api.risk.application.RiskCheckResult
+import com.monticker.api.risk.application.RuleResult
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify

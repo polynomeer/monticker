@@ -1,10 +1,10 @@
 package com.monticker.api.matching.api
 
-import com.monticker.api.matching.application.RiskCheckResult
-import com.monticker.api.matching.application.RiskCheckerService
-import com.monticker.api.matching.domain.RiskLimit
+import com.monticker.api.risk.application.RiskCheckResult
+import com.monticker.api.risk.application.RiskCheckerService
+import com.monticker.api.risk.domain.RiskLimit
 import com.monticker.api.matching.infrastructure.OrderRepository
-import com.monticker.api.matching.infrastructure.RiskLimitRepository
+import com.monticker.api.risk.infrastructure.RiskLimitRepository
 import com.monticker.api.matching.domain.OrderStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.jdbc.core.JdbcTemplate

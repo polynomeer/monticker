@@ -67,7 +67,6 @@ class MatchingService(
     private val fillRepo: FillRepository,
     private val fillQueryService: FillQueryService,
     private val orderBookService: MatchingOrderBookService,
-    private val riskChecker: RiskCheckerService,
     private val jdbc: JdbcTemplate,
     private val stateMachineService: OrderStateMachineService,
     private val eventPublisher: ApplicationEventPublisher,

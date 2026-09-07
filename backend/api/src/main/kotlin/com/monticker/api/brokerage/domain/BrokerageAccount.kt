@@ -32,6 +32,16 @@ class BrokerageAccount(
     @Column(name = "access_token", columnDefinition = "TEXT")
     var accessToken: String? = null,
 
+    // ADR-025: 토큰 발급 이후에도 매 인증 호출마다 appkey/appsecret 헤더가 필요해서 저장한다
+    // (재발급 정책은 아직 없음 — 저장 자체만 이번 범위).
+    @Convert(converter = EncryptedStringConverter::class)
+    @Column(name = "app_key", columnDefinition = "TEXT")
+    var appKey: String? = null,
+
+    @Convert(converter = EncryptedStringConverter::class)
+    @Column(name = "app_secret", columnDefinition = "TEXT")
+    var appSecret: String? = null,
+
     @Column(name = "token_expires_at")
     var tokenExpiresAt: Instant? = null,
 
@@ -44,6 +54,11 @@ class BrokerageAccount(
     fun updateToken(token: String, expiresIn: Long) {
         this.accessToken = token
         this.tokenExpiresAt = Instant.now().plusSeconds(expiresIn)
+    }
+
+    fun updateCredentials(appKey: String, appSecret: String) {
+        this.appKey = appKey
+        this.appSecret = appSecret
     }
 
     fun isTokenValid(): Boolean =

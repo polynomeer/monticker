@@ -24,9 +24,16 @@ import java.time.format.DateTimeFormatter
  *   KIS_APP_KEY        — 앱 키 (발급 후 환경변수로 주입)
  *   KIS_APP_SECRET     — 앱 시크릿
  *
+ * ADR-025 — 엔드포인트/TR_ID는 공식 유지보수 중인 오픈소스 참조 구현체
+ * (https://github.com/Soju06/python-kis)로 교차 검증했다. 그래도 실제 KIS 계정으로
+ * 검증된 적은 없다 — docs/launch-plan.md Phase 6의 모의투자 E2E 실행 전까지는
+ * "스펙상 맞을 가능성이 높다"는 뜻이지 "동작 확인됨"이 아니다.
+ *
  * 참조:
  *   - https://apiportal.koreainvestment.com/apiservice/apiservice-domestic-stock
  *   - TR_ID: TTTC0802U(현금 매수), TTTC0801U(현금 매도), TTTC0803U(정정/취소)
+ *   - TR_ID: TTTC8001R/VTTC8001R(일별주문체결조회, 최근 3개월 이내)
+ *   - TR_ID: TTTC8434R/VTTC8434R(잔고조회)
  */
 @Component
 @ConditionalOnProperty("app.brokerage.mock.enabled", havingValue = "false")
@@ -38,6 +45,9 @@ class KisBrokerageClient(
     private val log = LoggerFactory.getLogger(javaClass)
     private val cb = cbRegistry.circuitBreaker("kis")
     private val DATE_FMT = DateTimeFormatter.ofPattern("yyyyMMdd")
+
+    // 모의투자 서버(openapivts)인지에 따라 TR_ID 접두사(실전 T/C, 모의 V)가 달라진다.
+    private val isVirtual = baseUrl.contains("vts")
 
     private val restClient = RestClient.builder()
         .baseUrl(baseUrl)
@@ -73,17 +83,36 @@ class KisBrokerageClient(
         }
     }
 
+    // ── 공통 헤더/계좌 필드 ──────────────────────────────────────────────────────
+
+    private fun authHeaders(credentials: BrokerageCredentials, trId: String): Map<String, String> = mapOf(
+        "authorization" to "Bearer ${credentials.token.accessToken}",
+        "appkey"        to credentials.appKey,
+        "appsecret"     to credentials.appSecret,
+        "tr_id"         to trId,
+    )
+
+    /** 계좌번호를 CANO(종합계좌번호, 앞 8자리)/ACNT_PRDT_CD(계좌상품코드, 나머지)로 분리한다. */
+    private fun accountFields(accountNumber: String): Pair<String, String> {
+        val digits = accountNumber.filter { it.isDigit() }
+        return if (digits.length > 8) digits.take(8) to digits.substring(8) else digits to "01"
+    }
+
+    private fun dailyOrderTrId(): String = if (isVirtual) "VTTC8001R" else "TTTC8001R"
+    private fun balanceTrId(): String = if (isVirtual) "VTTC8434R" else "TTTC8434R"
+
     // ── 주문 ───────────────────────────────────────────────────────────────────
 
-    override fun submitOrder(token: BrokerageToken, request: BrokerageOrderRequest): BrokerageOrderResult {
+    override fun submitOrder(credentials: BrokerageCredentials, request: BrokerageOrderRequest): BrokerageOrderResult {
         return try {
             cb.executeCallable {
                 // TR_ID: 현금 매수 TTTC0802U, 현금 매도 TTTC0801U
                 val trId = if (request.side == "BUY") "TTTC0802U" else "TTTC0801U"
+                val (cano, acntPrdtCd) = accountFields(credentials.accountNumber)
 
                 val body = mapOf(
-                    "CANO"      to "",           // 계좌번호 앞 8자리 (BrokerageService에서 account 정보로 채움)
-                    "ACNT_PRDT_CD" to "01",     // 계좌상품코드
+                    "CANO"      to cano,
+                    "ACNT_PRDT_CD" to acntPrdtCd,
                     "PDNO"      to request.symbol,
                     "ORD_DVSN"  to if (request.orderType == "MARKET") "01" else "00", // 01=시장가, 00=지정가
                     "ORD_QTY"   to request.quantity.toString(),
@@ -92,8 +121,7 @@ class KisBrokerageClient(
 
                 val resp = restClient.post()
                     .uri("/uapi/domestic-stock/v1/trading/order-cash")
-                    .header("authorization", "Bearer ${token.accessToken}")
-                    .header("tr_id", trId)
+                    .headers { h -> authHeaders(credentials, trId).forEach { (k, v) -> h.set(k, v) } }
                     .header("custtype", "P")
                     .body(body)
                     .retrieve()
@@ -118,33 +146,50 @@ class KisBrokerageClient(
     }
 
     // ── 주문 조회 ─────────────────────────────────────────────────────────────
+    //
+    // 이전 구현은 "정정취소가능주문조회"(inquire-psbl-rvsecncl) 엔드포인트를 썼는데, 이건
+    // 아직 취소/정정 가능한(=미체결) 주문만 나열한다 — 전량체결된 주문은 이 목록에서
+    // 빠지므로 "목록에 없음"을 "제출됨"으로 해석하면 이미 체결된 주문을 계속 대기 중으로
+    // 오판한다. 일별체결조회(inquire-daily-ccld)로 교체하고, 존재하지도 않는
+    // ord_sttsDvsnName 필드 대신 rjct_qty/rmn_qty/tot_ccld_qty로 상태를 판정한다.
 
-    override fun getOrderStatus(token: BrokerageToken, pgOrderId: String): BrokerageOrderStatus {
+    override fun getOrderStatus(credentials: BrokerageCredentials, pgOrderId: String): BrokerageOrderStatus {
         return try {
             cb.executeCallable {
+                val (cano, acntPrdtCd) = accountFields(credentials.accountNumber)
+                val today = DATE_FMT.format(LocalDate.now())
+                val uri = "/uapi/domestic-stock/v1/trading/inquire-daily-ccld" +
+                    "?CANO=$cano&ACNT_PRDT_CD=$acntPrdtCd" +
+                    "&INQR_STRT_DT=$today&INQR_END_DT=$today" +
+                    "&SLL_BUY_DVSN_CD=00&INQR_DVSN=00&PDNO=&CCLD_DVSN=00" +
+                    "&ORD_GNO_BRNO=&ODNO=&INQR_DVSN_3=00&INQR_DVSN_1=&CTX_AREA_FK100=&CTX_AREA_NK100="
+
                 val resp = restClient.get()
-                    .uri("/uapi/domestic-stock/v1/trading/inquire-psbl-rvsecncl?CANO=&ACNT_PRDT_CD=01&CTX_AREA_FK100=&CTX_AREA_NK100=&INQR_DVSN_1=0&INQR_DVSN_2=0")
-                    .header("authorization", "Bearer ${token.accessToken}")
-                    .header("tr_id", "TTTC8036R")
+                    .uri(uri)
+                    .headers { h -> authHeaders(credentials, dailyOrderTrId()).forEach { (k, v) -> h.set(k, v) } }
                     .retrieve()
-                    .body(KisOrderStatusResponse::class.java)
+                    .body(KisDailyOrderResponse::class.java)
 
                 val item = resp?.output1?.firstOrNull { it.odno == pgOrderId }
 
                 if (item == null) {
+                    // 오늘 접수한 주문이 조회에 아직 반영 안 됐을 수도 있어 보수적으로 SUBMITTED 유지.
                     BrokerageOrderStatus(pgOrderId, "SUBMITTED", 0, null)
                 } else {
-                    val status = when (item.ordSttsDvsnName) {
-                        "전량체결" -> "FILLED"
-                        "일부체결" -> "PARTIALLY_FILLED"
-                        "취소"     -> "CANCELLED"
-                        else        -> "SUBMITTED"
+                    val rejectedQty = item.rjctQty?.toIntOrNull() ?: 0
+                    val filledQty   = item.totCcldQty?.toIntOrNull() ?: 0
+                    val remainQty   = item.rmnQty?.toIntOrNull() ?: 0
+                    val status = when {
+                        rejectedQty > 0            -> "REJECTED"
+                        filledQty > 0 && remainQty == 0 -> "FILLED"
+                        filledQty > 0 && remainQty > 0   -> "PARTIALLY_FILLED"
+                        else                        -> "SUBMITTED"
                     }
                     BrokerageOrderStatus(
                         pgOrderId    = pgOrderId,
                         status       = status,
-                        filledQty    = item.tot_ccld_qty?.toIntOrNull() ?: 0,
-                        avgFillPrice = item.avg_prvs?.toBigDecimalOrNull(),
+                        filledQty    = filledQty,
+                        avgFillPrice = item.avgPrvs?.toBigDecimalOrNull(),
                     )
                 }
             }
@@ -158,27 +203,38 @@ class KisBrokerageClient(
     }
 
     // ── 정산 내역 조회 ────────────────────────────────────────────────────────
+    //
+    // BrokerageService는 현재 이 메서드를 호출하지 않는다(정산은 로컬 brokerage_settlements를
+    // 체결 시점에 직접 계산해 채운다) — 죽은 코드지만 인터페이스 계약이므로 같은
+    // inquire-daily-ccld 엔드포인트로 맞춰둔다. 이 응답에서 수수료/세금 필드를 신뢰성 있게
+    // 확인하지 못해 0으로 둔다.
 
-    override fun getSettlements(token: BrokerageToken, date: LocalDate): List<BrokerageSettlementItem> {
+    override fun getSettlements(credentials: BrokerageCredentials, date: LocalDate): List<BrokerageSettlementItem> {
         return try {
             cb.executeCallable {
+                val (cano, acntPrdtCd) = accountFields(credentials.accountNumber)
                 val dateStr = date.format(DATE_FMT)
-                val resp = restClient.get()
-                    .uri("/uapi/domestic-stock/v1/trading/inquire-account-balance?CANO=&ACNT_PRDT_CD=01&AFHR_FLPR_YN=N&OFL_YN=&INQR_DVSN=02&UNPR_DVSN=01&FUND_STTL_ICLD_YN=N&FNCG_AMT_AUTO_RDPT_YN=N&PRCS_DVSN=00&CTX_AREA_FK100=&CTX_AREA_NK100=")
-                    .header("authorization", "Bearer ${token.accessToken}")
-                    .header("tr_id", "TTTC8434R")
-                    .retrieve()
-                    .body(KisSettlementResponse::class.java)
+                val uri = "/uapi/domestic-stock/v1/trading/inquire-daily-ccld" +
+                    "?CANO=$cano&ACNT_PRDT_CD=$acntPrdtCd" +
+                    "&INQR_STRT_DT=$dateStr&INQR_END_DT=$dateStr" +
+                    "&SLL_BUY_DVSN_CD=00&INQR_DVSN=00&PDNO=&CCLD_DVSN=01" +
+                    "&ORD_GNO_BRNO=&ODNO=&INQR_DVSN_3=00&INQR_DVSN_1=&CTX_AREA_FK100=&CTX_AREA_NK100="
 
-                resp?.output1?.filter { it.sttl_dt == dateStr }?.map { item ->
+                val resp = restClient.get()
+                    .uri(uri)
+                    .headers { h -> authHeaders(credentials, dailyOrderTrId()).forEach { (k, v) -> h.set(k, v) } }
+                    .retrieve()
+                    .body(KisDailyOrderResponse::class.java)
+
+                resp?.output1?.filter { (it.totCcldQty?.toIntOrNull() ?: 0) > 0 }?.map { item ->
                     BrokerageSettlementItem(
                         pgOrderId  = item.odno ?: "",
                         symbol     = item.pdno ?: "",
-                        side       = if ((item.sll_buy_dvsn_cd ?: "02") == "02") "BUY" else "SELL",
-                        quantity   = item.ccld_qty?.toIntOrNull() ?: 0,
-                        fillPrice  = item.ccld_unpr?.toBigDecimalOrNull() ?: BigDecimal.ZERO,
-                        fee        = item.bfee?.toBigDecimalOrNull() ?: BigDecimal.ZERO,
-                        tax        = item.tl_tax?.toBigDecimalOrNull() ?: BigDecimal.ZERO,
+                        side       = if (item.sllBuyDvsnCd == "02") "BUY" else "SELL",
+                        quantity   = item.totCcldQty?.toIntOrNull() ?: 0,
+                        fillPrice  = item.avgPrvs?.toBigDecimalOrNull() ?: BigDecimal.ZERO,
+                        fee        = BigDecimal.ZERO, // 확인되지 않은 필드 — ADR-025 참고
+                        tax        = BigDecimal.ZERO,
                         settleDate = date,
                     )
                 } ?: emptyList()
@@ -194,13 +250,18 @@ class KisBrokerageClient(
 
     // ── 잔고 조회 ─────────────────────────────────────────────────────────────
 
-    override fun getBalance(token: BrokerageToken): BrokerageBalance {
+    override fun getBalance(credentials: BrokerageCredentials): BrokerageBalance {
         return try {
             cb.executeCallable {
+                val (cano, acntPrdtCd) = accountFields(credentials.accountNumber)
+                val uri = "/uapi/domestic-stock/v1/trading/inquire-balance" +
+                    "?CANO=$cano&ACNT_PRDT_CD=$acntPrdtCd" +
+                    "&AFHR_FLPR_YN=N&OFL_YN=&INQR_DVSN=02&UNPR_DVSN=01&FUND_STTL_ICLD_YN=N" +
+                    "&FNCG_AMT_AUTO_RDPT_YN=N&PRCS_DVSN=00&CTX_AREA_FK100=&CTX_AREA_NK100="
+
                 val resp = restClient.get()
-                    .uri("/uapi/domestic-stock/v1/trading/inquire-balance?CANO=&ACNT_PRDT_CD=01&AFHR_FLPR_YN=N&OFL_YN=&INQR_DVSN=02&UNPR_DVSN=01&FUND_STTL_ICLD_YN=N&FNCG_AMT_AUTO_RDPT_YN=N&PRCS_DVSN=00&CTX_AREA_FK100=&CTX_AREA_NK100=")
-                    .header("authorization", "Bearer ${token.accessToken}")
-                    .header("tr_id", "TTTC8434R")
+                    .uri(uri)
+                    .headers { h -> authHeaders(credentials, balanceTrId()).forEach { (k, v) -> h.set(k, v) } }
                     .retrieve()
                     .body(KisBalanceResponse::class.java)
 
@@ -247,33 +308,26 @@ class KisBrokerageClient(
 
     private data class KisOrderOutput(val odno: String?)
 
-    private data class KisOrderStatusResponse(
-        val output1: List<KisOrderStatusItem>?,
+    private data class KisDailyOrderResponse(
+        val output1: List<KisDailyOrderItem>?,
     )
 
-    private data class KisOrderStatusItem(
-        val odno: String?,
-        val ord_sttsDvsnName: String?,
-        val tot_ccld_qty: String?,
-        val avg_prvs: String?,
-    ) {
-        val ordSttsDvsnName: String? get() = ord_sttsDvsnName
-    }
-
-    private data class KisSettlementResponse(
-        val output1: List<KisSettlementItem>?,
-    )
-
-    private data class KisSettlementItem(
+    private data class KisDailyOrderItem(
         val odno: String?,
         val pdno: String?,
         val sll_buy_dvsn_cd: String?,
-        val ccld_qty: String?,
-        val ccld_unpr: String?,
-        val bfee: String?,
-        val tl_tax: String?,
-        val sttl_dt: String?,
-    )
+        val ord_qty: String?,
+        val tot_ccld_qty: String?,
+        val rmn_qty: String?,
+        val rjct_qty: String?,
+        val avg_prvs: String?,
+    ) {
+        val sllBuyDvsnCd: String? get() = sll_buy_dvsn_cd
+        val totCcldQty: String?   get() = tot_ccld_qty
+        val rmnQty: String?       get() = rmn_qty
+        val rjctQty: String?      get() = rjct_qty
+        val avgPrvs: String?      get() = avg_prvs
+    }
 
     private data class KisBalanceResponse(
         val output1: List<KisHoldingItem>?,
