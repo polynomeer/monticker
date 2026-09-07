@@ -3,43 +3,10 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import type { EarningsSummaryResponse, EarningSummary, CreatorEarning, CreatorPayout, PageResponse } from "@monticker/types";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
-
-interface EarningSummary {
-  strategyId: number;
-  totalNet: number;
-}
-
-interface CreatorEarning {
-  id: number;
-  strategyId: number;
-  subscriberId: number;
-  grossAmount: number;
-  platformFee: number;
-  netAmount: number;
-  status: "AVAILABLE" | "PAID_OUT" | "CANCELLED";
-  earnedAt: string;
-}
-
-interface CreatorPayout {
-  id: number;
-  amount: number;
-  bankName: string;
-  accountNumber: string;
-  accountHolder: string;
-  status: "REQUESTED" | "APPROVED" | "REJECTED" | "PAID";
-  requestedAt: string;
-  paidAt: string | null;
-}
-
-interface Page<T> {
-  content: T[];
-  totalElements: number;
-  totalPages: number;
-  number: number;
-}
 
 function won(n: number) {
   return n.toLocaleString("ko-KR") + "원";
@@ -154,25 +121,21 @@ export default function EarningsPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const { data: balance = 0 } = useQuery<number>({
-    queryKey: ["earnings", "balance"],
-    queryFn: () => authFetch("/api/settlement/strategy/earnings/summary/balance").then(r => r.json()),
+  const { data: summary } = useQuery<EarningsSummaryResponse>({
+    queryKey: ["earnings", "summary"],
+    queryFn: () => authFetch("/api/settlement/strategy/earnings/summary").then(r => r.json()),
   });
+  const balance = summary?.availableBalance ?? 0;
+  const byStrategy = summary?.byStrategy;
 
-  const { data: byStrategy } = useQuery<EarningSummary[]>({
-    queryKey: ["earnings", "by-strategy"],
-    queryFn: (): Promise<EarningSummary[]> => authFetch("/api/settlement/strategy/earnings/summary").then(r => r.json()),
-    enabled: tab === "overview",
-  });
-
-  const { data: earningsData } = useQuery<Page<CreatorEarning>>({
+  const { data: earningsData } = useQuery<PageResponse<CreatorEarning>>({
     queryKey: ["earnings", "list", earningPage],
     queryFn: () =>
       authFetch(`/api/settlement/strategy/earnings?page=${earningPage}&size=20`).then(r => r.json()),
     enabled: tab === "earnings",
   });
 
-  const { data: payoutsData } = useQuery<Page<CreatorPayout>>({
+  const { data: payoutsData } = useQuery<PageResponse<CreatorPayout>>({
     queryKey: ["earnings", "payouts", payoutPage],
     queryFn: () =>
       authFetch(`/api/settlement/strategy/payouts?page=${payoutPage}&size=20`).then(r => r.json()),
@@ -334,11 +297,11 @@ export default function EarningsPage() {
                             <span className={`text-xs ${meta.color}`}>{meta.label}</span>
                           </div>
                           <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">
-                            {p.bankName} {p.accountNumber.slice(-4).padStart(p.accountNumber.length, "•")} ({p.accountHolder})
+                            {p.bankName} {(p.accountNumber ?? "").slice(-4).padStart(p.accountNumber?.length ?? 0, "•")} ({p.accountHolder})
                           </p>
                           <p className="text-xs text-gray-500 dark:text-dracula-comment">
                             신청일: {new Date(p.requestedAt).toLocaleDateString("ko-KR")}
-                            {p.paidAt && ` · 지급일: ${new Date(p.paidAt).toLocaleDateString("ko-KR")}`}
+                            {p.processedAt && ` · 처리일: ${new Date(p.processedAt).toLocaleDateString("ko-KR")}`}
                           </p>
                         </div>
                       </div>

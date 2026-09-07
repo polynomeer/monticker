@@ -5,36 +5,12 @@ import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
 import { HourglassMedium, Play } from "@phosphor-icons/react";
+import type { RuleSet, QuantBacktestResult, QuantEquityPoint } from "@monticker/types";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
 
-interface RuleSet {
-  id: number; name: string; description: string | null;
-  version: number; status: string; ruleDefinition: string;
-}
-
-interface QuantTradeRecord {
-  entryDate: string; exitDate: string;
-  entryPrice: number; exitPrice: number;
-  quantity: number; pnl: number; pnlPct: number;
-  exitReason: string;
-}
-
-interface QuantEquityPoint {
-  date: string; equity: number; drawdown: number;
-}
-
-interface BacktestResult {
-  id: number; stockId: number; startDate: string; endDate: string;
-  initialCapital: number; finalCapital: number;
-  totalReturn: number | null; annualReturn: number | null;
-  mdd: number | null; winRate: number | null; profitFactor: number | null;
-  tradeCount: number | null; avgHoldingDays: number | null;
-  benchmarkReturn: number | null; excessReturn: number | null;
-  reliabilityScore: string | null; createdAt: string;
-  trades: QuantTradeRecord[]; equityCurve: QuantEquityPoint[];
-}
+type BacktestResult = QuantBacktestResult;
 
 const EXIT_REASON_LABEL: Record<string, string> = {
   SIGNAL: "청산 신호", END: "기간 종료",

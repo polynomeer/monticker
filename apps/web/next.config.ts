@@ -33,6 +33,7 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: "standalone",
   eslint: { ignoreDuringBuilds: true },
+  transpilePackages: ["@monticker/types"],
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },

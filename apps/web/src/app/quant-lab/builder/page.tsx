@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { X } from "@phosphor-icons/react";
+import type { RuleCondition, RuleOperator } from "@monticker/types";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
@@ -27,12 +28,9 @@ const COMPARATOR_LABEL: Record<string, string> = {
   ABOVE_UPPER: "상단 돌파", BELOW_LOWER: "하단 이탈",
 };
 
-interface Condition {
+interface Condition extends RuleCondition {
   id: string;
-  indicator: string;
-  comparator: string;
   params: Record<string, number>;
-  value?: number | [number, number];
 }
 
 const DEFAULT_ENTRY: Condition[] = [
@@ -41,8 +39,8 @@ const DEFAULT_ENTRY: Condition[] = [
   { id: "e3", indicator: "RSI", comparator: "BETWEEN", params: { period: 14 }, value: [30, 70] },
 ];
 interface ParsedRuleDefinition {
-  entryRules?: { operator?: "AND" | "OR"; conditions?: Omit<Condition, "id">[] };
-  exitRules?: { operator?: "AND" | "OR"; conditions?: Omit<Condition, "id">[] };
+  entryRules?: { operator?: RuleOperator; conditions?: RuleCondition[] };
+  exitRules?: { operator?: RuleOperator; conditions?: RuleCondition[] };
   positionSizing?: { value?: number };
 }
 
@@ -173,8 +171,8 @@ export default function BuilderPage() {
       const def: ParsedRuleDefinition = JSON.parse(existing.ruleDefinition);
       setEntryOp(def.entryRules?.operator ?? "AND");
       setExitOp(def.exitRules?.operator ?? "OR");
-      setEntry(def.entryRules?.conditions?.map((c, i) => ({ ...c, id: `e${i}` })) ?? []);
-      setExit(def.exitRules?.conditions?.map((c, i) => ({ ...c, id: `x${i}` })) ?? []);
+      setEntry(def.entryRules?.conditions?.map((c, i) => ({ ...c, id: `e${i}`, params: c.params ?? {} })) ?? []);
+      setExit(def.exitRules?.conditions?.map((c, i) => ({ ...c, id: `x${i}`, params: c.params ?? {} })) ?? []);
       setPositionPct(def.positionSizing?.value ?? 10);
     } catch {}
   }, [existing]);
