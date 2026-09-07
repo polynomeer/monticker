@@ -148,7 +148,7 @@ THEN
 ```json
 {
   "name": "거래량 돌파 단기 전략",
-  "universe": { "market": "KOSPI", "filters": ["market_cap > 5e11"] },
+  "universe": { "market": "domestic", "marketCapTier": "large" },
   "entryRules": {
     "operator": "AND",
     "conditions": [
@@ -521,6 +521,7 @@ Investment Wallet (upcoming)
 | 실시간 시세 파이프라인 실데이터 전환 | 현재 `market.ticks` Kafka 토픽은 Mock/Go 합성 데이터로만 채워짐 — Toss/KIS 실시세 producer로 교체 |
 | Quant Lab 룰셋 빌더 UI | ✅ 완료 — `/quant-lab` 룰셋 빌더·백테스트 상세(자산곡선/거래내역 포함)·전략 마켓·제작자 수익 페이지 모두 구현됨 |
 | Quant Lab 포워드 테스트 | ✅ 완료 ([ADR-024](decisions/024-quant-lab-forward-test.md)) — 장 마감 후(KST 16:00) 일 1회 평가, `quant_forward_tests`/`quant_forward_test_equity`에 상태·자산곡선 저장, `/topic/rulesets/{id}/signals`로 신호 실시간 푸시. 단일 종목만 지원(백테스트와 동일 제약) |
+| Quant Lab 유니버스/스크리너 설정 | ✅ 완료 (좁은 범위) — 룰셋 빌더에서 시장(국내/해외)·시가총액 구간을 `universeJson`에 저장하고, 백테스트/포워드 테스트의 종목 선택기가 그 범위 안에서 검색(`/api/screener`, `/api/screener/search`)하도록 좁혀줌. 여러 종목을 동시에 백테스트/포워드 테스트하는 진짜 유니버스 스크리닝(다종목 실행)은 범위 밖 — 여전히 한 번에 한 종목만 검증한다 |
 | Strategy Market | 룰셋 보호(서버사이드 실행, fingerprint) 메커니즘은 이미 설계됨 |
 | 리밸런싱 실행 자동화 | `PortfolioOptimizerService`의 목표 비중 계산은 이미 있음 — 현재 보유 대비 diff → 임계값 초과분만 기존 OMS/브로커 계층으로 주문하는 실행 로직이 없음 |
 | 조건주문 (OCO/OTO, TP/SL) | `Order` 도메인은 현재 MARKET/LIMIT만 지원 — 기존 OMS를 대체하지 않고 그 위에 얹는 감시 컴포넌트로 설계 |
