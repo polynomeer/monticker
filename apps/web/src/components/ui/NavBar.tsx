@@ -28,6 +28,7 @@ const NAV_GROUPS = [
     label: "내 자산",
     items: [
       { href: "/portfolio",  label: "포트폴리오" },
+      { href: "/brokerage",  label: "실전투자" },
       { href: "/wallet",     label: "지갑" },
       { href: "/watchlist",  label: "관심종목" },
       { href: "/settlement", label: "정산" },
