@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
-import { HourglassMedium, Play, Broadcast, Stop } from "@phosphor-icons/react";
+import { HourglassMedium, Play, Broadcast, Stop, ShareNetwork } from "@phosphor-icons/react";
 import type { RuleSet, QuantBacktestResult, QuantEquityPoint, ForwardTestResult } from "@monticker/types";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/Card";
 import { getForwardTestStatus, startForwardTest, stopForwardTest } from "@/services/forwardTest";
 import { useForwardTestSignalsWs } from "@/hooks/useForwardTestSignalsWs";
 import { StockPicker } from "@/components/quant/StockPicker";
+import { shareStrategy } from "@/services/strategyMarket";
 
 type BacktestResult = QuantBacktestResult;
 
@@ -116,6 +117,60 @@ function MetricCard({ label, value, highlight }: { label: string; value: string;
   );
 }
 
+function ShareModal({ onClose, onSubmit, isPending }: {
+  onClose: () => void;
+  onSubmit: (description: string, price: number) => void;
+  isPending: boolean;
+}) {
+  const [description, setDescription] = useState("");
+  const [price, setPrice] = useState(0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <Card className="p-6" outerClassName="w-full max-w-sm mx-4 animate-fade-up">
+        <h2 className="text-base font-bold text-gray-900 dark:text-dracula-fg mb-1">전략 마켓에 공유</h2>
+        <p className="text-xs text-gray-500 dark:text-dracula-comment mb-5">
+          룰 로직은 공개되지 않고 구독자에게는 성과 지표만 보입니다. 구독료의 70%가 제작자 수익으로 적립됩니다.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <label htmlFor="share-description" className="text-xs text-gray-500 dark:text-dracula-comment block mb-1">전략 소개</label>
+            <textarea
+              id="share-description"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              rows={3}
+              placeholder="이 전략을 소개해주세요 (선택)"
+              className="w-full px-3 py-2 rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
+            />
+          </div>
+          <div>
+            <label htmlFor="share-price" className="text-xs text-gray-500 dark:text-dracula-comment block mb-1">구독료 (원, 0이면 무료)</label>
+            <input
+              id="share-price"
+              type="number"
+              min={0}
+              value={price}
+              onChange={e => setPrice(Math.max(0, +e.target.value))}
+              className="w-full px-3 py-2 rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg text-sm focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
+            />
+          </div>
+        </div>
+        <div className="flex gap-2 pt-5">
+          <button onClick={onClose} disabled={isPending}
+            className="flex-1 py-2.5 rounded-xl border border-gray-300 dark:border-dracula-line text-gray-500 dark:text-dracula-comment text-sm hover:bg-gray-50 dark:hover:bg-dracula-line/30 active:scale-[0.98] transition-all duration-150 disabled:opacity-40">
+            취소
+          </button>
+          <button onClick={() => onSubmit(description, price)} disabled={isPending}
+            className="flex-1 py-2.5 rounded-xl bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg text-sm font-semibold hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40">
+            {isPending ? "공유 중..." : "공유하기"}
+          </button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 export default function QuantLabDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -129,6 +184,7 @@ export default function QuantLabDetailPage() {
   const [capital, setCapital] = useState(10_000_000);
   const [fwStockId, setFwStockId] = useState(1);
   const [fwCapital, setFwCapital] = useState(10_000_000);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   const { data: ruleSet, isLoading: rsLoading } = useQuery<RuleSet>({
     queryKey: ["quant", "ruleset", id],
@@ -194,6 +250,15 @@ export default function QuantLabDetailPage() {
     onError: (e: Error) => toast({ type: "error", title: "중지 실패", message: e.message }),
   });
 
+  const shareMutation = useMutation({
+    mutationFn: ({ description, price }: { description: string; price: number }) => shareStrategy(id, description, price),
+    onSuccess: () => {
+      setShowShareModal(false);
+      toast({ type: "success", title: "공유 완료", message: "전략 마켓에서 확인할 수 있습니다." });
+    },
+    onError: (e: Error) => toast({ type: "error", title: "공유 실패", message: e.message }),
+  });
+
   useForwardTestSignalsWs(
     forwardTest?.status === "RUNNING" ? id : undefined,
     (event) => {
@@ -215,9 +280,18 @@ export default function QuantLabDetailPage() {
   })();
   const universeMarket = universe.market ?? "all";
   const universeMarketCapTier = universe.marketCapTier ?? "all";
+  const canShare = ruleSet.status === "BACKTESTED" || ruleSet.status === "RUNNING";
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 animate-fade-up">
+      {showShareModal && (
+        <ShareModal
+          onClose={() => setShowShareModal(false)}
+          onSubmit={(description, price) => shareMutation.mutate({ description, price })}
+          isPending={shareMutation.isPending}
+        />
+      )}
+
       {/* 헤더 */}
       <div className="flex items-start justify-between mb-6">
         <div>
@@ -225,12 +299,22 @@ export default function QuantLabDetailPage() {
           <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-dracula-fg">{ruleSet.name}</h1>
           {ruleSet.description && <p className="text-sm text-gray-500 dark:text-dracula-comment mt-1">{ruleSet.description}</p>}
         </div>
-        <button
-          onClick={() => router.push(`/quant-lab/builder?edit=${id}`)}
-          className="px-4 py-2 rounded-lg text-xs font-medium bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg hover:bg-gray-200 dark:hover:bg-dracula-comment active:scale-95 transition-all duration-150"
-        >
-          룰셋 수정
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {canShare && (
+            <button
+              onClick={() => setShowShareModal(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium border border-dracula-purple/40 text-blue-600 dark:text-dracula-purple hover:bg-blue-50 dark:hover:bg-dracula-purple/10 active:scale-95 transition-all duration-150"
+            >
+              <ShareNetwork size={14} weight="bold" aria-hidden /> 전략 공유
+            </button>
+          )}
+          <button
+            onClick={() => router.push(`/quant-lab/builder?edit=${id}`)}
+            className="px-4 py-2 rounded-lg text-xs font-medium bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg hover:bg-gray-200 dark:hover:bg-dracula-comment active:scale-95 transition-all duration-150"
+          >
+            룰셋 수정
+          </button>
+        </div>
       </div>
 
       {/* 백테스트 실행 패널 */}
