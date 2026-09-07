@@ -191,7 +191,7 @@ See [ADR-005](decisions/005-kafka-go-gateway-netty-broadcast.md) and [kafka-tick
 | **Rule Engine** | `quant_signals` | Done — Evaluate conditions against live indicators; emit signals |
 | **Indicator Engine** | (in-memory) | Done — MA, EMA, RSI, MACD, Bollinger, ATR from candle data |
 | **Backtest Engine** | `backtest_results` | Done — Historical simulation, commission/slippage, reliability score |
-| **Forward Test Engine** | `quant_signals` | Done — Live-market signal logging, vs-backtest comparison |
+| **Forward Test Engine** | `quant_forward_tests`, `quant_forward_test_equity`, `quant_signals` | Done ([ADR-024](decisions/024-quant-lab-forward-test.md)) — daily post-close cron evaluation, live signal push via `/topic/rulesets/{id}/signals` |
 | **Strategy Vault** | `rule_sets.rule_set_fingerprint` | Done — SHA-256 fingerprint, server-side evaluation only |
 
 ### Implemented Modules (Quant Analytics — V16)
@@ -399,6 +399,7 @@ DELETE /api/quant/rulesets/{id}
 POST   /api/quant/rulesets/{id}/backtest      # 백테스트 실행
 GET    /api/quant/rulesets/{id}/backtest/{runId}
 POST   /api/quant/rulesets/{id}/forward-test/start
+POST   /api/quant/rulesets/{id}/forward-test/stop
 GET    /api/quant/rulesets/{id}/forward-test
 
 # Quant Analytics
@@ -441,7 +442,7 @@ Connect: `ws://localhost:8080/ws` (SockJS fallback)
 |-------|-------------|
 | `/topic/stocks/{stockId}` | 종목별 실시간 가격 |
 | `/topic/market` | 전체 시장 요약 |
-| `/topic/signals/{userId}` | 룰셋 신호 알림 (Quant Lab) |
+| `/topic/rulesets/{ruleSetId}/signals` | 포워드 테스트 매수/매도 신호 알림 (Quant Lab, ADR-024) |
 
 ---
 
@@ -847,7 +848,6 @@ LedgerEvent types:
 stock:price:{market}:{symbol}      # latest price JSON (STRING)
 orderbook:{symbol}                 # KIS realtime orderbook (STRING, TTL 30s)
 alert:cooldown:{ruleId}            # cooldown flag (STRING, TTL 600s)
-signal:forward:{ruleSetId}:{date}  # daily forward test signal set
 wallet:snapshot:{userId}           # 최신 wallet 스냅샷 캐시 (TTL 30s)
 ```
 

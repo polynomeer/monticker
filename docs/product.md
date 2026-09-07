@@ -519,7 +519,8 @@ Investment Wallet (upcoming)
 |------|------|
 | 실제 주문 체결 | **BYOK 모델** — monticker는 자체 브로커 라이선스를 보유하지 않는다. 사용자가 본인 명의 증권 계좌의 API 키(Toss Securities Open API / KIS Open API)를 연결하고, monticker는 그 키로 사용자를 대신해 API를 호출하는 클라이언트로만 동작한다. 기존 `BrokerageClient` 인터페이스(`KisBrokerageClient`/`MockBrokerageClient`)에 `TossBrokerageClient`를 추가하는 형태로 구현 — 새 OMS를 만들지 않는다 |
 | 실시간 시세 파이프라인 실데이터 전환 | 현재 `market.ticks` Kafka 토픽은 Mock/Go 합성 데이터로만 채워짐 — Toss/KIS 실시세 producer로 교체 |
-| Quant Lab 룰셋 빌더 UI | 백엔드 룰 엔진·백테스트·포워드테스트는 이미 구현됨 — UI만 남음 |
+| Quant Lab 룰셋 빌더 UI | ✅ 완료 — `/quant-lab` 룰셋 빌더·백테스트 상세(자산곡선/거래내역 포함)·전략 마켓·제작자 수익 페이지 모두 구현됨 |
+| Quant Lab 포워드 테스트 | ✅ 완료 ([ADR-024](decisions/024-quant-lab-forward-test.md)) — 장 마감 후(KST 16:00) 일 1회 평가, `quant_forward_tests`/`quant_forward_test_equity`에 상태·자산곡선 저장, `/topic/rulesets/{id}/signals`로 신호 실시간 푸시. 단일 종목만 지원(백테스트와 동일 제약) |
 | Strategy Market | 룰셋 보호(서버사이드 실행, fingerprint) 메커니즘은 이미 설계됨 |
 | 리밸런싱 실행 자동화 | `PortfolioOptimizerService`의 목표 비중 계산은 이미 있음 — 현재 보유 대비 diff → 임계값 초과분만 기존 OMS/브로커 계층으로 주문하는 실행 로직이 없음 |
 | 조건주문 (OCO/OTO, TP/SL) | `Order` 도메인은 현재 MARKET/LIMIT만 지원 — 기존 OMS를 대체하지 않고 그 위에 얹는 감시 컴포넌트로 설계 |
