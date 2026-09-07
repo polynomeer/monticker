@@ -1,6 +1,7 @@
 package com.monticker.api.quant.api
 
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
+import com.monticker.api.quant.domain.RuleSetStatus
 import com.monticker.api.quant.infrastructure.RuleSetRepository
 import com.monticker.api.settlement.creator.application.CreatorEarningsService
 import org.springframework.http.ResponseEntity
@@ -54,8 +55,17 @@ class StrategyMarketController(
     fun share(
         @RequestHeader("Authorization") auth: String,
         @RequestBody req: StrategyShareRequest,
-    ): ResponseEntity<Map<String, Any>> {
+    ): ResponseEntity<*> {
         val userId = jwtTokenProvider.getUserId(auth.removePrefix("Bearer ").trim())
+
+        // req.rulesetId를 그대로 믿고 INSERT하면 남의 룰셋 ID를 알아내는 것만으로 그 룰셋을
+        // 마켓에 공유해버릴 수 있었다(broken object-level authorization) — 소유권을 먼저 확인한다.
+        val doc = ruleSetRepository.findByIdAndUserId(req.rulesetId, userId)
+            .orElse(null) ?: return ResponseEntity.notFound().build<Unit>()
+        if (doc.status !in setOf(RuleSetStatus.BACKTESTED.name, RuleSetStatus.RUNNING.name)) {
+            return ResponseEntity.badRequest().body(mapOf("error" to "백테스트를 먼저 완료해야 공유할 수 있습니다."))
+        }
+
         val id = jdbc.queryForObject(
             """INSERT INTO strategy_market (ruleset_id, user_id, description, price, subscribe_count, created_at)
                VALUES (?, ?, ?, ?, 0, NOW())
