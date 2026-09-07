@@ -45,4 +45,33 @@ class RuleSetServiceTest {
 
         assertThat(d.name).isEqualTo("renamed after stop")
     }
+
+    // ── universe (종목 선택기용 유니버스 필터) ───────────────────────────────────────
+
+    @Test
+    fun `create stores the universe filter when provided`() {
+        every { ruleSetRepository.save(any()) } answers { firstArg<RuleSetDocument>().copy(id = "generated") }
+
+        val response = service.create(
+            1L,
+            CreateRuleSetRequest(
+                name = "test", ruleDefinition = emptyMap<String, Any>(),
+                universeJson = mapOf("market" to "domestic", "marketCapTier" to "large"),
+            ),
+        )
+
+        assertThat(response.universeJson).contains("\"market\":\"domestic\"", "\"marketCapTier\":\"large\"")
+    }
+
+    @Test
+    fun `update replaces the universe filter without touching rule definition version`() {
+        val d = doc(RuleSetStatus.BACKTESTED.name)
+        every { ruleSetRepository.findByIdAndUserId("rs1", 1L) } returns Optional.of(d)
+        every { ruleSetRepository.save(any()) } returnsArgument 0
+
+        service.update("rs1", 1L, UpdateRuleSetRequest(universeJson = mapOf("market" to "overseas")))
+
+        assertThat(d.universeJson).isEqualTo(mapOf("market" to "overseas"))
+        assertThat(d.version).isEqualTo(1)
+    }
 }

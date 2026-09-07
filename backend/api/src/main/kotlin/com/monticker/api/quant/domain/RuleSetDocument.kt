@@ -48,6 +48,16 @@ data class RuleSetDocument(
         updatedAt = Instant.now()
     }
 
+    /**
+     * "이 전략은 어떤 종목군을 대상으로 하는가" 메타데이터 — {market, marketCapTier}
+     * (ScreenerRepository와 동일한 값 체계). 룰 로직 자체가 아니므로 버전 스냅샷은 남기지
+     * 않는다.
+     */
+    fun updateUniverse(newUniverse: Map<String, Any>) {
+        universeJson = newUniverse
+        updatedAt = Instant.now()
+    }
+
     fun updateDefinition(newDef: Map<String, Any>, fingerprint: String, summary: String? = null) {
         require(status != RuleSetStatus.RUNNING.name) {
             "포워드 테스트 운용 중에는 룰을 수정할 수 없습니다. 먼저 중지해주세요."

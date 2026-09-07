@@ -32,6 +32,7 @@ class RuleSetService(
             description        = req.description,
             ruleDefinition     = defMap,
             ruleSetFingerprint = fingerprint,
+            universeJson       = req.universeJson?.let { toStringAnyMap(it) } ?: emptyMap(),
         )
         return ruleSetRepository.save(doc).toResponse()
     }
@@ -55,10 +56,10 @@ class RuleSetService(
         req.name?.let { doc.rename(it) }
         req.description?.let { doc.updateDescription(it) }
         req.ruleDefinition?.let {
-            @Suppress("UNCHECKED_CAST")
-            val defMap = objectMapper.convertValue(it, Map::class.java) as Map<String, Any>
+            val defMap = toStringAnyMap(it)
             doc.updateDefinition(defMap, sha256(objectMapper.writeValueAsString(defMap)), req.changeSummary)
         }
+        req.universeJson?.let { doc.updateUniverse(toStringAnyMap(it)) }
         return ruleSetRepository.save(doc).toResponse()
     }
 
@@ -208,6 +209,10 @@ class RuleSetService(
         return bytes.joinToString("") { "%02x".format(it) }
     }
 
+    @Suppress("UNCHECKED_CAST")
+    private fun toStringAnyMap(value: Any): Map<String, Any> =
+        objectMapper.convertValue(value, Map::class.java) as Map<String, Any>
+
     // ─── Mappers ───────────────────────────────────────────────────────────────
 
     private fun RuleSetDocument.toResponse() = RuleSetResponse(
@@ -256,6 +261,7 @@ data class CreateRuleSetRequest(
     val name: String,
     val description: String? = null,
     val ruleDefinition: Any,
+    val universeJson: Any? = null,
 )
 
 data class UpdateRuleSetRequest(
@@ -263,6 +269,7 @@ data class UpdateRuleSetRequest(
     val description: String? = null,
     val ruleDefinition: Any? = null,
     val changeSummary: String? = null,
+    val universeJson: Any? = null,
 )
 
 data class QuantBacktestRequest(
