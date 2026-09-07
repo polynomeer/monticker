@@ -63,7 +63,7 @@ export function usePaperTrade() {
         body: JSON.stringify({ stockId, quantity }),
       });
       const body = await r.json();
-      if (!r.ok) throw new Error(body.error ?? "매수 실패");
+      if (!r.ok) throw new Error(body.message ?? "매수 실패");
       return body;
     },
     onSuccess: refresh,
@@ -77,7 +77,7 @@ export function usePaperTrade() {
         body: JSON.stringify({ stockId, quantity }),
       });
       const body = await r.json();
-      if (!r.ok) throw new Error(body.error ?? "매도 실패");
+      if (!r.ok) throw new Error(body.message ?? "매도 실패");
       return body;
     },
     onSuccess: refresh,

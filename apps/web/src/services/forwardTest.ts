@@ -16,7 +16,7 @@ export async function startForwardTest(ruleSetId: string, stockId: number, initi
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error ?? "포워드 테스트 시작에 실패했습니다.");
+    throw new Error(err.message ?? "포워드 테스트 시작에 실패했습니다.");
   }
   return res.json();
 }
@@ -25,7 +25,7 @@ export async function stopForwardTest(ruleSetId: string): Promise<ForwardTestRes
   const res = await authFetch(`/api/quant/rulesets/${ruleSetId}/forward-test/stop`, { method: "POST" });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error ?? "포워드 테스트 중지에 실패했습니다.");
+    throw new Error(err.message ?? "포워드 테스트 중지에 실패했습니다.");
   }
   return res.json();
 }

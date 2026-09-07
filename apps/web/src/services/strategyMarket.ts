@@ -14,7 +14,7 @@ export async function shareStrategy(rulesetId: string, description: string, pric
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error ?? "전략 공유에 실패했습니다.");
+    throw new Error(err.message ?? "전략 공유에 실패했습니다.");
   }
   return res.json();
 }
