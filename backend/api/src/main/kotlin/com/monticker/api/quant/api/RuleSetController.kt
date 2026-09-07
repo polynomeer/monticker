@@ -41,6 +41,8 @@ class RuleSetController(private val service: RuleSetService) {
             ResponseEntity.ok(service.update(id, userId(), req))
         } catch (e: NoSuchElementException) {
             ResponseEntity.notFound().build<Unit>()
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.badRequest().body(mapOf("error" to e.message))
         }
 
     @DeleteMapping("/{id}")

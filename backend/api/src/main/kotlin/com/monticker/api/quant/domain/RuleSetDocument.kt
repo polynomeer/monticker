@@ -49,6 +49,9 @@ data class RuleSetDocument(
     }
 
     fun updateDefinition(newDef: Map<String, Any>, fingerprint: String, summary: String? = null) {
+        require(status != RuleSetStatus.RUNNING.name) {
+            "포워드 테스트 운용 중에는 룰을 수정할 수 없습니다. 먼저 중지해주세요."
+        }
         snapshotCurrentVersion(summary)
         ruleDefinition = newDef
         ruleSetFingerprint = fingerprint
@@ -66,6 +69,14 @@ data class RuleSetDocument(
             "백테스트 완료 후 배포할 수 있습니다: 현재 상태 $status"
         }
         status = RuleSetStatus.RUNNING.name
+        updatedAt = Instant.now()
+    }
+
+    fun unpublish() {
+        require(status == RuleSetStatus.RUNNING.name) {
+            "운용 중이 아닙니다: 현재 상태 $status"
+        }
+        status = RuleSetStatus.BACKTESTED.name
         updatedAt = Instant.now()
     }
 

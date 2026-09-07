@@ -7,8 +7,9 @@ import kotlin.math.pow
 
 object QuantBacktestEngine {
 
-    private const val COMMISSION_RATE = 0.00015   // 0.015%
-    private const val SLIPPAGE_RATE   = 0.001     // 0.1%
+    // ForwardTestService가 동일한 수수료/슬리피지 가정으로 시뮬레이션 체결하기 위해 internal로 공유한다.
+    internal const val COMMISSION_RATE = 0.00015   // 0.015%
+    internal const val SLIPPAGE_RATE   = 0.001     // 0.1%
 
     fun run(
         candles: List<DailyCandle>,

@@ -47,6 +47,11 @@ class RuleSetService(
     fun update(id: String, userId: Long, req: UpdateRuleSetRequest): RuleSetResponse {
         val doc = ruleSetRepository.findByIdAndUserId(id, userId)
             .orElseThrow { NoSuchElementException("RuleSet $id not found") }
+        // ADR-024: 포워드 테스트 운용 중에는 이름/설명 변경도 막는다 — updateDefinition()의
+        // 자체 가드는 ruleDefinition 필드가 실제로 바뀔 때만 걸리므로 이걸로는 부족하다.
+        require(doc.status != RuleSetStatus.RUNNING.name) {
+            "포워드 테스트 운용 중에는 룰셋을 수정할 수 없습니다. 먼저 중지해주세요."
+        }
         req.name?.let { doc.rename(it) }
         req.description?.let { doc.updateDescription(it) }
         req.ruleDefinition?.let {
@@ -138,7 +143,8 @@ class RuleSetService(
 
     // ─── Helpers ───────────────────────────────────────────────────────────────
 
-    private fun loadDailyCandles(stockId: Long, from: LocalDate, to: LocalDate): List<DailyCandle> =
+    // internal — ForwardTestService도 동일한 일봉 조회/룰 파싱 로직을 재사용한다.
+    internal fun loadDailyCandles(stockId: Long, from: LocalDate, to: LocalDate): List<DailyCandle> =
         jdbc.query(
             """
             SELECT
@@ -168,7 +174,7 @@ class RuleSetService(
         )
 
     @Suppress("UNCHECKED_CAST")
-    private fun parseRuleDefinition(def: Map<String, Any>): RuleDefinition {
+    internal fun parseRuleDefinition(def: Map<String, Any>): RuleDefinition {
         fun parseCondition(raw: Map<*, *>): RuleCondition {
             val params = (raw["params"] as? Map<*, *>)
                 ?.entries?.associate { (k, v) -> k.toString() to (v as Any) }
