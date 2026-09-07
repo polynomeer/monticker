@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
 import { getForwardTestStatus, startForwardTest, stopForwardTest } from "@/services/forwardTest";
 import { useForwardTestSignalsWs } from "@/hooks/useForwardTestSignalsWs";
+import { StockPicker } from "@/components/quant/StockPicker";
 
 type BacktestResult = QuantBacktestResult;
 
@@ -26,17 +27,6 @@ const RELIABILITY_COLOR: Record<string, string> = {
   C: "text-dracula-orange border-dracula-orange",
   D: "text-dracula-red border-dracula-red",
 };
-
-const STOCKS = [
-  { id: 1,  label: "삼성전자 (005930)" },
-  { id: 2,  label: "SK하이닉스 (000660)" },
-  { id: 3,  label: "현대차 (005380)" },
-  { id: 4,  label: "NAVER (035420)" },
-  { id: 5,  label: "카카오 (035720)" },
-  { id: 51, label: "AAPL (Apple)" },
-  { id: 52, label: "MSFT (Microsoft)" },
-  { id: 53, label: "NVDA (NVIDIA)" },
-];
 
 function fmt(n: number | null | undefined, suffix = "%", digits = 2) {
   if (n == null) return "—";
@@ -220,6 +210,11 @@ export default function QuantLabDetailPage() {
   if (!ruleSet) return <div className="p-8 text-dracula-red">룰셋을 찾을 수 없습니다.</div>;
 
   const latestResult = results[0];
+  const universe: { market?: string; marketCapTier?: string } = (() => {
+    try { return JSON.parse(ruleSet.universeJson || "{}"); } catch { return {}; }
+  })();
+  const universeMarket = universe.market ?? "all";
+  const universeMarketCapTier = universe.marketCapTier ?? "all";
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 animate-fade-up">
@@ -244,13 +239,7 @@ export default function QuantLabDetailPage() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
           <div>
             <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">종목</label>
-            <select
-              value={stockId}
-              onChange={e => setStockId(+e.target.value)}
-              className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg px-3 py-2 text-xs transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
-            >
-              {STOCKS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-            </select>
+            <StockPicker market={universeMarket} marketCapTier={universeMarketCapTier} value={stockId} onChange={setStockId} />
           </div>
           <div>
             <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">시작일</label>
@@ -480,13 +469,7 @@ export default function QuantLabDetailPage() {
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div>
                 <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">종목</label>
-                <select
-                  value={fwStockId}
-                  onChange={e => setFwStockId(+e.target.value)}
-                  className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg px-3 py-2 text-xs transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
-                >
-                  {STOCKS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-                </select>
+                <StockPicker market={universeMarket} marketCapTier={universeMarketCapTier} value={fwStockId} onChange={setFwStockId} />
               </div>
               <div>
                 <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">초기 자본 (원)</label>
