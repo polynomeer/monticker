@@ -1,6 +1,7 @@
 package com.monticker.api.quant.api
 
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
+import com.monticker.api.quant.infrastructure.RuleSetRepository
 import com.monticker.api.settlement.creator.application.CreatorEarningsService
 import org.springframework.http.ResponseEntity
 import org.springframework.jdbc.core.JdbcTemplate
@@ -21,6 +22,7 @@ class StrategyMarketController(
     private val jdbc: JdbcTemplate,
     private val jwtTokenProvider: JwtTokenProvider,
     private val creatorEarningsService: CreatorEarningsService,
+    private val ruleSetRepository: RuleSetRepository,
 ) {
     @GetMapping
     fun list(
@@ -36,7 +38,16 @@ class StrategyMarketController(
                LIMIT ? OFFSET ?""",
             size, page * size,
         )
-        return ResponseEntity.ok(rows)
+
+        // ruleset_id는 Postgres FK가 아니라 Mongo(rule_sets)의 ObjectId라 SQL JOIN이 불가능하다 —
+        // 전략 이름은 이 별도 조회로 채워 넣는다(빠지면 프론트 카드 제목이 항상 빈 문자열이 된다).
+        val rulesetIds = rows.mapNotNull { it["ruleset_id"] as? String }
+        val namesById = ruleSetRepository.findAllById(rulesetIds).associate { it.id to it.name }
+
+        val enriched = rows.map { row ->
+            LinkedHashMap(row).apply { put("name", namesById[row["ruleset_id"]] ?: "(삭제된 전략)") }
+        }
+        return ResponseEntity.ok(enriched)
     }
 
     @PostMapping("/share")
