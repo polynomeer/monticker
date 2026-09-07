@@ -36,6 +36,9 @@ class IdempotencyFilter(
         "/api/paper/sell",
         "/api/matching/orders",
         "/api/subscription/payment/confirm",
+        // ADR-026 — 실제 돈이 이동하는 실거래 주문. 프론트 재시도로 인한 중복 제출을 막는다.
+        // Toss의 clientOrderId(모나티커→Toss)와는 별개 레이어 — 이건 브라우저→모나티커 요청을 보호한다.
+        "/api/brokerage/orders",
     )
 
     override fun shouldNotFilter(request: HttpServletRequest): Boolean {

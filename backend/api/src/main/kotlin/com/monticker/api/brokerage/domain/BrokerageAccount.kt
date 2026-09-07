@@ -4,7 +4,7 @@ import com.monticker.api.common.security.EncryptedStringConverter
 import jakarta.persistence.*
 import java.time.Instant
 
-enum class BrokerageProvider { KIS, MOCK }
+enum class BrokerageProvider { KIS, TOSS, MOCK }
 enum class BrokerageAccountType { REAL, DEMO }
 
 @Entity
@@ -44,6 +44,12 @@ class BrokerageAccount(
 
     @Column(name = "token_expires_at")
     var tokenExpiresAt: Instant? = null,
+
+    // ADR-026 — Toss는 계좌번호만으로 API를 호출할 수 없고, 별도 조회로 얻는 accountSeq를
+    // 매 호출 헤더에 실어야 한다. KIS는 사용하지 않는다(null). accountSeq 자체는 API 키
+    // 없이는 무의미한 내부 참조값이라 암호화 대상이 아니다.
+    @Column(name = "provider_account_ref")
+    var providerAccountRef: String? = null,
 
     @Column(name = "is_active", nullable = false)
     var isActive: Boolean = true,

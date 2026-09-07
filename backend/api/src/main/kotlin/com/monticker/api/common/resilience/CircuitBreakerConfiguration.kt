@@ -65,8 +65,19 @@ class CircuitBreakerConfiguration {
                 .build()
         )
 
+        // ADR-026 — Toss Securities. 위 kis와 동일한 설정(브로커 실주문 API는 빠른 차단 우선).
+        registry.circuitBreaker("toss",
+            CircuitBreakerConfig.custom()
+                .failureRateThreshold(50f)
+                .slidingWindowSize(6)
+                .waitDurationInOpenState(Duration.ofSeconds(30))
+                .permittedNumberOfCallsInHalfOpenState(2)
+                .recordExceptions(Exception::class.java)
+                .build()
+        )
+
         // 상태 전이 이벤트 로깅
-        listOf("tradingService", "quantEngine", "yahooFinance", "kis").forEach { name ->
+        listOf("tradingService", "quantEngine", "yahooFinance", "kis", "toss").forEach { name ->
             registry.circuitBreaker(name).eventPublisher
                 .onStateTransition { e ->
                     log.warn("[CircuitBreaker:{}] {} → {}",

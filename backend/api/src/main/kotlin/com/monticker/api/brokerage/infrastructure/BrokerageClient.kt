@@ -20,6 +20,9 @@ data class BrokerageCredentials(
     val appKey: String,
     val appSecret: String,
     val accountNumber: String,
+    // ADR-026 — Toss의 accountSeq처럼 계좌번호만으로 호출 불가능한 프로바이더를 위한
+    // 추가 참조값. connect() 시점에 resolveAccountRef()로 한 번만 조회해 저장해둔다.
+    val providerAccountRef: String? = null,
 )
 
 data class BrokerageOrderRequest(
@@ -71,6 +74,14 @@ data class BrokerageHolding(
 
 interface BrokerageClient {
     fun issueToken(appKey: String, appSecret: String): BrokerageToken
+
+    /**
+     * ADR-026 — 계좌번호 문자열만으로 API 호출이 불가능한 프로바이더(Toss의 accountSeq)를
+     * 위한 추가 계좌 참조 조회. KIS처럼 계좌번호를 그대로 쪼개 쓰는 프로바이더는 오버라이드하지
+     * 않는다(기본값 null).
+     */
+    fun resolveAccountRef(token: BrokerageToken, accountNumber: String): String? = null
+
     fun submitOrder(credentials: BrokerageCredentials, request: BrokerageOrderRequest): BrokerageOrderResult
     fun getOrderStatus(credentials: BrokerageCredentials, pgOrderId: String): BrokerageOrderStatus
     fun getSettlements(credentials: BrokerageCredentials, date: LocalDate): List<BrokerageSettlementItem>

@@ -3,6 +3,7 @@ package com.monticker.api.brokerage.application
 import com.monticker.api.brokerage.domain.BrokerageAccount
 import com.monticker.api.brokerage.domain.BrokerageOrder
 import com.monticker.api.brokerage.domain.BrokerageOrderStatus
+import com.monticker.api.brokerage.domain.BrokerageProvider
 import com.monticker.api.brokerage.domain.BrokerageSettlement
 import com.monticker.api.brokerage.domain.BrokerageSettlementStatus
 import com.monticker.api.brokerage.domain.OrderSide
@@ -10,6 +11,7 @@ import com.monticker.api.brokerage.domain.OrderType
 import com.monticker.api.brokerage.infrastructure.BrokerageBalance
 import com.monticker.api.brokerage.infrastructure.BrokerageAccountRepository
 import com.monticker.api.brokerage.infrastructure.BrokerageClient
+import com.monticker.api.brokerage.infrastructure.BrokerageClientRegistry
 import com.monticker.api.brokerage.infrastructure.BrokerageCredentials
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRepository
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRequest
@@ -33,7 +35,7 @@ import java.time.LocalDate
 
 @Service
 class BrokerageService(
-    private val brokerageClient: BrokerageClient,
+    private val clientRegistry: BrokerageClientRegistry,
     private val accountRepo: BrokerageAccountRepository,
     private val orderRepo: BrokerageOrderRepository,
     private val settlementRepo: BrokerageSettlementRepository,
@@ -46,18 +48,30 @@ class BrokerageService(
     // ── 계좌 연동 ──────────────────────────────────────────────────────────────
 
     @Transactional
-    fun connect(userId: Long, appKey: String, appSecret: String, accountNumber: String): BrokerageAccount {
-        val token = brokerageClient.issueToken(appKey, appSecret)
+    fun connect(userId: Long, provider: BrokerageProvider, appKey: String, appSecret: String, accountNumber: String): BrokerageAccount {
+        val client = clientRegistry.get(provider)
+        val token = client.issueToken(appKey, appSecret)
+        // ADR-026 — Toss는 계좌번호만으로 호출할 수 없고 별도 조회로 얻는 accountSeq가
+        // 필요하다. KIS는 오버라이드하지 않아 항상 null.
+        val accountRef = client.resolveAccountRef(token, accountNumber)
 
-        val account = accountRepo.findByUserIdAndIsActiveTrue(userId).orElseGet {
-            BrokerageAccount(userId = userId, accountNumber = accountNumber)
-        }
+        val account = accountRepo.findByUserIdAndProviderAndAccountNumber(userId, provider, accountNumber)
+            .orElseGet { BrokerageAccount(userId = userId, provider = provider, accountNumber = accountNumber) }
+
+        // 다른 증권사/계좌로 갈아탄 경우 기존 활성 계좌는 비활성화한다 — 사용자당 활성 계좌는
+        // 하나로 유지한다(주문/정산 내역은 계좌별로 그대로 남는다).
+        accountRepo.findByUserIdAndIsActiveTrue(userId)
+            .filter { it.id != account.id }
+            .ifPresent { old -> old.isActive = false; accountRepo.save(old) }
+
+        account.isActive = true
         account.updateToken(token.accessToken, token.expiresIn)
-        // ADR-025 — appKey/appSecret도 저장한다. 토큰 발급 이후의 모든 KIS 호출도
-        // appkey/appsecret 헤더를 요구하므로, 여기서 버리면 이후 호출이 전부 거부된다.
+        // ADR-025 — appKey/appSecret도 저장한다. 토큰 발급 이후의 모든 호출도
+        // appkey/appsecret(또는 client_id/secret) 헤더를 요구하므로, 여기서 버리면 이후 호출이 전부 거부된다.
         account.updateCredentials(appKey, appSecret)
+        account.providerAccountRef = accountRef
 
-        log.info("증권사 계좌 연동: userId={} accountNumber={}", userId, accountNumber)
+        log.info("증권사 계좌 연동: userId={} provider={} accountNumber={}", userId, provider, accountNumber)
         return accountRepo.save(account)
     }
 
@@ -69,7 +83,7 @@ class BrokerageService(
     @Transactional(readOnly = true)
     fun getBalance(userId: Long): BrokerageBalance {
         val account = getAccount(userId)
-        return brokerageClient.getBalance(requireCredentials(account))
+        return clientRegistry.get(account.provider).getBalance(requireCredentials(account))
     }
 
     // ── 주문 ───────────────────────────────────────────────────────────────────
@@ -77,6 +91,7 @@ class BrokerageService(
     @Transactional
     fun submitOrder(userId: Long, request: BrokerageOrderRequest): BrokerageOrder {
         val account = getAccount(userId)
+        val client = clientRegistry.get(account.provider)
         val credentials = requireCredentials(account)
         val stockId = resolveStockId(request.symbol)
 
@@ -84,7 +99,7 @@ class BrokerageService(
         // 막는다 — 실패하면 실제 주문은 아예 나가지 않는다.
         if (stockId != null) {
             val estimatedPrice = request.limitPrice ?: currentPrice(request.symbol) ?: BigDecimal.ZERO
-            val snapshot = buildPortfolioSnapshot(userId, credentials)
+            val snapshot = buildPortfolioSnapshot(userId, client, credentials)
             val riskResult = riskChecker.checkBrokerageOrder(userId, stockId, request.side, request.quantity, estimatedPrice, snapshot)
             if (!riskResult.approved) {
                 throw RiskLimitException(riskResult.blockedBy ?: "Unknown risk rule")
@@ -93,7 +108,7 @@ class BrokerageService(
             log.warn("리스크 체크 건너뜀 — 종목을 찾을 수 없음: symbol={}", request.symbol)
         }
 
-        val result = brokerageClient.submitOrder(credentials, request)
+        val result = client.submitOrder(credentials, request)
 
         val order = BrokerageOrder(
             userId    = userId,
@@ -114,7 +129,7 @@ class BrokerageService(
             order.reject(result.rejectReason ?: "증권사 거부")
         } else {
             // 시장가는 즉시 체결 상태로 동기화
-            val status = brokerageClient.getOrderStatus(credentials, result.pgOrderId)
+            val status = client.getOrderStatus(credentials, result.pgOrderId)
             if (status.status == "FILLED" && status.avgFillPrice != null) {
                 order.fill(status.filledQty, status.avgFillPrice!!)
                 createSettlementFromFill(account, order, status.avgFillPrice!!)
@@ -136,7 +151,7 @@ class BrokerageService(
 
         val account = getAccount(userId)
         val credentials = requireCredentials(account)
-        val status  = brokerageClient.getOrderStatus(credentials, order.pgOrderId ?: return order)
+        val status  = clientRegistry.get(account.provider).getOrderStatus(credentials, order.pgOrderId ?: return order)
 
         when (status.status) {
             "FILLED" -> {
@@ -199,16 +214,17 @@ class BrokerageService(
         val appKey = account.appKey ?: throw IllegalStateException("증권사 계좌 정보가 불완전합니다. 재연동이 필요합니다.")
         val appSecret = account.appSecret ?: throw IllegalStateException("증권사 계좌 정보가 불완전합니다. 재연동이 필요합니다.")
         return BrokerageCredentials(
-            token         = BrokerageToken(account.accessToken!!, 0),
-            appKey        = appKey,
-            appSecret     = appSecret,
-            accountNumber = account.accountNumber,
+            token               = BrokerageToken(account.accessToken!!, 0),
+            appKey              = appKey,
+            appSecret           = appSecret,
+            accountNumber       = account.accountNumber,
+            providerAccountRef  = account.providerAccountRef,
         )
     }
 
     /** ADR-025 — 실거래 사전 리스크 게이트에 넘길 포트폴리오 스냅샷을 조립한다. */
-    private fun buildPortfolioSnapshot(userId: Long, credentials: BrokerageCredentials): PortfolioSnapshot {
-        val balance = brokerageClient.getBalance(credentials)
+    private fun buildPortfolioSnapshot(userId: Long, client: BrokerageClient, credentials: BrokerageCredentials): PortfolioSnapshot {
+        val balance = client.getBalance(credentials)
         val holdings = balance.holdings.mapNotNull { h ->
             resolveStockId(h.symbol)?.let { HoldingPosition(stockId = it, qty = h.quantity) }
         }
