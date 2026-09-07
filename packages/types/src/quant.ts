@@ -103,3 +103,36 @@ export interface MarketStrategy {
   author_email: string;
   created_at: string;
 }
+
+// Quant Lab forward test (ADR-024) — /api/quant/rulesets/{id}/forward-test*
+export type ForwardTestStatus = "RUNNING" | "STOPPED";
+
+export interface ForwardTestEquityPoint {
+  date: string;
+  equity: number;
+  drawdown: number;
+}
+
+export type SignalDirection = "BUY" | "SELL";
+
+export interface ForwardTestSignal {
+  direction: SignalDirection;
+  signalTime: string;
+  evalDate: string | null;
+}
+
+export interface ForwardTestResult {
+  id: number;
+  ruleSetId: string;
+  stockId: number;
+  status: ForwardTestStatus;
+  initialCapital: number;
+  cash: number;
+  holdingQty: number;
+  holdingEntryPrice: number | null;
+  currentEquity: number;
+  startedAt: string;
+  stoppedAt: string | null;
+  equityCurve: ForwardTestEquityPoint[];
+  signals: ForwardTestSignal[];
+}
