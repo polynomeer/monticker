@@ -44,9 +44,11 @@ class ScreenerController(private val screenerService: ScreenerService) {
         @RequestParam query: String,
         @RequestParam(defaultValue = "amount") sort: String,
         @RequestParam(defaultValue = "20")     limit: Int,
+        @RequestParam(defaultValue = "all")    market: String,
+        @RequestParam(defaultValue = "all")    marketCapTier: String,
     ): ResponseEntity<ScreenerResponse> {
         if (query.isBlank()) return ResponseEntity.badRequest().build()
-        val result = screenerService.search(query, sort, limit.coerceIn(1, 50))
+        val result = screenerService.search(query, sort, limit.coerceIn(1, 50), market, marketCapTier)
         return ResponseEntity.ok(result.toResponse())
     }
 
