@@ -5,7 +5,8 @@ import Link from "next/link";
 import { ShieldCheck, HourglassMedium, CheckCircle, XCircle } from "@phosphor-icons/react";
 import { type Icon } from "@phosphor-icons/react";
 import { getAccessToken } from "@/services/auth";
-import { useBrokerageAccount, useBrokerageBalance, useBrokerageOrders, useBrokerageSettlements } from "@/hooks/useBrokerage";
+import { useBrokerageAccount, useBrokerageBalance, useBrokerageOrders, useBrokerageSettlements, useCancelBrokerageOrder } from "@/hooks/useBrokerage";
+import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { brokerageProviderLabel } from "@/lib/brokerageProvider";
@@ -30,6 +31,18 @@ const SETTLEMENT_STATUS_META: Record<string, { label: string; color: string }> =
 
 function OrderRow({ o }: { o: BrokerageOrderResponse }) {
   const meta = ORDER_STATUS_META[o.status] ?? { label: o.status, icon: HourglassMedium, color: "text-gray-500" };
+  const { toast } = useToast();
+  const cancelOrder = useCancelBrokerageOrder();
+
+  const handleCancel = async () => {
+    try {
+      await cancelOrder.mutateAsync(o.id);
+      toast({ type: "success", title: "취소 완료", message: "주문이 취소되었습니다." });
+    } catch (e) {
+      toast({ type: "error", title: "취소 실패", message: (e as Error).message });
+    }
+  };
+
   return (
     <Card className="p-4 flex items-center gap-3">
       <meta.icon size={18} weight="bold" className={meta.color} aria-hidden />
@@ -46,6 +59,15 @@ function OrderRow({ o }: { o: BrokerageOrderResponse }) {
         </p>
         {o.rejectReason && <p className="text-xs text-dracula-red mt-0.5">{o.rejectReason}</p>}
       </div>
+      {o.status === "SUBMITTED" && (
+        <button
+          onClick={handleCancel}
+          disabled={cancelOrder.isPending}
+          className="shrink-0 px-3 py-1.5 rounded-lg border border-dracula-red/40 text-dracula-red text-xs font-medium hover:bg-dracula-red/10 transition-colors disabled:opacity-40"
+        >
+          {cancelOrder.isPending ? "취소 중..." : "주문 취소"}
+        </button>
+      )}
     </Card>
   );
 }
