@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
 import org.springframework.web.server.ResponseStatusException
 import java.time.Instant
+import java.util.concurrent.RejectedExecutionException
 
 @RestControllerAdvice
 class GlobalExceptionHandler {
@@ -64,6 +65,12 @@ class GlobalExceptionHandler {
     @ExceptionHandler(RiskLimitException::class)
     fun handleRiskLimit(e: RiskLimitException) =
         error(HttpStatus.UNPROCESSABLE_ENTITY, e.message ?: "리스크 한도 초과")
+
+    // 백테스트 실행기(backtestExecutor) 큐가 가득 찼을 때 — 스레드 풀 고갈 대신 클라이언트에게
+    // 429로 알려 재시도를 유도한다(BacktestController).
+    @ExceptionHandler(RejectedExecutionException::class)
+    fun handleRejectedExecution(e: RejectedExecutionException) =
+        error(HttpStatus.TOO_MANY_REQUESTS, "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.")
 
     @ExceptionHandler(ResponseStatusException::class)
     fun handleResponseStatus(e: ResponseStatusException) =

@@ -4,14 +4,13 @@ import com.monticker.api.backtest.application.BacktestService
 import com.monticker.api.backtest.domain.*
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.format.annotation.DateTimeFormat
-import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 import java.time.LocalDate
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
-import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ExecutionException
 
 @Validated
 @RestController
@@ -22,41 +21,36 @@ class BacktestController(
 ) {
 
     @PostMapping
-    fun run(@RequestBody req: BacktestRequestDto): ResponseEntity<*> {
-        val request = try {
-            BacktestRequest(
-                stockId           = req.stockId,
-                strategy          = StrategyType.valueOf(req.strategy),
-                fromDate          = req.fromDate,
-                toDate            = req.toDate,
-                initialCapital    = req.initialCapital ?: 10_000_000.0,
-                shortPeriod       = req.shortPeriod   ?: 5,
-                longPeriod        = req.longPeriod    ?: 20,
-                rsiPeriod         = req.rsiPeriod     ?: 14,
-                rsiOversold       = req.rsiOversold   ?: 30.0,
-                rsiOverbought     = req.rsiOverbought ?: 70.0,
-                emaPeriod         = req.emaPeriod     ?: 20,
-                breakoutMultiplier = req.breakoutMultiplier ?: 1.5,
-                stopLossPct       = req.stopLossPct   ?: 5.0,
-                takeProfitPct     = req.takeProfitPct ?: 10.0,
-            )
-        } catch (e: IllegalArgumentException) {
-            return ResponseEntity.badRequest().body(mapOf("error" to e.message))
-        }
+    fun run(@RequestBody req: BacktestRequestDto): ResponseEntity<BacktestResult> {
+        // StrategyType.valueOf 등 검증 실패는 IllegalArgumentException으로 그대로 던져
+        // GlobalExceptionHandler가 400으로 처리한다.
+        val request = BacktestRequest(
+            stockId           = req.stockId,
+            strategy          = StrategyType.valueOf(req.strategy),
+            fromDate          = req.fromDate,
+            toDate            = req.toDate,
+            initialCapital    = req.initialCapital ?: 10_000_000.0,
+            shortPeriod       = req.shortPeriod   ?: 5,
+            longPeriod        = req.longPeriod    ?: 20,
+            rsiPeriod         = req.rsiPeriod     ?: 14,
+            rsiOversold       = req.rsiOversold   ?: 30.0,
+            rsiOverbought     = req.rsiOverbought ?: 70.0,
+            emaPeriod         = req.emaPeriod     ?: 20,
+            breakoutMultiplier = req.breakoutMultiplier ?: 1.5,
+            stopLossPct       = req.stopLossPct   ?: 5.0,
+            takeProfitPct     = req.takeProfitPct ?: 10.0,
+        )
 
+        // CompletableFuture.get()은 실행 중 던져진 예외를 ExecutionException으로 감싼다 —
+        // 감싸인 채로 흘려보내면 GlobalExceptionHandler가 실제 타입(IllegalArgumentException
+        // 등)으로 매칭하지 못하고 무조건 500으로 떨어진다. cause를 꺼내 다시 던져야 원래
+        // 예외 타입에 맞는 상태 코드로 처리된다. RejectedExecutionException(큐 포화)은
+        // supplyAsync 제출 시점에 즉시 던져지므로 감싸이지 않고 그대로 전파된다 —
+        // GlobalExceptionHandler의 전용 핸들러가 429로 처리한다.
         return try {
-            val result = CompletableFuture.supplyAsync({ backtestService.run(request) }, executor).get()
-            ResponseEntity.ok(result)
-        } catch (e: RejectedExecutionException) {
-            ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                .body(mapOf("error" to "백테스트 요청이 너무 많습니다. 잠시 후 다시 시도해주세요."))
-        } catch (e: Exception) {
-            val cause = e.cause ?: e
-            if (cause is IllegalArgumentException)
-                ResponseEntity.badRequest().body(mapOf("error" to cause.message))
-            else
-                ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(mapOf("error" to cause.message))
+            ResponseEntity.ok(CompletableFuture.supplyAsync({ backtestService.run(request) }, executor).get())
+        } catch (e: ExecutionException) {
+            throw (e.cause ?: e)
         }
     }
 

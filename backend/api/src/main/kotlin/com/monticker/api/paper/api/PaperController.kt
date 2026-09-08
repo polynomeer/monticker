@@ -3,6 +3,7 @@ package com.monticker.api.paper.api
 import com.monticker.api.common.aop.RateLimited
 import com.monticker.api.paper.application.PaperPortfolioQueryService
 import com.monticker.api.paper.application.PaperTradingService
+import com.monticker.api.paper.application.TradeResultResponse
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.validation.annotation.Validated
@@ -23,31 +24,13 @@ class PaperController(
 
     @PostMapping("/buy")
     @RateLimited(limit = 60, windowSec = 60, keyPrefix = "paper.buy")
-    fun buy(@RequestBody req: TradeRequest): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(tradingService.buy(userId(), req.stockId, req.quantity))
-        } catch (e: IllegalArgumentException) {
-            ResponseEntity.badRequest().body(mapOf("error" to e.message))
-        } catch (e: IllegalStateException) {
-            ResponseEntity.badRequest().body(mapOf("error" to e.message))
-        } catch (e: NoSuchElementException) {
-            ResponseEntity.notFound().build<Unit>()
-        }
-    }
+    fun buy(@RequestBody req: TradeRequest): ResponseEntity<TradeResultResponse> =
+        ResponseEntity.ok(tradingService.buy(userId(), req.stockId, req.quantity))
 
     @PostMapping("/sell")
     @RateLimited(limit = 60, windowSec = 60, keyPrefix = "paper.sell")
-    fun sell(@RequestBody req: TradeRequest): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(tradingService.sell(userId(), req.stockId, req.quantity))
-        } catch (e: IllegalArgumentException) {
-            ResponseEntity.badRequest().body(mapOf("error" to e.message))
-        } catch (e: IllegalStateException) {
-            ResponseEntity.badRequest().body(mapOf("error" to e.message))
-        } catch (e: NoSuchElementException) {
-            ResponseEntity.notFound().build<Unit>()
-        }
-    }
+    fun sell(@RequestBody req: TradeRequest): ResponseEntity<TradeResultResponse> =
+        ResponseEntity.ok(tradingService.sell(userId(), req.stockId, req.quantity))
 
     @GetMapping("/history")
     fun getHistory(

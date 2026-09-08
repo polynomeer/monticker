@@ -18,50 +18,28 @@ class MatchingController(private val matchingService: MatchingService) {
 
     @PostMapping("/orders")
     @RateLimited(limit = 30, windowSec = 60, keyPrefix = "matching.order")
-    fun submitOrder(@RequestBody req: SubmitOrderRequest): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(matchingService.submitOrderChecked(
-                userId         = userId(),
-                stockId        = req.stockId,
-                side           = req.side,
-                quantity       = req.quantity,
-                estimatedPrice = req.limitPrice ?: java.math.BigDecimal.ZERO,
-                req            = req,
-            ))
-        } catch (e: com.monticker.api.common.aop.RiskLimitException) {
-            ResponseEntity.status(org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY)
-                .body(mapOf("error" to e.message))
-        } catch (e: IllegalArgumentException) {
-            ResponseEntity.badRequest().body(mapOf("error" to e.message))
-        } catch (e: IllegalStateException) {
-            ResponseEntity.badRequest().body(mapOf("error" to e.message))
-        }
-    }
+    fun submitOrder(@RequestBody req: SubmitOrderRequest): ResponseEntity<*> =
+        ResponseEntity.ok(matchingService.submitOrderChecked(
+            userId         = userId(),
+            stockId        = req.stockId,
+            side           = req.side,
+            quantity       = req.quantity,
+            estimatedPrice = req.limitPrice ?: java.math.BigDecimal.ZERO,
+            req            = req,
+        ))
 
     @DeleteMapping("/orders/{id}")
     @RateLimited(limit = 30, windowSec = 60, keyPrefix = "matching.cancel")
-    fun cancelOrder(@PathVariable id: Long): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(matchingService.cancelOrder(userId(), id))
-        } catch (e: IllegalArgumentException) {
-            ResponseEntity.badRequest().body(mapOf("error" to e.message))
-        } catch (e: NoSuchElementException) {
-            ResponseEntity.notFound().build<Unit>()
-        }
-    }
+    fun cancelOrder(@PathVariable id: Long): ResponseEntity<*> =
+        ResponseEntity.ok(matchingService.cancelOrder(userId(), id))
 
     @GetMapping("/orders")
     fun getActiveOrders(): ResponseEntity<*> =
         ResponseEntity.ok(matchingService.getActiveOrders(userId()))
 
     @GetMapping("/orders/{id}/fills")
-    fun getOrderFills(@PathVariable id: Long): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(matchingService.getOrderFills(userId(), id))
-        } catch (e: NoSuchElementException) {
-            ResponseEntity.notFound().build<Unit>()
-        }
-    }
+    fun getOrderFills(@PathVariable id: Long): ResponseEntity<*> =
+        ResponseEntity.ok(matchingService.getOrderFills(userId(), id))
 
     @GetMapping("/fills")
     fun getMyFills(): ResponseEntity<*> =

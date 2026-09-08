@@ -26,41 +26,24 @@ class RuleSetController(private val service: RuleSetService) {
 
     @GetMapping("/{id}")
     fun getById(@PathVariable id: String): ResponseEntity<*> =
-        try {
-            ResponseEntity.ok(service.findById(id, userId()))
-        } catch (e: NoSuchElementException) {
-            ResponseEntity.notFound().build<Unit>()
-        }
+        ResponseEntity.ok(service.findById(id, userId()))
 
     @PutMapping("/{id}")
     fun update(
         @PathVariable id: String,
         @RequestBody req: UpdateRuleSetRequest,
     ): ResponseEntity<*> =
-        try {
-            ResponseEntity.ok(service.update(id, userId(), req))
-        } catch (e: NoSuchElementException) {
-            ResponseEntity.notFound().build<Unit>()
-        } catch (e: IllegalArgumentException) {
-            ResponseEntity.badRequest().body(mapOf("error" to e.message))
-        }
+        ResponseEntity.ok(service.update(id, userId(), req))
 
     @DeleteMapping("/{id}")
-    fun delete(@PathVariable id: String): ResponseEntity<Void> =
-        try {
-            service.delete(id, userId())
-            ResponseEntity.noContent().build()
-        } catch (e: NoSuchElementException) {
-            ResponseEntity.notFound().build()
-        }
+    fun delete(@PathVariable id: String): ResponseEntity<Void> {
+        service.delete(id, userId())
+        return ResponseEntity.noContent().build()
+    }
 
     @GetMapping("/{id}/versions")
     fun versions(@PathVariable id: String): ResponseEntity<*> =
-        try {
-            ResponseEntity.ok(service.getVersionHistory(id, userId()))
-        } catch (e: NoSuchElementException) {
-            ResponseEntity.notFound().build<Unit>()
-        }
+        ResponseEntity.ok(service.getVersionHistory(id, userId()))
 
     @PostMapping("/{id}/backtest")
     @Timed("quant.backtest", tags = ["module=quant"])
@@ -69,19 +52,9 @@ class RuleSetController(private val service: RuleSetService) {
         @PathVariable id: String,
         @RequestBody req: QuantBacktestRequest,
     ): ResponseEntity<*> =
-        try {
-            ResponseEntity.ok(service.runBacktest(id, userId(), req))
-        } catch (e: NoSuchElementException) {
-            ResponseEntity.notFound().build<Unit>()
-        } catch (e: IllegalArgumentException) {
-            ResponseEntity.badRequest().body(mapOf("error" to e.message))
-        }
+        ResponseEntity.ok(service.runBacktest(id, userId(), req))
 
     @GetMapping("/{id}/backtest")
     fun listBacktests(@PathVariable id: String): ResponseEntity<*> =
-        try {
-            ResponseEntity.ok(service.listBacktestResults(id, userId()))
-        } catch (e: NoSuchElementException) {
-            ResponseEntity.notFound().build<Unit>()
-        }
+        ResponseEntity.ok(service.listBacktestResults(id, userId()))
 }

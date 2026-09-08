@@ -1,5 +1,6 @@
 package com.monticker.api.quant.api
 
+import com.monticker.api.quant.application.ForwardTestResponse
 import com.monticker.api.quant.application.ForwardTestService
 import com.monticker.api.quant.application.StartForwardTestRequest
 import org.springframework.http.ResponseEntity
@@ -16,31 +17,16 @@ class ForwardTestController(private val service: ForwardTestService) {
     fun start(
         @PathVariable id: String,
         @RequestBody req: StartForwardTestRequest,
-    ): ResponseEntity<*> =
-        try {
-            ResponseEntity.ok(service.start(id, userId(), req))
-        } catch (e: NoSuchElementException) {
-            ResponseEntity.notFound().build<Unit>()
-        } catch (e: IllegalArgumentException) {
-            ResponseEntity.badRequest().body(mapOf("error" to e.message))
-        }
+    ): ResponseEntity<ForwardTestResponse> =
+        ResponseEntity.ok(service.start(id, userId(), req))
 
     @PostMapping("/stop")
-    fun stop(@PathVariable id: String): ResponseEntity<*> =
-        try {
-            ResponseEntity.ok(service.stop(id, userId()))
-        } catch (e: NoSuchElementException) {
-            ResponseEntity.notFound().build<Unit>()
-        } catch (e: IllegalArgumentException) {
-            ResponseEntity.badRequest().body(mapOf("error" to e.message))
-        }
+    fun stop(@PathVariable id: String): ResponseEntity<ForwardTestResponse> =
+        ResponseEntity.ok(service.stop(id, userId()))
 
     @GetMapping
-    fun status(@PathVariable id: String): ResponseEntity<*> =
-        try {
-            val result = service.getStatus(id, userId())
-            if (result == null) ResponseEntity.noContent().build<Unit>() else ResponseEntity.ok(result)
-        } catch (e: NoSuchElementException) {
-            ResponseEntity.notFound().build<Unit>()
-        }
+    fun status(@PathVariable id: String): ResponseEntity<ForwardTestResponse> {
+        val result = service.getStatus(id, userId())
+        return if (result == null) ResponseEntity.noContent().build() else ResponseEntity.ok(result)
+    }
 }
