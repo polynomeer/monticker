@@ -1,9 +1,11 @@
 package com.monticker.api.marketdata.infrastructure
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.api.marketdata.domain.MarketTickReceivedEvent
 import com.monticker.api.marketdata.domain.PriceTick
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.slf4j.LoggerFactory
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.stereotype.Component
 import java.math.BigDecimal
@@ -21,6 +23,7 @@ import java.time.Instant
 @Component
 class MarketTickBroadcastConsumer(
     private val priceBroadcaster: PriceBroadcaster,
+    private val eventPublisher: ApplicationEventPublisher,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val objectMapper = ObjectMapper().findAndRegisterModules()
@@ -29,15 +32,17 @@ class MarketTickBroadcastConsumer(
     fun onTick(record: ConsumerRecord<String, String>) {
         runCatching {
             val wire = objectMapper.readValue(record.value(), MarketTickMessage::class.java)
-            priceBroadcaster.broadcast(
-                PriceTick(
-                    stockId   = wire.stockId,
-                    symbol    = wire.symbol,
-                    price     = wire.price,
-                    volume    = wire.volume,
-                    tradeTime = wire.tradeTime,
-                )
+            val tick = PriceTick(
+                stockId   = wire.stockId,
+                symbol    = wire.symbol,
+                price     = wire.price,
+                volume    = wire.volume,
+                tradeTime = wire.tradeTime,
             )
+            priceBroadcaster.broadcast(tick)
+            // ADR-032 — ConditionalOrderEvaluator가 구독한다. 발행 자체는 동기(같은 스레드)지만
+            // 리스너가 @Async라 평가/주문 제출이 이 컨슈머 스레드를 블로킹하지 않는다.
+            eventPublisher.publishEvent(MarketTickReceivedEvent(tick))
         }.onFailure { e ->
             log.warn("[MarketTickBroadcast] 틱 처리 실패: {}", e.message)
         }
