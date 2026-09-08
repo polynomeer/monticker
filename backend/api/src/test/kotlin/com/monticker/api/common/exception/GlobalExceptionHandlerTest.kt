@@ -54,6 +54,14 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    fun `증권사 계좌 미연동 IllegalStateException은 409를 반환한다`() {
+        // BrokerageService#getAccount / ConditionalOrderService — 계좌 미연동은
+        // 프론트가 정상 상태로 취급하는 케이스라 500이 아닌 409여야 한다.
+        val resp = handler.handleIllegalState(IllegalStateException("연동된 증권사 계좌가 없습니다."))
+        assertThat(resp.statusCode).isEqualTo(HttpStatus.CONFLICT)
+    }
+
+    @Test
     fun `서버 내부 IllegalStateException은 500을 반환한다`() {
         val resp = handler.handleIllegalState(IllegalStateException("내부 컴포넌트 오류"))
         assertThat(resp.statusCode).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR)

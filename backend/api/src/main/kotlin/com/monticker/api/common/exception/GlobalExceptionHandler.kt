@@ -90,7 +90,7 @@ class GlobalExceptionHandler {
         val message = e.message ?: "처리할 수 없는 상태입니다"
         val isBusinessRule = message.contains("현재가") || message.contains("보유") ||
                 message.contains("잔고") || message.contains("불가") ||
-                message.contains("없음")
+                message.contains("없음") || message.contains("계좌가 없습니다")
         return if (isBusinessRule) {
             error(HttpStatus.CONFLICT, message)
         } else {
