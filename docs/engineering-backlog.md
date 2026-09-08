@@ -40,7 +40,12 @@
 
 ## 5. Strategy Market 실 배포 마무리
 
-룰셋 보호(서버사이드 실행, SHA-256 fingerprint)는 [ADR-023](decisions/023-commercialization-pivot.md)에서 이미 설계됨 — 실제 마켓 플로우(판매자 등록 → 구매자 구독 → 신호 전달)가 프로덕션 수준으로 끝까지 이어지는지 점검·마무리 필요. 어디까지 됐고 뭐가 빠졌는지부터 먼저 조사(Explore) 필요 — 이번 세션에서 확인 안 함.
+룰셋 보호(서버사이드 실행, SHA-256 fingerprint)는 [ADR-023](decisions/023-commercialization-pivot.md)에서 이미 설계됨 — 감사(2026-09-09) 결과 실제 마켓 플로우에서 진짜 문제 3건 발견, 그중 보안 구멍(STOMP 인가 누락)은 마무리, 결제는 범위 밖으로 남음:
+
+- [x] **`/topic/rulesets/{id}/signals` STOMP 인가 누락 수정** — ✅ 완료(2026-09-09, [ADR-035](decisions/035-strategy-market-signal-access-control.md)). 누구나 어떤 룰셋의 신호든 구독 가능했던 문제. `RuleSetSignalAccessInterceptor`가 CONNECT의 JWT로 신원 확인 후 소유자/유료 구독자만 SUBSCRIBE 허용. 같이 고침: `subscribe()` `@Transactional`화(결제 실패 시 구독 row 고아 방지), `RuleSetService.delete()`가 활성 구독자 있는 룰셋 삭제 거부, 프론트 가격/구독 상태 표시 + `onStompError`로 거부 상태 노출. 라이브 검증: unit 7/7 + 실 서버 raw WebSocket으로 익명 SUBSCRIBE가 실제 STOMP ERROR 프레임으로 거부됨 확인.
+- [ ] **Toss 결제 연동** — `TossPgClient.requestPayment()`가 항상 실패하는 스텁(웹훅 기반 confirm 플로우 필요, 지금 구조는 서버 주도 동기 호출을 가정). 유료 구독 버튼은 "준비 중"으로 명시적으로 막아둔 상태([ADR-035](decisions/035-strategy-market-signal-access-control.md) Context). 프론트 SDK 위젯 → `paymentKey` → 서버 `confirmPayment()` 플로우로 재설계 필요 — 이 저장소 전체(PG 연동)에 걸친 더 큰 작업이라 별도 라운드로 분리.
+- [ ] **판매자가 활성 구독자 있는 전략을 마켓에서 내리는 플로우** — 지금은 룰셋 삭제만 막았을 뿐(위 항목), "마켓 등록 취소"에 해당하는 별도 액션 자체가 없다. `strategy_market` row를 비활성화하고 기존 구독자에게 알리는 흐름 설계 필요.
+- [ ] **`RuleSetDocument.fingerprint`(SHA-256) 실사용처 연결** — 필드는 존재하지만 마켓 구독/신호 전달 경로 어디에서도 검증에 쓰이지 않음 — 애초 설계 의도(룰셋 무결성 증명?) 재확인부터 필요.
 
 ## 6. QA/CI
 
@@ -67,8 +72,8 @@
 
 1. **500/409 버그 수정** (§2, 이미 배경 작업으로 시작됨) — 가장 작고 빠르게 끝남
 2. ~~Netty `broadcast-gateway` 정리 결정~~ — ✅ 완료(2026-09-08, ADR-033)
-3. **리밸런싱 실행 자동화** (§3) — 계산 로직은 이미 있어 상대적으로 작은 추가 작업
-4. **Strategy Market 조사 + 마무리** (§5) — 조사부터 시작해 범위 확정
+3. ~~리밸런싱 실행 자동화~~ — ✅ 완료(2026-09-09, ADR-034, §3 실브로커리지/수동 실행분)
+4. ~~Strategy Market 보안 구멍 수정~~ — ✅ 완료(2026-09-09, ADR-035). 결제 연동은 §5에 남음
 5. **AI 자동매매** (§4) — 가장 큰 신규 도메인, ADR부터
 
 KIS/Toss 관련 항목(§1의 다중 커넥션 풀링, §2의 OTO 이후 실서버 재검증)은 [human-action-items.md](human-action-items.md)의 플랫폼 키 발급이 먼저 끝나야 진행 가능 — 그 전까지는 순서상 뒤로 미룰 것.
