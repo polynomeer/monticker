@@ -1,5 +1,5 @@
 # ── Build stage ────────────────────────────────────────────────
-FROM eclipse-temurin:21-jdk-alpine AS build
+FROM eclipse-temurin:25-jdk-alpine AS build
 WORKDIR /app
 COPY gradlew settings.gradle.kts ./
 COPY gradle/ gradle/
@@ -21,7 +21,7 @@ RUN apk add --no-cache curl tar && \
     rm /tmp/pp.tar.gz
 
 # ── Runtime stage ──────────────────────────────────────────────
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:25-jre-alpine
 WORKDIR /app
 
 RUN addgroup -S monticker && adduser -S monticker -G monticker
