@@ -10,6 +10,7 @@ import io.mockk.verify
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.jdbc.core.RowMapper
 import java.math.BigDecimal
 import java.util.Optional
 
@@ -44,13 +45,13 @@ class RiskCheckerServiceTest {
 
         // 1. daily pnl
         every {
-            jdbc.queryForObject(match<String> { it.contains("FROM fills") }, BigDecimal::class.java, userId)
-        } returns BigDecimal.ZERO
+            jdbc.query(match<String> { it.contains("FROM fills") }, any<RowMapper<BigDecimal>>(), userId)
+        } returns listOf(BigDecimal.ZERO)
 
         // accountCash
         every {
-            jdbc.queryForObject(match<String> { it.contains("paper_accounts") }, BigDecimal::class.java, userId)
-        } returns BigDecimal("10000000")
+            jdbc.query(match<String> { it.contains("paper_accounts") }, any<RowMapper<BigDecimal>>(), userId)
+        } returns listOf(BigDecimal("10000000"))
 
         // 3. holdings (concentration + VaR 둘 다 이 단일 조회를 공유한다 — RiskRuleQueryService 참고)
         every {
@@ -69,8 +70,8 @@ class RiskCheckerServiceTest {
 
         // 9. hourly orders
         every {
-            jdbc.queryForObject(match<String> { it.contains("FROM orders") }, Long::class.java, userId, any())
-        } returns 0L
+            jdbc.query(match<String> { it.contains("FROM orders") }, any<RowMapper<Long>>(), userId, any())
+        } returns listOf(0L)
 
         // 10. log insert
         every { jdbc.update(any<String>(), *anyVararg()) } returns 1
@@ -81,8 +82,8 @@ class RiskCheckerServiceTest {
         stubSafeDefaults()
         // account cash 10,000,000 * 3% = 300,000 limit; loss of -400,000 exceeds it
         every {
-            jdbc.queryForObject(match<String> { it.contains("FROM fills") }, BigDecimal::class.java, userId)
-        } returns BigDecimal("-400000")
+            jdbc.query(match<String> { it.contains("FROM fills") }, any<RowMapper<BigDecimal>>(), userId)
+        } returns listOf(BigDecimal("-400000"))
 
         val result = service.check(userId, stockId, "SELL", 1, estimatedPrice)
 
@@ -97,8 +98,8 @@ class RiskCheckerServiceTest {
     fun `daily loss rule passes when loss is within limit`() {
         stubSafeDefaults()
         every {
-            jdbc.queryForObject(match<String> { it.contains("FROM fills") }, BigDecimal::class.java, userId)
-        } returns BigDecimal("-100000")
+            jdbc.query(match<String> { it.contains("FROM fills") }, any<RowMapper<BigDecimal>>(), userId)
+        } returns listOf(BigDecimal("-100000"))
 
         val result = service.check(userId, stockId, "SELL", 1, estimatedPrice)
 
@@ -229,8 +230,8 @@ class RiskCheckerServiceTest {
     fun `trading frequency rule fails when hourly order count meets or exceeds limit`() {
         stubSafeDefaults()
         every {
-            jdbc.queryForObject(match<String> { it.contains("FROM orders") }, Long::class.java, userId, any())
-        } returns 5L
+            jdbc.query(match<String> { it.contains("FROM orders") }, any<RowMapper<Long>>(), userId, any())
+        } returns listOf(5L)
 
         val result = service.check(userId, stockId, "SELL", 1, estimatedPrice)
 
@@ -251,11 +252,26 @@ class RiskCheckerServiceTest {
     }
 
     @Test
+    fun `check does not throw for a user with no paper_accounts row yet and falls back to seed cash`() {
+        stubSafeDefaults()
+        // 한 번도 페이퍼 트레이딩을 하지 않은 신규 유저는 paper_accounts 행이 아직 없다 — 0건 조회 시
+        // queryForObject였다면 EmptyResultDataAccessException으로 GlobalExceptionHandler catch-all에
+        // 잡혀 안내 메시지 없는 500이 났던 버그. query+firstOrNull로 기본 시드머니 폴백을 검증한다.
+        every {
+            jdbc.query(match<String> { it.contains("paper_accounts") }, any<RowMapper<BigDecimal>>(), userId)
+        } returns emptyList()
+
+        val result = service.check(userId, stockId, "BUY", 10, estimatedPrice)
+
+        assertThat(result.approved).isTrue()
+    }
+
+    @Test
     fun `check returns approved false and blockedBy set with BLOCKED severity when any rule fails`() {
         stubSafeDefaults()
         every {
-            jdbc.queryForObject(match<String> { it.contains("FROM orders") }, Long::class.java, userId, any())
-        } returns 99L
+            jdbc.query(match<String> { it.contains("FROM orders") }, any<RowMapper<Long>>(), userId, any())
+        } returns listOf(99L)
 
         val result = service.check(userId, stockId, "BUY", 10, estimatedPrice)
 

@@ -61,15 +61,8 @@ class TradeReceiptController(
         SecurityContextHolder.getContext().authentication.principal as Long
 
     @GetMapping("/{id}/receipt")
-    fun getReceipt(@PathVariable id: Long): ResponseEntity<*> {
-        return try {
-            ResponseEntity.ok(receiptService.getReceipt(userId(), id))
-        } catch (e: NoSuchElementException) {
-            ResponseEntity.notFound().build<Unit>()
-        } catch (e: IllegalArgumentException) {
-            ResponseEntity.badRequest().body(mapOf("error" to e.message))
-        }
-    }
+    fun getReceipt(@PathVariable id: Long): ResponseEntity<*> =
+        ResponseEntity.ok(receiptService.getReceipt(userId(), id))
 
     @PostMapping("/{id}/emotion")
     fun saveEmotion(

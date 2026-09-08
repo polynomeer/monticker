@@ -10,6 +10,7 @@ import io.mockk.mockk
 import io.mockk.verify
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.springframework.http.HttpStatus
 import org.springframework.jdbc.core.JdbcTemplate
 import java.math.BigDecimal
@@ -34,9 +35,11 @@ class StrategyMarketControllerTest {
         every { jwtTokenProvider.getUserId("token") } returns 1L
         every { ruleSetRepository.findByIdAndUserId("rs1", 1L) } returns Optional.empty()
 
-        val response = controller.share("Bearer token", StrategyShareRequest(rulesetId = "rs1"))
-
-        assertThat(response.statusCode).isEqualTo(HttpStatus.NOT_FOUND)
+        // GlobalExceptionHandler가 실제 HTTP 요청 처리 중에만 개입하므로, 컨트롤러를 직접
+        // 호출하는 이 테스트에서는 404로 변환되기 전의 원본 예외를 검증한다.
+        assertThrows<NoSuchElementException> {
+            controller.share("Bearer token", StrategyShareRequest(rulesetId = "rs1"))
+        }
         verify(exactly = 0) { jdbc.queryForObject(any<String>(), any<Class<Long>>(), *anyVararg()) }
     }
 
@@ -45,9 +48,9 @@ class StrategyMarketControllerTest {
         every { jwtTokenProvider.getUserId("token") } returns 1L
         every { ruleSetRepository.findByIdAndUserId("rs1", 1L) } returns Optional.of(doc(1L, RuleSetStatus.DRAFT.name))
 
-        val response = controller.share("Bearer token", StrategyShareRequest(rulesetId = "rs1"))
-
-        assertThat(response.statusCode).isEqualTo(HttpStatus.BAD_REQUEST)
+        assertThrows<IllegalArgumentException> {
+            controller.share("Bearer token", StrategyShareRequest(rulesetId = "rs1"))
+        }
     }
 
     @Test

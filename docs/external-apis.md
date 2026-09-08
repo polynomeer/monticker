@@ -80,11 +80,11 @@ EOD / history:   KRX 정보데이터시스템
 - Order-related: 주문 생성/정정/취소, 주문 체결 조회, 잔고/매수가능금액 조회.
 - Auth: per-user appKey/appSecret (계좌 개설 필요).
 
-### Toss Securities Open API (토스증권 Open API) — planned
+### Toss Securities Open API (토스증권 Open API) — order execution integrated (ADR-026); market data still planned
 
 - URL: https://developers.tossinvest.com/docs
 - Coverage: KR + US stocks in one API — 현재가/호가/체결/캔들, 보유자산, 주문(정정·취소 포함), 조건주문(SINGLE/OCO/OTO), 환율, 시장 캘린더, 투자자별 매매동향, 공매도·신용·대차.
-- Realtime: REST confirmed; WebSocket support is inconsistently documented as of writing (index page lists it, overview/market-data pages say REST-only / WebSocket "추후 지원") — **design any market-data adapter behind an interface so a REST-polling implementation can be swapped for WebSocket later without touching consumers** (mirrors the `StockPriceProvider` interface pattern below).
+- Realtime: both REST and WebSocket exist today — confirmed via the official OpenAPI/AsyncAPI specs (`wss://openapi-ws.tossinvest.com/ws/v1`), correcting an earlier note here that WebSocket was still "추후 지원" (ADR-026 verified this against the published spec directly). **Design any market-data adapter behind an interface anyway** so a REST-polling implementation can be swapped for WebSocket without touching consumers (mirrors the `StockPriceProvider` interface pattern below) — order execution (ADR-026) does not touch market-data streaming, so this remains unimplemented.
 - Auth: per-user API key, plus a `clientOrderId`-style idempotency mechanism for order submission — reuse the existing `X-Idempotency-Key` / `IdempotencyFilter` pattern (`common/idempotency/`) rather than inventing a second one.
 - Rate limiting: per-endpoint-group limits, current usage returned in response headers — wrap `TossBrokerageClient` with a token bucket / backoff and register a named resilience4j circuit breaker (`"toss"`) in `CircuitBreakerConfiguration`, the way `TradingServiceClient`/`YahooFinanceOrderBookProvider` already do. Do not copy `KisBrokerageClient`'s current lack of one.
 - Implementation shape: implement the existing `BrokerageClient` interface (`brokerage/infrastructure/BrokerageClient.kt`) — `BrokerageService` depends on the interface only, so no other code changes. Conditional-order (OCO/OTO) support needs new interface methods since `BrokerageClient` currently has none for it.
@@ -92,7 +92,7 @@ EOD / history:   KRX 정보데이터시스템
 ### **Recommendation**
 
 ```
-실주문 실행:  KIS (already wired) + Toss (new TossBrokerageClient, same interface)
+실주문 실행:  KIS + Toss — both wired via `BrokerageClientRegistry` (ADR-026), same `BrokerageClient` interface
 공통 원칙:    BYOK — 사용자 계좌 API 키만 사용, monticker 명의 주문 없음
 ```
 

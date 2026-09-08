@@ -149,6 +149,8 @@ app:
       enabled: ${BROKERAGE_MOCK_ENABLED:true} # 로컬 개발 전용 — 프로덕션은 반드시 false
     kis:
       base-url: ${KIS_BASE_URL:https://openapivts.koreainvestment.com:29443} # 기본값: 모의투자 서버
+    toss:
+      base-url: ${TOSS_BASE_URL:https://openapi.tossinvest.com} # 모의투자 서버 없음 — 항상 실서버
   security:
     # BrokerageAccount.accessToken 등 민감 컬럼 암호화 키 (AES-256, Base64 32바이트).
     # 아래 값은 로컬 개발 전용 — 프로덕션은 반드시 별도 발급한 키로 오버라이드(application-prod.yml 참고).

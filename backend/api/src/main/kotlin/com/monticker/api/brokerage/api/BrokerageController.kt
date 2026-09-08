@@ -18,6 +18,7 @@ import java.time.LocalDate
 // ── 요청 DTO ───────────────────────────────────────────────────────────────────
 
 data class ConnectRequest(
+    val provider: String,
     val appKey: String,
     val appSecret: String,
     val accountNumber: String,
@@ -100,7 +101,8 @@ class BrokerageController(
         @RequestHeader("Authorization") token: String,
         @RequestBody req: ConnectRequest,
     ): ResponseEntity<AccountResponse> {
-        val account = brokerageService.connect(userId(token), req.appKey, req.appSecret, req.accountNumber)
+        val provider = BrokerageProvider.valueOf(req.provider.uppercase())
+        val account = brokerageService.connect(userId(token), provider, req.appKey, req.appSecret, req.accountNumber)
         return ResponseEntity.ok(account.toResponse())
     }
 

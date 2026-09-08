@@ -61,9 +61,11 @@ class StrategyMarketController(
         // req.rulesetId를 그대로 믿고 INSERT하면 남의 룰셋 ID를 알아내는 것만으로 그 룰셋을
         // 마켓에 공유해버릴 수 있었다(broken object-level authorization) — 소유권을 먼저 확인한다.
         val doc = ruleSetRepository.findByIdAndUserId(req.rulesetId, userId)
-            .orElse(null) ?: return ResponseEntity.notFound().build<Unit>()
-        if (doc.status !in setOf(RuleSetStatus.BACKTESTED.name, RuleSetStatus.RUNNING.name)) {
-            return ResponseEntity.badRequest().body(mapOf("error" to "백테스트를 먼저 완료해야 공유할 수 있습니다."))
+            .orElseThrow { NoSuchElementException("룰셋을 찾을 수 없습니다: ${req.rulesetId}") }
+        // 메시지가 GlobalExceptionHandler의 IllegalStateException 비즈니스 규칙 키워드에
+        // 안 걸려도 항상 400으로 처리되도록 IllegalArgumentException을 쓴다.
+        require(doc.status in setOf(RuleSetStatus.BACKTESTED.name, RuleSetStatus.RUNNING.name)) {
+            "백테스트를 먼저 완료해야 공유할 수 있습니다."
         }
 
         val id = jdbc.queryForObject(

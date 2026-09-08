@@ -3,11 +3,13 @@ package com.monticker.api.brokerage.application
 import com.monticker.api.brokerage.domain.BrokerageAccount
 import com.monticker.api.brokerage.domain.BrokerageOrder
 import com.monticker.api.brokerage.domain.BrokerageOrderStatus
+import com.monticker.api.brokerage.domain.BrokerageProvider
 import com.monticker.api.brokerage.domain.BrokerageSettlement
 import com.monticker.api.brokerage.domain.BrokerageSettlementStatus
 import com.monticker.api.brokerage.domain.OrderSide
 import com.monticker.api.brokerage.domain.OrderType
 import com.monticker.api.brokerage.infrastructure.BrokerageAccountRepository
+import com.monticker.api.brokerage.infrastructure.BrokerageClientRegistry
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRepository
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRequest
 import com.monticker.api.brokerage.infrastructure.BrokerageSettlementRepository
@@ -29,13 +31,14 @@ class BrokerageServiceTest {
 
     private val jdbc           = mockk<JdbcTemplate>(relaxed = true)
     private val mockClient     = MockBrokerageClient(jdbc)
+    private val clientRegistry = BrokerageClientRegistry(BrokerageProvider.entries.associateWith { mockClient })
     private val accountRepo    = mockk<BrokerageAccountRepository>()
     private val orderRepo      = mockk<BrokerageOrderRepository>()
     private val settlementRepo = mockk<BrokerageSettlementRepository>()
     private val ledgerService  = mockk<LedgerService>(relaxed = true)
     private val riskChecker    = mockk<RiskCheckerService>()
 
-    private val service = BrokerageService(mockClient, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc)
+    private val service = BrokerageService(clientRegistry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc)
 
     private val approvedRisk = RiskCheckResult(approved = true, blockedBy = null, severity = "APPROVED", checks = emptyList())
 
@@ -54,10 +57,11 @@ class BrokerageServiceTest {
     @Test
     fun `계좌 연동 시 Mock 토큰이 발급되고 저장된다`() {
         val accountSlot = slot<BrokerageAccount>()
+        every { accountRepo.findByUserIdAndProviderAndAccountNumber(1L, BrokerageProvider.KIS, "12345678") } returns Optional.empty()
         every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.empty()
         every { accountRepo.save(capture(accountSlot)) }      returns makeAccount()
 
-        service.connect(userId = 1L, appKey = "key", appSecret = "secret", accountNumber = "12345678")
+        service.connect(userId = 1L, provider = BrokerageProvider.KIS, appKey = "key", appSecret = "secret", accountNumber = "12345678")
 
         val saved = accountSlot.captured
         assertThat(saved.accessToken).startsWith("mock_token_")
@@ -65,6 +69,23 @@ class BrokerageServiceTest {
         // ADR-025 — appKey/appSecret도 저장돼야 이후의 모든 KIS 호출이 가능하다.
         assertThat(saved.appKey).isEqualTo("key")
         assertThat(saved.appSecret).isEqualTo("secret")
+    }
+
+    @Test
+    fun `다른 증권사로 재연동하면 기존 활성 계좌는 비활성화된다`() {
+        val oldAccount = makeAccount().apply { }
+        val accountSlots = mutableListOf<BrokerageAccount>()
+        every { accountRepo.findByUserIdAndProviderAndAccountNumber(1L, BrokerageProvider.TOSS, "98765432") } returns Optional.empty()
+        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(oldAccount)
+        every { accountRepo.save(capture(accountSlots)) } answers { firstArg() }
+
+        service.connect(userId = 1L, provider = BrokerageProvider.TOSS, appKey = "key2", appSecret = "secret2", accountNumber = "98765432")
+
+        assertThat(oldAccount.isActive).isFalse()
+        val newAccount = accountSlots.first { it !== oldAccount }
+        assertThat(newAccount.provider).isEqualTo(BrokerageProvider.TOSS)
+        assertThat(newAccount.accountNumber).isEqualTo("98765432")
+        assertThat(newAccount.isActive).isTrue()
     }
 
     // ── submitOrder (MARKET) ──────────────────────────────────────────────────
