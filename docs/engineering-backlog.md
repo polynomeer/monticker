@@ -23,12 +23,11 @@
 
 ## 3. 리밸런싱 실행 자동화
 
-`PortfolioOptimizerService`(`backend/api/.../analytics/application/`)가 목표 비중 계산까지는 이미 한다. 없는 것:
-
-- [ ] 현재 보유 비중 대비 목표 비중 **diff 계산** 로직
-- [ ] diff가 **임계값을 초과한 종목만** 실행 대상으로 선별
-- [ ] 선별된 diff를 기존 OMS/브로커 계층(`BrokerageService.submitOrder()`)으로 실제 주문 제출 — 조건부 주문(ADR-032)과 마찬가지로 **기존 리스크 게이트를 반드시 거치도록** 설계할 것(우회 금지 원칙은 ADR-032와 동일하게 적용)
-- [ ] 실행 주기·트리거(수동 버튼 vs 스케줄) 설계 — ADR 필요(도메인 핵심 구조 채택)
+- [x] **실브로커리지 한정, 수동 실행** — ✅ 완료(2026-09-09, [ADR-034](decisions/034-rebalancing-execution.md)). 목표 비중 저장(`rebalance_targets`) → 실행 시점마다 `BrokerageService.getBalance()`로 diff 재계산 → 임계값 초과 종목만 SELL 먼저·BUY 나중 순서로 `submitOrder()`에 순차 위임(리스크 게이트 그대로 적용, 우회 없음). 라이브 검증: 리스크 한도 초과 leg는 정상 거부(`ConcentrationRule`), 정상 범위 leg는 실제 FILLED 주문까지 확인.
+- [ ] **모의투자 리밸런싱** — `MatchingService.submitOrderChecked`/`OrderSagaOrchestrator` 경로로 한정해 별도 실행기 필요(`PaperTradingService.buy/sell`는 리스크 게이트가 없어 재사용 금지). [ADR-034 Revisit When](decisions/034-rebalancing-execution.md#revisit-when)
+- [ ] **스케줄 기반 자동 실행** — 지금 만든 diff 계산+순차 실행 로직을 `@Scheduled` 잡에서 재사용, 트리거만 추가. [ADR-034 Revisit When](decisions/034-rebalancing-execution.md#revisit-when)
+- [ ] **`PortfolioOptimizerService` 결과를 목표 비중에 바로 저장하는 편의 플로우** — 지금은 목표 비중을 수동 입력만 지원한다. 프론트에서 `/api/analytics/portfolio/optimize` 결과를 `/api/rebalance/target`에 그대로 전달하는 "최적화 결과로 저장" 버튼을 추가할 수 있다(백엔드 변경 불필요, 프론트 전용 작업).
+- [ ] **(발견됨) `PortfolioOptimization.weightsJson`/`AlertRule.conditionJson`도 같은 jsonb 바인딩 버그를 가질 수 있음** — `RebalanceTarget.weightsJson` 저장 중 라이브로 발견: `columnDefinition="jsonb"`만으론 Hibernate가 INSERT 시 varchar로 바인딩해 Postgres가 캐스트를 거부한다(`@JdbcTypeCode(SqlTypes.JSON)` 필요, `QuantBacktestResult`가 이미 쓰던 패턴). 이 두 파일은 같은 방식(`columnDefinition`만, `@JdbcTypeCode` 없음)이라 INSERT 시 동일하게 깨질 가능성이 있음 — 확인 필요.
 
 ## 4. AI 자동 매수/매도 (가드레일 필수)
 
