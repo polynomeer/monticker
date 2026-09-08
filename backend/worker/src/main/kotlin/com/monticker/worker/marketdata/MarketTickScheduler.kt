@@ -12,6 +12,9 @@ import org.springframework.stereotype.Component
  * role=market : MSA 독립 컨테이너 모드.
  * role=all    : 단일 프로세스 모드. ingestion.source=kafka 이면 Go market-gateway가
  *               market.ticks를 대신 발행하므로 이 스케줄러를 비활성화한다.
+ * ingestion.source=kis 에서도 이 스케줄러는 계속 돈다 — KIS가 커버하지 않는 나머지
+ * 종목(미국 전체 + 국내 비커버 종목)은 여전히 Mock이 채워야 하기 때문이다. 실제
+ * 종목 단위 제외는 MockPriceGenerator가 KisCoverageProvider를 참조해 처리한다(ADR-030).
  *
  * [Stage 4] 내부 경로와 Go gateway 경로 모두 Kafka를 거친다.
  * CandleAggregator/EventDetector/AlertEvaluator는 TickKafkaConsumer가 담당.
@@ -22,7 +25,7 @@ import org.springframework.stereotype.Component
  */
 @Component
 @ConditionalOnExpression(
-    "'\${worker.role:all}'.matches('market|all') && '\${ingestion.source:internal}' != 'kafka'"
+    "'\${worker.role:all}'.matches('market|all') && '\${ingestion.source:internal}'.matches('internal|kis')"
 )
 class MarketTickScheduler(
     private val generator: MockPriceGenerator,

@@ -127,8 +127,10 @@ services:
       KIS_APP_KEY: ${KIS_APP_KEY:-}
       KIS_APP_SECRET: ${KIS_APP_SECRET:-}
       # Stage 4: Kafka가 항상 활성화되므로 brokers를 명시한다.
-      # internal(기본) = MockPriceGenerator → Kafka → TickKafkaConsumer
-      # kafka          = Go market-gateway  → Kafka → TickKafkaConsumer
+      # internal(기본) = MockPriceGenerator             → Kafka → TickKafkaConsumer
+      # kafka          = Go market-gateway              → Kafka → TickKafkaConsumer
+      # kis            = KIS 실시간체결가(국내 21종목) + MockPriceGenerator(나머지) → Kafka
+      #                  (ADR-030, KIS_APP_KEY/KIS_APP_SECRET 필요)
       INGESTION_SOURCE: ${INGESTION_SOURCE:-internal}
       KAFKA_BROKERS: kafka:9092
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318

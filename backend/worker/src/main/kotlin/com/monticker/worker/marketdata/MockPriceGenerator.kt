@@ -1,5 +1,6 @@
 package com.monticker.worker.marketdata
 
+import com.monticker.worker.kis.KisCoverageProvider
 import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
@@ -24,7 +25,10 @@ data class GeneratedTick(
 private data class StockMeta(val id: Long, val symbol: String, val market: String)
 
 @Component
-class MockPriceGenerator(private val jdbc: JdbcTemplate) {
+class MockPriceGenerator(
+    private val jdbc: JdbcTemplate,
+    private val kisCoverage: KisCoverageProvider,
+) {
 
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -68,6 +72,10 @@ class MockPriceGenerator(private val jdbc: JdbcTemplate) {
 
     fun generate(): List<GeneratedTick> {
         return stocks.mapNotNull { s ->
+            // ADR-030 — KIS 실시간체결가가 실제로 구독한 종목은 Mock을 건너뛴다.
+            // "KOSPI/KOSDAQ 전체 제외"가 아니라 실제 커버리지만큼만 정확히 대체한다.
+            if (s.id in kisCoverage.coveredStockIds) return@mapNotNull null
+
             val config = MarketSchedule.getTickConfig(s.symbol, s.market)
             // 장 마감 중에도 개발 편의를 위해 낮은 변동성으로 틱 생성 (실서비스에서는 제거)
             val effectiveStatus = if (config.status == MarketSchedule.MarketStatus.CLOSED)

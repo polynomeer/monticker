@@ -23,14 +23,16 @@ import java.time.Instant
 @Component
 class KisOrderBookHandler(
     private val redisTemplate: StringRedisTemplate,
-) {
+) : KisRealtimeHandler {
+    override val trId = "H0STASP0"
+
     private val log = LoggerFactory.getLogger(javaClass)
     private val mapper = ObjectMapper()
 
     // Redis TTL — 호가 데이터는 30초 이상 오래되면 신뢰 불가
     private val TTL = Duration.ofSeconds(30)
 
-    fun handle(parts: List<String>) {
+    override fun handle(parts: List<String>) {
         // parts[0]=encType, [1]=trId, [2]=dataCount, [3..] = actual fields
         val fields = parts.drop(3)
         if (fields.size < 44) return

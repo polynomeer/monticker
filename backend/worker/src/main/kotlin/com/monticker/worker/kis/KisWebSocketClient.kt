@@ -20,20 +20,30 @@ import java.util.concurrent.atomic.AtomicReference
 class KisWebSocketClient(
     @Value("\${kis.app-key:}") private val appKey: String,
     @Value("\${kis.app-secret:}") private val appSecret: String,
-    private val orderBookHandler: KisOrderBookHandler,
+    handlers: List<KisRealtimeHandler>,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
     private val mapper = ObjectMapper()
+    private val handlersByTrId = handlers.associateBy { it.trId }
 
     private val WS_URL = "ws://ops.koreainvestment.com:21000"
     private val wsRef = AtomicReference<WebSocket?>()
     private val connected = AtomicBoolean(false)
     private val approvalKey = AtomicReference<String?>()
     private val approvalKeyExpiry = AtomicReference(Instant.EPOCH)
-    private val subscribedSymbols = CopyOnWriteArraySet<String>()
+
+    // (trId, symbol) 쌍 — 커넥션 하나를 여러 TR 타입이 공유하므로 심볼만으론 식별 불가.
+    private val subscriptions = CopyOnWriteArraySet<Pair<String, String>>()
 
     val isConfigured: Boolean get() = appKey.isNotBlank() && appSecret.isNotBlank()
+
+    companion object {
+        // KIS 공식 저장소(koreainvestment/open-trading-api) 명시: "1개 appkey당 최대
+        // 41건 등록 제한". 커넥션당인지 appkey당 전역인지는 실 서버 검증 전까지 불확실해
+        // 다중 커넥션 풀링 대신 이 값 하나로 방어한다(ADR-030).
+        const val MAX_REGISTRATIONS = 41
+    }
 
     // ── Approval Key ─────────────────────────────────────────────────────────
 
@@ -87,7 +97,7 @@ class KisWebSocketClient(
         val key = getApprovalKey() ?: return
 
         log.info("Connecting to KIS WebSocket...")
-        val listener = KisWebSocketListener(key, subscribedSymbols, orderBookHandler, ::onDisconnected)
+        val listener = KisWebSocketListener(key, subscriptions, handlersByTrId, ::onDisconnected)
 
         try {
             val ws = HttpClient.newHttpClient()
@@ -103,27 +113,20 @@ class KisWebSocketClient(
         }
     }
 
-    fun subscribe(symbol: String) {
+    fun subscribe(trId: String, symbol: String) {
         if (!isConfigured) return
-        subscribedSymbols.add(symbol)
+        val pair = trId to symbol
+        if (pair !in subscriptions && subscriptions.size >= MAX_REGISTRATIONS) {
+            log.warn("KIS WebSocket 등록 한도({}) 초과 — {}:{} 구독 건너뜀", MAX_REGISTRATIONS, trId, symbol)
+            return
+        }
+        subscriptions.add(pair)
         val ws = wsRef.get() ?: return
         if (!connected.get()) return
 
         val key = approvalKey.get() ?: return
-        val msg = mapper.writeValueAsString(mapOf(
-            "header" to mapOf(
-                "approval_key"  to key,
-                "custtype"      to "P",
-                "tr_type"       to "1",
-                "content-type"  to "utf-8",
-            ),
-            "body" to mapOf("input" to mapOf(
-                "tr_id"  to "H0STASP0",
-                "tr_key" to symbol,
-            )),
-        ))
-        ws.sendText(msg, true)
-        log.debug("Subscribed to H0STASP0 for {}", symbol)
+        ws.sendText(buildSubscribeMessage(key, trId, symbol), true)
+        log.debug("Subscribed to {} for {}", trId, symbol)
     }
 
     fun disconnect() {
@@ -138,12 +141,30 @@ class KisWebSocketClient(
     }
 }
 
+// ── Shared helpers ─────────────────────────────────────────────────────────────
+
+private val subscribeMessageMapper = ObjectMapper()
+
+private fun buildSubscribeMessage(approvalKey: String, trId: String, symbol: String): String =
+    subscribeMessageMapper.writeValueAsString(mapOf(
+        "header" to mapOf(
+            "approval_key" to approvalKey,
+            "custtype"     to "P",
+            "tr_type"      to "1",
+            "content-type" to "utf-8",
+        ),
+        "body" to mapOf("input" to mapOf(
+            "tr_id"  to trId,
+            "tr_key" to symbol,
+        )),
+    ))
+
 // ── Listener ─────────────────────────────────────────────────────────────────
 
 private class KisWebSocketListener(
     private val approvalKey: String,
-    private val subscribedSymbols: Set<String>,
-    private val handler: KisOrderBookHandler,
+    private val subscriptions: Set<Pair<String, String>>,
+    private val handlersByTrId: Map<String, KisRealtimeHandler>,
     private val onDisconnected: () -> Unit,
 ) : WebSocket.Listener {
 
@@ -151,23 +172,10 @@ private class KisWebSocketListener(
     private val sb = StringBuilder()
 
     override fun onOpen(webSocket: WebSocket) {
-        log.info("KIS WebSocket open — re-subscribing {} symbols", subscribedSymbols.size)
+        log.info("KIS WebSocket open — re-subscribing {} registrations", subscriptions.size)
         // Re-subscribe after reconnect
-        subscribedSymbols.forEach { symbol ->
-            val mapper = ObjectMapper()
-            val msg = mapper.writeValueAsString(mapOf(
-                "header" to mapOf(
-                    "approval_key" to approvalKey,
-                    "custtype"     to "P",
-                    "tr_type"      to "1",
-                    "content-type" to "utf-8",
-                ),
-                "body" to mapOf("input" to mapOf(
-                    "tr_id"  to "H0STASP0",
-                    "tr_key" to symbol,
-                )),
-            ))
-            webSocket.sendText(msg, true)
+        subscriptions.forEach { (trId, symbol) ->
+            webSocket.sendText(buildSubscribeMessage(approvalKey, trId, symbol), true)
         }
         webSocket.request(1)
     }
@@ -201,18 +209,17 @@ private class KisWebSocketListener(
             log.debug("KIS control message: {}", raw.take(100))
             return
         }
-        // Format: header|trId|dataCount|body
-        // body for H0STASP0: fields are pipe-separated
+        // Format: header|trId|dataCount|body — body fields are pipe-separated per TR type.
         val parts = raw.split("|")
         if (parts.size < 4) return
 
         val trId = parts[1]
-        if (trId != "H0STASP0") return
+        val handler = handlersByTrId[trId] ?: return
 
         try {
             handler.handle(parts)
         } catch (e: Exception) {
-            log.warn("H0STASP0 parse error: {}", e.message)
+            log.warn("{} parse error: {}", trId, e.message)
         }
     }
 }
