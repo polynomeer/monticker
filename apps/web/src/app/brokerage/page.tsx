@@ -140,7 +140,15 @@ export default function BrokerageDashboardPage() {
             </p>
           </div>
         </div>
-        <Badge variant={account.isActive ? "up" : "neutral"}>{account.isActive ? "활성" : "비활성"}</Badge>
+        <div className="flex items-center gap-2 shrink-0">
+          {!account.tokenValid && (
+            <Link href="/brokerage/connect"
+              className="px-3 py-1.5 rounded-lg bg-dracula-red/15 text-dracula-red text-xs font-semibold hover:bg-dracula-red/25 transition-colors">
+              재연동
+            </Link>
+          )}
+          <Badge variant={account.isActive ? "up" : "neutral"}>{account.isActive ? "활성" : "비활성"}</Badge>
+        </div>
       </Card>
 
       {/* 잔고 요약 */}

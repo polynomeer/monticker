@@ -56,8 +56,17 @@ export default function BrokerageConnectPage() {
 
   useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
 
+  // ADR-027 — 재인증이 필요한 계좌면 기존 증권사/계좌번호를 채워 폼을 그대로 보여준다.
+  useEffect(() => {
+    if (account && !account.tokenValid) {
+      setProvider(account.provider as BrokerageProviderId);
+      setAccountNumber(account.accountNumber);
+    }
+  }, [account]);
+
   const meta = PROVIDER_META[provider];
   const isValid = appKey.trim().length > 0 && appSecret.trim().length > 0 && accountNumber.trim().length > 0;
+  const needsReconnect = !!account && !account.tokenValid;
 
   const handleSubmit = async () => {
     try {
@@ -76,7 +85,7 @@ export default function BrokerageConnectPage() {
     </div>
   );
 
-  if (account) return (
+  if (account && account.tokenValid) return (
     <div className="max-w-lg mx-auto px-4 py-6 sm:py-8 animate-fade-up text-center">
       <Card className="p-6">
         <ShieldCheck size={28} weight="duotone" className="text-dracula-green mx-auto mb-2" aria-hidden />
@@ -99,6 +108,20 @@ export default function BrokerageConnectPage() {
           증권사 Open API 키를 입력하면 실제 계좌로 주문을 체결할 수 있습니다.
         </p>
       </div>
+
+      {needsReconnect && (
+        <Card className="p-4 mb-5" outerClassName="mb-5">
+          <div className="flex items-start gap-2.5 text-sm">
+            <Warning size={18} weight="bold" className="text-dracula-red shrink-0 mt-0.5" aria-hidden />
+            <div>
+              <p className="font-semibold text-dracula-red">재인증이 필요합니다</p>
+              <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">
+                증권사 인증이 만료되었거나 앱키/시크릿이 변경되었을 수 있습니다. 아래에서 다시 발급받은 정보로 재연동해주세요.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* 증권사 선택 */}
       <div className="grid grid-cols-2 gap-2 mb-5">
@@ -164,7 +187,7 @@ export default function BrokerageConnectPage() {
           disabled={!isValid || connect.isPending}
           className="w-full mt-6 py-3 rounded-xl font-bold text-sm text-white active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100 bg-blue-600 dark:bg-dracula-purple dark:text-dracula-bg"
         >
-          {connect.isPending ? "연동 중..." : `${BROKERAGE_PROVIDER_LABELS[provider]} 계좌 연동하기`}
+          {connect.isPending ? "연동 중..." : needsReconnect ? `${BROKERAGE_PROVIDER_LABELS[provider]} 계좌 재연동하기` : `${BROKERAGE_PROVIDER_LABELS[provider]} 계좌 연동하기`}
         </button>
       </Card>
 
