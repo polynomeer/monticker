@@ -24,8 +24,10 @@ class KisCoverageProvider(
         const val MAX_TICK_SYMBOLS = 21
     }
 
+    // ADR-031 — ingestion.source가 "kis,toss"처럼 콤마 구분 다중값일 수 있어 정확히
+    // 일치 대신 포함 여부로 판단한다. "kis" 단독 사용 시 동작은 바뀌지 않는다.
     val targets: List<KisTickTarget> =
-        if (ingestionSource == "kis")
+        if (ingestionSource.contains("kis"))
             jdbc.query(
                 """
                 SELECT id, symbol, market FROM stocks

@@ -1,6 +1,7 @@
 package com.monticker.worker.marketdata
 
 import com.monticker.worker.kis.KisCoverageProvider
+import com.monticker.worker.toss.TossCoverageProvider
 import io.mockk.every
 import io.mockk.mockk
 import org.assertj.core.api.Assertions.assertThat
@@ -11,15 +12,16 @@ import java.sql.ResultSet
 
 class MockPriceGeneratorTest {
 
-    // ingestion.source=internal — KisCoverageProvider의 자체 쿼리는 short-circuit되어
-    // 실행되지 않으므로 jdbc mock을 그냥 넘겨도 안전하다.
-    private val noCoverage = KisCoverageProvider(mockk(), "internal")
+    // ingestion.source=internal — KisCoverageProvider/TossCoverageProvider의 자체 쿼리는
+    // short-circuit되어 실행되지 않으므로 jdbc mock을 그냥 넘겨도 안전하다.
+    private val noKisCoverage = KisCoverageProvider(mockk(), "internal")
+    private val noTossCoverage = TossCoverageProvider(mockk(), "internal", noKisCoverage)
 
     private val jdbc = mockk<JdbcTemplate> {
         // @PostConstruct loadStocks() 가 호출하는 DB 쿼리를 스텁
         every { query(any<String>(), any<RowMapper<Any>>()) } returns emptyList<Any>()
     }
-    private val generator = MockPriceGenerator(jdbc, noCoverage)
+    private val generator = MockPriceGenerator(jdbc, noKisCoverage, noTossCoverage)
 
     @Test
     fun `DB에 종목 없으면 generate는 빈 리스트를 반환한다`() {
@@ -45,7 +47,7 @@ class MockPriceGeneratorTest {
                 listOf(mapper.mapRow(rs, 0))
             }
         }
-        val loadedGenerator = MockPriceGenerator(loadingJdbc, noCoverage)
+        val loadedGenerator = MockPriceGenerator(loadingJdbc, noKisCoverage, noTossCoverage)
         loadedGenerator.loadStocks()
 
         val ticks = loadedGenerator.generate()
@@ -92,12 +94,56 @@ class MockPriceGeneratorTest {
                 listOf(mapper.mapRow(covered, 0), mapper.mapRow(uncovered, 1))
             }
         }
-        val loadedGenerator = MockPriceGenerator(loadingJdbc, kisCoverage)
+        val loadedGenerator = MockPriceGenerator(loadingJdbc, kisCoverage, noTossCoverage)
         loadedGenerator.loadStocks()
 
         val ticks = loadedGenerator.generate()
 
         assertThat(ticks).hasSize(1)
         assertThat(ticks.first().stockId).isEqualTo(2L)
+    }
+
+    @Test
+    fun `Toss가 실시간으로 커버하는 종목은 Mock 생성에서 제외한다`() {
+        // ingestion.source=toss이고 TossCoverageProvider가 stockId=3(미국)을 커버 대상으로
+        // 계산했다면, MockPriceGenerator는 그 종목만 정확히 건너뛰어야 한다(ADR-031).
+        val tossJdbc = mockk<JdbcTemplate> {
+            every { query(any<String>(), any<RowMapper<Any>>()) } answers {
+                @Suppress("UNCHECKED_CAST")
+                val mapper = secondArg<RowMapper<Any>>()
+                val rs = mockk<ResultSet> {
+                    every { getLong("id") } returns 3L
+                    every { getString("symbol") } returns "AAPL"
+                    every { getString("market") } returns "NASDAQ"
+                }
+                listOf(mapper.mapRow(rs, 0))
+            }
+        }
+        val tossCoverage = TossCoverageProvider(tossJdbc, "toss", noKisCoverage)
+
+        val loadingJdbc = mockk<JdbcTemplate> {
+            every { query(any<String>(), any<RowMapper<Any>>()) } answers {
+                @Suppress("UNCHECKED_CAST")
+                val mapper = secondArg<RowMapper<Any>>()
+                val covered = mockk<ResultSet> {
+                    every { getLong("id") } returns 3L
+                    every { getString("symbol") } returns "AAPL"
+                    every { getString("market") } returns "NASDAQ"
+                }
+                val uncovered = mockk<ResultSet> {
+                    every { getLong("id") } returns 4L
+                    every { getString("symbol") } returns "MSFT"
+                    every { getString("market") } returns "NASDAQ"
+                }
+                listOf(mapper.mapRow(covered, 0), mapper.mapRow(uncovered, 1))
+            }
+        }
+        val loadedGenerator = MockPriceGenerator(loadingJdbc, noKisCoverage, tossCoverage)
+        loadedGenerator.loadStocks()
+
+        val ticks = loadedGenerator.generate()
+
+        assertThat(ticks).hasSize(1)
+        assertThat(ticks.first().stockId).isEqualTo(4L)
     }
 }
