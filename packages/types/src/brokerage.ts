@@ -5,8 +5,12 @@ export type BrokerageOrderSide = "BUY" | "SELL";
 export type BrokerageOrderType = "MARKET" | "LIMIT";
 export type BrokerageOrderStatus = "SUBMITTED" | "FILLED" | "PARTIALLY_FILLED" | "CANCELLED" | "REJECTED";
 export type BrokerageSettlementStatus = "PENDING" | "SETTLED" | "FAILED";
+// ADR-026 — 사용자가 선택 가능한 실제 증권사만. MOCK은 서버 설정(app.brokerage.mock.enabled)에
+// 따른 내부 구현 디테일이라 프론트에서 선택하지 않는다.
+export type BrokerageProviderId = "KIS" | "TOSS";
 
 export interface ConnectBrokerageRequest {
+  provider: BrokerageProviderId;
   appKey: string;
   appSecret: string;
   accountNumber: string;

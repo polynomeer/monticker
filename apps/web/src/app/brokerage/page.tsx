@@ -8,6 +8,7 @@ import { getAccessToken } from "@/services/auth";
 import { useBrokerageAccount, useBrokerageBalance, useBrokerageOrders, useBrokerageSettlements } from "@/hooks/useBrokerage";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { brokerageProviderLabel } from "@/lib/brokerageProvider";
 import type { BrokerageOrderResponse, BrokerageSettlementResponse } from "@monticker/types";
 
 function fmt(n: number) { return n.toLocaleString("ko-KR", { maximumFractionDigits: 0 }); }
@@ -133,7 +134,7 @@ export default function BrokerageDashboardPage() {
         <div className="flex items-center gap-3">
           <ShieldCheck size={22} weight="duotone" className={account.tokenValid ? "text-dracula-green" : "text-dracula-orange"} aria-hidden />
           <div>
-            <p className="text-xs text-gray-500 dark:text-dracula-comment">{account.provider} 계좌 연동됨</p>
+            <p className="text-xs text-gray-500 dark:text-dracula-comment">{brokerageProviderLabel(account.provider)} 계좌 연동됨</p>
             <p className="text-sm font-semibold text-gray-900 dark:text-dracula-fg mt-0.5">
               {account.tokenValid ? "정상 연결" : "재인증 필요"}
             </p>

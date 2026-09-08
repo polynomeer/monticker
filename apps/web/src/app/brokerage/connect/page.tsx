@@ -9,9 +9,43 @@ import { useBrokerageAccount, useConnectBrokerage } from "@/hooks/useBrokerage";
 import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { BROKERAGE_PROVIDER_LABELS, brokerageProviderLabel } from "@/lib/brokerageProvider";
+import type { BrokerageProviderId } from "@monticker/types";
+
+const PROVIDER_META: Record<BrokerageProviderId, {
+  keyLabel: string;
+  secretLabel: string;
+  keyPlaceholder: string;
+  secretPlaceholder: string;
+  accountPlaceholder: string;
+  portalName: string;
+  portalUrl: string;
+}> = {
+  KIS: {
+    keyLabel: "App Key",
+    secretLabel: "App Secret",
+    keyPlaceholder: "한국투자증권에서 발급받은 App Key",
+    secretPlaceholder: "한국투자증권에서 발급받은 App Secret",
+    accountPlaceholder: "숫자만 입력 (예: 1234567801)",
+    portalName: "한국투자증권 Open API 포털",
+    portalUrl: "https://apiportal.koreainvestment.com",
+  },
+  TOSS: {
+    keyLabel: "Client ID",
+    secretLabel: "Client Secret",
+    keyPlaceholder: "토스증권에서 발급받은 Client ID",
+    secretPlaceholder: "토스증권에서 발급받은 Client Secret",
+    accountPlaceholder: "숫자만 입력 (예: 12345678901)",
+    portalName: "토스증권 Open API 개발자 센터",
+    portalUrl: "https://developers.tossinvest.com",
+  },
+};
+
+const PROVIDERS = Object.keys(PROVIDER_META) as BrokerageProviderId[];
 
 export default function BrokerageConnectPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [provider, setProvider] = useState<BrokerageProviderId>("KIS");
   const [appKey, setAppKey] = useState("");
   const [appSecret, setAppSecret] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
@@ -22,11 +56,12 @@ export default function BrokerageConnectPage() {
 
   useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
 
+  const meta = PROVIDER_META[provider];
   const isValid = appKey.trim().length > 0 && appSecret.trim().length > 0 && accountNumber.trim().length > 0;
 
   const handleSubmit = async () => {
     try {
-      await connect.mutateAsync({ appKey: appKey.trim(), appSecret: appSecret.trim(), accountNumber: accountNumber.trim() });
+      await connect.mutateAsync({ provider, appKey: appKey.trim(), appSecret: appSecret.trim(), accountNumber: accountNumber.trim() });
       toast({ type: "success", title: "연동 완료", message: "증권사 계좌가 연동되었습니다." });
       router.push("/brokerage");
     } catch (e) {
@@ -46,7 +81,9 @@ export default function BrokerageConnectPage() {
       <Card className="p-6">
         <ShieldCheck size={28} weight="duotone" className="text-dracula-green mx-auto mb-2" aria-hidden />
         <p className="font-semibold text-gray-900 dark:text-dracula-fg">이미 계좌가 연동되어 있습니다</p>
-        <p className="text-xs text-gray-500 dark:text-dracula-comment mt-1">계좌번호 {account.accountNumber}</p>
+        <p className="text-xs text-gray-500 dark:text-dracula-comment mt-1">
+          {brokerageProviderLabel(account.provider)} · 계좌번호 {account.accountNumber}
+        </p>
         <Link href="/brokerage" className="inline-block mt-4 px-4 py-2 rounded-lg bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg text-sm font-semibold hover:opacity-90 active:scale-[0.98] transition-all duration-150">
           대시보드로 이동
         </Link>
@@ -59,16 +96,37 @@ export default function BrokerageConnectPage() {
       <div className="mb-8">
         <h1 className="text-xl font-bold text-gray-900 dark:text-dracula-fg">증권사 계좌 연동</h1>
         <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">
-          한국투자증권 Open API 앱키를 입력하면 실제 계좌로 주문을 체결할 수 있습니다.
+          증권사 Open API 키를 입력하면 실제 계좌로 주문을 체결할 수 있습니다.
         </p>
+      </div>
+
+      {/* 증권사 선택 */}
+      <div className="grid grid-cols-2 gap-2 mb-5">
+        {PROVIDERS.map(p => (
+          <button
+            key={p}
+            onClick={() => setProvider(p)}
+            className={`py-3 rounded-xl text-sm font-bold transition-all duration-150 border ${
+              provider === p
+                ? "bg-blue-50 dark:bg-dracula-purple/15 border-blue-600 dark:border-dracula-purple text-blue-600 dark:text-dracula-purple"
+                : "bg-gray-50 dark:bg-dracula-line/20 border-transparent text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg"
+            }`}
+          >
+            {BROKERAGE_PROVIDER_LABELS[p]}
+          </button>
+        ))}
       </div>
 
       <Card className="p-5 mb-5" outerClassName="mb-5">
         <div className="flex items-start gap-2.5 text-xs text-gray-500 dark:text-dracula-comment">
           <Warning size={16} weight="bold" className="text-dracula-orange shrink-0 mt-0.5" aria-hidden />
           <p>
-            appKey/appSecret은 암호화되어 저장되며, 몬티커는 이 값을 이용해 사용자 본인 명의 계좌에만
-            주문을 전달합니다. 발급 방법은 한국투자증권 Open API 포털의 안내를 참고하세요.
+            {meta.keyLabel}/{meta.secretLabel}은 암호화되어 저장되며, 몬티커는 이 값을 이용해 사용자 본인 명의
+            계좌에만 주문을 전달합니다. 발급 방법은{" "}
+            <a href={meta.portalUrl} target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-900 dark:hover:text-dracula-fg">
+              {meta.portalName}
+            </a>
+            의 안내를 참고하세요.
           </p>
         </div>
       </Card>
@@ -76,23 +134,25 @@ export default function BrokerageConnectPage() {
       <Card className="p-5">
         <div className="flex flex-col gap-4">
           <Input
-            label="App Key"
-            placeholder="한국투자증권에서 발급받은 App Key"
+            key={`${provider}-key`}
+            label={meta.keyLabel}
+            placeholder={meta.keyPlaceholder}
             value={appKey}
             onChange={e => setAppKey(e.target.value)}
             autoComplete="off"
           />
           <Input
-            label="App Secret"
+            key={`${provider}-secret`}
+            label={meta.secretLabel}
             type="password"
-            placeholder="한국투자증권에서 발급받은 App Secret"
+            placeholder={meta.secretPlaceholder}
             value={appSecret}
             onChange={e => setAppSecret(e.target.value)}
             autoComplete="off"
           />
           <Input
             label="계좌번호"
-            placeholder="숫자만 입력 (예: 1234567801)"
+            placeholder={meta.accountPlaceholder}
             value={accountNumber}
             onChange={e => setAccountNumber(e.target.value.replace(/[^0-9]/g, ""))}
             autoComplete="off"
@@ -104,7 +164,7 @@ export default function BrokerageConnectPage() {
           disabled={!isValid || connect.isPending}
           className="w-full mt-6 py-3 rounded-xl font-bold text-sm text-white active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100 bg-blue-600 dark:bg-dracula-purple dark:text-dracula-bg"
         >
-          {connect.isPending ? "연동 중..." : "계좌 연동하기"}
+          {connect.isPending ? "연동 중..." : `${BROKERAGE_PROVIDER_LABELS[provider]} 계좌 연동하기`}
         </button>
       </Card>
 
