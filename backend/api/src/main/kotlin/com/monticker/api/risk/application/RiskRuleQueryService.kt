@@ -145,25 +145,30 @@ class RiskRuleQueryService(
         return checks
     }
 
+    // queryForObject는 결과가 0건이면 EmptyResultDataAccessException을 던진다 — 아직 한 번도
+    // 거래하지 않아 paper_accounts/캔들 행이 없는 사용자가 있으면 GlobalExceptionHandler의
+    // catch-all에 잡혀 안내 메시지 없는 500으로 샌다. query+firstOrNull은 0건이어도 예외 없이
+    // 빈 리스트를 준다. (PaperTradingService.getCurrentPrice와 동일한 패턴)
     private fun currentPrice(stockId: Long): BigDecimal =
-        runCatching {
-            jdbc.queryForObject(
-                "SELECT close FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1",
-                BigDecimal::class.java, stockId,
-            ) ?: BigDecimal.ZERO
-        }.getOrDefault(BigDecimal.ZERO)
+        jdbc.query(
+            "SELECT close FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1",
+            { rs, _ -> rs.getBigDecimal("close") },
+            stockId,
+        ).firstOrNull() ?: BigDecimal.ZERO
 
     private fun paperSnapshot(userId: Long): PortfolioSnapshot {
-        val accountCash = jdbc.queryForObject(
+        val accountCash = jdbc.query(
             "SELECT COALESCE(cash, 0) FROM paper_accounts WHERE user_id = ?",
-            BigDecimal::class.java, userId,
-        ) ?: BigDecimal("10000000")
+            { rs, _ -> rs.getBigDecimal(1) },
+            userId,
+        ).firstOrNull() ?: BigDecimal("10000000")
 
-        val dailyPnl = jdbc.queryForObject(
+        val dailyPnl = jdbc.query(
             """SELECT COALESCE(SUM(CASE WHEN side='SELL' THEN amount ELSE -amount END), 0)
                FROM fills WHERE user_id = ? AND filled_at >= current_date""",
-            BigDecimal::class.java, userId,
-        ) ?: BigDecimal.ZERO
+            { rs, _ -> rs.getBigDecimal(1) },
+            userId,
+        ).firstOrNull() ?: BigDecimal.ZERO
 
         val holdings = jdbc.queryForList(
             """SELECT stock_id, SUM(CASE WHEN side='BUY' THEN quantity ELSE -quantity END) as qty
@@ -179,10 +184,11 @@ class RiskRuleQueryService(
         }
 
         val oneHourAgo = Instant.now().minusSeconds(3600)
-        val recentOrderCount = jdbc.queryForObject(
+        val recentOrderCount = jdbc.query(
             "SELECT COUNT(*) FROM orders WHERE user_id = ? AND created_at > ?",
-            Long::class.java, userId, java.sql.Timestamp.from(oneHourAgo),
-        ) ?: 0L
+            { rs, _ -> rs.getLong(1) },
+            userId, java.sql.Timestamp.from(oneHourAgo),
+        ).firstOrNull() ?: 0L
 
         return PortfolioSnapshot(accountCash, holdings, dailyPnl, recentOrderCount)
     }
