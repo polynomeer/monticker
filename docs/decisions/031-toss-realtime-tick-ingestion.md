@@ -1,11 +1,11 @@
 # ADR-031: Toss 실시간 시세(trade:kr/us) 연동 설계
 
 ## Status
-Accepted (설계만 — 구현은 의도적으로 다음 라운드로 미룸, 사용자 지시)
+Accepted — 구현 완료(코드는 `backend/worker/.../toss/` 참고). 처음엔 사용자가 설계만 요청해 이 문서를 코드 없이 작성했고, 바로 다음 요청으로 구현까지 이어졌다. 라이브 검증은 여전히 보류 상태다(아래 Consequences 참고) — 이 부분만 최초 작성 이후 갱신됐다.
 
 ## Context
 
-[ADR-030](030-kis-realtime-tick-ingestion.md)의 "Revisit When"이 명시한 다음 단계다: "Toss 플랫폼 앱키가 준비되면 — trade:kr/trade:us WebSocket 채널로 별도 라운드 진행." 이번엔 KIS 라운드와 같은 방식(공식 스펙 직접 확인 → ADR로 설계 → 구현)을 따르되, **사용자가 이번엔 설계까지만 요청**했다 — 코드는 이 ADR에 한 줄도 없다.
+[ADR-030](030-kis-realtime-tick-ingestion.md)의 "Revisit When"이 명시한 다음 단계다: "Toss 플랫폼 앱키가 준비되면 — trade:kr/trade:us WebSocket 채널로 별도 라운드 진행." 이번엔 KIS 라운드와 같은 방식(공식 스펙 직접 확인 → ADR로 설계 → 구현)을 따랐다 — 처음엔 사용자가 설계까지만 요청해 코드 없이 작성했고, 곧이어 구현까지 요청받아 완료했다.
 
 **Toss 실시간 채널 인증/한도를 AsyncAPI 스펙에서 직접 재확인했다**(`openapi.tossinvest.com/openapi-docs/latest/asyncapi.json`) — ADR-026이 이 스펙의 존재만 언급하고 세부는 검증하지 않았던 부분이다:
 
@@ -47,7 +47,8 @@ Accepted (설계만 — 구현은 의도적으로 다음 라운드로 미룸, �
 
 ## Consequences
 
-- **이 ADR 시점엔 코드가 전혀 없다** — `backend/worker/.../toss/` 디렉터리 자체가 아직 없다. 다음 라운드가 실제로 클래스를 만들고 컴파일·테스트·(플랫폼 키가 생기면) 라이브 검증까지 진행해야 한다.
+- **구현이 끝났다** — `backend/worker/.../toss/`(`TossWebSocketClient`, `TossRealtimeHandler`, `TossExecutionTickHandler`/`Subscriber`, `TossCoverageProvider`, `TossTokenIssuer`) 컴파일·전체 테스트 그린. 다만 **라이브 검증은 여전히 보류 상태다** — 플랫폼 Toss 앱키(`TOSS_PLATFORM_APP_KEY`/`SECRET`)가 로컬에 설정된 적이 없어, 실제 `wss://openapi-ws.tossinvest.com/ws/v1` 연결로 검증한 적은 아직 없다. ADR-030의 KIS 코드와 정확히 같은 처지다.
+- `ingestion.source`를 `contains()` 기반으로 일반화하면서 `MarketTickScheduler`의 조건식도 "정확히 kafka가 아니면 실행"으로 단순화했다 — ADR-030 원문의 `matches('internal|kis')`보다 일반적이라 새 프로바이더 토큰이 추가돼도 이 조건식을 다시 고칠 필요가 없다.
 - 플랫폼 시크릿이 KIS 것(`KIS_APP_KEY`/`KIS_APP_SECRET`)에 이어 2개 더 늘어난다(`TOSS_PLATFORM_APP_KEY`/`TOSS_PLATFORM_APP_SECRET`) — 운영 시 시크릿 관리 항목이 늘어난다.
 - KIS(60초 주기 재연결 스케줄러 방식)와 Toss(60초 keepalive ping + 180초 서버 타임아웃 방식)가 서로 다른 커넥션 유지 전략을 갖게 된다 — 통합된 "실시간 커넥션 관리자" 추상화는 만들지 않았다(아직 프로바이더가 2개뿐이라 과설계로 판단, Reasons 참고). 3번째 프로바이더가 생기면 재검토할 만하다.
 - `trade:kr`/`trade:us`가 커버하지 않는 `orderbook:kr`/`orderbook:us`, `personal:order`(계정별 주문 체결 푸시 — REST 폴링 대신 쓸 수 있는 잠재적 개선점)는 이번 설계 범위 밖이다.
@@ -55,7 +56,6 @@ Accepted (설계만 — 구현은 의도적으로 다음 라운드로 미룸, �
 
 ## Revisit When
 
-- 이 설계를 실제로 구현할 때 — ADR-030처럼 코드 작성 → 컴파일/테스트 → (플랫폼 키가 있다면) 라이브 검증까지 진행.
-- 플랫폼 Toss 앱키(`TOSS_PLATFORM_APP_KEY`/`SECRET`)가 실제로 발급되면 — 라이브 검증이 비로소 가능해진다.
+- 플랫폼 Toss 앱키(`TOSS_PLATFORM_APP_KEY`/`SECRET`)가 실제로 발급되면 — 라이브 검증이 비로소 가능해진다. KIS와 마찬가지로, 이 코드를 다시 만질 땐 "이미 검증됨"으로 가정하지 말 것.
 - `personal:order` 채널을 `backend/api`의 주문 상태 폴링(`getOrderStatus` REST 호출) 대신 쓰는 걸 검토할 때 — 이번 ADR은 시세(market data)만 다루고 브로커리지 주문 흐름은 건드리지 않는다.
 - 국내 나머지 30종목까지 실시간 커버리지가 필요해지거나, 3번째 실시간 프로바이더가 추가돼 커넥션 관리 로직 중복이 부담될 때.
