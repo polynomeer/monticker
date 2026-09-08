@@ -1,4 +1,4 @@
-FROM eclipse-temurin:21-jdk-alpine AS build
+FROM eclipse-temurin:25-jdk-alpine AS build
 WORKDIR /app
 COPY gradlew settings.gradle.kts ./
 COPY gradle/ gradle/
@@ -17,7 +17,7 @@ RUN apk add --no-cache curl tar && \
     tar -xzf /tmp/pp.tar.gz -C /pinpoint-agent --strip-components=1 && \
     rm /tmp/pp.tar.gz
 
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:25-jre-alpine
 WORKDIR /app
 RUN addgroup -S monticker && adduser -S monticker -G monticker
 COPY --from=build          /app/build/libs/*.jar  app.jar
