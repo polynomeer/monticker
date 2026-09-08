@@ -43,6 +43,12 @@ spring:
       retries: 3
       properties:
         enable.idempotence: true   # 프로듀서 멱등성 (중복 발행 방지)
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      # ADR-029 — market.ticks 브로드캐스트 컨슈머(monticker-api-broadcast)는 재시작 시
+      # 밀려있던 과거 틱을 한꺼번에 쏟아내지 않도록 항상 최신 틱부터 받는다.
+      auto-offset-reset: latest
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}
     port: ${MAIL_PORT:587}
