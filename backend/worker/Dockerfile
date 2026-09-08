@@ -7,7 +7,7 @@ RUN ./gradlew dependencies --no-daemon -q || true
 COPY src/ src/
 RUN ./gradlew bootJar --no-daemon -x test -q
 
-FROM alpine:3.19 AS pinpoint-agent
+FROM alpine:3.24 AS pinpoint-agent
 ARG PINPOINT_VERSION=3.1.0
 RUN apk add --no-cache curl tar && \
     curl -fSL \
