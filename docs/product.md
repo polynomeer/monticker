@@ -517,7 +517,7 @@ Investment Wallet (upcoming)
 
 | 기능 | 비고 |
 |------|------|
-| 실제 주문 체결 | **BYOK 모델** — monticker는 자체 브로커 라이선스를 보유하지 않는다. 사용자가 본인 명의 증권 계좌의 API 키(Toss Securities Open API / KIS Open API)를 연결하고, monticker는 그 키로 사용자를 대신해 API를 호출하는 클라이언트로만 동작한다. 기존 `BrokerageClient` 인터페이스(`KisBrokerageClient`/`MockBrokerageClient`)에 `TossBrokerageClient`를 추가하는 형태로 구현 — 새 OMS를 만들지 않는다 |
+| 실제 주문 체결 | **BYOK 모델** — 백엔드는 완료: 사전 리스크 게이트([ADR-025](decisions/025-real-brokerage-order-safety-gate.md)), KIS 클라이언트 버그 수정, `BrokerageClientRegistry`를 통한 KIS/Toss 프로바이더 라우팅과 `TossBrokerageClient`([ADR-026](decisions/026-toss-brokerage-integration.md)), 계좌 연동·주문·대시보드 프론트엔드(`/brokerage`)까지 구현됨. 남은 것: 프론트엔드 증권사 선택 UI(현재 연동 화면이 provider 선택 없이 단일 흐름), 자격증명 재발급/만료 UX 정책, `BrokerageClient.cancelOrder` 부재(취소가 로컬 상태만 바꾸고 브로커에 실제 취소를 전달하지 않음, KIS/Toss 공통), 실계좌 E2E 검증(KIS/Toss 모두 스펙 대조만 마쳤을 뿐 실제 계좌로 확인된 적 없음 — Toss는 모의투자 서버 자체가 없음) |
 | 실시간 시세 파이프라인 실데이터 전환 | 현재 `market.ticks` Kafka 토픽은 Mock/Go 합성 데이터로만 채워짐 — Toss/KIS 실시세 producer로 교체 |
 | Quant Lab 룰셋 빌더 UI | ✅ 완료 — `/quant-lab` 룰셋 빌더·백테스트 상세(자산곡선/거래내역 포함)·전략 마켓·제작자 수익 페이지 모두 구현됨 |
 | Quant Lab 포워드 테스트 | ✅ 완료 ([ADR-024](decisions/024-quant-lab-forward-test.md)) — 장 마감 후(KST 16:00) 일 1회 평가, `quant_forward_tests`/`quant_forward_test_equity`에 상태·자산곡선 저장, `/topic/rulesets/{id}/signals`로 신호 실시간 푸시. 단일 종목만 지원(백테스트와 동일 제약) |
