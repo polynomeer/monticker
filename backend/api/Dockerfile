@@ -10,7 +10,7 @@ RUN ./gradlew bootJar --no-daemon -x test -q
 
 # ── Pinpoint agent stage ────────────────────────────────────────
 # 별도 스테이지에서 다운로드 → 레이어 캐시로 재빌드 비용 최소화.
-FROM alpine:3.19 AS pinpoint-agent
+FROM alpine:3.24 AS pinpoint-agent
 ARG PINPOINT_VERSION=3.1.0
 RUN apk add --no-cache curl tar && \
     curl -fSL \
