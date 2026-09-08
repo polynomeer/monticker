@@ -13,7 +13,7 @@
 - [ ] **`KisOrderBookSubscriber` 재설계** — 기존 `LIMIT 100`을 20으로 낮춰 즉시 위험만 없앴을 뿐, 호가 구독 자체의 다중화·정확한 한도 재검증은 미완료. [ADR-030 Revisit When](decisions/030-kis-realtime-tick-ingestion.md#revisit-when)
 - [ ] **KIS 해외(미국) 실시간 체결 TR 연동** — 지금 미국 51종목은 Toss만 커버. KIS 쪽 해외 실시간 체결 TR은 이번 세션에서 조사조차 안 했다 — 필요해지면 신규 조사부터.
 - [ ] **Toss `personal:order` 채널 활용 검토** — 계좌별 주문 체결 푸시. 지금 `BrokerageService`는 REST 폴링(`getOrderStatus`)만 쓴다 — 실시간 채널로 대체할 수 있는지 검토. [ADR-031 Revisit When](decisions/031-toss-realtime-tick-ingestion.md#revisit-when)
-- [ ] **Netty `broadcast-gateway`(ADR-005) 채택 또는 제거 결정** — STOMP(ADR-029로 살림)와 커스텀 WS(여전히 죽음) 두 개의 실시간 전송 경로가 공존 중. 둘 중 하나로 정리 필요.
+- [x] **Netty `broadcast-gateway`(ADR-005) 채택 또는 제거 결정** — ✅ 제거로 결정, 완료(2026-09-08, [ADR-033](decisions/033-remove-netty-broadcast-gateway.md)). 프론트엔드 클라이언트 0건·CI 커버리지 0건·실검증 커밋 0건 확인 후 `services/broadcast-gateway` 삭제, 문서(architecture.md, technical/) 동기화.
 
 ## 2. 조건부 주문 후속 (ADR-032)
 
@@ -67,7 +67,7 @@
 의존관계 없이 바로 시작 가능한 순서:
 
 1. **500/409 버그 수정** (§2, 이미 배경 작업으로 시작됨) — 가장 작고 빠르게 끝남
-2. **Netty `broadcast-gateway` 정리 결정** (§1) — 코드 정리, 외부 의존 없음
+2. ~~Netty `broadcast-gateway` 정리 결정~~ — ✅ 완료(2026-09-08, ADR-033)
 3. **리밸런싱 실행 자동화** (§3) — 계산 로직은 이미 있어 상대적으로 작은 추가 작업
 4. **Strategy Market 조사 + 마무리** (§5) — 조사부터 시작해 범위 확정
 5. **AI 자동매매** (§4) — 가장 큰 신규 도메인, ADR부터
