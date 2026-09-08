@@ -27,7 +27,7 @@
 - REST: 현재가, 분봉, 일봉, 시장 지수, 투자자별 매매동향(개인/외국인/기관 순매수, `inquire-investor`, [ADR-017](decisions/017-investor-flow-kis-integration.md)), 시가총액/PER/PBR(`inquire-price` 응답에 이미 포함, [ADR-018](decisions/018-stock-fundamentals-kis-reuse.md))
 - Auth: API key (계좌 개설 필요)
 - Cost: Free (개인 계좌 기준)
-- Notes: **한국 개인 개발자가 가장 많이 사용하는 국내 증권 API**
+- Notes: **한국 개인 개발자가 가장 많이 사용하는 국내 증권 API**. 플랫폼 레벨 앱키 발급 절차는 [platform-api-keys.md](platform-api-keys.md) 참고.
 
 ### LS증권 OpenAPI (LS証券)
 
@@ -80,11 +80,11 @@ EOD / history:   KRX 정보데이터시스템
 - Order-related: 주문 생성/정정/취소, 주문 체결 조회, 잔고/매수가능금액 조회.
 - Auth: per-user appKey/appSecret (계좌 개설 필요).
 
-### Toss Securities Open API (토스증권 Open API) — order execution integrated (ADR-026); market data still planned
+### Toss Securities Open API (토스증권 Open API) — order execution integrated (ADR-026); real-time market data integrated (ADR-031)
 
 - URL: https://developers.tossinvest.com/docs
 - Coverage: KR + US stocks in one API — 현재가/호가/체결/캔들, 보유자산, 주문(정정·취소 포함), 조건주문(SINGLE/OCO/OTO), 환율, 시장 캘린더, 투자자별 매매동향, 공매도·신용·대차.
-- Realtime: both REST and WebSocket exist today — confirmed via the official OpenAPI/AsyncAPI specs (`wss://openapi-ws.tossinvest.com/ws/v1`), correcting an earlier note here that WebSocket was still "추후 지원" (ADR-026 verified this against the published spec directly). **Design any market-data adapter behind an interface anyway** so a REST-polling implementation can be swapped for WebSocket without touching consumers (mirrors the `StockPriceProvider` interface pattern below) — order execution (ADR-026) does not touch market-data streaming, so this remains unimplemented.
+- Realtime: WebSocket(`wss://openapi-ws.tossinvest.com/ws/v1`)의 `trade:kr`/`trade:us` 채널을 `backend/worker`가 실제로 구독한다(ADR-031, KIS가 커버하지 않는 미국 전체 + 국내 나머지). 플랫폼 앱키 발급 절차는 [platform-api-keys.md](platform-api-keys.md) 참고 — 라이브 검증은 앱키가 발급되기 전까지 보류 상태다.
 - Auth: per-user API key, plus a `clientOrderId`-style idempotency mechanism for order submission — reuse the existing `X-Idempotency-Key` / `IdempotencyFilter` pattern (`common/idempotency/`) rather than inventing a second one.
 - Rate limiting: per-endpoint-group limits, current usage returned in response headers — wrap `TossBrokerageClient` with a token bucket / backoff and register a named resilience4j circuit breaker (`"toss"`) in `CircuitBreakerConfiguration`, the way `TradingServiceClient`/`YahooFinanceOrderBookProvider` already do. Do not copy `KisBrokerageClient`'s current lack of one.
 - Implementation shape: implement the existing `BrokerageClient` interface (`brokerage/infrastructure/BrokerageClient.kt`) — `BrokerageService` depends on the interface only, so no other code changes. Conditional-order (OCO/OTO) support needs new interface methods since `BrokerageClient` currently has none for it.
