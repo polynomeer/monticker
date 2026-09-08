@@ -49,6 +49,11 @@ class BrokerageOrder(
     @Column(name = "pg_order_id")
     var pgOrderId: String? = null,
 
+    // 증권사 주문번호만으로는 취소 호출이 불가능한 프로바이더를 위한 추가 참조값
+    // (KIS의 KRX_FWDG_ORD_ORGNO/지점코드). Toss/Mock은 사용하지 않는다(null).
+    @Column(name = "broker_order_ref")
+    var brokerOrderRef: String? = null,
+
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
     var status: BrokerageOrderStatus = BrokerageOrderStatus.SUBMITTED,

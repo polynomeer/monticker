@@ -1,5 +1,6 @@
 package com.monticker.api.brokerage.infrastructure
 
+import com.fasterxml.jackson.annotation.JsonProperty
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import org.slf4j.LoggerFactory
@@ -34,6 +35,11 @@ import java.time.format.DateTimeFormatter
  *   - TR_ID: TTTC0802U(현금 매수), TTTC0801U(현금 매도), TTTC0803U(정정/취소)
  *   - TR_ID: TTTC8001R/VTTC8001R(일별주문체결조회, 최근 3개월 이내)
  *   - TR_ID: TTTC8434R/VTTC8434R(잔고조회)
+ *
+ * cancelOrder() 구현 중 python-kis 교차검증으로 발견 — order-cash/order-rvsecncl(같은
+ * 계열) 응답의 output 필드명은 대문자(ODNO, KRX_FWDG_ORD_ORGNO)인데, 기존 코드는 소문자
+ * 필드명(odno)으로 매핑하고 있어 Jackson이 항상 null로 바인딩했다(대소문자 구분).
+ * 일별체결조회/잔고조회 응답은 실제로 소문자라 그쪽은 문제없다.
  */
 @Component
 @ConditionalOnProperty("app.brokerage.mock.enabled", havingValue = "false")
@@ -129,8 +135,8 @@ class KisBrokerageClient(
 
                 if (resp?.rtCd == "0") {
                     val pgOrderId = resp.output?.odno ?: "UNKNOWN"
-                    log.info("[KIS] 주문 접수: trId={} odno={}", trId, pgOrderId)
-                    BrokerageOrderResult(pgOrderId = pgOrderId, status = "SUBMITTED")
+                    log.info("[KIS] 주문 접수: trId={} odno={} orgno={}", trId, pgOrderId, resp.output?.krxFwdgOrdOrgno)
+                    BrokerageOrderResult(pgOrderId = pgOrderId, status = "SUBMITTED", brokerOrderRef = resp.output?.krxFwdgOrdOrgno)
                 } else {
                     log.warn("[KIS] 주문 거부: rtCd={} msg={}", resp?.rtCd, resp?.msg1)
                     BrokerageOrderResult(pgOrderId = "REJECTED_${System.currentTimeMillis()}", status = "REJECTED", rejectReason = resp?.msg1)
@@ -142,6 +148,60 @@ class KisBrokerageClient(
         } catch (e: RestClientException) {
             log.error("[KIS] 주문 실패: {}", e.message)
             BrokerageOrderResult(pgOrderId = "ERR_${System.currentTimeMillis()}", status = "REJECTED", rejectReason = e.message)
+        }
+    }
+
+    // ── 주문 취소 ─────────────────────────────────────────────────────────────
+    //
+    // 정정취소 엔드포인트(order-rvsecncl)는 응답 output의 ODNO/KRX_FWDG_ORD_ORGNO가 대문자다 —
+    // 같은 계열인 주문 제출(order-cash) 응답과 동일하게 대문자, 반면 일별체결조회/잔고조회는
+    // 소문자다(python-kis 참조 구현체로 교차 검증, KIS API가 엔드포인트별로 대소문자가
+    // 다르다). KRX_FWDG_ORD_ORGNO(지점코드)는 계좌번호만으로 계산할 수 없고 원주문 접수
+    // 응답에만 있어, submitOrder()가 돌려준 brokerOrderRef를 그대로 받아야 한다.
+
+    override fun cancelOrder(credentials: BrokerageCredentials, pgOrderId: String, brokerOrderRef: String?): BrokerageCancelResult {
+        if (brokerOrderRef == null) {
+            return BrokerageCancelResult(cancelled = false, reason = "지점코드(KRX_FWDG_ORD_ORGNO)가 없어 취소할 수 없습니다.")
+        }
+        return try {
+            cb.executeCallable {
+                val (cano, acntPrdtCd) = accountFields(credentials.accountNumber)
+                val trId = if (isVirtual) "VTTC0803U" else "TTTC0803U"
+
+                val body = mapOf(
+                    "CANO"                  to cano,
+                    "ACNT_PRDT_CD"          to acntPrdtCd,
+                    "KRX_FWDG_ORD_ORGNO"    to brokerOrderRef,
+                    "ORGN_ODNO"             to pgOrderId,
+                    "ORD_DVSN"              to "00",
+                    "RVSE_CNCL_DVSN_CD"     to "02", // 01=정정, 02=취소
+                    "ORD_QTY"               to "0",
+                    "ORD_UNPR"              to "0",
+                    "QTY_ALL_ORD_YN"        to "Y",
+                )
+
+                val resp = restClient.post()
+                    .uri("/uapi/domestic-stock/v1/trading/order-rvsecncl")
+                    .headers { h -> authHeaders(credentials, trId).forEach { (k, v) -> h.set(k, v) } }
+                    .header("custtype", "P")
+                    .body(body)
+                    .retrieve()
+                    .body(KisOrderResponse::class.java)
+
+                if (resp?.rtCd == "0") {
+                    log.info("[KIS] 주문 취소 접수: orgnOdno={}", pgOrderId)
+                    BrokerageCancelResult(cancelled = true)
+                } else {
+                    log.warn("[KIS] 주문 취소 거부: rtCd={} msg={}", resp?.rtCd, resp?.msg1)
+                    BrokerageCancelResult(cancelled = false, reason = resp?.msg1)
+                }
+            }
+        } catch (e: CallNotPermittedException) {
+            log.warn("[CircuitBreaker:kis] 요청 차단됨 — 주문 취소 건너뜀")
+            BrokerageCancelResult(cancelled = false, reason = "KIS API 서킷브레이커 OPEN")
+        } catch (e: RestClientException) {
+            log.error("[KIS] 주문 취소 실패: {}", e.message)
+            BrokerageCancelResult(cancelled = false, reason = e.message)
         }
     }
 
@@ -306,7 +366,12 @@ class KisBrokerageClient(
         val rtCd: String? get() = rt_cd
     }
 
-    private data class KisOrderOutput(val odno: String?)
+    // 주문 제출/취소(order-cash, order-rvsecncl) 응답의 output은 필드명이 대문자다 —
+    // 일별체결조회/잔고조회(아래)는 소문자라 서로 다르다(python-kis로 교차 검증).
+    private data class KisOrderOutput(
+        @JsonProperty("ODNO") val odno: String?,
+        @JsonProperty("KRX_FWDG_ORD_ORGNO") val krxFwdgOrdOrgno: String?,
+    )
 
     private data class KisDailyOrderResponse(
         val output1: List<KisDailyOrderItem>?,

@@ -127,6 +127,7 @@ class BrokerageService(
             quantity  = request.quantity,
             limitPrice = request.limitPrice,
             pgOrderId = result.pgOrderId,
+            brokerOrderRef = result.brokerOrderRef,
         )
 
         // 정산 레코드가 order_id FK를 참조하므로 체결 처리 전에 주문을 먼저 저장해 실제 ID를 확보한다.
@@ -174,12 +175,26 @@ class BrokerageService(
         return orderRepo.save(order)
     }
 
+    // ADR-028 — 지금까지 여기서 로컬 상태만 CANCELLED로 바꾸고 증권사에는 취소 요청을 전혀
+    // 보내지 않았다. 화면상 "취소됨"으로 보여도 실제로는 증권사에서 그대로 체결될 수 있었다.
     @Transactional
     fun cancelOrder(userId: Long, orderId: Long): BrokerageOrder {
         val order = orderRepo.findById(orderId).orElseThrow { NoSuchElementException("주문 없음: $orderId") }
         require(order.userId == userId) { "접근 권한 없음" }
         require(order.status == BrokerageOrderStatus.SUBMITTED) { "취소 불가 상태: ${order.status}" }
+
+        val account = getAccount(userId)
+        val credentials = requireCredentials(account)
+        val pgOrderId = order.pgOrderId ?: throw IllegalStateException("증권사 주문번호가 없어 취소할 수 없습니다.")
+        val result = clientRegistry.get(account.provider).cancelOrder(credentials, pgOrderId, order.brokerOrderRef)
+
+        if (!result.cancelled) {
+            // "불가" 키워드가 있어야 GlobalExceptionHandler가 이걸 409로 처리한다(그 외는 500).
+            throw IllegalStateException("증권사에서 주문 취소가 불가능합니다: ${result.reason ?: "사유 없음"}")
+        }
+
         order.cancel()
+        log.info("주문 취소: userId={} orderId={} pgOrderId={}", userId, orderId, pgOrderId)
         return orderRepo.save(order)
     }
 

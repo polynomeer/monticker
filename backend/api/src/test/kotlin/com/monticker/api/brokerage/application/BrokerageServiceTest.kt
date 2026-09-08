@@ -10,6 +10,7 @@ import com.monticker.api.brokerage.domain.OrderSide
 import com.monticker.api.brokerage.domain.OrderType
 import com.monticker.api.brokerage.infrastructure.BrokerageAccountRepository
 import com.monticker.api.brokerage.infrastructure.BrokerageBalance
+import com.monticker.api.brokerage.infrastructure.BrokerageCancelResult
 import com.monticker.api.brokerage.infrastructure.BrokerageClient
 import com.monticker.api.brokerage.infrastructure.BrokerageClientRegistry
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRepository
@@ -195,17 +196,38 @@ class BrokerageServiceTest {
         }
     }
 
-    // ── cancelOrder ───────────────────────────────────────────────────────────
+    // ── cancelOrder (ADR-028 — 증권사에 실제로 취소를 전달한다) ─────────────────────
 
     @Test
-    fun `SUBMITTED 주문 취소 성공`() {
-        val order = makeOrder(status = BrokerageOrderStatus.SUBMITTED)
-        every { orderRepo.findById(1L) }    returns Optional.of(order)
-        every { orderRepo.save(any()) }     returns order
+    fun `SUBMITTED 주문 취소 성공 시 증권사에 취소를 전달하고 CANCELLED로 저장한다`() {
+        val order = makeOrder(status = BrokerageOrderStatus.SUBMITTED, pgOrderId = "KIS123", brokerOrderRef = "00950")
+        val account = makeAccount()
+        val fakeClient = mockk<BrokerageClient>()
+        every { orderRepo.findById(1L) } returns Optional.of(order)
+        every { orderRepo.save(any()) } returns order
+        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
+        every { fakeClient.cancelOrder(any(), "KIS123", "00950") } returns BrokerageCancelResult(cancelled = true)
 
-        service.cancelOrder(userId = 1L, orderId = 1L)
+        serviceWithFakeClient(fakeClient).cancelOrder(userId = 1L, orderId = 1L)
 
         assertThat(order.status).isEqualTo(BrokerageOrderStatus.CANCELLED)
+        verify { fakeClient.cancelOrder(any(), "KIS123", "00950") }
+    }
+
+    @Test
+    fun `증권사가 취소를 거부하면 로컬 상태는 CANCELLED로 바뀌지 않는다`() {
+        val order = makeOrder(status = BrokerageOrderStatus.SUBMITTED, pgOrderId = "KIS123", brokerOrderRef = "00950")
+        val account = makeAccount()
+        val fakeClient = mockk<BrokerageClient>()
+        every { orderRepo.findById(1L) } returns Optional.of(order)
+        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
+        every { fakeClient.cancelOrder(any(), "KIS123", "00950") } returns
+            BrokerageCancelResult(cancelled = false, reason = "이미 체결된 주문입니다")
+
+        assertThrows<IllegalStateException> { serviceWithFakeClient(fakeClient).cancelOrder(userId = 1L, orderId = 1L) }
+
+        assertThat(order.status).isEqualTo(BrokerageOrderStatus.SUBMITTED)
+        verify(exactly = 0) { orderRepo.save(any()) }
     }
 
     @Test
@@ -304,10 +326,14 @@ class BrokerageServiceTest {
         appKey = "test-app-key", appSecret = "test-app-secret", authFailedAt = authFailedAt,
     )
 
-    private fun makeOrder(status: BrokerageOrderStatus = BrokerageOrderStatus.SUBMITTED) = BrokerageOrder(
+    private fun makeOrder(
+        status: BrokerageOrderStatus = BrokerageOrderStatus.SUBMITTED,
+        pgOrderId: String? = null,
+        brokerOrderRef: String? = null,
+    ) = BrokerageOrder(
         id = 1L, userId = 1L, accountId = 1L, symbol = "005930",
         side = OrderSide.BUY, orderType = OrderType.MARKET, quantity = 10,
-        status = status,
+        status = status, pgOrderId = pgOrderId, brokerOrderRef = brokerOrderRef,
     )
 
     private fun makeSettlement(status: BrokerageSettlementStatus = BrokerageSettlementStatus.PENDING) =

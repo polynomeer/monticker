@@ -159,6 +159,37 @@ class TossBrokerageClient(
         }
     }
 
+    // ── 주문 취소 ─────────────────────────────────────────────────────────────
+    //
+    // 취소 응답의 orderId는 원주문과 다른, 취소 요청 자체의 새 식별자다(스펙에 명시) —
+    // 원주문 상태는 이후 getOrderStatus()로 다시 조회해서 확인한다. brokerOrderRef는
+    // Toss에서는 쓰지 않는다(KIS의 지점코드 같은 추가 참조값이 필요 없다).
+
+    override fun cancelOrder(credentials: BrokerageCredentials, pgOrderId: String, brokerOrderRef: String?): BrokerageCancelResult {
+        return try {
+            cb.executeCallable {
+                val resp = restClient.post()
+                    .uri("/api/v1/orders/{orderId}/cancel", pgOrderId)
+                    .headers { h -> authHeaders(credentials).forEach { (k, v) -> h.set(k, v) } }
+                    .retrieve()
+                    .body(TossCancelEnvelope::class.java)
+
+                if (resp?.result?.orderId != null) {
+                    log.info("[Toss] 주문 취소 접수: orderId={}", pgOrderId)
+                    BrokerageCancelResult(cancelled = true)
+                } else {
+                    BrokerageCancelResult(cancelled = false, reason = "Toss 취소 응답이 비어 있습니다.")
+                }
+            }
+        } catch (e: CallNotPermittedException) {
+            log.warn("[CircuitBreaker:toss] 요청 차단됨 — 주문 취소 건너뜀")
+            BrokerageCancelResult(cancelled = false, reason = "Toss API 서킷브레이커 OPEN")
+        } catch (e: RestClientException) {
+            log.error("[Toss] 주문 취소 실패: {}", e.message)
+            BrokerageCancelResult(cancelled = false, reason = e.message)
+        }
+    }
+
     // ── 주문 조회 ─────────────────────────────────────────────────────────────
     //
     // Toss의 주문 상태 enum(PENDING/PENDING_CANCEL/PENDING_REPLACE/PARTIAL_FILLED/FILLED/
@@ -307,6 +338,9 @@ class TossBrokerageClient(
 
     private data class TossOrderCreateEnvelope(val result: TossOrderCreateResult?)
     private data class TossOrderCreateResult(val orderId: String?, val clientOrderId: String?)
+
+    private data class TossCancelEnvelope(val result: TossCancelResult?)
+    private data class TossCancelResult(val orderId: String?)
 
     private data class TossOrderEnvelope(val result: TossOrder?)
     private data class TossOrderListEnvelope(val result: TossPaginatedOrders?)
