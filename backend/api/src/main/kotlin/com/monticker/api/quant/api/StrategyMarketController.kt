@@ -6,6 +6,7 @@ import com.monticker.api.quant.infrastructure.RuleSetRepository
 import com.monticker.api.settlement.creator.application.CreatorEarningsService
 import org.springframework.http.ResponseEntity
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 import java.math.BigDecimal
@@ -27,11 +28,17 @@ class StrategyMarketController(
 ) {
     @GetMapping
     fun list(
+        // ADR-035 — isSubscribed 계산에 로그인 사용자가 필요하지만, 마켓 둘러보기 자체는
+        // 로그인 없이도 가능해야 하므로 필수로 만들지 않는다.
+        @RequestHeader(value = "Authorization", required = false) auth: String?,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") size: Int,
     ): ResponseEntity<List<Map<String, Any?>>> {
+        val userId = auth?.let { runCatching { jwtTokenProvider.getUserId(it.removePrefix("Bearer ").trim()) }.getOrNull() }
+
         val rows = jdbc.queryForList(
-            """SELECT sm.id, sm.ruleset_id, sm.description, sm.subscribe_count, sm.created_at,
+            // ADR-035 — price가 빠져 있으면 구매자가 얼마가 청구될지 모른 채 구독을 누르게 된다.
+            """SELECT sm.id, sm.ruleset_id, sm.description, sm.price, sm.subscribe_count, sm.created_at,
                       u.email AS author_email
                FROM strategy_market sm
                JOIN users u ON u.id = sm.user_id
@@ -45,8 +52,15 @@ class StrategyMarketController(
         val rulesetIds = rows.mapNotNull { it["ruleset_id"] as? String }
         val namesById = ruleSetRepository.findAllById(rulesetIds).associate { it.id to it.name }
 
+        val subscribedMarketIds: Set<Long> = if (userId != null) {
+            jdbc.queryForList("SELECT market_id FROM strategy_subscriptions WHERE user_id = ?", Long::class.java, userId).toSet()
+        } else emptySet()
+
         val enriched = rows.map { row ->
-            LinkedHashMap(row).apply { put("name", namesById[row["ruleset_id"]] ?: "(삭제된 전략)") }
+            LinkedHashMap(row).apply {
+                put("name", namesById[row["ruleset_id"]] ?: "(삭제된 전략)")
+                put("isSubscribed", (row["id"] as Number).toLong() in subscribedMarketIds)
+            }
         }
         return ResponseEntity.ok(enriched)
     }
@@ -80,7 +94,10 @@ class StrategyMarketController(
         return ResponseEntity.ok(mapOf("id" to id, "rulesetId" to req.rulesetId, "price" to req.price))
     }
 
+    // ADR-035 — @Transactional 없이는 결제(onStrategySubscribed)가 실패해도 이미 INSERT된
+    // 구독 행이 커밋된 채로 남는다(무료로 접근권만 얻는 정합성 버그). 실패 시 전체 롤백되도록 묶는다.
     @PostMapping("/{id}/subscribe")
+    @Transactional
     fun subscribe(
         @RequestHeader("Authorization") auth: String,
         @PathVariable id: Long,

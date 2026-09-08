@@ -66,6 +66,16 @@ class RuleSetService(
     fun delete(id: String, userId: Long) {
         val doc = ruleSetRepository.findByIdAndUserId(id, userId)
             .orElseThrow { NoSuchElementException("RuleSet $id not found") }
+
+        // ADR-035 — 마켓에 공유돼 구독자가 있는 룰셋을 그냥 지우면, 신호의 원본이 사라져
+        // 구독자가 아무 알림 없이 신호를 못 받게 된다. 마켓에서 내리는 흐름(환불·통지 정책)은
+        // 이번 범위 밖이라 지금은 구독자가 있으면 삭제 자체를 막는 것으로만 방어한다.
+        val subscriberCount = jdbc.queryForObject(
+            "SELECT COALESCE(SUM(subscribe_count), 0) FROM strategy_market WHERE ruleset_id = ?",
+            Long::class.java, id,
+        ) ?: 0L
+        require(subscriberCount == 0L) { "구독자가 있는 전략은 삭제할 수 없습니다." }
+
         ruleSetRepository.delete(doc)
     }
 

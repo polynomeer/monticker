@@ -74,4 +74,29 @@ class RuleSetServiceTest {
         assertThat(d.universeJson).isEqualTo(mapOf("market" to "overseas"))
         assertThat(d.version).isEqualTo(1)
     }
+
+    // ── delete — ADR-035: 구독자가 있는 마켓 공유 룰셋은 삭제할 수 없다 ────────────────
+
+    @Test
+    fun `delete rejects a ruleset that still has subscribers`() {
+        every { ruleSetRepository.findByIdAndUserId("rs1", 1L) } returns Optional.of(doc(RuleSetStatus.BACKTESTED.name))
+        every {
+            jdbc.queryForObject("SELECT COALESCE(SUM(subscribe_count), 0) FROM strategy_market WHERE ruleset_id = ?", Long::class.java, "rs1")
+        } returns 3L
+
+        assertThrows<IllegalArgumentException> { service.delete("rs1", 1L) }
+    }
+
+    @Test
+    fun `delete succeeds when the ruleset has no subscribers`() {
+        every { ruleSetRepository.findByIdAndUserId("rs1", 1L) } returns Optional.of(doc(RuleSetStatus.BACKTESTED.name))
+        every {
+            jdbc.queryForObject("SELECT COALESCE(SUM(subscribe_count), 0) FROM strategy_market WHERE ruleset_id = ?", Long::class.java, "rs1")
+        } returns 0L
+        every { ruleSetRepository.delete(any()) } returns Unit
+
+        service.delete("rs1", 1L)
+
+        io.mockk.verify { ruleSetRepository.delete(any()) }
+    }
 }
