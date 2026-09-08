@@ -3,7 +3,10 @@ import type {
   BrokerageBalanceResponse,
   BrokerageOrderResponse,
   BrokerageSettlementResponse,
+  ConditionalOrderResponse,
   ConnectBrokerageRequest,
+  CreateConditionalOrderRequest,
+  CreateOcoOrderRequest,
   SubmitBrokerageOrderRequest,
   PageResponse,
 } from "@monticker/types";
@@ -81,6 +84,40 @@ export async function getBrokerageSettlements(page: number, size = 20): Promise<
 
 export async function getPendingBrokerageSettlements(): Promise<BrokerageSettlementResponse[]> {
   const res = await authFetch("/api/brokerage/settlements/pending");
+  await throwIfNotOk(res);
+  return res.json();
+}
+
+// ── 조건부 주문 (ADR-032) ────────────────────────────────────────────────────
+
+export async function createConditionalOrder(req: CreateConditionalOrderRequest): Promise<ConditionalOrderResponse> {
+  const res = await authFetch("/api/brokerage/conditional-orders", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  await throwIfNotOk(res);
+  return res.json();
+}
+
+export async function createOcoOrder(req: CreateOcoOrderRequest): Promise<ConditionalOrderResponse[]> {
+  const res = await authFetch("/api/brokerage/conditional-orders/oco", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  await throwIfNotOk(res);
+  return res.json();
+}
+
+export async function getConditionalOrders(page: number, size = 20): Promise<PageResponse<ConditionalOrderResponse>> {
+  const res = await authFetch(`/api/brokerage/conditional-orders?page=${page}&size=${size}`);
+  await throwIfNotOk(res);
+  return res.json();
+}
+
+export async function cancelConditionalOrder(id: number): Promise<ConditionalOrderResponse> {
+  const res = await authFetch(`/api/brokerage/conditional-orders/${id}`, { method: "DELETE" });
   await throwIfNotOk(res);
   return res.json();
 }

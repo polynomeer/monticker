@@ -44,15 +44,19 @@ class KisOrderBookSubscriber(
             ws.connect()
             val symbols = fetchKoreanSymbols()
             log.info("Subscribing to {} symbols for real-time order book", symbols.size)
-            symbols.forEach { ws.subscribe(it) }
+            symbols.forEach { ws.subscribe("H0STASP0", it) }
         } catch (e: Exception) {
             log.warn("KIS subscribe failed: {}", e.message)
         }
     }
 
+    // 20건 — KisWebSocketClient.MAX_REGISTRATIONS(41, KIS 공식 한도)를
+    // KisExecutionTickSubscriber(체결가, 21건)와 정적으로 나눈 값이다(ADR-030).
+    // 이전 LIMIT 100은 이 한도를 검증 없이 초과했었다 — 이 경로가 한 번도 실행된
+    // 적이 없어(플랫폼 KIS 앱키 미설정) 지금까지 드러나지 않았을 뿐이다.
     private fun fetchKoreanSymbols(): List<String> =
         jdbc.queryForList(
-            "SELECT symbol FROM stocks WHERE market IN ('KOSPI', 'KOSDAQ') AND is_active = true LIMIT 100",
+            "SELECT symbol FROM stocks WHERE market IN ('KOSPI', 'KOSDAQ') AND is_active = true ORDER BY id LIMIT 20",
             String::class.java,
         )
 }

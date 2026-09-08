@@ -88,6 +88,19 @@ class MockBrokerageClient(
         return BrokerageOrderResult(pgOrderId = pgOrderId, status = "SUBMITTED")
     }
 
+    override fun cancelOrder(credentials: BrokerageCredentials, pgOrderId: String, brokerOrderRef: String?): BrokerageCancelResult {
+        val order = orderStore[pgOrderId]
+            ?: return BrokerageCancelResult(cancelled = false, reason = "존재하지 않는 주문입니다.")
+
+        if (order.status != "SUBMITTED") {
+            return BrokerageCancelResult(cancelled = false, reason = "이미 ${order.status} 상태라 취소할 수 없습니다.")
+        }
+
+        order.status = "CANCELLED"
+        log.info("[MockKIS] 주문 취소: {}", pgOrderId)
+        return BrokerageCancelResult(cancelled = true)
+    }
+
     override fun getOrderStatus(credentials: BrokerageCredentials, pgOrderId: String): BrokerageOrderStatus {
         val order = orderStore[pgOrderId]
             ?: return BrokerageOrderStatus(pgOrderId, "REJECTED", 0, null)

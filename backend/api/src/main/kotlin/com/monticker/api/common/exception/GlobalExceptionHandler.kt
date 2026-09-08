@@ -66,6 +66,12 @@ class GlobalExceptionHandler {
     fun handleRiskLimit(e: RiskLimitException) =
         error(HttpStatus.UNPROCESSABLE_ENTITY, e.message ?: "리스크 한도 초과")
 
+    // ADR-027 — 증권사 자격증명 재연동이 필요한 상태. 메시지에 IllegalStateException의
+    // 비즈니스 규칙 키워드가 없어도 항상 401로 매핑되도록 전용 타입을 쓴다.
+    @ExceptionHandler(ReconnectRequiredException::class)
+    fun handleReconnectRequired(e: ReconnectRequiredException) =
+        error(HttpStatus.UNAUTHORIZED, e.message ?: "재연동이 필요합니다.")
+
     // 백테스트 실행기(backtestExecutor) 큐가 가득 찼을 때 — 스레드 풀 고갈 대신 클라이언트에게
     // 429로 알려 재시도를 유도한다(BacktestController).
     @ExceptionHandler(RejectedExecutionException::class)
@@ -84,7 +90,7 @@ class GlobalExceptionHandler {
         val message = e.message ?: "처리할 수 없는 상태입니다"
         val isBusinessRule = message.contains("현재가") || message.contains("보유") ||
                 message.contains("잔고") || message.contains("불가") ||
-                message.contains("없음")
+                message.contains("없음") || message.contains("계좌가 없습니다")
         return if (isBusinessRule) {
             error(HttpStatus.CONFLICT, message)
         } else {

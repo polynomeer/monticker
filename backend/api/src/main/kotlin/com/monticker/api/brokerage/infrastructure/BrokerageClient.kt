@@ -37,6 +37,14 @@ data class BrokerageOrderResult(
     val pgOrderId: String,         // 증권사 주문 번호
     val status: String,            // SUBMITTED | REJECTED
     val rejectReason: String? = null,
+    // KIS의 KRX_FWDG_ORD_ORGNO(지점코드)처럼 주문번호만으로는 취소 호출이 불가능한
+    // 프로바이더를 위한 추가 참조값. Toss/Mock은 사용하지 않는다(null).
+    val brokerOrderRef: String? = null,
+)
+
+data class BrokerageCancelResult(
+    val cancelled: Boolean,
+    val reason: String? = null,
 )
 
 data class BrokerageOrderStatus(
@@ -83,6 +91,10 @@ interface BrokerageClient {
     fun resolveAccountRef(token: BrokerageToken, accountNumber: String): String? = null
 
     fun submitOrder(credentials: BrokerageCredentials, request: BrokerageOrderRequest): BrokerageOrderResult
+
+    /** 증권사에 실제로 취소를 요청한다. brokerOrderRef는 submitOrder()가 돌려준 값을 그대로 넘긴다. */
+    fun cancelOrder(credentials: BrokerageCredentials, pgOrderId: String, brokerOrderRef: String?): BrokerageCancelResult
+
     fun getOrderStatus(credentials: BrokerageCredentials, pgOrderId: String): BrokerageOrderStatus
     fun getSettlements(credentials: BrokerageCredentials, date: LocalDate): List<BrokerageSettlementItem>
     fun getBalance(credentials: BrokerageCredentials): BrokerageBalance

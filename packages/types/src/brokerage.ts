@@ -77,3 +77,47 @@ export interface BrokerageSettlementResponse {
   status: BrokerageSettlementStatus;
   settledAt: string | null;
 }
+
+// ADR-032 — 조건부 주문(스탑로스/익절/OCO).
+// 4가지 타입 중 STOP_LOSS/PRICE_BELOW는 "현재가 <= triggerPrice",
+// TAKE_PROFIT/PRICE_ABOVE는 "현재가 >= triggerPrice"일 때 발동한다.
+export type ConditionalTriggerType = "STOP_LOSS" | "TAKE_PROFIT" | "PRICE_ABOVE" | "PRICE_BELOW";
+export type ConditionalOrderStatus = "ACTIVE" | "TRIGGERED" | "EXECUTED" | "CANCELLED" | "EXPIRED" | "FAILED";
+
+export interface ConditionalOrderLegRequest {
+  triggerType: ConditionalTriggerType;
+  triggerPrice: number;
+  orderType: BrokerageOrderType;
+  limitPrice?: number;
+}
+
+export interface CreateConditionalOrderRequest {
+  symbol: string;
+  side: BrokerageOrderSide;
+  quantity: number;
+  leg: ConditionalOrderLegRequest;
+}
+
+export interface CreateOcoOrderRequest {
+  symbol: string;
+  side: BrokerageOrderSide;
+  quantity: number;
+  legs: ConditionalOrderLegRequest[];
+}
+
+export interface ConditionalOrderResponse {
+  id: number;
+  symbol: string;
+  side: BrokerageOrderSide;
+  triggerType: ConditionalTriggerType;
+  triggerPrice: number;
+  orderType: BrokerageOrderType;
+  limitPrice: number | null;
+  quantity: number;
+  ocoGroupId: string | null;
+  status: ConditionalOrderStatus;
+  failReason: string | null;
+  executedOrderId: number | null;
+  createdAt: string;
+  triggeredAt: string | null;
+}

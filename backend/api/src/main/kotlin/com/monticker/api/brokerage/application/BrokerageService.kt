@@ -18,6 +18,7 @@ import com.monticker.api.brokerage.infrastructure.BrokerageOrderRequest
 import com.monticker.api.brokerage.infrastructure.BrokerageSettlementRepository
 import com.monticker.api.brokerage.infrastructure.BrokerageToken
 import com.monticker.api.common.aop.RiskLimitException
+import com.monticker.api.common.exception.ReconnectRequiredException
 import com.monticker.api.risk.application.HoldingPosition
 import com.monticker.api.risk.application.PortfolioSnapshot
 import com.monticker.api.risk.application.RiskCheckerService
@@ -70,6 +71,8 @@ class BrokerageService(
         // appkey/appsecret(또는 client_id/secret) 헤더를 요구하므로, 여기서 버리면 이후 호출이 전부 거부된다.
         account.updateCredentials(appKey, appSecret)
         account.providerAccountRef = accountRef
+        // ADR-027 — 사용자가 직접 재연동했으니 이전 재발급 실패 기록은 의미가 없다.
+        account.authFailedAt = null
 
         log.info("증권사 계좌 연동: userId={} provider={} accountNumber={}", userId, provider, accountNumber)
         return accountRepo.save(account)
@@ -80,7 +83,11 @@ class BrokerageService(
         accountRepo.findByUserIdAndIsActiveTrue(userId)
             .orElseThrow { IllegalStateException("연동된 증권사 계좌가 없습니다.") }
 
-    @Transactional(readOnly = true)
+    // ADR-027 — requireCredentials()가 만료된 토큰을 조용히 재발급하며 accountRepo.save()로
+    // 써야 할 수 있다. readOnly=true였다면 Hibernate가 커밋 시 flush를 건너뛰어 재발급이
+    // 매번 성공한 것처럼 로그만 남고 DB에는 결코 반영되지 않는 버그가 있었다(라이브 테스트로
+    // 실제 확인). requireCredentials()를 호출하는 메서드는 항상 쓰기 가능한 트랜잭션이어야 한다.
+    @Transactional
     fun getBalance(userId: Long): BrokerageBalance {
         val account = getAccount(userId)
         return clientRegistry.get(account.provider).getBalance(requireCredentials(account))
@@ -120,6 +127,7 @@ class BrokerageService(
             quantity  = request.quantity,
             limitPrice = request.limitPrice,
             pgOrderId = result.pgOrderId,
+            brokerOrderRef = result.brokerOrderRef,
         )
 
         // 정산 레코드가 order_id FK를 참조하므로 체결 처리 전에 주문을 먼저 저장해 실제 ID를 확보한다.
@@ -167,12 +175,26 @@ class BrokerageService(
         return orderRepo.save(order)
     }
 
+    // ADR-028 — 지금까지 여기서 로컬 상태만 CANCELLED로 바꾸고 증권사에는 취소 요청을 전혀
+    // 보내지 않았다. 화면상 "취소됨"으로 보여도 실제로는 증권사에서 그대로 체결될 수 있었다.
     @Transactional
     fun cancelOrder(userId: Long, orderId: Long): BrokerageOrder {
         val order = orderRepo.findById(orderId).orElseThrow { NoSuchElementException("주문 없음: $orderId") }
         require(order.userId == userId) { "접근 권한 없음" }
         require(order.status == BrokerageOrderStatus.SUBMITTED) { "취소 불가 상태: ${order.status}" }
+
+        val account = getAccount(userId)
+        val credentials = requireCredentials(account)
+        val pgOrderId = order.pgOrderId ?: throw IllegalStateException("증권사 주문번호가 없어 취소할 수 없습니다.")
+        val result = clientRegistry.get(account.provider).cancelOrder(credentials, pgOrderId, order.brokerOrderRef)
+
+        if (!result.cancelled) {
+            // "불가" 키워드가 있어야 GlobalExceptionHandler가 이걸 409로 처리한다(그 외는 500).
+            throw IllegalStateException("증권사에서 주문 취소가 불가능합니다: ${result.reason ?: "사유 없음"}")
+        }
+
         order.cancel()
+        log.info("주문 취소: userId={} orderId={} pgOrderId={}", userId, orderId, pgOrderId)
         return orderRepo.save(order)
     }
 
@@ -210,9 +232,13 @@ class BrokerageService(
     // ── 내부 헬퍼 ─────────────────────────────────────────────────────────────
 
     private fun requireCredentials(account: BrokerageAccount): BrokerageCredentials {
-        if (!account.isTokenValid()) throw IllegalStateException("증권사 토큰이 만료되었습니다. 재연동이 필요합니다.")
-        val appKey = account.appKey ?: throw IllegalStateException("증권사 계좌 정보가 불완전합니다. 재연동이 필요합니다.")
-        val appSecret = account.appSecret ?: throw IllegalStateException("증권사 계좌 정보가 불완전합니다. 재연동이 필요합니다.")
+        val appKey = account.appKey ?: throw ReconnectRequiredException("증권사 계좌 정보가 불완전합니다. 재연동이 필요합니다.")
+        val appSecret = account.appSecret ?: throw ReconnectRequiredException("증권사 계좌 정보가 불완전합니다. 재연동이 필요합니다.")
+
+        if (!account.isTokenValid()) {
+            refreshToken(account, appKey, appSecret)
+        }
+
         return BrokerageCredentials(
             token               = BrokerageToken(account.accessToken!!, 0),
             appKey              = appKey,
@@ -220,6 +246,36 @@ class BrokerageService(
             accountNumber       = account.accountNumber,
             providerAccountRef  = account.providerAccountRef,
         )
+    }
+
+    /**
+     * ADR-027 — KIS/Toss 둘 다 refresh token 없이 appKey/appSecret으로 동일 엔드포인트를
+     * 다시 호출해 재발급하는 구조다. appKey/appSecret 자체는 여전히 유효한, 매일 반복되는
+     * 정상적인 토큰 만료를 매번 "재연동 필요" 에러로 사용자에게 떠넘기지 않고 조용히 갱신한다.
+     *
+     * 재발급 자체가 실패하면(앱키가 실제로 취소·변경된 경우) authFailedAt을 기록해 진짜
+     * "재연동 필요" 상태로 전환한다. 5분 쿨다운 동안은 재시도하지 않는다 — 취소된 앱키로
+     * 매 요청마다 브로커 인증 엔드포인트를 두드리지 않기 위해서다. 쿨다운이 지나면 다시
+     * 자동 재시도한다(일시적 장애였다면 스스로 복구된다).
+     */
+    private fun refreshToken(account: BrokerageAccount, appKey: String, appSecret: String) {
+        val recentFailure = account.authFailedAt?.isAfter(Instant.now().minusSeconds(AUTH_RETRY_COOLDOWN_SECONDS)) == true
+        if (recentFailure) {
+            throw ReconnectRequiredException("증권사 인증이 만료되었습니다. 앱키/시크릿을 다시 발급받아 재연동해주세요.")
+        }
+
+        try {
+            val token = clientRegistry.get(account.provider).issueToken(appKey, appSecret)
+            account.updateToken(token.accessToken, token.expiresIn)
+            account.authFailedAt = null
+            accountRepo.save(account)
+            log.info("증권사 토큰 자동 재발급 성공: userId={} provider={}", account.userId, account.provider)
+        } catch (e: Exception) {
+            account.authFailedAt = Instant.now()
+            accountRepo.save(account)
+            log.warn("증권사 토큰 자동 재발급 실패: userId={} provider={} reason={}", account.userId, account.provider, e.message)
+            throw ReconnectRequiredException("증권사 인증이 만료되었습니다. 앱키/시크릿을 다시 발급받아 재연동해주세요.")
+        }
     }
 
     /** ADR-025 — 실거래 사전 리스크 게이트에 넘길 포트폴리오 스냅샷을 조립한다. */
@@ -301,5 +357,10 @@ class BrokerageService(
             if (date.dayOfWeek.value !in 6..7) remaining--
         }
         return date
+    }
+
+    companion object {
+        // ADR-027 — 취소된 앱키로 매 요청마다 브로커 인증 엔드포인트를 두드리지 않기 위한 쿨다운.
+        private const val AUTH_RETRY_COOLDOWN_SECONDS = 300L
     }
 }

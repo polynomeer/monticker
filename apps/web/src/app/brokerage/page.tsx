@@ -5,7 +5,8 @@ import Link from "next/link";
 import { ShieldCheck, HourglassMedium, CheckCircle, XCircle } from "@phosphor-icons/react";
 import { type Icon } from "@phosphor-icons/react";
 import { getAccessToken } from "@/services/auth";
-import { useBrokerageAccount, useBrokerageBalance, useBrokerageOrders, useBrokerageSettlements } from "@/hooks/useBrokerage";
+import { useBrokerageAccount, useBrokerageBalance, useBrokerageOrders, useBrokerageSettlements, useCancelBrokerageOrder } from "@/hooks/useBrokerage";
+import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { brokerageProviderLabel } from "@/lib/brokerageProvider";
@@ -30,6 +31,18 @@ const SETTLEMENT_STATUS_META: Record<string, { label: string; color: string }> =
 
 function OrderRow({ o }: { o: BrokerageOrderResponse }) {
   const meta = ORDER_STATUS_META[o.status] ?? { label: o.status, icon: HourglassMedium, color: "text-gray-500" };
+  const { toast } = useToast();
+  const cancelOrder = useCancelBrokerageOrder();
+
+  const handleCancel = async () => {
+    try {
+      await cancelOrder.mutateAsync(o.id);
+      toast({ type: "success", title: "취소 완료", message: "주문이 취소되었습니다." });
+    } catch (e) {
+      toast({ type: "error", title: "취소 실패", message: (e as Error).message });
+    }
+  };
+
   return (
     <Card className="p-4 flex items-center gap-3">
       <meta.icon size={18} weight="bold" className={meta.color} aria-hidden />
@@ -46,6 +59,15 @@ function OrderRow({ o }: { o: BrokerageOrderResponse }) {
         </p>
         {o.rejectReason && <p className="text-xs text-dracula-red mt-0.5">{o.rejectReason}</p>}
       </div>
+      {o.status === "SUBMITTED" && (
+        <button
+          onClick={handleCancel}
+          disabled={cancelOrder.isPending}
+          className="shrink-0 px-3 py-1.5 rounded-lg border border-dracula-red/40 text-dracula-red text-xs font-medium hover:bg-dracula-red/10 transition-colors disabled:opacity-40"
+        >
+          {cancelOrder.isPending ? "취소 중..." : "주문 취소"}
+        </button>
+      )}
     </Card>
   );
 }
@@ -123,10 +145,16 @@ export default function BrokerageDashboardPage() {
           <h1 className="text-xl font-bold text-gray-900 dark:text-dracula-fg">실전투자</h1>
           <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">계좌번호 {account.accountNumber}</p>
         </div>
-        <Link href="/brokerage/orders"
-          className="shrink-0 px-4 py-2 rounded-lg bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg text-sm font-semibold hover:opacity-90 active:scale-[0.98] transition-all duration-150">
-          주문하기
-        </Link>
+        <div className="flex gap-2 shrink-0">
+          <Link href="/brokerage/conditional-orders"
+            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-dracula-line text-gray-700 dark:text-dracula-fg text-sm font-semibold hover:bg-gray-50 dark:hover:bg-dracula-line/30 active:scale-[0.98] transition-all duration-150">
+            조건부 주문
+          </Link>
+          <Link href="/brokerage/orders"
+            className="px-4 py-2 rounded-lg bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg text-sm font-semibold hover:opacity-90 active:scale-[0.98] transition-all duration-150">
+            주문하기
+          </Link>
+        </div>
       </div>
 
       {/* 계좌 상태 */}
@@ -140,7 +168,15 @@ export default function BrokerageDashboardPage() {
             </p>
           </div>
         </div>
-        <Badge variant={account.isActive ? "up" : "neutral"}>{account.isActive ? "활성" : "비활성"}</Badge>
+        <div className="flex items-center gap-2 shrink-0">
+          {!account.tokenValid && (
+            <Link href="/brokerage/connect"
+              className="px-3 py-1.5 rounded-lg bg-dracula-red/15 text-dracula-red text-xs font-semibold hover:bg-dracula-red/25 transition-colors">
+              재연동
+            </Link>
+          )}
+          <Badge variant={account.isActive ? "up" : "neutral"}>{account.isActive ? "활성" : "비활성"}</Badge>
+        </div>
       </Card>
 
       {/* 잔고 요약 */}

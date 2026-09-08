@@ -28,6 +28,13 @@ spring:
     port: ${MAIL_PORT:587}
     username: ${MAIL_USERNAME:}
     password: ${MAIL_PASSWORD:}
+  kafka:
+    # TickKafkaConsumer(@KafkaListener)는 ingestion.source=kafka가 아닌 한(기본값
+    # internal) Spring Boot 자동구성 ConsumerFactory를 쓴다 — 이 값이 없으면 KAFKA_BROKERS를
+    # 무시하고 Spring Boot 기본값(localhost:9092)에 그대로 접속한다. 아래 kafka.brokers(비
+    # spring 네임스페이스)는 TickKafkaProducer/조건부 KafkaConfig에서만 읽는 별도 키라
+    # 이것만으로는 커버되지 않는다 — 실제로 이 둘이 어긋나 있던 걸 라이브 테스트로 발견했다.
+    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
     properties:
       mail:
         smtp:
@@ -79,6 +86,16 @@ kis:
   app-key: ${KIS_APP_KEY:}
   app-secret: ${KIS_APP_SECRET:}
 
+toss:
+  # ADR-031 — 플랫폼 전체 시세용 앱 레벨 키. TOSS_APP_KEY/TOSS_APP_SECRET(BYOK 브로커리지
+  # 연동 전용, backend/api TossBrokerageClient)와 이름을 절대 공유하지 않는다 — 같은 이름을
+  # 쓰면 "BYOK 전용, .env에 넣지 않음"이라는 기존 관례와 충돌해 혼동을 일으킨다.
+  platform:
+    app-key: ${TOSS_PLATFORM_APP_KEY:}
+    app-secret: ${TOSS_PLATFORM_APP_SECRET:}
+    base-url: ${TOSS_PLATFORM_BASE_URL:https://openapi.tossinvest.com}
+  ws-url: ${TOSS_WS_URL:wss://openapi-ws.tossinvest.com/ws/v1}
+
 anthropic:
   api-key: ${ANTHROPIC_API_KEY:}
 
@@ -86,9 +103,13 @@ otel:
   service:
     name: monticker-worker
 
-# 시세 수집 소스 (Stage 4: 두 경로 모두 Kafka를 경유한다)
-# internal(기본값) = MockPriceGenerator → Kafka market.ticks → TickKafkaConsumer
-# kafka            = Go market-gateway  → Kafka market.ticks → TickKafkaConsumer
+# 시세 수집 소스 (Stage 4: 모든 경로가 Kafka를 경유한다)
+# internal(기본값) = MockPriceGenerator                        → Kafka market.ticks
+# kafka            = Go market-gateway                         → Kafka market.ticks
+# kis              = KIS 실시간체결가(국내 21종목, ADR-030)      → Kafka market.ticks
+# toss             = Toss 실시간체결가(미국 전체+국내 나머지, ADR-031) → Kafka market.ticks
+# ADR-031부터 콤마로 여러 개를 동시에 켤 수 있다 — 예: "kis,toss". kafka는 Go가 발행을
+# 전담하므로 다른 값과 병행하지 않는다(정확히 "kafka" 하나일 때만 내부 스케줄러가 꺼진다).
 ingestion:
   source: ${INGESTION_SOURCE:internal}
 
