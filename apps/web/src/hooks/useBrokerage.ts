@@ -1,14 +1,23 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ConnectBrokerageRequest, SubmitBrokerageOrderRequest } from "@monticker/types";
+import type {
+  ConnectBrokerageRequest,
+  CreateConditionalOrderRequest,
+  CreateOcoOrderRequest,
+  SubmitBrokerageOrderRequest,
+} from "@monticker/types";
 import {
   cancelBrokerageOrder,
+  cancelConditionalOrder,
   connectBrokerage,
+  createConditionalOrder,
+  createOcoOrder,
   getBrokerageAccount,
   getBrokerageBalance,
   getBrokerageOrders,
   getBrokerageSettlements,
+  getConditionalOrders,
   submitBrokerageOrder,
 } from "@/services/brokerage";
 
@@ -72,5 +81,41 @@ export function useCancelBrokerageOrder() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["brokerage", "orders"] });
     },
+  });
+}
+
+// ── 조건부 주문 (ADR-032) ────────────────────────────────────────────────────
+
+export function useConditionalOrders(page: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ["brokerage", "conditional-orders", page],
+    queryFn: () => getConditionalOrders(page),
+    enabled,
+    // 발동 대기 중인 주문 상태가 실시간으로 바뀔 수 있으므로 짧은 주기로 갱신한다.
+    refetchInterval: enabled ? 5_000 : false,
+  });
+}
+
+export function useCreateConditionalOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (req: CreateConditionalOrderRequest) => createConditionalOrder(req),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["brokerage", "conditional-orders"] }),
+  });
+}
+
+export function useCreateOcoOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (req: CreateOcoOrderRequest) => createOcoOrder(req),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["brokerage", "conditional-orders"] }),
+  });
+}
+
+export function useCancelConditionalOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => cancelConditionalOrder(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["brokerage", "conditional-orders"] }),
   });
 }
