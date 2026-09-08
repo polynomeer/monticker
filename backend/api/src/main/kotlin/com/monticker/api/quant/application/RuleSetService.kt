@@ -1,6 +1,7 @@
 package com.monticker.api.quant.application
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.readValue
 import com.monticker.api.quant.domain.*
 import com.monticker.api.quant.infrastructure.QuantBacktestResultRepository
 import com.monticker.api.quant.infrastructure.RuleSetRepository
@@ -31,6 +32,7 @@ class RuleSetService(
             description        = req.description,
             ruleDefinition     = defMap,
             ruleSetFingerprint = fingerprint,
+            universeJson       = req.universeJson?.let { toStringAnyMap(it) } ?: emptyMap(),
         )
         return ruleSetRepository.save(doc).toResponse()
     }
@@ -46,13 +48,18 @@ class RuleSetService(
     fun update(id: String, userId: Long, req: UpdateRuleSetRequest): RuleSetResponse {
         val doc = ruleSetRepository.findByIdAndUserId(id, userId)
             .orElseThrow { NoSuchElementException("RuleSet $id not found") }
+        // ADR-024: 포워드 테스트 운용 중에는 이름/설명 변경도 막는다 — updateDefinition()의
+        // 자체 가드는 ruleDefinition 필드가 실제로 바뀔 때만 걸리므로 이걸로는 부족하다.
+        require(doc.status != RuleSetStatus.RUNNING.name) {
+            "포워드 테스트 운용 중에는 룰셋을 수정할 수 없습니다. 먼저 중지해주세요."
+        }
         req.name?.let { doc.rename(it) }
         req.description?.let { doc.updateDescription(it) }
         req.ruleDefinition?.let {
-            @Suppress("UNCHECKED_CAST")
-            val defMap = objectMapper.convertValue(it, Map::class.java) as Map<String, Any>
+            val defMap = toStringAnyMap(it)
             doc.updateDefinition(defMap, sha256(objectMapper.writeValueAsString(defMap)), req.changeSummary)
         }
+        req.universeJson?.let { doc.updateUniverse(toStringAnyMap(it)) }
         return ruleSetRepository.save(doc).toResponse()
     }
 
@@ -137,7 +144,8 @@ class RuleSetService(
 
     // ─── Helpers ───────────────────────────────────────────────────────────────
 
-    private fun loadDailyCandles(stockId: Long, from: LocalDate, to: LocalDate): List<DailyCandle> =
+    // internal — ForwardTestService도 동일한 일봉 조회/룰 파싱 로직을 재사용한다.
+    internal fun loadDailyCandles(stockId: Long, from: LocalDate, to: LocalDate): List<DailyCandle> =
         jdbc.query(
             """
             SELECT
@@ -167,7 +175,7 @@ class RuleSetService(
         )
 
     @Suppress("UNCHECKED_CAST")
-    private fun parseRuleDefinition(def: Map<String, Any>): RuleDefinition {
+    internal fun parseRuleDefinition(def: Map<String, Any>): RuleDefinition {
         fun parseCondition(raw: Map<*, *>): RuleCondition {
             val params = (raw["params"] as? Map<*, *>)
                 ?.entries?.associate { (k, v) -> k.toString() to (v as Any) }
@@ -200,6 +208,10 @@ class RuleSetService(
         val bytes = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))
         return bytes.joinToString("") { "%02x".format(it) }
     }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun toStringAnyMap(value: Any): Map<String, Any> =
+        objectMapper.convertValue(value, Map::class.java) as Map<String, Any>
 
     // ─── Mappers ───────────────────────────────────────────────────────────────
 
@@ -238,6 +250,8 @@ class RuleSetService(
         excessReturn     = excessReturn?.toDouble(),
         reliabilityScore = reliabilityScore,
         createdAt        = createdAt.toString(),
+        trades           = tradesJson?.let { objectMapper.readValue<List<QuantTradeRecord>>(it) } ?: emptyList(),
+        equityCurve      = equityCurveJson?.let { objectMapper.readValue<List<QuantEquityPoint>>(it) } ?: emptyList(),
     )
 }
 
@@ -247,6 +261,7 @@ data class CreateRuleSetRequest(
     val name: String,
     val description: String? = null,
     val ruleDefinition: Any,
+    val universeJson: Any? = null,
 )
 
 data class UpdateRuleSetRequest(
@@ -254,6 +269,7 @@ data class UpdateRuleSetRequest(
     val description: String? = null,
     val ruleDefinition: Any? = null,
     val changeSummary: String? = null,
+    val universeJson: Any? = null,
 )
 
 data class QuantBacktestRequest(
@@ -298,4 +314,6 @@ data class QuantBacktestResponse(
     val excessReturn: Double?,
     val reliabilityScore: String?,
     val createdAt: String,
+    val trades: List<QuantTradeRecord>,
+    val equityCurve: List<QuantEquityPoint>,
 )

@@ -9,6 +9,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # gradle/actions/dependency-submission가 Dependency Graph에 제출하는 데 필요
     strategy:
       matrix:
         module: [api, worker, trading-service, quant-engine]
@@ -41,6 +43,13 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: gradle
+
+      # GitHub Dependency Graph에 이 모듈의 의존성을 제출한다 — Dependabot 취약점 알림은
+      # Gradle 프로젝트의 경우 lockfile 파싱만으로는 동작하지 않고 이 그래프가 있어야 켜진다.
+      - name: Submit dependency graph — ${{ matrix.module }}
+        uses: gradle/actions/dependency-submission@v4
+        with:
+          build-root-directory: backend/${{ matrix.module }}
 
       - name: Unit tests — ${{ matrix.module }}
         run: cd backend/${{ matrix.module }} && ./gradlew test

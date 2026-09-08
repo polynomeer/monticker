@@ -1,8 +1,8 @@
-package com.monticker.api.matching.application
+package com.monticker.api.risk.application
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.monticker.api.matching.domain.RiskLimit
-import com.monticker.api.matching.infrastructure.RiskLimitRepository
+import com.monticker.api.risk.domain.RiskLimit
+import com.monticker.api.risk.infrastructure.RiskLimitRepository
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -19,7 +19,8 @@ class RiskCheckerServiceTest {
     private val jdbc = mockk<JdbcTemplate>(relaxed = true)
     private val objectMapper = ObjectMapper()
     private val riskRuleQueryService = RiskRuleQueryService(jdbc)
-    private val service = RiskCheckerService(riskLimitRepo, riskRuleQueryService, jdbc, objectMapper)
+    private val auditLogger = RiskCheckAuditLogger(jdbc, objectMapper)
+    private val service = RiskCheckerService(riskLimitRepo, riskRuleQueryService, auditLogger)
 
     private val userId = 1L
     private val stockId = 100L
@@ -51,14 +52,9 @@ class RiskCheckerServiceTest {
             jdbc.queryForObject(match<String> { it.contains("paper_accounts") }, BigDecimal::class.java, userId)
         } returns BigDecimal("10000000")
 
-        // 3. holdings (concentration) — empty by default
+        // 3. holdings (concentration + VaR 둘 다 이 단일 조회를 공유한다 — RiskRuleQueryService 참고)
         every {
             jdbc.queryForList(match<String> { it.contains("paper_trades") && it.contains("GROUP BY stock_id") }, userId)
-        } returns emptyList()
-
-        // 5. distinct stock ids for VaR — empty by default
-        every {
-            jdbc.queryForList(match<String> { it.contains("DISTINCT stock_id") }, Long::class.java, userId)
         } returns emptyList()
 
         // 7. position count
@@ -143,9 +139,12 @@ class RiskCheckerServiceTest {
             maxHourlyOrders = 5,
         )
         stubSafeDefaults(tightLimits)
+        // ADR-025 리팩터링 이후 VaR 대상 종목도 "현재 보유 중"인 종목(holdings 조회)에서만
+        // 가져온다 — 예전엔 이미 청산한 종목까지 포함하는 별도 DISTINCT 조회를 썼는데,
+        // 지금 포트폴리오와 무관한 과거 종목을 리스크에 반영하던 버그였다.
         every {
-            jdbc.queryForList(match<String> { it.contains("DISTINCT stock_id") }, Long::class.java, userId)
-        } returns listOf(stockId)
+            jdbc.queryForList(match<String> { it.contains("paper_trades") && it.contains("GROUP BY stock_id") }, userId)
+        } returns listOf(mapOf("stock_id" to stockId, "qty" to 10))
 
         // candles_1d returns: provide >=6 closes so the 95th-percentile branch
         // (allReturns.size >= 5) is used, with a clear negative-return tail so
@@ -179,13 +178,15 @@ class RiskCheckerServiceTest {
             maxHourlyOrders = 5,
         )
         stubSafeDefaults(limits)
+        // ADR-025 리팩터링 이후 보유 종목 수(positionCount)/신규 여부 판정도 holdings
+        // 스냅샷 하나로 통일됐다 — 3개 보유 중인 상태를 이 조회 하나로 표현한다.
         every {
-            jdbc.queryForObject(match<String> { it.contains("COUNT(DISTINCT stock_id)") }, Long::class.java, userId, userId)
-        } returns 3L
-        // isNewStock: no prior buy/sell quantity for this stock
-        every {
-            jdbc.queryForObject(match<String> { it.contains("SUM(CASE WHEN side='BUY' THEN quantity ELSE -quantity END), 0)") }, Int::class.java, userId, stockId)
-        } returns 0
+            jdbc.queryForList(match<String> { it.contains("paper_trades") && it.contains("GROUP BY stock_id") }, userId)
+        } returns listOf(
+            mapOf("stock_id" to 201L, "qty" to 5),
+            mapOf("stock_id" to 202L, "qty" to 5),
+            mapOf("stock_id" to 203L, "qty" to 5),
+        )
 
         val result = service.check(userId, stockId, "BUY", 10, estimatedPrice)
 
@@ -205,13 +206,15 @@ class RiskCheckerServiceTest {
             maxHourlyOrders = 5,
         )
         stubSafeDefaults(limits)
+        // 이미 보유 중인 종목(stockId)이 3개 보유 목록에 포함돼 있다 — isNewStock=false이므로
+        // PositionCountRule 자체가 평가되지 않아야 한다.
         every {
-            jdbc.queryForObject(match<String> { it.contains("COUNT(DISTINCT stock_id)") }, Long::class.java, userId, userId)
-        } returns 3L
-        // isNewStock: already holds a positive position in this stock
-        every {
-            jdbc.queryForObject(match<String> { it.contains("SUM(CASE WHEN side='BUY' THEN quantity ELSE -quantity END), 0)") }, Int::class.java, userId, stockId)
-        } returns 10
+            jdbc.queryForList(match<String> { it.contains("paper_trades") && it.contains("GROUP BY stock_id") }, userId)
+        } returns listOf(
+            mapOf("stock_id" to stockId, "qty" to 10),
+            mapOf("stock_id" to 202L, "qty" to 5),
+            mapOf("stock_id" to 203L, "qty" to 5),
+        )
 
         val result = service.check(userId, stockId, "BUY", 10, estimatedPrice)
 

@@ -37,7 +37,7 @@ cleanup() {
     docker compose --profile msa stop 2>/dev/null || true
   elif [ "$WITH_KAFKA" = true ]; then
     docker compose --profile kafka stop 2>/dev/null || true
-    docker compose stop postgres redis jaeger 2>/dev/null || true
+    docker compose stop postgres redis jaeger mailhog 2>/dev/null || true
   elif [ "$WITH_PINPOINT" = true ]; then
     docker compose --profile pinpoint stop 2>/dev/null || true
   else
@@ -64,6 +64,76 @@ die() {
   kill "$API_PID" "$WORKER_PID" "$WEB_PID" 2>/dev/null || true
   exit 1
 }
+
+# ── 포트 충돌 우회 ───────────────────────────────────────────
+# 선호 포트가 비어있으면 그대로 쓴다. 이 저장소 경로($ROOT)가 커맨드라인에 들어있는
+# 프로세스가 점유 중이면 이전 dev.sh 실행의 잔여물로 보고 정리한 뒤 재사용한다.
+# 그 외(관련 없는 다른 프로세스)는 절대 죽이지 않고 다음 빈 포트를 찾아 우회한다.
+#
+# 결과는 $RESOLVED_PORT 전역 변수에 담는다 — $(resolve_port ...) 식으로 서브셸에서
+# 캡처하면 CLAIMED_PORTS 갱신이 호출자 셸로 전파되지 않아(서브셸은 종료 시 변경사항이
+# 사라짐) 아직 아무도 리슨하지 않는 포트를 다음 서비스가 또 고르는 버그가 생긴다.
+# 반드시 `resolve_port N; VAR=$RESOLVED_PORT` 형태로 호출할 것 — $(...)로 감싸지 말 것.
+CLAIMED_PORTS=""
+RESOLVED_PORT=""
+port_claimed() {
+  case " $CLAIMED_PORTS " in *" $1 "*) return 0 ;; *) return 1 ;; esac
+}
+
+resolve_port() {
+  local preferred="$1"
+  local pid
+
+  if ! port_claimed "$preferred"; then
+    pid=$(lsof -ti :"$preferred" 2>/dev/null | head -1)
+    if [ -z "$pid" ]; then
+      CLAIMED_PORTS="$CLAIMED_PORTS $preferred"
+      RESOLVED_PORT="$preferred"
+      return
+    fi
+
+    if ps -p "$pid" -o command= 2>/dev/null | grep -qF "$ROOT"; then
+      kill -9 "$pid" 2>/dev/null || true
+      sleep 1
+      CLAIMED_PORTS="$CLAIMED_PORTS $preferred"
+      RESOLVED_PORT="$preferred"
+      return
+    fi
+  fi
+
+  local port=$((preferred + 1))
+  while [ "$port" -lt $((preferred + 50)) ] && { port_claimed "$port" || lsof -ti :"$port" > /dev/null 2>&1; }; do
+    port=$((port + 1))
+  done
+  echo -e "  ${YELLOW}[PORT] ${preferred} is in use — using ${port} instead${NC}" >&2
+  CLAIMED_PORTS="$CLAIMED_PORTS $port"
+  RESOLVED_PORT="$port"
+}
+
+echo "Resolving ports..."
+resolve_port 5432;  POSTGRES_PORT=$RESOLVED_PORT
+resolve_port 6379;  REDIS_PORT=$RESOLVED_PORT
+resolve_port 27017; MONGODB_PORT=$RESOLVED_PORT
+resolve_port 9200;  ELASTICSEARCH_PORT=$RESOLVED_PORT
+resolve_port 16686; JAEGER_UI_PORT=$RESOLVED_PORT
+resolve_port 4318;  OTLP_PORT=$RESOLVED_PORT
+resolve_port 1025;  MAILHOG_SMTP_PORT=$RESOLVED_PORT
+resolve_port 8025;  MAILHOG_WEB_PORT=$RESOLVED_PORT
+resolve_port 8080;  API_PORT=$RESOLVED_PORT
+resolve_port 8081;  WORKER_PORT=$RESOLVED_PORT
+resolve_port 3000;  WEB_PORT=$RESOLVED_PORT
+if [ "$WITH_KAFKA" = true ]; then
+  resolve_port 9092;  KAFKA_PORT=$RESOLVED_PORT
+  resolve_port 29092; KAFKA_EXTERNAL_PORT=$RESOLVED_PORT
+  resolve_port 9090;  BROADCAST_GW_PORT=$RESOLVED_PORT
+fi
+if [ "$WITH_MSA" = true ]; then
+  resolve_port 8082; QUANT_ENGINE_PORT=$RESOLVED_PORT
+  resolve_port 8083; TRADING_SERVICE_PORT=$RESOLVED_PORT
+fi
+export POSTGRES_PORT REDIS_PORT MONGODB_PORT ELASTICSEARCH_PORT JAEGER_UI_PORT OTLP_PORT \
+       MAILHOG_SMTP_PORT MAILHOG_WEB_PORT \
+       KAFKA_PORT KAFKA_EXTERNAL_PORT BROADCAST_GW_PORT QUANT_ENGINE_PORT TRADING_SERVICE_PORT
 
 # ── 프로세스 대기 (타임아웃 + 실시간 로그) ─────────────────────
 # wait_for <이름> <로그파일> <성공조건함수> <PID> <타임아웃초>
@@ -112,41 +182,34 @@ if ! docker info > /dev/null 2>&1; then
   done
 fi
 
-# ── 포트 정리 ────────────────────────────────────────────────
-echo "Clearing ports 3000, 8080, 8081..."
-lsof -ti :3000 | xargs kill -9 2>/dev/null || true
-lsof -ti :8080 | xargs kill -9 2>/dev/null || true
-lsof -ti :8081 | xargs kill -9 2>/dev/null || true
-sleep 1
-
 # ── 1. infra ─────────────────────────────────────────────────
 mkdir -p "$ROOT/logs"
 echo ""
 
 if [ "$WITH_MSA" = true ]; then
-  echo "1/4  Starting infra (MSA 모드: postgres + redis + jaeger + kafka + quant-engine + trading-service)..."
+  echo "1/4  Starting infra (MSA 모드: postgres + redis + jaeger + mailhog + kafka + quant-engine + trading-service)..."
   echo -e "  ${CYAN}Building MSA service images (변경 없으면 캐시 사용)...${NC}"
   docker compose --profile msa build --quiet 2>&1 || {
     echo -e "${YELLOW}[WARN] 일부 이미지 빌드 실패. 계속 진행합니다.${NC}"
   }
-  docker compose up -d postgres redis mongodb elasticsearch jaeger 2>&1 | grep -v "^$" || true
+  docker compose up -d postgres redis mongodb elasticsearch jaeger mailhog 2>&1 | grep -v "^$" || true
   docker compose --profile msa up -d --no-build 2>&1 | grep -v "^$" || true
 
 elif [ "$WITH_KAFKA" = true ]; then
-  echo "1/4  Starting infra (Kafka 모드: postgres + redis + mongodb + jaeger + kafka + market-gateway + broadcast-gateway)..."
+  echo "1/4  Starting infra (Kafka 모드: postgres + redis + mongodb + jaeger + mailhog + kafka + market-gateway + broadcast-gateway)..."
   echo -e "  ${CYAN}Building kafka service images (변경 없으면 캐시 사용)...${NC}"
   docker compose --profile kafka build --quiet 2>&1 || true
-  docker compose up -d postgres redis mongodb elasticsearch jaeger 2>&1 | grep -v "^$" || true
+  docker compose up -d postgres redis mongodb elasticsearch jaeger mailhog 2>&1 | grep -v "^$" || true
   docker compose --profile kafka up -d --no-build 2>&1 | grep -v "^$" || true
 
 elif [ "$WITH_PINPOINT" = true ]; then
-  echo "1/4  Starting infra (postgres + redis + mongodb + jaeger + pinpoint)..."
-  docker compose up -d postgres redis mongodb elasticsearch jaeger 2>&1 | grep -v "^$" || true
+  echo "1/4  Starting infra (postgres + redis + mongodb + jaeger + mailhog + pinpoint)..."
+  docker compose up -d postgres redis mongodb elasticsearch jaeger mailhog 2>&1 | grep -v "^$" || true
   docker compose --profile pinpoint up -d 2>&1 | grep -v "^$" || true
 
 else
-  echo "1/4  Starting infra (postgres + redis + mongodb + jaeger)..."
-  docker compose up -d postgres redis mongodb elasticsearch jaeger 2>&1 | grep -v "^$" || true
+  echo "1/4  Starting infra (postgres + redis + mongodb + jaeger + mailhog)..."
+  docker compose up -d postgres redis mongodb elasticsearch jaeger mailhog 2>&1 | grep -v "^$" || true
 fi
 
 postgres_ready() { docker compose exec postgres pg_isready -U monticker -q 2>/dev/null; }
@@ -158,6 +221,10 @@ wait_for "mongodb" "/dev/null" mongodb_ready "" 60
 # ES는 JVM 워밍업으로 느림 — 타임아웃 120s
 elasticsearch_ready() { docker compose ps elasticsearch 2>/dev/null | grep -q "healthy"; }
 wait_for "elasticsearch" "/dev/null" elasticsearch_ready "" 120
+
+# mailhog 이미지는 healthcheck가 없어 docker compose ps로는 확인 불가 — Web UI API로 직접 확인
+mailhog_ready() { /usr/bin/curl -sf "http://localhost:${MAILHOG_WEB_PORT}/api/v2/messages" > /dev/null 2>&1; }
+wait_for "mailhog" "/dev/null" mailhog_ready "" 30
 
 if [ "$WITH_KAFKA" = true ]; then
   # healthcheck 통과 여부로 확인 (이미지별 bin 경로 차이 회피)
@@ -176,66 +243,80 @@ fi
 
 if [ "$WITH_MSA" = true ]; then
   # MSA 서비스는 Kafka healthy 이후 Spring Boot 기동까지 포함해 최대 3분
-  quant_ready()   { /usr/bin/curl -sf http://localhost:8082/actuator/health > /dev/null 2>&1; }
-  trading_ready() { /usr/bin/curl -sf http://localhost:8083/actuator/health > /dev/null 2>&1; }
+  quant_ready()   { /usr/bin/curl -sf "http://localhost:${QUANT_ENGINE_PORT}/actuator/health" > /dev/null 2>&1; }
+  trading_ready() { /usr/bin/curl -sf "http://localhost:${TRADING_SERVICE_PORT}/actuator/health" > /dev/null 2>&1; }
   wait_for "quant-engine"    "/dev/null" quant_ready   "" 180
   wait_for "trading-service" "/dev/null" trading_ready "" 180
 fi
 
 # ── 2. api ───────────────────────────────────────────────────
 echo ""
-echo "2/4  Starting API (port 8080)..."
+echo "2/4  Starting API (port ${API_PORT})..."
 cd "$ROOT/backend/api"
 
 # MSA 모드: TRADING_SERVICE_URL / QUANT_ENGINE_URL 활성화
 # Kafka 모드: KAFKA_BROKERS 설정 (Outbox 발행 정상화)
-API_ENV="OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 PINPOINT_ENABLE=${WITH_PINPOINT}"
+API_ENV="OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:${OTLP_PORT} PINPOINT_ENABLE=${WITH_PINPOINT}"
+API_ENV="$API_ENV DB_URL=jdbc:postgresql://localhost:${POSTGRES_PORT}/monticker REDIS_HOST=localhost REDIS_PORT=${REDIS_PORT}"
+API_ENV="$API_ENV MONGODB_URI=mongodb://monticker:monticker@localhost:${MONGODB_PORT}/monticker?authSource=admin"
+API_ENV="$API_ENV ELASTICSEARCH_URI=http://localhost:${ELASTICSEARCH_PORT}"
+API_ENV="$API_ENV ALLOWED_ORIGINS=http://localhost:${WEB_PORT} APP_BASE_URL=http://localhost:${WEB_PORT}"
+# API가 bare-metal(gradlew bootRun)로 뜨므로 도커 내부 호스트명 "mailhog"가 아니라
+# 호스트에 노출된 포트로 접속한다. smtp.auth=true가 고정값이라 자격증명 문자열
+# 자체는 있어야 하지만 MailHog는 인증을 실제로 검사하지 않는다 — 아무 값이나 무방.
+API_ENV="$API_ENV MAIL_HOST=localhost MAIL_PORT=${MAILHOG_SMTP_PORT} MAIL_USERNAME=test MAIL_PASSWORD=test"
 if [ "$WITH_MSA" = true ]; then
-  API_ENV="$API_ENV TRADING_SERVICE_URL=http://localhost:8083 QUANT_ENGINE_URL=http://localhost:8082"
+  API_ENV="$API_ENV TRADING_SERVICE_URL=http://localhost:${TRADING_SERVICE_PORT} QUANT_ENGINE_URL=http://localhost:${QUANT_ENGINE_PORT}"
 fi
 if [ "$WITH_KAFKA" = true ]; then
-  API_ENV="$API_ENV KAFKA_BROKERS=localhost:9092"
+  API_ENV="$API_ENV KAFKA_BROKERS=localhost:${KAFKA_PORT}"
 fi
 
-eval "$API_ENV ./gradlew bootRun --console=plain -q" > "$ROOT/logs/api.log" 2>&1 &
+eval "$API_ENV ./gradlew bootRun --console=plain -q --args='--server.port=${API_PORT}'" > "$ROOT/logs/api.log" 2>&1 &
 API_PID=$!
 
 api_ready() {
-  /usr/bin/curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1 ||
+  /usr/bin/curl -sf "http://localhost:${API_PORT}/actuator/health" > /dev/null 2>&1 ||
   grep -q "Started ApiApplication" "$ROOT/logs/api.log" 2>/dev/null
 }
 wait_for "API" "$ROOT/logs/api.log" api_ready "$API_PID" 120
 
 # ── 3. worker ────────────────────────────────────────────────
 echo ""
-echo "3/4  Starting Worker (port 8081)..."
+echo "3/4  Starting Worker (port ${WORKER_PORT})..."
 cd "$ROOT/backend/worker"
 
 # Kafka 모드: INGESTION_SOURCE=kafka (Go market-gateway → Kafka → Worker)
 # 기본 모드: INGESTION_SOURCE=internal (MockPriceGenerator)
-WORKER_ENV="OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 PINPOINT_ENABLE=${WITH_PINPOINT}"
+WORKER_ENV="OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:${OTLP_PORT} PINPOINT_ENABLE=${WITH_PINPOINT}"
+WORKER_ENV="$WORKER_ENV DB_URL=jdbc:postgresql://localhost:${POSTGRES_PORT}/monticker REDIS_HOST=localhost REDIS_PORT=${REDIS_PORT}"
+WORKER_ENV="$WORKER_ENV ELASTICSEARCH_URI=http://localhost:${ELASTICSEARCH_PORT}"
 if [ "$WITH_KAFKA" = true ]; then
-  WORKER_ENV="$WORKER_ENV INGESTION_SOURCE=kafka KAFKA_BROKERS=localhost:9092"
+  WORKER_ENV="$WORKER_ENV INGESTION_SOURCE=kafka KAFKA_BROKERS=localhost:${KAFKA_PORT}"
 fi
 
-eval "$WORKER_ENV ./gradlew bootRun --console=plain -q" > "$ROOT/logs/worker.log" 2>&1 &
+eval "$WORKER_ENV ./gradlew bootRun --console=plain -q --args='--server.port=${WORKER_PORT}'" > "$ROOT/logs/worker.log" 2>&1 &
 WORKER_PID=$!
 
 worker_ready() {
-  /usr/bin/curl -sf http://localhost:8081/actuator/health > /dev/null 2>&1 ||
+  /usr/bin/curl -sf "http://localhost:${WORKER_PORT}/actuator/health" > /dev/null 2>&1 ||
   grep -q "Started WorkerApplication" "$ROOT/logs/worker.log" 2>/dev/null
 }
 wait_for "Worker" "$ROOT/logs/worker.log" worker_ready "$WORKER_PID" 90
 
 # ── 4. web ───────────────────────────────────────────────────
 echo ""
-echo "4/4  Starting Web (port 3000)..."
+echo "4/4  Starting Web (port ${WEB_PORT})..."
 cd "$ROOT/apps/web"
 pnpm install --ignore-scripts --frozen-lockfile 2>/dev/null || true
-pnpm dev > "$ROOT/logs/web.log" 2>&1 &
+# .env.local의 NEXT_PUBLIC_API_URL은 8080 고정값이다 — API_PORT가 충돌로 다른 값으로
+# 해석됐는데 이걸 안 넘기면, 브라우저의 /api/* 요청이 실제로는 monticker API가 아니라
+# 우연히 8080을 쓰고 있는 다른 프로세스로 흘러들어가 알 수 없는 401/에러가 난다.
+# Next.js는 이미 process.env에 설정된 NEXT_PUBLIC_* 값을 .env.local보다 우선한다.
+NEXT_PUBLIC_API_URL="http://localhost:${API_PORT}" npx next dev -p "$WEB_PORT" > "$ROOT/logs/web.log" 2>&1 &
 WEB_PID=$!
 
-web_ready() { /usr/bin/curl -sf http://localhost:3000 > /dev/null 2>&1; }
+web_ready() { /usr/bin/curl -sf "http://localhost:${WEB_PORT}" > /dev/null 2>&1; }
 wait_for "Web" "$ROOT/logs/web.log" web_ready "$WEB_PID" 60
 
 # ── ready ────────────────────────────────────────────────────
@@ -243,17 +324,18 @@ echo ""
 echo -e "${GREEN}========================================"
 echo "  monticker is running"
 echo ""
-echo "  Web    → http://localhost:3000"
-echo "  API    → http://localhost:8080"
-echo "  Worker → http://localhost:8081"
-echo "  Jaeger → http://localhost:16686"
+echo "  Web    → http://localhost:${WEB_PORT}"
+echo "  API    → http://localhost:${API_PORT}"
+echo "  Worker → http://localhost:${WORKER_PORT}"
+echo "  Jaeger → http://localhost:${JAEGER_UI_PORT}"
+echo "  MailHog → http://localhost:${MAILHOG_WEB_PORT}  (이메일 인증 / 비밀번호 재설정 링크 미리보기)"
 if [ "$WITH_KAFKA" = true ]; then
-echo "  Kafka  → localhost:9092"
-echo "  Broadcast-GW → ws://localhost:9090/ws"
+echo "  Kafka  → localhost:${KAFKA_PORT}"
+echo "  Broadcast-GW → ws://localhost:${BROADCAST_GW_PORT}/ws"
 fi
 if [ "$WITH_MSA" = true ]; then
-echo "  quant-engine    → http://localhost:8082"
-echo "  trading-service → http://localhost:8083"
+echo "  quant-engine    → http://localhost:${QUANT_ENGINE_PORT}"
+echo "  trading-service → http://localhost:${TRADING_SERVICE_PORT}"
 fi
 if [ "$WITH_PINPOINT" = true ]; then
 echo "  Pinpoint → http://localhost:18080"

@@ -1,6 +1,8 @@
 package com.monticker.api.quant.domain
 
 import jakarta.persistence.*
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
@@ -69,12 +71,15 @@ class QuantBacktestResult(
     @Column(name = "reliability_score", length = 1)
     val reliabilityScore: String? = null,
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "reliability_notes", columnDefinition = "jsonb")
     val reliabilityNotes: String? = null,
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "trades_json", columnDefinition = "jsonb")
     val tradesJson: String? = null,
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "equity_curve_json", columnDefinition = "jsonb")
     val equityCurveJson: String? = null,
 

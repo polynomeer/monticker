@@ -8,9 +8,11 @@ import { useToast } from "@/hooks/useToast";
 interface Props {
   stockId: number;
   symbol: string;
+  /** 카드 테두리/제목 없이 폼만 렌더링 (다른 카드 안에 임베드할 때) */
+  bare?: boolean;
 }
 
-export default function AlertPanel({ stockId, symbol }: Props) {
+export default function AlertPanel({ stockId, symbol, bare = false }: Props) {
   const [ruleType, setRuleType] = useState("PRICE_ABOVE");
   const [threshold, setThreshold] = useState("");
   const [loading, setLoading] = useState(false);
@@ -44,13 +46,7 @@ export default function AlertPanel({ stockId, symbol }: Props) {
     }
   };
 
-  return (
-    <Card className="p-4">
-      <h3 className="font-semibold text-gray-900 dark:text-dracula-fg mb-3">
-        알림 설정{" "}
-        <span className="text-gray-500 dark:text-dracula-comment text-sm font-normal">({symbol})</span>
-      </h3>
-
+  const form = (
       <form onSubmit={handleSave} className="flex flex-col gap-3">
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-gray-700 dark:text-dracula-fg">알림 유형</label>
@@ -83,6 +79,17 @@ export default function AlertPanel({ stockId, symbol }: Props) {
           {loading ? "저장 중..." : "알림 저장"}
         </button>
       </form>
+  );
+
+  if (bare) return form;
+
+  return (
+    <Card className="p-4">
+      <h3 className="font-semibold text-gray-900 dark:text-dracula-fg mb-3">
+        알림 설정{" "}
+        <span className="text-gray-500 dark:text-dracula-comment text-sm font-normal">({symbol})</span>
+      </h3>
+      {form}
     </Card>
   );
 }

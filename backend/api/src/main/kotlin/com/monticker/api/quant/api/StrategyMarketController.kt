@@ -1,6 +1,8 @@
 package com.monticker.api.quant.api
 
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
+import com.monticker.api.quant.domain.RuleSetStatus
+import com.monticker.api.quant.infrastructure.RuleSetRepository
 import com.monticker.api.settlement.creator.application.CreatorEarningsService
 import org.springframework.http.ResponseEntity
 import org.springframework.jdbc.core.JdbcTemplate
@@ -21,6 +23,7 @@ class StrategyMarketController(
     private val jdbc: JdbcTemplate,
     private val jwtTokenProvider: JwtTokenProvider,
     private val creatorEarningsService: CreatorEarningsService,
+    private val ruleSetRepository: RuleSetRepository,
 ) {
     @GetMapping
     fun list(
@@ -36,15 +39,33 @@ class StrategyMarketController(
                LIMIT ? OFFSET ?""",
             size, page * size,
         )
-        return ResponseEntity.ok(rows)
+
+        // ruleset_id는 Postgres FK가 아니라 Mongo(rule_sets)의 ObjectId라 SQL JOIN이 불가능하다 —
+        // 전략 이름은 이 별도 조회로 채워 넣는다(빠지면 프론트 카드 제목이 항상 빈 문자열이 된다).
+        val rulesetIds = rows.mapNotNull { it["ruleset_id"] as? String }
+        val namesById = ruleSetRepository.findAllById(rulesetIds).associate { it.id to it.name }
+
+        val enriched = rows.map { row ->
+            LinkedHashMap(row).apply { put("name", namesById[row["ruleset_id"]] ?: "(삭제된 전략)") }
+        }
+        return ResponseEntity.ok(enriched)
     }
 
     @PostMapping("/share")
     fun share(
         @RequestHeader("Authorization") auth: String,
         @RequestBody req: StrategyShareRequest,
-    ): ResponseEntity<Map<String, Any>> {
+    ): ResponseEntity<*> {
         val userId = jwtTokenProvider.getUserId(auth.removePrefix("Bearer ").trim())
+
+        // req.rulesetId를 그대로 믿고 INSERT하면 남의 룰셋 ID를 알아내는 것만으로 그 룰셋을
+        // 마켓에 공유해버릴 수 있었다(broken object-level authorization) — 소유권을 먼저 확인한다.
+        val doc = ruleSetRepository.findByIdAndUserId(req.rulesetId, userId)
+            .orElse(null) ?: return ResponseEntity.notFound().build<Unit>()
+        if (doc.status !in setOf(RuleSetStatus.BACKTESTED.name, RuleSetStatus.RUNNING.name)) {
+            return ResponseEntity.badRequest().body(mapOf("error" to "백테스트를 먼저 완료해야 공유할 수 있습니다."))
+        }
+
         val id = jdbc.queryForObject(
             """INSERT INTO strategy_market (ruleset_id, user_id, description, price, subscribe_count, created_at)
                VALUES (?, ?, ?, ?, 0, NOW())

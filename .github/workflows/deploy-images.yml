@@ -1,0 +1,69 @@
+name: deploy-images
+
+# main에 머지될 때마다 각 서비스 이미지를 빌드해 GHCR(ghcr.io)에 푸시한다.
+# GHCR은 저장소 소유자의 GITHUB_TOKEN만으로 인증되므로 별도 클라우드 계정/시크릿 없이도
+# 여기까지는 동작한다 — 실제 K8s 클러스터에 배포하는 단계는 아직 없다(launch-plan.md Phase 3
+# 참고: 그건 실제 클러스터/kubeconfig가 있어야 가능하고, 이 세션엔 그게 없다).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "apps/web/**"
+      - "services/market-gateway/**"
+      - ".github/workflows/deploy-images.yml"
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          # backend/* 서비스는 각자 독립된 Gradle 프로젝트라 자기 디렉터리가 곧 빌드 컨텍스트다.
+          - service: api
+            context: backend/api
+            dockerfile: backend/api/Dockerfile
+          - service: worker
+            context: backend/worker
+            dockerfile: backend/worker/Dockerfile
+          - service: quant-engine
+            context: backend/quant-engine
+            dockerfile: backend/quant-engine/Dockerfile
+          - service: trading-service
+            context: backend/trading-service
+            dockerfile: backend/trading-service/Dockerfile
+          - service: market-gateway
+            context: services/market-gateway
+            dockerfile: services/market-gateway/Dockerfile
+          # web은 pnpm 워크스페이스 루트(lockfile 위치)가 빌드 컨텍스트여야 한다 — apps/web/
+          # 단독으로는 pnpm-lock.yaml/.npmrc를 못 찾는다(apps/web/Dockerfile 상단 주석 참고).
+          - service: web
+            context: .
+            dockerfile: apps/web/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/monticker-${{ matrix.service }}:latest
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/monticker-${{ matrix.service }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}

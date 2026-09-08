@@ -5,7 +5,10 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.http.HttpStatus
 import org.springframework.security.access.AccessDeniedException
+import org.springframework.core.MethodParameter
 import org.springframework.security.authentication.BadCredentialsException
+import org.springframework.web.bind.MissingServletRequestParameterException
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
 import org.springframework.web.server.ResponseStatusException
 
 class GlobalExceptionHandlerTest {
@@ -70,6 +73,33 @@ class GlobalExceptionHandlerTest {
         )
         assertThat(resp.statusCode).isEqualTo(HttpStatus.TOO_MANY_REQUESTS)
     }
+
+    @Test
+    fun `MissingServletRequestParameterException은 400을 반환한다 (누락된 파라미터명 포함)`() {
+        // @RequestParam token: String 처럼 필수 쿼리 파라미터가 아예 없을 때 —
+        // 예: POST /api/auth/verify-email 을 token 없이 호출하는 경우.
+        val resp = handler.handleMissingParam(
+            MissingServletRequestParameterException("token", "String")
+        )
+        assertThat(resp.statusCode).isEqualTo(HttpStatus.BAD_REQUEST)
+        assertThat(resp.body?.message).contains("token")
+    }
+
+    @Test
+    fun `MethodArgumentTypeMismatchException은 400을 반환한다 (형식이 안 맞는 파라미터명 포함)`() {
+        // MethodParameter 생성자는 실제 메서드 리플렉션이 필요 — 문자열 파라미터가 있는
+        // 아무 메서드나 빌려 쓴다(값 자체는 검사하지 않음).
+        val method = this::class.java.getDeclaredMethod("dummyMethodForParam", String::class.java)
+        val param = MethodParameter(method, 0)
+        val resp = handler.handleTypeMismatch(
+            MethodArgumentTypeMismatchException("abc", Long::class.java, "stockId", param, IllegalArgumentException())
+        )
+        assertThat(resp.statusCode).isEqualTo(HttpStatus.BAD_REQUEST)
+        assertThat(resp.body?.message).contains("stockId")
+    }
+
+    @Suppress("unused")
+    private fun dummyMethodForParam(value: String) {}
 
     @Test
     fun `ErrorResponse에 timestamp가 포함된다`() {

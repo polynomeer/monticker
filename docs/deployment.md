@@ -80,7 +80,11 @@ PG_MOCK_ENABLED=false
     |← 결제 완료 (paymentKey)─|                          |
     |                         |                          |
     |── POST /api/subscription/payment/confirm ─────────→|
-    |     {paymentKey, orderId, amount, planCode, userId} |
+    |     Authorization: Bearer {JWT}                     |
+    |     {paymentKey, orderId, amount, planCode}         |
+    |     (userId는 바디로 안 받는다 — JWT에서만 추출.      |
+    |      과거엔 바디의 userId를 믿어서 broken object-level|
+    |      authorization이었음 — 지금은 고쳐짐)             |
     |                         |── /v1/payments/confirm ─→|
     |                         |← 200 {status: "DONE"} ──|
     |                         |                          |
@@ -96,6 +100,21 @@ https://api.monticker.io/api/subscription/payment/webhook
 ```
 
 이벤트: `PAYMENT_STATUS_CHANGED`, `DEPOSIT_CALLBACK` (가상계좌 입금)
+
+### 2-5. 정기결제(자동 갱신) — 빌링키
+
+confirm 플로우와 별개의 API다. 프론트에서 아래 순서로 호출한다:
+
+```
+1. GET  /api/subscription/billing/customer-key  → customerKey 발급/재사용
+2. 토스 SDK: tossPayments.requestBillingAuth('CARD', {customerKey, successUrl, failUrl})
+3. successUrl 리다이렉트로 {authKey, customerKey} 수신
+4. POST /api/subscription/billing/register {authKey, customerKey}
+   → 백엔드가 /v1/billing/authorizations/issue로 billingKey 발급받아 암호화 저장
+```
+
+이후 월 갱신 배치가 저장된 billingKey로 `/v1/billing/{billingKey}`를 호출해 자동 청구한다.
+카드 조회/해지는 `GET`/`DELETE /api/subscription/billing`.
 
 ---
 
@@ -180,5 +199,5 @@ java -jar monticker-api.jar --spring.profiles.active=prod
   openssl rand -base64 48
   ```
 - `*_MOCK_ENABLED` 환경변수는 절대 프로덕션에서 `true`로 설정 금지
-- 토스페이먼츠 라이브 키 / KIS 앱 시크릿은 Secret Manager나 Vault로 관리 권장
+- 토스페이먼츠 라이브 키 / KIS 앱 시크릿 / `CREDENTIAL_ENCRYPTION_KEY`는 Secret Manager나 Vault로 관리 권장 — 실제 전환 템플릿은 [infra/k8s/base/external-secrets-example/](../infra/k8s/base/external-secrets-example/README.md) 참고. 아직 `infra/k8s/base/secret.yaml`은 값을 직접 채워 넣는 평문 placeholder Secret이다(실제 프로덕션 값은 커밋된 적 없음) — 실제 클라우드 시크릿 백엔드를 프로비저닝하기 전까지는 이 상태다.
 - OAuth 리디렉션 URI는 각 콘솔에 등록된 URI와 정확히 일치해야 함

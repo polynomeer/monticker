@@ -16,12 +16,12 @@ class ScreenerServiceTest {
     private val stockSearchService = mockk<StockSearchService>(relaxed = true)
     private val service = ScreenerService(repo, stockSearchService)
 
-    private fun item(rank: Int, stockId: Long) = ScreenerItem(
+    private fun item(rank: Int, stockId: Long, market: String = "KOSPI", marketCap: Long? = null) = ScreenerItem(
         rank = rank, stockId = stockId, symbol = "00$stockId", name = "종목$stockId",
-        market = "KOSPI", sector = null, price = BigDecimal("10000"), prevClose = BigDecimal("9900"),
+        market = market, sector = null, price = BigDecimal("10000"), prevClose = BigDecimal("9900"),
         changeRate = 1.0, changeAmount = BigDecimal("100"), volume = 1000L, amount = BigDecimal("10000000"),
         buyRatio = 55, sellRatio = 45,
-        marketCap = null, per = null, pbr = null, isFundamentalsMocked = false,
+        marketCap = marketCap, per = null, pbr = null, isFundamentalsMocked = false,
     )
 
     @Test
@@ -113,5 +113,52 @@ class ScreenerServiceTest {
         val result = service.getItems(limit = 1)
 
         assertThat(result.total).isEqualTo(202)
+    }
+
+    // ── search with universe filters (Quant Lab 종목 선택기용) ─────────────────────
+
+    private fun stubEsResult(vararg ids: Long) {
+        every { stockSearchService.search(any()) } returns ids.map { id ->
+            com.monticker.api.stock.application.StockSearchResult(id, "00$id", "종목$id", "KOSPI", null, null)
+        }
+    }
+
+    @Test
+    fun `search excludes results outside the requested market`() {
+        stubEsResult(1L, 2L)
+        every { repo.findItemsByStockIds(listOf(1L, 2L), "amount") } returns listOf(
+            item(1, 1L, market = "KOSPI"),
+            item(2, 2L, market = "NASDAQ"),
+        )
+
+        val result = service.search(query = "삼성", market = "domestic")
+
+        assertThat(result.items).extracting("stockId").containsExactly(1L)
+    }
+
+    @Test
+    fun `search excludes results outside the requested market cap tier`() {
+        stubEsResult(1L, 2L)
+        every { repo.findItemsByStockIds(listOf(1L, 2L), "amount") } returns listOf(
+            item(1, 1L, marketCap = 2_000_000_000_000L), // large
+            item(2, 2L, marketCap = 50_000_000_000L),    // small
+        )
+
+        val result = service.search(query = "삼성", marketCapTier = "large")
+
+        assertThat(result.items).extracting("stockId").containsExactly(1L)
+    }
+
+    @Test
+    fun `search returns everything when market and marketCapTier are left as default`() {
+        stubEsResult(1L, 2L)
+        every { repo.findItemsByStockIds(listOf(1L, 2L), "amount") } returns listOf(
+            item(1, 1L, market = "KOSPI", marketCap = 50_000_000_000L),
+            item(2, 2L, market = "NASDAQ", marketCap = 2_000_000_000_000L),
+        )
+
+        val result = service.search(query = "삼성")
+
+        assertThat(result.items).hasSize(2)
     }
 }

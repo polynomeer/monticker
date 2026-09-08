@@ -1,27 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { HourglassMedium, Play } from "@phosphor-icons/react";
+import { useTheme } from "next-themes";
+import { HourglassMedium, Play, Broadcast, Stop, ShareNetwork } from "@phosphor-icons/react";
+import type { RuleSet, QuantBacktestResult, QuantEquityPoint, ForwardTestResult } from "@monticker/types";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
+import { getForwardTestStatus, startForwardTest, stopForwardTest } from "@/services/forwardTest";
+import { useForwardTestSignalsWs } from "@/hooks/useForwardTestSignalsWs";
+import { StockPicker } from "@/components/quant/StockPicker";
+import { shareStrategy } from "@/services/strategyMarket";
 
-interface RuleSet {
-  id: number; name: string; description: string | null;
-  version: number; status: string; ruleDefinition: string;
-}
+type BacktestResult = QuantBacktestResult;
 
-interface BacktestResult {
-  id: number; stockId: number; startDate: string; endDate: string;
-  initialCapital: number; finalCapital: number;
-  totalReturn: number | null; annualReturn: number | null;
-  mdd: number | null; winRate: number | null; profitFactor: number | null;
-  tradeCount: number | null; avgHoldingDays: number | null;
-  benchmarkReturn: number | null; excessReturn: number | null;
-  reliabilityScore: string | null; createdAt: string;
-}
+const EXIT_REASON_LABEL: Record<string, string> = {
+  SIGNAL: "청산 신호", END: "기간 종료",
+};
+
+const SIGNAL_DIRECTION_LABEL: Record<string, string> = { BUY: "매수", SELL: "매도" };
 
 const RELIABILITY_COLOR: Record<string, string> = {
   A: "text-dracula-green border-dracula-green",
@@ -30,21 +29,83 @@ const RELIABILITY_COLOR: Record<string, string> = {
   D: "text-dracula-red border-dracula-red",
 };
 
-const STOCKS = [
-  { id: 1,  label: "삼성전자 (005930)" },
-  { id: 2,  label: "SK하이닉스 (000660)" },
-  { id: 3,  label: "현대차 (005380)" },
-  { id: 4,  label: "NAVER (035420)" },
-  { id: 5,  label: "카카오 (035720)" },
-  { id: 51, label: "AAPL (Apple)" },
-  { id: 52, label: "MSFT (Microsoft)" },
-  { id: 53, label: "NVDA (NVIDIA)" },
-];
-
 function fmt(n: number | null | undefined, suffix = "%", digits = 2) {
   if (n == null) return "—";
   const s = n.toFixed(digits);
   return n > 0 ? `+${s}${suffix}` : `${s}${suffix}`;
+}
+
+function won(n: number) {
+  return n.toLocaleString("ko-KR", { maximumFractionDigits: 0 });
+}
+
+function EquityCurveChart({ equityCurve, isDark }: { equityCurve: QuantEquityPoint[]; isDark: boolean }) {
+  const chartRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!chartRef.current || equityCurve.length === 0) return;
+    let disposed = false;
+    let chart: import("echarts").ECharts | undefined;
+    let onResize: (() => void) | undefined;
+    import("echarts").then(echarts => {
+      if (disposed || !chartRef.current) return;
+      const existing = echarts.getInstanceByDom(chartRef.current);
+      if (existing) existing.dispose();
+
+      chart = echarts.init(chartRef.current, undefined, { renderer: "canvas", height: 220 });
+      const rising = equityCurve[equityCurve.length - 1].equity >= equityCurve[0].equity;
+
+      chart.setOption({
+        backgroundColor: "transparent",
+        animation: false,
+        tooltip: {
+          trigger: "axis",
+          backgroundColor: isDark ? "#282a36" : "#fff",
+          borderColor: "#44475a",
+          textStyle: { color: isDark ? "#f8f8f2" : "#374151", fontSize: 11 },
+          formatter: (params: unknown) => {
+            const p = (params as Array<{ axisValue: string; data: number }>)[0];
+            const point = equityCurve.find(e => e.date === p.axisValue);
+            return `${p.axisValue}<br/>자산 ${won(p.data)}원${point ? `<br/>낙폭 ${point.drawdown.toFixed(2)}%` : ""}`;
+          },
+        },
+        grid: { left: 64, right: 16, top: 16, bottom: 28 },
+        xAxis: {
+          type: "category", data: equityCurve.map(p => p.date),
+          axisLabel: { color: isDark ? "#6272a4" : "#6b7280", fontSize: 10 },
+          axisLine: { lineStyle: { color: isDark ? "#44475a" : "#e5e7eb" } },
+        },
+        yAxis: {
+          type: "value", position: "left",
+          axisLabel: {
+            color: isDark ? "#6272a4" : "#6b7280", fontSize: 10,
+            formatter: (v: number) => `${(v / 10000).toFixed(0)}만`,
+          },
+          splitLine: { lineStyle: { color: isDark ? "#44475a" : "#e5e7eb", type: "dashed" } },
+        },
+        series: [{
+          type: "line", data: equityCurve.map(p => p.equity),
+          smooth: true, symbol: "none",
+          lineStyle: { color: rising ? "#0ecb81" : "#f6465d", width: 2 },
+          areaStyle: {
+            color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [
+              { offset: 0, color: rising ? "#0ecb8133" : "#f6465d33" },
+              { offset: 1, color: "transparent" },
+            ] },
+          },
+        }],
+      });
+      onResize = () => chart?.resize();
+      window.addEventListener("resize", onResize);
+    });
+    return () => {
+      disposed = true;
+      if (onResize) window.removeEventListener("resize", onResize);
+      chart?.dispose();
+    };
+  }, [equityCurve, isDark]);
+
+  return <div ref={chartRef} className="w-full" />;
 }
 
 function MetricCard({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
@@ -56,16 +117,74 @@ function MetricCard({ label, value, highlight }: { label: string; value: string;
   );
 }
 
+function ShareModal({ onClose, onSubmit, isPending }: {
+  onClose: () => void;
+  onSubmit: (description: string, price: number) => void;
+  isPending: boolean;
+}) {
+  const [description, setDescription] = useState("");
+  const [price, setPrice] = useState(0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <Card className="p-6" outerClassName="w-full max-w-sm mx-4 animate-fade-up">
+        <h2 className="text-base font-bold text-gray-900 dark:text-dracula-fg mb-1">전략 마켓에 공유</h2>
+        <p className="text-xs text-gray-500 dark:text-dracula-comment mb-5">
+          룰 로직은 공개되지 않고 구독자에게는 성과 지표만 보입니다. 구독료의 70%가 제작자 수익으로 적립됩니다.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <label htmlFor="share-description" className="text-xs text-gray-500 dark:text-dracula-comment block mb-1">전략 소개</label>
+            <textarea
+              id="share-description"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              rows={3}
+              placeholder="이 전략을 소개해주세요 (선택)"
+              className="w-full px-3 py-2 rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
+            />
+          </div>
+          <div>
+            <label htmlFor="share-price" className="text-xs text-gray-500 dark:text-dracula-comment block mb-1">구독료 (원, 0이면 무료)</label>
+            <input
+              id="share-price"
+              type="number"
+              min={0}
+              value={price}
+              onChange={e => setPrice(Math.max(0, +e.target.value))}
+              className="w-full px-3 py-2 rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg text-sm focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
+            />
+          </div>
+        </div>
+        <div className="flex gap-2 pt-5">
+          <button onClick={onClose} disabled={isPending}
+            className="flex-1 py-2.5 rounded-xl border border-gray-300 dark:border-dracula-line text-gray-500 dark:text-dracula-comment text-sm hover:bg-gray-50 dark:hover:bg-dracula-line/30 active:scale-[0.98] transition-all duration-150 disabled:opacity-40">
+            취소
+          </button>
+          <button onClick={() => onSubmit(description, price)} disabled={isPending}
+            className="flex-1 py-2.5 rounded-xl bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg text-sm font-semibold hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40">
+            {isPending ? "공유 중..." : "공유하기"}
+          </button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 export default function QuantLabDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { resolvedTheme } = useTheme();
 
   const [stockId, setStockId] = useState(1);
   const [startDate, setStartDate] = useState("2024-01-01");
   const [endDate, setEndDate] = useState("2026-06-01");
   const [capital, setCapital] = useState(10_000_000);
+  const [fwStockId, setFwStockId] = useState(1);
+  const [fwCapital, setFwCapital] = useState(10_000_000);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   const { data: ruleSet, isLoading: rsLoading } = useQuery<RuleSet>({
     queryKey: ["quant", "ruleset", id],
@@ -106,13 +225,73 @@ export default function QuantLabDetailPage() {
     onError: (e: Error) => toast({ type: "error", title: "백테스트 실패", message: e.message }),
   });
 
+  const { data: forwardTest } = useQuery<ForwardTestResult | null>({
+    queryKey: ["quant", "forward-test", id],
+    queryFn: () => getForwardTestStatus(id),
+  });
+
+  const startFwMutation = useMutation({
+    mutationFn: () => startForwardTest(id, fwStockId, fwCapital),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["quant", "forward-test", id] });
+      qc.invalidateQueries({ queryKey: ["quant", "ruleset", id] });
+      toast({ type: "success", title: "포워드 테스트 시작", message: "장 마감 후 매일 자동으로 평가됩니다." });
+    },
+    onError: (e: Error) => toast({ type: "error", title: "시작 실패", message: e.message }),
+  });
+
+  const stopFwMutation = useMutation({
+    mutationFn: () => stopForwardTest(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["quant", "forward-test", id] });
+      qc.invalidateQueries({ queryKey: ["quant", "ruleset", id] });
+      toast({ type: "success", title: "포워드 테스트 중지", message: "룰셋을 다시 수정할 수 있습니다." });
+    },
+    onError: (e: Error) => toast({ type: "error", title: "중지 실패", message: e.message }),
+  });
+
+  const shareMutation = useMutation({
+    mutationFn: ({ description, price }: { description: string; price: number }) => shareStrategy(id, description, price),
+    onSuccess: () => {
+      setShowShareModal(false);
+      toast({ type: "success", title: "공유 완료", message: "전략 마켓에서 확인할 수 있습니다." });
+    },
+    onError: (e: Error) => toast({ type: "error", title: "공유 실패", message: e.message }),
+  });
+
+  useForwardTestSignalsWs(
+    forwardTest?.status === "RUNNING" ? id : undefined,
+    (event) => {
+      qc.invalidateQueries({ queryKey: ["quant", "forward-test", id] });
+      toast({
+        type: "success",
+        title: `${SIGNAL_DIRECTION_LABEL[event.direction] ?? event.direction} 신호 발생`,
+        message: `${event.evalDate} · ${won(event.price)}원`,
+      });
+    },
+  );
+
   if (rsLoading) return <div className="p-8 text-gray-500 dark:text-dracula-comment">로딩 중...</div>;
   if (!ruleSet) return <div className="p-8 text-dracula-red">룰셋을 찾을 수 없습니다.</div>;
 
   const latestResult = results[0];
+  const universe: { market?: string; marketCapTier?: string } = (() => {
+    try { return JSON.parse(ruleSet.universeJson || "{}"); } catch { return {}; }
+  })();
+  const universeMarket = universe.market ?? "all";
+  const universeMarketCapTier = universe.marketCapTier ?? "all";
+  const canShare = ruleSet.status === "BACKTESTED" || ruleSet.status === "RUNNING";
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 animate-fade-up">
+      {showShareModal && (
+        <ShareModal
+          onClose={() => setShowShareModal(false)}
+          onSubmit={(description, price) => shareMutation.mutate({ description, price })}
+          isPending={shareMutation.isPending}
+        />
+      )}
+
       {/* 헤더 */}
       <div className="flex items-start justify-between mb-6">
         <div>
@@ -120,12 +299,22 @@ export default function QuantLabDetailPage() {
           <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-dracula-fg">{ruleSet.name}</h1>
           {ruleSet.description && <p className="text-sm text-gray-500 dark:text-dracula-comment mt-1">{ruleSet.description}</p>}
         </div>
-        <button
-          onClick={() => router.push(`/quant-lab/builder?edit=${id}`)}
-          className="px-4 py-2 rounded-lg text-xs font-medium bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg hover:bg-gray-200 dark:hover:bg-dracula-comment active:scale-95 transition-all duration-150"
-        >
-          룰셋 수정
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {canShare && (
+            <button
+              onClick={() => setShowShareModal(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium border border-dracula-purple/40 text-blue-600 dark:text-dracula-purple hover:bg-blue-50 dark:hover:bg-dracula-purple/10 active:scale-95 transition-all duration-150"
+            >
+              <ShareNetwork size={14} weight="bold" aria-hidden /> 전략 공유
+            </button>
+          )}
+          <button
+            onClick={() => router.push(`/quant-lab/builder?edit=${id}`)}
+            className="px-4 py-2 rounded-lg text-xs font-medium bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg hover:bg-gray-200 dark:hover:bg-dracula-comment active:scale-95 transition-all duration-150"
+          >
+            룰셋 수정
+          </button>
+        </div>
       </div>
 
       {/* 백테스트 실행 패널 */}
@@ -134,13 +323,7 @@ export default function QuantLabDetailPage() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
           <div>
             <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">종목</label>
-            <select
-              value={stockId}
-              onChange={e => setStockId(+e.target.value)}
-              className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg px-3 py-2 text-xs transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
-            >
-              {STOCKS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-            </select>
+            <StockPicker market={universeMarket} marketCapTier={universeMarketCapTier} value={stockId} onChange={setStockId} />
           </div>
           <div>
             <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">시작일</label>
@@ -216,6 +399,57 @@ export default function QuantLabDetailPage() {
               {latestResult.reliabilityScore === "D" && " — 거래 횟수가 매우 적습니다. 과최적화 위험이 높습니다."}
             </div>
           )}
+
+          {/* 자산 곡선 */}
+          {latestResult.equityCurve.length > 0 && (
+            <Card className="overflow-hidden mt-4">
+              <div className="px-4 pt-3 text-xs font-medium text-gray-500 dark:text-dracula-comment">자산 곡선</div>
+              <EquityCurveChart equityCurve={latestResult.equityCurve} isDark={resolvedTheme === "dark"} />
+            </Card>
+          )}
+
+          {/* 거래 내역 */}
+          {latestResult.trades.length > 0 && (
+            <Card className="overflow-hidden mt-4">
+              <div className="px-4 py-3 border-b border-gray-200 dark:border-dracula-line bg-gray-50 dark:bg-transparent">
+                <span className="text-sm font-semibold text-gray-900 dark:text-dracula-fg">거래 내역</span>
+                <span className="ml-2 text-xs text-gray-500 dark:text-dracula-comment">{latestResult.trades.length}건</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-200 dark:border-dracula-line text-gray-500 dark:text-dracula-comment">
+                      {["매수일", "매도일", "매수가", "매도가", "수량", "손익", "수익률", "사유"].map(h => (
+                        <th key={h} className="px-3 py-2 text-left">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {latestResult.trades.map((t, i) => (
+                      <tr key={i} className="border-b border-gray-100 dark:border-dracula-line/40 hover:bg-gray-50 dark:hover:bg-dracula-line/10 transition-colors">
+                        <td className="px-3 py-2 text-gray-500 dark:text-dracula-comment tabular-nums">{t.entryDate}</td>
+                        <td className="px-3 py-2 text-gray-500 dark:text-dracula-comment tabular-nums">{t.exitDate}</td>
+                        <td className="px-3 py-2 font-mono tabular-nums text-gray-900 dark:text-dracula-fg">{won(t.entryPrice)}</td>
+                        <td className="px-3 py-2 font-mono tabular-nums text-gray-900 dark:text-dracula-fg">{won(t.exitPrice)}</td>
+                        <td className="px-3 py-2 font-mono tabular-nums text-gray-500 dark:text-dracula-comment">{t.quantity}</td>
+                        <td className={`px-3 py-2 font-mono tabular-nums font-bold ${t.pnl >= 0 ? "text-dracula-green" : "text-dracula-red"}`}>
+                          {t.pnl >= 0 ? "+" : ""}{won(t.pnl)}
+                        </td>
+                        <td className={`px-3 py-2 font-mono tabular-nums font-bold ${t.pnlPct >= 0 ? "text-dracula-green" : "text-dracula-red"}`}>
+                          {fmt(t.pnlPct)}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-500 dark:bg-dracula-line dark:text-dracula-comment">
+                            {EXIT_REASON_LABEL[t.exitReason] ?? t.exitReason}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
         </div>
       )}
 
@@ -248,6 +482,104 @@ export default function QuantLabDetailPage() {
           아직 백테스트 결과가 없습니다. 위에서 실행해보세요.
         </div>
       )}
+
+      {/* 포워드 테스트 */}
+      <div className="mt-8">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-dracula-fg mb-3 flex items-center gap-1.5">
+          <Broadcast size={16} weight="bold" aria-hidden /> 포워드 테스트
+        </h2>
+
+        {forwardTest?.status === "RUNNING" ? (
+          <div className="space-y-4">
+            <Card className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full bg-dracula-green/10 text-dracula-green">
+                  <span className="w-1.5 h-1.5 rounded-full bg-dracula-green animate-pulse" /> 운용 중
+                </span>
+                <button
+                  onClick={() => stopFwMutation.mutate()}
+                  disabled={stopFwMutation.isPending}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border border-dracula-red/40 text-dracula-red hover:bg-dracula-red/10 active:scale-95 transition-all duration-150 disabled:opacity-40"
+                >
+                  <Stop size={12} weight="fill" aria-hidden /> {stopFwMutation.isPending ? "중지 중..." : "중지"}
+                </button>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <MetricCard label="현재 자산" value={`${won(forwardTest.currentEquity)}원`} highlight />
+                <MetricCard label="초기 자본" value={`${won(forwardTest.initialCapital)}원`} />
+                <MetricCard
+                  label="포지션"
+                  value={forwardTest.holdingQty > 0 ? `보유 ${forwardTest.holdingQty}주` : "미보유"}
+                />
+                <MetricCard label="시작일" value={new Date(forwardTest.startedAt).toLocaleDateString("ko-KR")} />
+              </div>
+              <p className="mt-3 text-xs text-gray-500 dark:text-dracula-comment text-center">
+                매일 장 마감 후(KST 16:00) 자동으로 평가되며, 신호 발생 시 실시간으로 알려드립니다.
+              </p>
+            </Card>
+
+            {forwardTest.equityCurve.length > 0 && (
+              <Card className="overflow-hidden">
+                <div className="px-4 pt-3 text-xs font-medium text-gray-500 dark:text-dracula-comment">자산 곡선</div>
+                <EquityCurveChart equityCurve={forwardTest.equityCurve} isDark={resolvedTheme === "dark"} />
+              </Card>
+            )}
+
+            <Card className="overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-200 dark:border-dracula-line bg-gray-50 dark:bg-transparent">
+                <span className="text-sm font-semibold text-gray-900 dark:text-dracula-fg">신호 이력</span>
+                <span className="ml-2 text-xs text-gray-500 dark:text-dracula-comment">{forwardTest.signals.length}건</span>
+              </div>
+              {forwardTest.signals.length === 0 ? (
+                <div className="text-center py-8 text-xs text-gray-500 dark:text-dracula-comment">
+                  아직 발생한 신호가 없습니다.
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100 dark:divide-dracula-line/40">
+                  {forwardTest.signals.map((s, i) => (
+                    <div key={i} className="flex items-center justify-between px-4 py-2.5 text-xs">
+                      <span className={`font-bold px-2 py-0.5 rounded ${s.direction === "BUY" ? "bg-dracula-green/10 text-dracula-green" : "bg-dracula-red/10 text-dracula-red"}`}>
+                        {SIGNAL_DIRECTION_LABEL[s.direction] ?? s.direction}
+                      </span>
+                      <span className="text-gray-500 dark:text-dracula-comment tabular-nums">{s.evalDate ?? new Date(s.signalTime).toLocaleDateString("ko-KR")}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </div>
+        ) : ruleSet.status === "BACKTESTED" ? (
+          <Card className="p-5">
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div>
+                <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">종목</label>
+                <StockPicker market={universeMarket} marketCapTier={universeMarketCapTier} value={fwStockId} onChange={setFwStockId} />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">초기 자본 (원)</label>
+                <input
+                  type="number" value={fwCapital} onChange={e => setFwCapital(+e.target.value)}
+                  className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg px-3 py-2 text-xs transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
+                />
+              </div>
+            </div>
+            <button
+              onClick={() => startFwMutation.mutate()}
+              disabled={startFwMutation.isPending}
+              className="w-full py-2.5 rounded-xl bg-dracula-green text-dracula-bg font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100 inline-flex items-center justify-center gap-1.5"
+            >
+              <Broadcast size={14} weight="bold" aria-hidden /> {startFwMutation.isPending ? "시작 중..." : "포워드 테스트 시작"}
+            </button>
+            <p className="mt-2 text-xs text-gray-500 dark:text-dracula-comment text-center">
+              시작하면 룰셋 수정이 잠기고, 매일 장 마감 후 자동으로 신호를 평가합니다.
+            </p>
+          </Card>
+        ) : (
+          <div className="text-center py-8 text-gray-500 dark:text-dracula-comment text-sm border border-dashed border-gray-300 dark:border-dracula-line rounded-xl">
+            백테스트를 먼저 완료해야 포워드 테스트를 시작할 수 있습니다.
+          </div>
+        )}
+      </div>
     </div>
   );
 }

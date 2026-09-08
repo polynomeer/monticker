@@ -1,5 +1,6 @@
 package com.monticker.api.brokerage.domain
 
+import com.monticker.api.common.security.EncryptedStringConverter
 import jakarta.persistence.*
 import java.time.Instant
 
@@ -26,9 +27,20 @@ class BrokerageAccount(
     @Enumerated(EnumType.STRING)
     val accountType: BrokerageAccountType = BrokerageAccountType.REAL,
 
-    // AES-256 암호화 저장 (현재는 Mock이므로 평문 허용)
+    // AES-256-GCM 암호화 저장 (EncryptedStringConverter) — docs/launch-plan.md Phase 0
+    @Convert(converter = EncryptedStringConverter::class)
     @Column(name = "access_token", columnDefinition = "TEXT")
     var accessToken: String? = null,
+
+    // ADR-025: 토큰 발급 이후에도 매 인증 호출마다 appkey/appsecret 헤더가 필요해서 저장한다
+    // (재발급 정책은 아직 없음 — 저장 자체만 이번 범위).
+    @Convert(converter = EncryptedStringConverter::class)
+    @Column(name = "app_key", columnDefinition = "TEXT")
+    var appKey: String? = null,
+
+    @Convert(converter = EncryptedStringConverter::class)
+    @Column(name = "app_secret", columnDefinition = "TEXT")
+    var appSecret: String? = null,
 
     @Column(name = "token_expires_at")
     var tokenExpiresAt: Instant? = null,
@@ -42,6 +54,11 @@ class BrokerageAccount(
     fun updateToken(token: String, expiresIn: Long) {
         this.accessToken = token
         this.tokenExpiresAt = Instant.now().plusSeconds(expiresIn)
+    }
+
+    fun updateCredentials(appKey: String, appSecret: String) {
+        this.appKey = appKey
+        this.appSecret = appSecret
     }
 
     fun isTokenValid(): Boolean =

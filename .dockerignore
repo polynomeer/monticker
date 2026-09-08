@@ -1,0 +1,15 @@
+# apps/web/Dockerfile builds from the repo root (pnpm workspace lockfile lives there, not in
+# apps/web/) — exclude everything the web image doesn't need so the build context stays small.
+.git
+backend
+services
+infra
+docs
+scripts
+**/node_modules
+apps/web/.next
+apps/mobile/*
+!apps/mobile/package.json
+packages/types/*
+!packages/types/package.json
+*.md

@@ -1,7 +1,7 @@
-package com.monticker.api.matching.aop
+package com.monticker.api.risk.aop
 
 import com.monticker.api.common.aop.RiskLimitException
-import com.monticker.api.matching.application.RiskCheckerService
+import com.monticker.api.risk.application.RiskCheckerService
 import org.aspectj.lang.ProceedingJoinPoint
 import org.aspectj.lang.annotation.Around
 import org.aspectj.lang.annotation.Aspect

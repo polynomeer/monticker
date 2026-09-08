@@ -48,7 +48,7 @@ class MockBrokerageClient(
         )
     }
 
-    override fun submitOrder(token: BrokerageToken, request: BrokerageOrderRequest): BrokerageOrderResult {
+    override fun submitOrder(credentials: BrokerageCredentials, request: BrokerageOrderRequest): BrokerageOrderResult {
         val pgOrderId = "KIS${System.currentTimeMillis()}"
         val settleDate = addBusinessDays(LocalDate.now(), 2)
 
@@ -88,7 +88,7 @@ class MockBrokerageClient(
         return BrokerageOrderResult(pgOrderId = pgOrderId, status = "SUBMITTED")
     }
 
-    override fun getOrderStatus(token: BrokerageToken, pgOrderId: String): BrokerageOrderStatus {
+    override fun getOrderStatus(credentials: BrokerageCredentials, pgOrderId: String): BrokerageOrderStatus {
         val order = orderStore[pgOrderId]
             ?: return BrokerageOrderStatus(pgOrderId, "REJECTED", 0, null)
 
@@ -128,10 +128,10 @@ class MockBrokerageClient(
         )
     }
 
-    override fun getSettlements(token: BrokerageToken, date: LocalDate): List<BrokerageSettlementItem> =
+    override fun getSettlements(credentials: BrokerageCredentials, date: LocalDate): List<BrokerageSettlementItem> =
         settlementStore.values.filter { it.settleDate == date }
 
-    override fun getBalance(token: BrokerageToken): BrokerageBalance =
+    override fun getBalance(credentials: BrokerageCredentials): BrokerageBalance =
         BrokerageBalance(
             cash           = BigDecimal("100000000"),
             totalEvaluated = BigDecimal("100000000"),

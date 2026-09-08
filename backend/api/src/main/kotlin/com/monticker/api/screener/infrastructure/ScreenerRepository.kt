@@ -9,6 +9,26 @@ import java.math.RoundingMode
 @Repository
 class ScreenerRepository(private val jdbc: JdbcTemplate) {
 
+    companion object {
+        // Quant Lab 유니버스 필터(ScreenerService.search)도 동일한 기준을 쓴다 — 두 곳에서
+        // 따로 정의하면 브라우즈 목록과 검색 결과의 시가총액 구간 경계가 어긋날 수 있다.
+        const val MARKET_CAP_LARGE_THRESHOLD = 1_000_000_000_000L  // 1조원
+        const val MARKET_CAP_MID_THRESHOLD   = 100_000_000_000L    // 1000억원
+
+        fun matchesMarket(market: String, itemMarket: String): Boolean = when (market) {
+            "domestic" -> itemMarket in setOf("KOSPI", "KOSDAQ")
+            "overseas" -> itemMarket in setOf("NASDAQ", "NYSE")
+            else       -> true
+        }
+
+        fun matchesMarketCapTier(tier: String, marketCap: Long?): Boolean = when (tier) {
+            "large" -> (marketCap ?: 0) >= MARKET_CAP_LARGE_THRESHOLD
+            "mid"   -> (marketCap ?: 0) in MARKET_CAP_MID_THRESHOLD until MARKET_CAP_LARGE_THRESHOLD
+            "small" -> (marketCap ?: 0) < MARKET_CAP_MID_THRESHOLD
+            else    -> true
+        }
+    }
+
     fun findItems(
         market: String,        // all | domestic | overseas
         sort: String,          // amount | volume | rise | fall
@@ -69,9 +89,9 @@ class ScreenerRepository(private val jdbc: JdbcTemplate) {
     }
 
     private fun marketCapTierFilter(tier: String): String = when (tier) {
-        "large" -> "AND sf.market_cap >= 1000000000000"                                  // 1조원 이상
-        "mid"   -> "AND sf.market_cap >= 100000000000 AND sf.market_cap < 1000000000000" // 1000억~1조
-        "small" -> "AND sf.market_cap < 100000000000"                                    // 1000억 미만
+        "large" -> "AND sf.market_cap >= $MARKET_CAP_LARGE_THRESHOLD"
+        "mid"   -> "AND sf.market_cap >= $MARKET_CAP_MID_THRESHOLD AND sf.market_cap < $MARKET_CAP_LARGE_THRESHOLD"
+        "small" -> "AND sf.market_cap < $MARKET_CAP_MID_THRESHOLD"
         else    -> ""
     }
 

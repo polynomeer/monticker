@@ -1,0 +1,31 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: default
+  group_by: ['alertname']
+  group_wait: 10s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - match:
+        severity: critical
+      receiver: default
+      repeat_interval: 1h
+
+receivers:
+  # 로컬 개발 기본값 — 아무 채널로도 보내지 않고 Alertmanager UI(http://localhost:9093)와
+  # API(/api/v2/alerts)에서만 확인한다. 프로덕션에서는 이 receiver를 실제 채널로 교체해야 한다.
+  # 예시(Slack — Incoming Webhook을 먼저 만들어야 한다: https://api.slack.com/messaging/webhooks):
+  #
+  # - name: default
+  #   slack_configs:
+  #     - api_url: 'https://hooks.slack.com/services/XXX/YYY/ZZZ'
+  #       channel: '#monticker-alerts'
+  #       send_resolved: true
+  #       title: '{{ .CommonAnnotations.summary }}'
+  #       text: '{{ .CommonAnnotations.description }}'
+  #
+  # severity: critical 라우트만 별도로 PagerDuty 등에 추가로 연결하고 싶다면 route.routes에
+  # receiver를 하나 더 추가하면 된다(이 파일 상단 route.routes 참고).
+  - name: default

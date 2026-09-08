@@ -2,20 +2,12 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import type { MarketStrategy } from "@monticker/types";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
 import { Storefront } from "@phosphor-icons/react";
 import Link from "next/link";
-
-interface MarketStrategy {
-  id: number;
-  name: string;
-  description: string | null;
-  subscribe_count: number;
-  author_email: string;
-  created_at: string;
-}
 
 function StrategyCard({ strategy }: { strategy: MarketStrategy }) {
   const qc = useQueryClient();

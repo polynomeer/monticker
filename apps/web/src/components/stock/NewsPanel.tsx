@@ -33,9 +33,11 @@ const SENTIMENT_LABEL: Record<string, string> = {
 
 interface Props {
   stockId: number;
+  /** 카드 테두리/제목 없이 내용만 렌더링 (탭 전환형 컨테이너에 임베드할 때) */
+  bare?: boolean;
 }
 
-export default function NewsPanel({ stockId }: Props) {
+export default function NewsPanel({ stockId, bare = false }: Props) {
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -49,9 +51,9 @@ export default function NewsPanel({ stockId }: Props) {
     return () => { cancelled = true; };
   }, [stockId]);
 
-  return (
-    <Card className="p-4">
-      <h3 className="font-semibold text-gray-900 dark:text-dracula-fg mb-3">관련 뉴스</h3>
+  const content = (
+    <>
+      {!bare && <h3 className="font-semibold text-gray-900 dark:text-dracula-fg mb-3">관련 뉴스</h3>}
 
       {loading && (
         <div className="space-y-2">
@@ -99,6 +101,9 @@ export default function NewsPanel({ stockId }: Props) {
           ))}
         </ul>
       )}
-    </Card>
+    </>
   );
+
+  if (bare) return <div>{content}</div>;
+  return <Card className="p-4">{content}</Card>;
 }

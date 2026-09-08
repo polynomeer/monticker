@@ -10,17 +10,25 @@ import com.monticker.api.brokerage.domain.OrderType
 import com.monticker.api.brokerage.infrastructure.BrokerageBalance
 import com.monticker.api.brokerage.infrastructure.BrokerageAccountRepository
 import com.monticker.api.brokerage.infrastructure.BrokerageClient
+import com.monticker.api.brokerage.infrastructure.BrokerageCredentials
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRepository
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRequest
 import com.monticker.api.brokerage.infrastructure.BrokerageSettlementRepository
 import com.monticker.api.brokerage.infrastructure.BrokerageToken
+import com.monticker.api.common.aop.RiskLimitException
+import com.monticker.api.risk.application.HoldingPosition
+import com.monticker.api.risk.application.PortfolioSnapshot
+import com.monticker.api.risk.application.RiskCheckerService
 import com.monticker.api.wallet.application.LedgerService
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
+import java.sql.Timestamp
+import java.time.Instant
 import java.time.LocalDate
 
 @Service
@@ -30,6 +38,8 @@ class BrokerageService(
     private val orderRepo: BrokerageOrderRepository,
     private val settlementRepo: BrokerageSettlementRepository,
     private val ledgerService: LedgerService,
+    private val riskChecker: RiskCheckerService,
+    private val jdbc: JdbcTemplate,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -43,6 +53,9 @@ class BrokerageService(
             BrokerageAccount(userId = userId, accountNumber = accountNumber)
         }
         account.updateToken(token.accessToken, token.expiresIn)
+        // ADR-025 — appKey/appSecret도 저장한다. 토큰 발급 이후의 모든 KIS 호출도
+        // appkey/appsecret 헤더를 요구하므로, 여기서 버리면 이후 호출이 전부 거부된다.
+        account.updateCredentials(appKey, appSecret)
 
         log.info("증권사 계좌 연동: userId={} accountNumber={}", userId, accountNumber)
         return accountRepo.save(account)
@@ -56,8 +69,7 @@ class BrokerageService(
     @Transactional(readOnly = true)
     fun getBalance(userId: Long): BrokerageBalance {
         val account = getAccount(userId)
-        val token   = requireToken(account)
-        return brokerageClient.getBalance(token)
+        return brokerageClient.getBalance(requireCredentials(account))
     }
 
     // ── 주문 ───────────────────────────────────────────────────────────────────
@@ -65,10 +77,23 @@ class BrokerageService(
     @Transactional
     fun submitOrder(userId: Long, request: BrokerageOrderRequest): BrokerageOrder {
         val account = getAccount(userId)
-        val token   = requireToken(account)
-
-        val result = brokerageClient.submitOrder(token, request)
+        val credentials = requireCredentials(account)
         val stockId = resolveStockId(request.symbol)
+
+        // ADR-025 — 페이퍼 트레이딩과 동일한 사전 리스크 게이트. 증권사에 보내기 전에
+        // 막는다 — 실패하면 실제 주문은 아예 나가지 않는다.
+        if (stockId != null) {
+            val estimatedPrice = request.limitPrice ?: currentPrice(request.symbol) ?: BigDecimal.ZERO
+            val snapshot = buildPortfolioSnapshot(userId, credentials)
+            val riskResult = riskChecker.checkBrokerageOrder(userId, stockId, request.side, request.quantity, estimatedPrice, snapshot)
+            if (!riskResult.approved) {
+                throw RiskLimitException(riskResult.blockedBy ?: "Unknown risk rule")
+            }
+        } else {
+            log.warn("리스크 체크 건너뜀 — 종목을 찾을 수 없음: symbol={}", request.symbol)
+        }
+
+        val result = brokerageClient.submitOrder(credentials, request)
 
         val order = BrokerageOrder(
             userId    = userId,
@@ -82,11 +107,14 @@ class BrokerageService(
             pgOrderId = result.pgOrderId,
         )
 
+        // 정산 레코드가 order_id FK를 참조하므로 체결 처리 전에 주문을 먼저 저장해 실제 ID를 확보한다.
+        orderRepo.save(order)
+
         if (result.status == "REJECTED") {
             order.reject(result.rejectReason ?: "증권사 거부")
         } else {
             // 시장가는 즉시 체결 상태로 동기화
-            val status = brokerageClient.getOrderStatus(token, result.pgOrderId)
+            val status = brokerageClient.getOrderStatus(credentials, result.pgOrderId)
             if (status.status == "FILLED" && status.avgFillPrice != null) {
                 order.fill(status.filledQty, status.avgFillPrice!!)
                 createSettlementFromFill(account, order, status.avgFillPrice!!)
@@ -107,8 +135,8 @@ class BrokerageService(
         }
 
         val account = getAccount(userId)
-        val token   = requireToken(account)
-        val status  = brokerageClient.getOrderStatus(token, order.pgOrderId ?: return order)
+        val credentials = requireCredentials(account)
+        val status  = brokerageClient.getOrderStatus(credentials, order.pgOrderId ?: return order)
 
         when (status.status) {
             "FILLED" -> {
@@ -166,10 +194,58 @@ class BrokerageService(
 
     // ── 내부 헬퍼 ─────────────────────────────────────────────────────────────
 
-    private fun requireToken(account: BrokerageAccount): BrokerageToken {
+    private fun requireCredentials(account: BrokerageAccount): BrokerageCredentials {
         if (!account.isTokenValid()) throw IllegalStateException("증권사 토큰이 만료되었습니다. 재연동이 필요합니다.")
-        return BrokerageToken(account.accessToken!!, 0)
+        val appKey = account.appKey ?: throw IllegalStateException("증권사 계좌 정보가 불완전합니다. 재연동이 필요합니다.")
+        val appSecret = account.appSecret ?: throw IllegalStateException("증권사 계좌 정보가 불완전합니다. 재연동이 필요합니다.")
+        return BrokerageCredentials(
+            token         = BrokerageToken(account.accessToken!!, 0),
+            appKey        = appKey,
+            appSecret     = appSecret,
+            accountNumber = account.accountNumber,
+        )
     }
+
+    /** ADR-025 — 실거래 사전 리스크 게이트에 넘길 포트폴리오 스냅샷을 조립한다. */
+    private fun buildPortfolioSnapshot(userId: Long, credentials: BrokerageCredentials): PortfolioSnapshot {
+        val balance = brokerageClient.getBalance(credentials)
+        val holdings = balance.holdings.mapNotNull { h ->
+            resolveStockId(h.symbol)?.let { HoldingPosition(stockId = it, qty = h.quantity) }
+        }
+
+        // brokerage_settlements는 T+2로 미래 날짜에 정산되므로 "오늘의 리스크"에는 쓸 수
+        // 없다 — 오늘 체결된 주문에서 직접 현금흐름을 근사한다(페이퍼의 daily PnL과 동일한 방식).
+        val dailyPnl = jdbc.queryForObject(
+            """SELECT COALESCE(SUM(CASE WHEN side='SELL' THEN quantity * avg_fill_price
+                                         ELSE -quantity * avg_fill_price END), 0)
+               FROM brokerage_orders
+               WHERE user_id = ? AND status IN ('FILLED','PARTIALLY_FILLED') AND filled_at >= current_date""",
+            BigDecimal::class.java, userId,
+        ) ?: BigDecimal.ZERO
+
+        val oneHourAgo = Instant.now().minusSeconds(3600)
+        val recentOrderCount = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM brokerage_orders WHERE user_id = ? AND submitted_at > ?",
+            Long::class.java, userId, Timestamp.from(oneHourAgo),
+        ) ?: 0L
+
+        return PortfolioSnapshot(
+            cash             = balance.cash,
+            holdings         = holdings,
+            dailyPnl         = dailyPnl,
+            recentOrderCount = recentOrderCount,
+        )
+    }
+
+    private fun currentPrice(symbol: String): BigDecimal? =
+        runCatching {
+            jdbc.queryForObject(
+                """SELECT c.close FROM candles_1m c
+                   JOIN stocks s ON s.id = c.stock_id
+                   WHERE s.symbol = ? ORDER BY c.candle_time DESC LIMIT 1""",
+                BigDecimal::class.java, symbol,
+            )
+        }.getOrNull()
 
     private fun createSettlementFromFill(account: BrokerageAccount, order: BrokerageOrder, fillPrice: BigDecimal) {
         val gross    = fillPrice.multiply(BigDecimal(order.quantity))
@@ -198,9 +274,7 @@ class BrokerageService(
 
     private fun resolveStockId(symbol: String): Long? =
         runCatching {
-            // BrokerageService is in a different module — use local jdbc would break layering,
-            // so we tolerate null stockId for mock orders
-            null as Long?
+            jdbc.queryForObject("SELECT id FROM stocks WHERE symbol = ?", Long::class.java, symbol)
         }.getOrNull()
 
     private fun addBusinessDays(from: LocalDate, days: Int): LocalDate {

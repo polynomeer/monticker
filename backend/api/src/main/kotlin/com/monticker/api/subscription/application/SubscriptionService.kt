@@ -3,9 +3,11 @@ package com.monticker.api.subscription.application
 import com.monticker.api.subscription.domain.*
 import com.monticker.api.subscription.infrastructure.PaymentRecordRepository
 import com.monticker.api.subscription.infrastructure.SubscriptionPlanRepository
+import com.monticker.api.subscription.infrastructure.UserBillingKeyRepository
 import com.monticker.api.subscription.infrastructure.UserSubscriptionRepository
 import com.monticker.api.subscription.infrastructure.pg.PgClient
 import com.monticker.api.subscription.infrastructure.pg.PaymentRequest
+import com.monticker.api.subscription.infrastructure.pg.PaymentResult
 import com.monticker.api.wallet.application.LedgerService
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Page
@@ -22,6 +24,7 @@ class SubscriptionService(
     private val paymentRepo: PaymentRecordRepository,
     private val pgClient: PgClient,
     private val ledgerService: LedgerService,
+    private val billingKeyRepo: UserBillingKeyRepository,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -56,22 +59,50 @@ class SubscriptionService(
         )
 
         return if (result.success) {
-            record.markSuccess(result.pgTransactionId!!)
-            paymentRepo.save(record)
-
-            val subscription = getOrCreateSubscription(userId, plan)
-            subscription.upgrade(plan, expiresAt = Instant.now().plus(30, ChronoUnit.DAYS))
-            subscriptionRepo.save(subscription)
-
-            log.info("구독 활성화: userId={} plan={} txId={}", userId, planCode, result.pgTransactionId)
-            ledgerService.recordSubscriptionPayment(userId, planCode.name, plan.price, record.id)
-            SubscribeResult.success(planCode, paymentId = record.id)
+            activatePaidPlan(userId, plan, record, result.pgTransactionId!!)
         } else {
             record.markFailed(result.failureReason ?: "PG 결제 실패")
             paymentRepo.save(record)
             log.warn("결제 실패: userId={} plan={} reason={}", userId, planCode, result.failureReason)
             SubscribeResult.failure(planCode, result.failureReason ?: "결제 처리 중 오류가 발생했습니다.")
         }
+    }
+
+    /**
+     * 토스페이먼츠 confirm 플로우 전용(PaymentWebhookController.confirm 참고). 프론트가
+     * 토스 SDK로 결제를 이미 완료했고, 컨트롤러가 tossPgClient.confirmPayment()로 그 결제를
+     * 이미 확정한 뒤 호출한다.
+     *
+     * subscribe()처럼 pgClient.requestPayment()를 다시 호출하면 안 된다 —
+     * TossPgClient.requestPayment()는 "웹훅 플로우를 쓰라"는 스텁이라 항상 실패를 반환하므로,
+     * 여기서 다시 호출하면 방금 실제로 성공한 결제인데도 구독이 활성화되지 않고 PaymentRecord만
+     * FAILED로 남는다 — 실제 코드에 있던 버그(고객은 결제됐는데 서비스는 활성화 안 됨).
+     */
+    @Transactional
+    fun activateConfirmedSubscription(userId: Long, planCode: PlanCode, pgTransactionId: String): SubscribeResult {
+        val plan = planRepo.findByCode(planCode).orElseThrow {
+            IllegalArgumentException("존재하지 않는 플랜: $planCode")
+        }
+        val record = paymentRepo.save(PaymentRecord(userId = userId, plan = plan, amount = plan.price))
+        return activatePaidPlan(userId, plan, record, pgTransactionId)
+    }
+
+    private fun activatePaidPlan(
+        userId: Long,
+        plan: SubscriptionPlan,
+        record: PaymentRecord,
+        pgTransactionId: String,
+    ): SubscribeResult {
+        record.markSuccess(pgTransactionId)
+        paymentRepo.save(record)
+
+        val subscription = getOrCreateSubscription(userId, plan)
+        subscription.upgrade(plan, expiresAt = Instant.now().plus(30, ChronoUnit.DAYS))
+        subscriptionRepo.save(subscription)
+
+        log.info("구독 활성화: userId={} plan={} txId={}", userId, plan.code, pgTransactionId)
+        ledgerService.recordSubscriptionPayment(userId, plan.code.name, plan.price, record.id)
+        return SubscribeResult.success(plan.code, paymentId = record.id)
     }
 
     @Transactional
@@ -92,6 +123,13 @@ class SubscriptionService(
     /**
      * 월 갱신 배치에서 호출 — 만료 예정 구독을 재결제 시도.
      * 3회 실패 시 FREE로 다운그레이드.
+     *
+     * 예전에는 여기서도 pgClient.requestPayment()를 호출했는데, TossPgClient에서는 그게
+     * 항상 실패하는 스텁이라(실제 결제는 confirm/billing 전용 API로만 가능) 실제 운영에서는
+     * 정기결제가 단 한 번도 성공할 수 없는 구조였다 — 애초에 자동결제 자체가 구현되어 있지
+     * 않았던 것. 이제는 등록된 빌링키(UserBillingKey)로 pgClient.chargeBilling()을 호출한다.
+     * 빌링키가 없으면(자동결제 카드 미등록) 결제 시도 자체가 불가능하므로 결제 실패로
+     * 취급해 기존 3회 실패 다운그레이드 로직을 그대로 태운다.
      */
     @Transactional
     fun renewSubscription(subscription: UserSubscription): RenewResult {
@@ -101,9 +139,18 @@ class SubscriptionService(
         val record = paymentRepo.save(
             PaymentRecord(userId = subscription.userId, plan = plan, amount = plan.price)
         )
-        val result = pgClient.requestPayment(
-            PaymentRequest(userId = subscription.userId, planCode = plan.code.name, amount = plan.price)
-        )
+        val billingKey = billingKeyRepo.findByUserId(subscription.userId).orElse(null)
+        val result = if (billingKey == null) {
+            PaymentResult(success = false, failureReason = "등록된 자동결제 카드가 없습니다.")
+        } else {
+            pgClient.chargeBilling(
+                billingKey  = billingKey.billingKeyValue,
+                customerKey = billingKey.customerKey,
+                amount      = plan.price,
+                orderId     = "renewal_${subscription.id}_${System.currentTimeMillis()}",
+                orderName   = "${plan.name} 정기결제",
+            )
+        }
 
         return if (result.success) {
             record.markSuccess(result.pgTransactionId!!)

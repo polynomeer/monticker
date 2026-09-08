@@ -9,8 +9,10 @@ import org.springframework.security.access.AccessDeniedException
 import org.springframework.security.authentication.BadCredentialsException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.MissingRequestHeaderException
+import org.springframework.web.bind.MissingServletRequestParameterException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
 import org.springframework.web.server.ResponseStatusException
 import java.time.Instant
 
@@ -34,6 +36,14 @@ class GlobalExceptionHandler {
     @ExceptionHandler(MissingRequestHeaderException::class)
     fun handleMissingHeader(e: MissingRequestHeaderException) =
         error(HttpStatus.BAD_REQUEST, "필수 헤더가 없습니다: ${e.headerName}")
+
+    @ExceptionHandler(MissingServletRequestParameterException::class)
+    fun handleMissingParam(e: MissingServletRequestParameterException) =
+        error(HttpStatus.BAD_REQUEST, "필수 파라미터가 없습니다: ${e.parameterName}")
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException::class)
+    fun handleTypeMismatch(e: MethodArgumentTypeMismatchException) =
+        error(HttpStatus.BAD_REQUEST, "파라미터 형식이 올바르지 않습니다: ${e.name}")
 
     @ExceptionHandler(IllegalArgumentException::class)
     fun handleIllegalArgument(e: IllegalArgumentException) =

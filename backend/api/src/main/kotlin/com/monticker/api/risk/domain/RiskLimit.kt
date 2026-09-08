@@ -1,9 +1,12 @@
-package com.monticker.api.matching.domain
+package com.monticker.api.risk.domain
 
 import jakarta.persistence.*
+import org.springframework.modulith.NamedInterface
 import java.math.BigDecimal
 import java.time.Instant
 
+/** matching.api.RiskController(페이퍼 트레이딩 리스크 설정 화면)에서 직접 참조하는 공개 타입. */
+@NamedInterface("api")
 @Entity
 @Table(name = "risk_limits")
 class RiskLimit(

@@ -23,4 +23,25 @@ class MockPgClient : PgClient {
         log.info("[MockPG] 환불 성공: txId={} amount={}", pgTransactionId, amount)
         return RefundResult(success = true)
     }
+
+    override fun getPaymentStatus(paymentKey: String): PaymentStatusResult =
+        PaymentStatusResult(found = true, status = "DONE", totalAmount = BigDecimal.ZERO)
+
+    override fun issueBillingKey(authKey: String, customerKey: String): BillingKeyResult {
+        val fakeBillingKey = "mock_billing_${UUID.randomUUID()}"
+        log.info("[MockPG] 빌링키 발급 성공: customerKey={} billingKey={}", customerKey, fakeBillingKey)
+        return BillingKeyResult(success = true, billingKey = fakeBillingKey, cardCompany = "MockCard", cardLast4 = "1234")
+    }
+
+    override fun chargeBilling(
+        billingKey: String,
+        customerKey: String,
+        amount: BigDecimal,
+        orderId: String,
+        orderName: String,
+    ): PaymentResult {
+        val txId = "mock_${UUID.randomUUID()}"
+        log.info("[MockPG] 정기결제 성공: orderId={} amount={} txId={}", orderId, amount, txId)
+        return PaymentResult(success = true, pgTransactionId = txId)
+    }
 }

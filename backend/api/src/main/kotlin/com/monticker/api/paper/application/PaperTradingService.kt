@@ -28,11 +28,17 @@ class PaperTradingService(
             accountRepo.save(PaperAccount(userId = userId))
         }
 
+    // queryForObject는 결과가 0건이면 null을 주는 게 아니라 EmptyResultDataAccessException을
+    // 던진다 — 아래 "?: throw IllegalStateException"이 의도한 대로 동작하려면 애초에 그 예외가
+    // 발생하지 않아야 한다(실제로 부하 테스트에서 최근 캔들이 없는 종목에 주문을 넣었을 때
+    // GlobalExceptionHandler의 catch-all에 잡혀 안내 메시지 없는 500으로 새는 게 확인됐다).
+    // query+firstOrNull은 0건이어도 예외 없이 빈 리스트를 준다.
     private fun getCurrentPrice(stockId: Long): Price =
-        jdbc.queryForObject(
+        jdbc.query(
             "SELECT close FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1",
-            BigDecimal::class.java, stockId,
-        )?.let { Price.of(it) } ?: throw IllegalStateException("현재가 조회 불가: stockId=$stockId")
+            { rs, _ -> rs.getBigDecimal("close") },
+            stockId,
+        ).firstOrNull()?.let { Price.of(it) } ?: throw IllegalStateException("현재가 조회 불가: stockId=$stockId")
 
     fun buy(userId: Long, stockId: Long, quantity: Int): TradeResultResponse {
         require(quantity > 0) { "수량은 1 이상이어야 합니다" }

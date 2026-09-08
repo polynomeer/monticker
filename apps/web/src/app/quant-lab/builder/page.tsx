@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { X } from "@phosphor-icons/react";
+import type { RuleCondition, RuleOperator } from "@monticker/types";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
@@ -27,12 +28,22 @@ const COMPARATOR_LABEL: Record<string, string> = {
   ABOVE_UPPER: "상단 돌파", BELOW_LOWER: "하단 이탈",
 };
 
-interface Condition {
+// ScreenerRepository와 동일한 값 체계 — apps/web/src/app/page.tsx의 필터 라벨과 일치시킨다.
+const UNIVERSE_MARKETS = [
+  { key: "all", label: "전체" },
+  { key: "domestic", label: "국내" },
+  { key: "overseas", label: "해외" },
+];
+const UNIVERSE_MARKET_CAP_TIERS = [
+  { key: "all", label: "시총 전체" },
+  { key: "large", label: "대형주" },
+  { key: "mid", label: "중형주" },
+  { key: "small", label: "소형주" },
+];
+
+interface Condition extends RuleCondition {
   id: string;
-  indicator: string;
-  comparator: string;
   params: Record<string, number>;
-  value?: number | [number, number];
 }
 
 const DEFAULT_ENTRY: Condition[] = [
@@ -41,8 +52,8 @@ const DEFAULT_ENTRY: Condition[] = [
   { id: "e3", indicator: "RSI", comparator: "BETWEEN", params: { period: 14 }, value: [30, 70] },
 ];
 interface ParsedRuleDefinition {
-  entryRules?: { operator?: "AND" | "OR"; conditions?: Omit<Condition, "id">[] };
-  exitRules?: { operator?: "AND" | "OR"; conditions?: Omit<Condition, "id">[] };
+  entryRules?: { operator?: RuleOperator; conditions?: RuleCondition[] };
+  exitRules?: { operator?: RuleOperator; conditions?: RuleCondition[] };
   positionSizing?: { value?: number };
 }
 
@@ -153,6 +164,8 @@ export default function BuilderPage() {
   const [entry, setEntry] = useState<Condition[]>(DEFAULT_ENTRY);
   const [exit,  setExit]  = useState<Condition[]>(DEFAULT_EXIT);
   const [positionPct, setPositionPct] = useState(10);
+  const [universeMarket, setUniverseMarket] = useState("all");
+  const [universeMarketCapTier, setUniverseMarketCapTier] = useState("all");
 
   // 수정 모드: 기존 룰셋 로드
   const { data: existing } = useQuery({
@@ -173,9 +186,14 @@ export default function BuilderPage() {
       const def: ParsedRuleDefinition = JSON.parse(existing.ruleDefinition);
       setEntryOp(def.entryRules?.operator ?? "AND");
       setExitOp(def.exitRules?.operator ?? "OR");
-      setEntry(def.entryRules?.conditions?.map((c, i) => ({ ...c, id: `e${i}` })) ?? []);
-      setExit(def.exitRules?.conditions?.map((c, i) => ({ ...c, id: `x${i}` })) ?? []);
+      setEntry(def.entryRules?.conditions?.map((c, i) => ({ ...c, id: `e${i}`, params: c.params ?? {} })) ?? []);
+      setExit(def.exitRules?.conditions?.map((c, i) => ({ ...c, id: `x${i}`, params: c.params ?? {} })) ?? []);
       setPositionPct(def.positionSizing?.value ?? 10);
+    } catch {}
+    try {
+      const universe: { market?: string; marketCapTier?: string } = JSON.parse(existing.universeJson || "{}");
+      setUniverseMarket(universe.market ?? "all");
+      setUniverseMarketCapTier(universe.marketCapTier ?? "all");
     } catch {}
   }, [existing]);
 
@@ -193,6 +211,7 @@ export default function BuilderPage() {
       },
       positionSizing: { type: "FIXED_RATIO", value: positionPct },
     },
+    universeJson: { market: universeMarket, marketCapTier: universeMarketCapTier },
   });
 
   const saveMutation = useMutation({
@@ -248,6 +267,41 @@ export default function BuilderPage() {
             rows={2}
             className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg placeholder-gray-400 dark:placeholder-dracula-comment px-4 py-2.5 text-sm resize-none transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
           />
+        </div>
+      </Card>
+
+      {/* 유니버스 설정 */}
+      <Card className="p-5" outerClassName="mb-6">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-dracula-fg mb-1">유니버스 설정</h2>
+        <p className="text-xs text-gray-500 dark:text-dracula-comment mb-4">
+          이 전략이 대상으로 하는 종목군입니다. 백테스트/포워드 테스트의 종목 검색 범위를 좁혀줍니다.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">시장</label>
+            <select
+              value={universeMarket}
+              onChange={e => {
+                setUniverseMarket(e.target.value);
+                if (e.target.value === "overseas") setUniverseMarketCapTier("all");
+              }}
+              className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg px-3 py-2 text-xs transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
+            >
+              {UNIVERSE_MARKETS.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+            </select>
+          </div>
+          {universeMarket !== "overseas" && (
+            <div>
+              <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">시가총액</label>
+              <select
+                value={universeMarketCapTier}
+                onChange={e => setUniverseMarketCapTier(e.target.value)}
+                className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg px-3 py-2 text-xs transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
+              >
+                {UNIVERSE_MARKET_CAP_TIERS.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+              </select>
+            </div>
+          )}
         </div>
       </Card>
 

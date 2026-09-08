@@ -4,19 +4,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Coins, Flask, Wrench, ChartBar, Trophy } from "@phosphor-icons/react";
+import type { RuleSet } from "@monticker/types";
 import { authFetch } from "@/services/api";
 import { Card } from "@/components/ui/Card";
-
-interface RuleSet {
-  id: number;
-  name: string;
-  description: string | null;
-  version: number;
-  status: string;
-  fingerprint: string;
-  createdAt: string;
-  updatedAt: string;
-}
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   DRAFT:      { label: "작성 중",        color: "text-gray-600 bg-gray-100 dark:text-dracula-comment dark:bg-dracula-line" },
@@ -39,7 +29,7 @@ export default function QuantLabPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
+    mutationFn: async (id: string) => {
       const res = await authFetch(`/api/quant/rulesets/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("삭제 실패");
     },
