@@ -5,6 +5,7 @@ import type {
   ConnectBrokerageRequest,
   CreateConditionalOrderRequest,
   CreateOcoOrderRequest,
+  SaveRebalanceTargetRequest,
   SubmitBrokerageOrderRequest,
 } from "@monticker/types";
 import {
@@ -13,11 +14,15 @@ import {
   connectBrokerage,
   createConditionalOrder,
   createOcoOrder,
+  executeRebalance,
   getBrokerageAccount,
   getBrokerageBalance,
   getBrokerageOrders,
   getBrokerageSettlements,
   getConditionalOrders,
+  getRebalanceTarget,
+  previewRebalance,
+  saveRebalanceTarget,
   submitBrokerageOrder,
 } from "@/services/brokerage";
 
@@ -117,5 +122,45 @@ export function useCancelConditionalOrder() {
   return useMutation({
     mutationFn: (id: number) => cancelConditionalOrder(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["brokerage", "conditional-orders"] }),
+  });
+}
+
+// ── 리밸런싱 (ADR-034) ───────────────────────────────────────────────────────
+
+export function useRebalanceTarget(enabled: boolean) {
+  return useQuery({
+    queryKey: ["brokerage", "rebalance-target"],
+    queryFn: getRebalanceTarget,
+    enabled,
+  });
+}
+
+export function useSaveRebalanceTarget() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (req: SaveRebalanceTargetRequest) => saveRebalanceTarget(req),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brokerage", "rebalance-target"] });
+      qc.invalidateQueries({ queryKey: ["brokerage", "rebalance-preview"] });
+    },
+  });
+}
+
+export function useRebalancePreview(enabled: boolean) {
+  return useQuery({
+    queryKey: ["brokerage", "rebalance-preview"],
+    queryFn: previewRebalance,
+    enabled,
+  });
+}
+
+export function useExecuteRebalance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => executeRebalance(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brokerage", "balance"] });
+      qc.invalidateQueries({ queryKey: ["brokerage", "rebalance-preview"] });
+    },
   });
 }

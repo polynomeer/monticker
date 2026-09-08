@@ -146,6 +146,10 @@ export default function BrokerageDashboardPage() {
           <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">계좌번호 {account.accountNumber}</p>
         </div>
         <div className="flex gap-2 shrink-0">
+          <Link href="/brokerage/rebalance"
+            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-dracula-line text-gray-700 dark:text-dracula-fg text-sm font-semibold hover:bg-gray-50 dark:hover:bg-dracula-line/30 active:scale-[0.98] transition-all duration-150">
+            리밸런싱
+          </Link>
           <Link href="/brokerage/conditional-orders"
             className="px-4 py-2 rounded-lg border border-gray-300 dark:border-dracula-line text-gray-700 dark:text-dracula-fg text-sm font-semibold hover:bg-gray-50 dark:hover:bg-dracula-line/30 active:scale-[0.98] transition-all duration-150">
             조건부 주문
