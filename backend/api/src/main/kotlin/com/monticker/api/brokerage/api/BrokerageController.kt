@@ -212,7 +212,7 @@ class BrokerageController(
         accountType   = accountType.name,
         isActive      = isActive,
         connectedAt   = connectedAt,
-        tokenValid    = isTokenValid(),
+        tokenValid    = !needsReconnect(),
     )
 
     private fun BrokerageOrder.toResponse() = OrderResponse(

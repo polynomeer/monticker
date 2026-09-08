@@ -9,12 +9,16 @@ import com.monticker.api.brokerage.domain.BrokerageSettlementStatus
 import com.monticker.api.brokerage.domain.OrderSide
 import com.monticker.api.brokerage.domain.OrderType
 import com.monticker.api.brokerage.infrastructure.BrokerageAccountRepository
+import com.monticker.api.brokerage.infrastructure.BrokerageBalance
+import com.monticker.api.brokerage.infrastructure.BrokerageClient
 import com.monticker.api.brokerage.infrastructure.BrokerageClientRegistry
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRepository
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRequest
 import com.monticker.api.brokerage.infrastructure.BrokerageSettlementRepository
+import com.monticker.api.brokerage.infrastructure.BrokerageToken
 import com.monticker.api.brokerage.infrastructure.MockBrokerageClient
 import com.monticker.api.common.aop.RiskLimitException
+import com.monticker.api.common.exception.ReconnectRequiredException
 import com.monticker.api.risk.application.RiskCheckResult
 import com.monticker.api.risk.application.RiskCheckerService
 import com.monticker.api.wallet.application.LedgerService
@@ -24,6 +28,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.springframework.jdbc.core.JdbcTemplate
 import java.math.BigDecimal
+import java.time.Instant
 import java.time.LocalDate
 import java.util.Optional
 
@@ -213,12 +218,90 @@ class BrokerageServiceTest {
         }
     }
 
+    // ── 토큰 자동 재발급 (ADR-027) ────────────────────────────────────────────────
+
+    private fun serviceWithFakeClient(fakeClient: BrokerageClient): BrokerageService {
+        val registry = BrokerageClientRegistry(BrokerageProvider.entries.associateWith { fakeClient })
+        return BrokerageService(registry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc)
+    }
+
+    @Test
+    fun `토큰이 만료됐으면 조용히 재발급하고 요청은 계속 진행된다`() {
+        val account = makeAccount(tokenExpiresAt = Instant.now().minusSeconds(10))
+        val fakeClient = mockk<BrokerageClient>()
+        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
+        every { fakeClient.issueToken("test-app-key", "test-app-secret") } returns BrokerageToken("new_token", 86400)
+        every { accountRepo.save(any()) } answers { firstArg() }
+        every { fakeClient.getBalance(any()) } returns BrokerageBalance(BigDecimal.TEN, BigDecimal.TEN, emptyList())
+
+        serviceWithFakeClient(fakeClient).getBalance(1L)
+
+        assertThat(account.accessToken).isEqualTo("new_token")
+        assertThat(account.authFailedAt).isNull()
+        verify { fakeClient.issueToken("test-app-key", "test-app-secret") }
+    }
+
+    @Test
+    fun `재발급 실패 시 authFailedAt이 기록되고 재연동 필요 예외가 발생한다`() {
+        val account = makeAccount(tokenExpiresAt = Instant.now().minusSeconds(10))
+        val fakeClient = mockk<BrokerageClient>()
+        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
+        every { fakeClient.issueToken(any(), any()) } throws IllegalStateException("KIS 토큰 발급 실패")
+        every { accountRepo.save(any()) } answers { firstArg() }
+
+        assertThrows<ReconnectRequiredException> { serviceWithFakeClient(fakeClient).getBalance(1L) }
+
+        assertThat(account.authFailedAt).isNotNull()
+    }
+
+    @Test
+    fun `재발급 실패 쿨다운 이내면 재시도하지 않고 즉시 재연동 필요 예외를 던진다`() {
+        val account = makeAccount(tokenExpiresAt = Instant.now().minusSeconds(10), authFailedAt = Instant.now().minusSeconds(60))
+        val fakeClient = mockk<BrokerageClient>()
+        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
+
+        assertThrows<ReconnectRequiredException> { serviceWithFakeClient(fakeClient).getBalance(1L) }
+
+        verify(exactly = 0) { fakeClient.issueToken(any(), any()) }
+    }
+
+    @Test
+    fun `쿨다운이 지나면 다시 자동으로 재시도한다`() {
+        val account = makeAccount(tokenExpiresAt = Instant.now().minusSeconds(10), authFailedAt = Instant.now().minusSeconds(400))
+        val fakeClient = mockk<BrokerageClient>()
+        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
+        every { fakeClient.issueToken(any(), any()) } returns BrokerageToken("new_token", 86400)
+        every { accountRepo.save(any()) } answers { firstArg() }
+        every { fakeClient.getBalance(any()) } returns BrokerageBalance(BigDecimal.TEN, BigDecimal.TEN, emptyList())
+
+        serviceWithFakeClient(fakeClient).getBalance(1L)
+
+        verify { fakeClient.issueToken(any(), any()) }
+        assertThat(account.authFailedAt).isNull()
+    }
+
+    @Test
+    fun `재연동하면 이전 재발급 실패 기록이 지워진다`() {
+        val oldAccount = makeAccount(authFailedAt = Instant.now())
+        val accountSlot = slot<BrokerageAccount>()
+        every { accountRepo.findByUserIdAndProviderAndAccountNumber(1L, BrokerageProvider.KIS, "12345678") } returns Optional.of(oldAccount)
+        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(oldAccount)
+        every { accountRepo.save(capture(accountSlot)) } answers { firstArg() }
+
+        service.connect(userId = 1L, provider = BrokerageProvider.KIS, appKey = "key", appSecret = "secret", accountNumber = "12345678")
+
+        assertThat(accountSlot.captured.authFailedAt).isNull()
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
-    private fun makeAccount() = BrokerageAccount(
+    private fun makeAccount(
+        tokenExpiresAt: Instant = Instant.now().plusSeconds(86400),
+        authFailedAt: Instant? = null,
+    ) = BrokerageAccount(
         id = 1L, userId = 1L, accountNumber = "12345678",
-        accessToken = "mock_token_test", tokenExpiresAt = java.time.Instant.now().plusSeconds(86400),
-        appKey = "test-app-key", appSecret = "test-app-secret",
+        accessToken = "mock_token_test", tokenExpiresAt = tokenExpiresAt,
+        appKey = "test-app-key", appSecret = "test-app-secret", authFailedAt = authFailedAt,
     )
 
     private fun makeOrder(status: BrokerageOrderStatus = BrokerageOrderStatus.SUBMITTED) = BrokerageOrder(

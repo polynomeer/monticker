@@ -51,6 +51,11 @@ class BrokerageAccount(
     @Column(name = "provider_account_ref")
     var providerAccountRef: String? = null,
 
+    // ADR-027 — 저장된 appKey/appSecret으로 토큰 자동 재발급을 시도했다가 실패한 시각.
+    // null이면 "재연동 불필요"로 취급한다(정상 토큰 만료는 조용히 재발급되므로 여기 남지 않는다).
+    @Column(name = "auth_failed_at")
+    var authFailedAt: Instant? = null,
+
     @Column(name = "is_active", nullable = false)
     var isActive: Boolean = true,
 
@@ -69,4 +74,7 @@ class BrokerageAccount(
 
     fun isTokenValid(): Boolean =
         accessToken != null && (tokenExpiresAt?.isAfter(Instant.now()) == true)
+
+    /** ADR-027 — 사용자에게 재연동을 요구해야 하는지. 정상적인 토큰 만료는 여기 포함되지 않는다. */
+    fun needsReconnect(): Boolean = authFailedAt != null
 }
