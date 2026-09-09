@@ -9,6 +9,26 @@ overrides:
   # 워크스페이스 전체에 blanket override를 걸면 안 된다.
   "zustand>@types/react": "^19.2.18"
   "@types/react-dom>@types/react": "^19.2.18"
+  "next>@types/react": "^19.2.18"
+packageExtensions:
+  # next는 package.json상 @types/react를 전혀 의존하지 않는다(순수 런타임 peer만
+  # react/react-dom). next/dist/types.d.ts의 `/// <reference types="react" />`가
+  # 자기 node_modules 밑에서 @types/react를 못 찾으면 pnpm의 워크스페이스 전체
+  # 팬텀 호이스트 폴더(node_modules/.pnpm/node_modules/@types/react)까지 타고
+  # 올라가는데, apps/mobile이 React 18 타입을 쓰는 이 워크스페이스에서는 그 팬텀
+  # 슬롯이 18.x로 결정되어(non-deterministic) apps/web의 19.x와 별개의 타입
+  # 인스턴스로 취급되며 위 "'Suspense' cannot be used as a JSX component" 에러가
+  # 난다. next에 @types/react 의존성을 명시적으로 주입해 자기 node_modules 안에서
+  # 바로 해석되게 하여 팬텀 호이스트 폴더까지 올라가지 않도록 막는다.
+  "next@15.1.0":
+    dependencies:
+      "@types/react": "^19.2.18"
+  "@tanstack/react-query@5.102.8":
+    dependencies:
+      "@types/react": "^19.2.18"
+  "next-themes@0.4.6":
+    dependencies:
+      "@types/react": "^19.2.18"
 allowBuilds:
   sharp: set this to true or false
   unrs-resolver: set this to true or false
