@@ -1,6 +1,14 @@
 packages:
   - "apps/*"
   - "packages/*"
+overrides:
+  # apps/web은 @types/react ^19를 쓰지만 zustand/@types/react-dom이 각각 다른 19.x 패치를
+  # 끌어와 구조적으로 다른 타입으로 취급되며 `next build`의 타입체크가 깨졌다(예:
+  # "'Suspense' cannot be used as a JSX component"). 특정 패키지가 끌어오는 @types/react만
+  # apps/web의 최상위 버전에 맞춰 고정한다 — apps/mobile은 React 18 타입(~18.3.0)을 쓰므로
+  # 워크스페이스 전체에 blanket override를 걸면 안 된다.
+  "zustand>@types/react": "^19.2.18"
+  "@types/react-dom>@types/react": "^19.2.18"
 allowBuilds:
   sharp: set this to true or false
   unrs-resolver: set this to true or false
