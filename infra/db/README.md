@@ -34,21 +34,49 @@ DB_HOST=localhost DB_PORT=5432 ./backup.sh
 로컬 `backups/` 디렉터리에만 저장 — 단일 서버 장애 시 백업까지 함께 유실되는 상태이므로
 이 자체가 프로덕션 전환 전 반드시 고쳐야 할 부분이다).
 
-## 아직 없는 것: PITR (Point-In-Time Recovery)
+## PITR (Point-In-Time Recovery)
 
 위 논리 백업은 **백업을 찍은 시점으로만** 복구할 수 있다(예: 매일 자정 백업이면 최악의 경우
 거의 24시간 치 데이터가 유실될 수 있음). 특정 시각(예: "사고 발생 5분 전")으로 정밀하게
-복구하려면 WAL(Write-Ahead Log) 아카이빙 기반 PITR이 필요하다:
+복구하려면 WAL(Write-Ahead Log) 아카이빙 기반 PITR이 필요하다.
+
+### 대상 Postgres에 필요한 설정
 
 ```
-postgresql.conf:
-  archive_mode = on
-  archive_command = 'cp %p /path/to/wal-archive/%f'   # 실제로는 S3 업로드 등으로 교체
-
-주기적으로 pg_basebackup으로 베이스 백업을 뜨고,
-복구 시 베이스 백업 + 그 이후 WAL을 순서대로 재생해 원하는 시점까지 복구한다.
+archive_mode = on
+archive_command = 'cp %p /path/to/wal-archive/%f'   # 실제 운영에서는 S3 업로드 등으로 교체
+wal_level = replica                                  # pg_basebackup(물리 복제 연결)에 필요
 ```
++ `pg_hba.conf`에 `host replication <user> <cidr> <auth-method>` 항목 추가(그렇지 않으면
+`pg_basebackup`이 "no pg_hba.conf entry for replication connection"으로 거부됨).
 
-이건 로컬 dev 환경의 docker-compose Postgres가 WAL 아카이빙을 켜둔 상태가 아니라서
-지금 리허설할 수 없다 — 실제 프로덕션 Postgres 인스턴스를 프로비저닝한 뒤에 설정하고
-리허설해야 한다. `docs/launch-plan.md` Phase 3에 이 상태를 그대로 기록해 뒀다.
+### 스크립트
+
+- `pitr-basebackup.sh <output-dir>` — `pg_basebackup`으로 물리 베이스 백업을 뜬다(주기적으로,
+  예를 들어 하루 1회 실행하는 것을 전제로 한다).
+- `pitr-restore.sh <basebackup-dir> <wal-archive-dir> <target-time> <new-data-dir>` — 베이스
+  백업을 새 데이터 디렉터리로 복사하고 `recovery.signal` + `restore_command`/`recovery_target_time`을
+  심어둔다. Postgres를 직접 기동하지는 않는다(배포 환경마다 기동 방식이 다르므로) — 이 스크립트가
+  준비한 디렉터리를 `postgres` 유저가 소유하게 한 뒤 평소 방식대로 그 디렉터리를 데이터 디렉터리로
+  지정해 Postgres를 기동하면, 목표 시각까지 WAL을 자동 재생한 뒤 정상 서비스로 전환된다
+  (`recovery_target_action = 'promote'`).
+
+### 실제로 검증했다 (2026-09-09, 로컬 dev와 완전히 격리된 임시 Docker 컨테이너 대상)
+
+로컬 dev의 docker-compose Postgres(`monticker-postgres`)는 WAL 아카이빙이 꺼져 있고, 다른
+세션이 동시에 쓰고 있을 수 있어 건드리지 않았다 — 대신 완전히 별도의 임시 컨테이너
+(`monticker-pitr-source`)를 띄워 아카이빙을 켜고 리허설했다.
+
+1. 아카이빙 켠 소스에 `baseline-1`, `baseline-2` 삽입
+2. `pitr-basebackup.sh`로 베이스 백업
+3. `after-basebackup-canary` 삽입(카나리아) → `SELECT now()`로 목표 시각 기록 → 2초 후
+   `AFTER-TARGET-should-not-survive-1/2` 삽입("목표 시각 이후에 발생한 데이터"를 흉내냄)
+4. `pitr-restore.sh`로 목표 시각(카나리아 이후, should-not-survive 이전)까지 복구 준비
+5. 새 데이터 디렉터리로 Postgres 기동
+6. **검증**: 로그에 `recovery stopping before commit of transaction ..., time <should-not-survive 시각>`
+   / `last completed transaction was at log time <카나리아 시각>` 정확히 기록됨. 실제 쿼리 결과도
+   `baseline-1`, `baseline-2`, `after-basebackup-canary` 3건만 남고 `should-not-survive` 2건은
+   정확히 사라짐 — 목표 시각 복구가 정밀하게 동작함을 확인.
+
+`docs/launch-plan.md` Phase 3도 "스크립트 미작성"에서 "스크립트 작성+리허설 완료, 실 프로덕션
+Postgres 설정만 남음"으로 갱신했다.
