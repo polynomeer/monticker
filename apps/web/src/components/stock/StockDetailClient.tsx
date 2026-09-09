@@ -8,6 +8,7 @@ import IndicatorChart from "./IndicatorChart";
 import VolumeChart from "./VolumeChart";
 import EventTimeline from "./EventTimeline";
 import NewsPanel from "./NewsPanel";
+import StockCommentPanel from "./StockCommentPanel";
 import AlertPanel from "./AlertPanel";
 import SummaryPanel from "./SummaryPanel";
 import WatchlistAddButton from "./WatchlistAddButton";
@@ -40,6 +41,7 @@ const LEFT_TABS = [
   { label: "AI 요약", value: "summary" },
   { label: "뉴스", value: "news" },
   { label: "이벤트", value: "events" },
+  { label: "커뮤니티", value: "community" },
 ] as const;
 
 function pill(active: boolean) {
@@ -210,6 +212,7 @@ export default function StockDetailClient({ stockId, symbol, stockName }: Props)
               {leftTab === "summary" && <SummaryPanel stockId={stockId} symbol={symbol} bare />}
               {leftTab === "news" && <NewsPanel stockId={stockId} bare />}
               {leftTab === "events" && <EventTimeline stockId={stockId} bare />}
+              {leftTab === "community" && <StockCommentPanel stockId={stockId} bare />}
             </div>
           </Card>
         </div>
