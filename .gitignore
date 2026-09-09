@@ -65,3 +65,8 @@ logs/
 # data/backfill/*.csv 는 Yahoo Finance 다운로드 캐시다.
 # 재실행 시 재사용되지만 커밋하지 않는다.
 data/backfill/*.csv
+
+# ── TypeScript incremental build cache ───────────────────────────
+# 커밋되어 있으면 tsc --incremental이 stale 캐시를 믿고 실제로 깨진 파일을
+# 재검증하지 않아 타입 에러를 놓칠 수 있다(라이브로 확인됨).
+*.tsbuildinfo
