@@ -4,7 +4,7 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 RUN npm install -g pnpm@9
-COPY pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY apps/web/package.json apps/web/package.json
 COPY apps/mobile/package.json apps/mobile/package.json
 COPY packages/types/package.json packages/types/package.json
