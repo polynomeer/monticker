@@ -10,6 +10,4 @@ scripts
 apps/web/.next
 apps/mobile/*
 !apps/mobile/package.json
-packages/types/*
-!packages/types/package.json
 *.md
