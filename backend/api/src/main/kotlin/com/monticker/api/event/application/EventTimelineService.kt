@@ -45,6 +45,9 @@ class EventTimelineService(
         eventRepository.findByOrderByEventTimeDesc(
             org.springframework.data.domain.PageRequest.of(0, limit)
         )
+
+    fun getById(id: Long): StockEvent =
+        eventRepository.findById(id).orElseThrow { NoSuchElementException("이벤트를 찾을 수 없습니다: $id") }
 }
 
 data class SectorEventSummary(
