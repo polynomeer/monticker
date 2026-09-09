@@ -7,6 +7,7 @@ import { getAccessToken } from "@/services/auth";
 import { useBrokerageAccount, useBrokerageBalance, useSubmitBrokerageOrder } from "@/hooks/useBrokerage";
 import { ApiError } from "@/services/brokerage";
 import { Card } from "@/components/ui/Card";
+import OrderProposalCard from "@/components/ai/OrderProposalCard";
 import type { BrokerageOrderResponse, BrokerageOrderSide, BrokerageOrderType } from "@monticker/types";
 
 interface StockHit { id: number; symbol: string; name: string; }
@@ -129,7 +130,15 @@ export default function BrokerageOrderPage() {
         <span className="font-mono font-bold text-gray-900 dark:text-dracula-fg">₩{fmt(cash)}</span>
       </Card>
 
-      <Card className="p-5">
+      {stock && (
+        <OrderProposalCard
+          stockId={stock.id}
+          onApprove={setSide}
+          disclaimer="이 제안은 투자자문이 아니며, 실제 계좌에 대한 참고용 정보입니다. 최종 투자 판단과 책임은 본인에게 있습니다."
+        />
+      )}
+
+      <Card className="p-5" outerClassName={stock ? "mt-5" : undefined}>
         {/* 종목 검색 */}
         <div className="relative mb-4">
           <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">종목</label>
