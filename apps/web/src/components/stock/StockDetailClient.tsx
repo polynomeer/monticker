@@ -19,8 +19,9 @@ import TradePanel from "@/components/paper/TradePanel";
 import { useStockChart } from "@/hooks/useStockChart";
 import { useVwap } from "@/hooks/useVwap";
 import { useStockPrice } from "@/hooks/useStockPrice";
+import { useRecentlyViewedStocks } from "@/hooks/useRecentlyViewedStocks";
 
-interface Props { stockId: number; symbol: string; stockName: string; }
+interface Props { stockId: number; symbol: string; stockName: string; market: string; }
 
 const INTERVALS = [
   { label: "1분", value: "1m" },
@@ -52,7 +53,7 @@ function pill(active: boolean) {
 
 function fmt(n: number) { return n.toLocaleString("ko-KR", { maximumFractionDigits: 0 }); }
 
-export default function StockDetailClient({ stockId, symbol, stockName }: Props) {
+export default function StockDetailClient({ stockId, symbol, stockName, market }: Props) {
   const [interval, setInterval] = useState("1d");
   const [subTab, setSubTab] = useState<typeof SUB_TABS[number]["value"]>("volume");
   const [leftTab, setLeftTab] = useState<typeof LEFT_TABS[number]["value"]>("summary");
@@ -60,6 +61,11 @@ export default function StockDetailClient({ stockId, symbol, stockName }: Props)
   const [alertHighlight, setAlertHighlight] = useState(false);
   const [chartHeight, setChartHeight] = useState(300);
   const chartAreaRef = useRef<HTMLDivElement>(null);
+  const { record: recordRecentlyViewed } = useRecentlyViewedStocks();
+
+  useEffect(() => {
+    recordRecentlyViewed({ stockId, symbol, name: stockName, market });
+  }, [stockId, symbol, stockName, market, recordRecentlyViewed]);
 
   // StockChart/EChartsAdapter는 height를 고정 px로만 받는다 — 유동 flex 높이에
   // 맞춰 리사이즈되도록 실제 렌더된 컨테이너 높이를 관찰해서 넘겨준다.

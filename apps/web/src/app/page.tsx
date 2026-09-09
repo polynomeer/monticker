@@ -3,6 +3,7 @@
 import { useState } from "react";
 import ScreenerTable from "@/components/screener/ScreenerTable";
 import WatchlistTicker from "@/components/home/WatchlistTicker";
+import RecentlyViewedStocks from "@/components/home/RecentlyViewedStocks";
 import PortfolioSnapshot from "@/components/home/PortfolioSnapshot";
 import WatchlistSummary from "@/components/home/WatchlistSummary";
 import MarketSummary from "@/components/home/MarketSummary";
@@ -73,6 +74,7 @@ export default function Home() {
   return (
     <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8 animate-fade-up">
       <WatchlistTicker />
+      <RecentlyViewedStocks />
 
       {/* 내 상태 — 로그인 상태가 아니면 각 컴포넌트가 스스로 null을 반환 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
