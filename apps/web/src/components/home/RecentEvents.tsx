@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 
 interface RecentEvent {
   id: number;
@@ -11,6 +11,8 @@ interface RecentEvent {
   importanceScore: number;
   eventTime: string;
 }
+
+interface QuoteItem { stockId: number; symbol: string; }
 
 const EVENT_COLOR: Record<string, string> = {
   PRICE_SPIKE:          "bg-green-50 dark:bg-market-up/25 border-green-200 dark:border-market-up/25 text-green-800 dark:text-market-up",
@@ -28,22 +30,33 @@ const EVENT_LABEL: Record<string, string> = {
 };
 
 export default function RecentEvents() {
-  const [events, setEvents] = useState<RecentEvent[]>([]);
-  const [loading, setLoading] = useState(true);
+  // WatchlistSummary/TopMovers와 같은 queryKey+fetcher를 써서 홈 화면에 셋이 같이
+  // 떠도 react-query가 요청을 하나로 합친다(限 개별 setInterval 3개로 중복 폴링하지 않음).
+  const { data: events = [], isLoading: loading } = useQuery<RecentEvent[]>({
+    queryKey: ["events", "recent", "home"],
+    queryFn:  async () => {
+      const r = await fetch("/api/events/recent?limit=50");
+      return r.ok ? r.json() : [];
+    },
+    refetchInterval: 10_000,
+    staleTime:       10_000,
+  });
 
-  useEffect(() => {
-    const fetchEvents = async () => {
-      try {
-        const res = await fetch("/api/events/recent?limit=10");
-        if (res.ok) setEvents(await res.json());
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchEvents();
-    const id = setInterval(fetchEvents, 10_000);
-    return () => clearInterval(id);
-  }, []);
+  const displayed = events.slice(0, 10);
+  const stockIds = Array.from(new Set(displayed.map(e => e.stockId)));
+
+  const { data: quotes = [] } = useQuery<QuoteItem[]>({
+    queryKey: ["screener", "quotes", "home-events", stockIds],
+    queryFn:  async () => {
+      const r = await fetch(`/api/screener/quotes?ids=${stockIds.join(",")}`);
+      if (!r.ok) return [];
+      const body = await r.json();
+      return body.items ?? [];
+    },
+    enabled:   stockIds.length > 0,
+    staleTime: 30_000,
+  });
+  const symbolByStockId = Object.fromEntries(quotes.map(q => [q.stockId, q.symbol]));
 
   return (
     <div className="border border-gray-200 dark:border-dracula-line dark:bg-dracula-bg rounded-lg p-4">
@@ -53,17 +66,18 @@ export default function RecentEvents() {
           {[1,2,3].map(i => <div key={i} className="h-12 bg-gray-100 dark:bg-dracula-line rounded animate-pulse" />)}
         </div>
       )}
-      {!loading && events.length === 0 && (
+      {!loading && displayed.length === 0 && (
         <p className="text-gray-400 dark:text-dracula-comment text-sm py-4 text-center">Worker 실행 후 이벤트가 표시됩니다.</p>
       )}
       <ul className="space-y-2">
-        {events.map(e => {
+        {displayed.map(e => {
           const colorClass = EVENT_COLOR[e.eventType] ?? EVENT_COLOR.default;
           const label = EVENT_LABEL[e.eventType] ?? e.eventType;
           const time = new Date(e.eventTime).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+          const symbol = symbolByStockId[e.stockId];
           return (
             <li key={e.id}>
-              <Link href={`/stocks/${e.stockId}`} className={`block p-3 rounded-lg border ${colorClass} hover:opacity-80 transition-opacity`}>
+              <Link href={symbol ? `/stocks/${symbol}` : "#"} className={`block p-3 rounded-lg border ${colorClass} hover:opacity-80 transition-opacity`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-medium">{label}</span>
