@@ -1,6 +1,8 @@
 package com.monticker.api.analytics.domain
 
 import jakarta.persistence.*
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import java.math.BigDecimal
 import java.time.Instant
 
@@ -17,9 +19,11 @@ class PortfolioOptimization(
     @Column(name = "target_return")
     val targetReturn: BigDecimal? = null,
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "universe_json", nullable = false, columnDefinition = "jsonb")
     val universeJson: String,
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "weights_json", nullable = false, columnDefinition = "jsonb")
     val weightsJson: String,
 
@@ -29,6 +33,7 @@ class PortfolioOptimization(
     @Column(name = "expected_risk")
     val expectedRisk: BigDecimal? = null,
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "frontier_json", columnDefinition = "jsonb")
     val frontierJson: String? = null,
 

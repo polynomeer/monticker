@@ -141,62 +141,9 @@ class TickKafkaConsumer(
 
 ---
 
-## 5. Netty Broadcast Gateway — 왜 Spring STOMP를 우회하는가
+## 5. Netty Broadcast Gateway — 제거됨 (ADR-033)
 
-### 5.1 기존 경로의 문제
-
-`backend/api`의 `PriceBroadcaster`는 Spring `SimpMessagingTemplate.convertAndSend()`를 통해 STOMP 메시지를 브로드캐스트하도록 작성돼 있었지만, 실제로는 **어떤 스케줄러도 호출하지 않아 죽은 코드**였다(ADR-005 참고). 설계 자체도 매 메시지마다 Spring MVC 메시지 디스패치 레이어를 거치므로, 초당 수천 건의 가격 업데이트를 푸시해야 하는 핫패스에는 오버헤드가 크다.
-
-### 5.2 Netty 구현
-
-```kotlin
-// services/broadcast-gateway/src/main/kotlin/BroadcastServer.kt
-class BroadcastServer(private val port: Int) {
-    private val channels = ConcurrentHashMap<Long, MutableSet<Channel>>()  // stockId → 구독 채널
-
-    fun start() {
-        val bossGroup = NioEventLoopGroup(1)
-        val workerGroup = NioEventLoopGroup()
-        ServerBootstrap()
-            .group(bossGroup, workerGroup)
-            .channel(NioServerSocketChannel::class.java)
-            .childHandler(object : ChannelInitializer<SocketChannel>() {
-                override fun initChannel(ch: SocketChannel) {
-                    ch.pipeline()
-                        .addLast(HttpServerCodec())
-                        .addLast(HttpObjectAggregator(65536))
-                        .addLast(WebSocketServerProtocolHandler("/ws"))
-                        .addLast(SubscriptionHandler(channels))   // 클라이언트 구독 메시지 처리
-                }
-            })
-            .bind(port).sync()
-    }
-
-    fun broadcastTick(stockId: Long, json: String) {
-        channels[stockId]?.forEach { it.writeAndFlush(TextWebSocketFrame(json)) }
-    }
-}
-```
-
-```kotlin
-// Kafka consumer thread → Netty broadcast
-class TickConsumerLoop(private val server: BroadcastServer) {
-    fun run() {
-        val consumer = KafkaConsumer<String, String>(consumerProps)
-        consumer.subscribe(listOf("market.ticks", "market.events"))
-        while (true) {
-            val records = consumer.poll(Duration.ofMillis(100))
-            for (r in records) server.broadcastTick(r.key().toLong(), r.value())
-        }
-    }
-}
-```
-
-Netty의 `EventLoopGroup`은 적은 수의 스레드로 수많은 채널의 I/O를 논블로킹으로 처리한다(리액터 패턴). Spring MVC의 "요청당 스레드" 모델과 달리, 연결된 WebSocket 클라이언트 수가 늘어나도 스레드 수는 거의 늘지 않는다 — 이는 정확히 시세 브로드캐스트처럼 "많은 연결에 같은 데이터를 자주 밀어줘야 하는" 워크로드에 맞는 모델이다.
-
-### 5.3 구독 관리
-
-클라이언트가 WebSocket 연결 후 `{"action":"subscribe","stockId":2}` 메시지를 보내면 `SubscriptionHandler`가 해당 채널을 `channels[2]`에 등록한다. 종목별로 구독자를 나눠 관리하므로, 특정 종목에 관심 있는 클라이언트에게만 데이터를 보내고 불필요한 트래픽을 줄인다.
+이 섹션이 다루던 `services/broadcast-gateway`(Netty 기반 커스텀 WebSocket 브로드캐스트)는 삭제됐다. 프론트엔드 클라이언트가 단 한 번도 존재한 적이 없었고(STOMP만 실제로 쓰였다), 테스트·CI 커버리지도 전무했다 — 실시간 시세 푸시는 `backend/api`의 `PriceBroadcaster`(Spring STOMP, ADR-029)가 전담한다. 제거 배경과 대안 검토는 [ADR-033](../decisions/033-remove-netty-broadcast-gateway.md) 참고. Kafka·Go market-gateway(§1~4)는 이 결정과 무관하게 그대로 유지된다.
 
 ---
 
@@ -208,7 +155,7 @@ ingestion:
   source: internal   # internal(기존 MockPriceGenerator) | kafka(Go 게이트웨이 경유)
 ```
 
-`ingestion.source=kafka`가 아니면 `MarketDataCollector`는 기존처럼 동작한다. Kafka·Go·Netty 게이트웨이는 모두 `docker-compose.yml`의 `kafka` profile로 묶여 있어, `docker compose --profile kafka up`을 명시적으로 실행해야만 뜬다 — 평소 `dev.sh` 흐름에는 영향을 주지 않는다.
+`ingestion.source=kafka`가 아니면 `MarketDataCollector`는 기존처럼 동작한다. Kafka·Go market-gateway는 `docker-compose.yml`의 `kafka` profile로 묶여 있어, `docker compose --profile kafka up`을 명시적으로 실행해야만 뜬다 — 평소 `dev.sh` 흐름에는 영향을 주지 않는다.
 
 ---
 

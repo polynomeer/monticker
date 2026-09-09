@@ -19,7 +19,7 @@ for arg in "$@"; do
       echo ""
       echo "Options:"
       echo "  (없음)       기본 모드 — API + Worker (MockPriceGenerator) + Web"
-      echo "  --kafka      Kafka 모드 — Kafka + market-gateway + broadcast-gateway 추가"
+      echo "  --kafka      Kafka 모드 — Kafka + market-gateway 추가"
       echo "               Worker가 실제 시세 파이프라인(Go→Kafka→Worker)으로 동작"
       echo "  --msa        MSA 모드  — --kafka + quant-engine + trading-service 컨테이너 추가"
       echo "               API가 로컬 서비스 대신 MSA 서비스로 위임"
@@ -196,7 +196,7 @@ if [ "$WITH_MSA" = true ]; then
   docker compose --profile msa up -d --no-build 2>&1 | grep -v "^$" || true
 
 elif [ "$WITH_KAFKA" = true ]; then
-  echo "1/4  Starting infra (Kafka 모드: postgres + redis + mongodb + jaeger + mailhog + kafka + market-gateway + broadcast-gateway)..."
+  echo "1/4  Starting infra (Kafka 모드: postgres + redis + mongodb + jaeger + mailhog + kafka + market-gateway)..."
   echo -e "  ${CYAN}Building kafka service images (변경 없으면 캐시 사용)...${NC}"
   docker compose --profile kafka build --quiet 2>&1 || true
   docker compose up -d postgres redis mongodb elasticsearch jaeger mailhog 2>&1 | grep -v "^$" || true

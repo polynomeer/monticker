@@ -79,4 +79,35 @@ class StrategyMarketControllerTest {
 
         assertThat(response.statusCode).isEqualTo(HttpStatus.OK)
     }
+
+    // ── list — ADR-035: price 노출, 로그인 사용자 기준 isSubscribed ──────────────────
+
+    private fun stubListRows(marketId: Long = 1L) {
+        every { jdbc.queryForList(match<String> { it.contains("FROM strategy_market") }, any<Int>(), any<Int>()) } returns listOf(
+            linkedMapOf<String, Any?>("id" to marketId, "ruleset_id" to "rs1", "description" to null, "price" to BigDecimal("5000"), "subscribe_count" to 3, "created_at" to null, "author_email" to "a@b.com")
+        )
+        every { ruleSetRepository.findAllById(listOf("rs1")) } returns listOf(doc(1L, RuleSetStatus.BACKTESTED.name))
+    }
+
+    @Test
+    fun `list은 로그인 없이도 조회되고 isSubscribed는 false다`() {
+        stubListRows()
+
+        val response = controller.list(auth = null, page = 0, size = 20)
+
+        val row = response.body!!.first()
+        assertThat(row["price"]).isEqualTo(BigDecimal("5000"))
+        assertThat(row["isSubscribed"]).isEqualTo(false)
+    }
+
+    @Test
+    fun `list은 로그인한 사용자가 구독 중인 항목을 isSubscribed=true로 표시한다`() {
+        stubListRows(marketId = 1L)
+        every { jwtTokenProvider.getUserId("token") } returns 9L
+        every { jdbc.queryForList("SELECT market_id FROM strategy_subscriptions WHERE user_id = ?", Long::class.java, 9L) } returns listOf(1L)
+
+        val response = controller.list(auth = "Bearer token", page = 0, size = 20)
+
+        assertThat(response.body!!.first()["isSubscribed"]).isEqualTo(true)
+    }
 }

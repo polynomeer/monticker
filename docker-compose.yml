@@ -150,7 +150,8 @@ services:
 
   # ── Kafka (Stage 4: full / kafka / msa 프로파일 공통 인프라) ────
   # full  : make up-full 시 Kafka 포함. 모든 틱이 Kafka를 경유한다.
-  # kafka : Go market-gateway + Netty broadcast-gateway 포함 세트.
+  # kafka : Go market-gateway 포함 세트. (구 Netty broadcast-gateway는 ADR-033으로 제거됨 — 실시간
+  #         푸시는 backend/api의 PriceBroadcaster/STOMP 경로가 전담한다, ADR-029)
   # msa   : 3분리 워커 + quant-engine 세트.
   kafka:
     image: apache/kafka:3.8.0
@@ -192,21 +193,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
-    profiles:
-      - kafka
-
-  broadcast-gateway:
-    build:
-      context: ./services/broadcast-gateway
-      dockerfile: Dockerfile
-    container_name: monticker-broadcast-gateway
-    ports:
-      - "${BROADCAST_GW_PORT:-9090}:9090"
-    environment:
-      KAFKA_BROKERS: kafka:9092
-    depends_on:
       kafka:
         condition: service_healthy
     profiles:
@@ -352,7 +338,8 @@ services:
     depends_on:
       - alertmanager
     ports:
-      - "9091:9090"   # 9090은 broadcast-gateway와 충돌 — 호스트 포트만 변경
+      - "9091:9090"   # 호스트 포트 9091 유지 (과거 broadcast-gateway와의 충돌 회피 목적이었으나
+                       # ADR-033으로 그 서비스가 제거됨 — 이제는 그냥 기존 설정과의 호환을 위해 유지)
     volumes:
       - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./infra/monitoring/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro

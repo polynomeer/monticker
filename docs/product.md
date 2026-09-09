@@ -518,13 +518,13 @@ Investment Wallet (upcoming)
 | 기능 | 비고 |
 |------|------|
 | 실제 주문 체결 | ✅ 완료 — **BYOK 모델**. 사전 리스크 게이트([ADR-025](decisions/025-real-brokerage-order-safety-gate.md)), `BrokerageClientRegistry`를 통한 KIS/Toss 프로바이더 라우팅과 증권사 선택 UI([ADR-026](decisions/026-toss-brokerage-integration.md)), 토큰 자동 재발급/재연동 UX([ADR-027](decisions/027-brokerage-credential-refresh.md)), 주문 취소의 실제 브로커 전달([ADR-028](decisions/028-brokerage-order-cancellation.md))까지 구현됨. 남은 것은 코드가 아니라 사용자 액션: 실계좌 E2E 검증(KIS 모의투자는 실제 앱키가 있으면 가능, Toss는 모의투자 서버 자체가 없어 실거래로만 검증 가능)과 자본시장법 등 법무 자문(`legal-review-brief.md`, 실제 변호사 대기 중) |
-| 실시간 시세 파이프라인 실데이터 전환 | 현재 `market.ticks` Kafka 토픽은 Mock/Go 합성 데이터로만 채워짐 — Toss/KIS 실시세 producer로 교체 |
+| 실시간 시세 파이프라인 실데이터 전환 | 🟡 코드 완료, 라이브 검증 대기 — 푸시 파이프라인 자체가 죽어있던 걸 먼저 복구([ADR-029](decisions/029-price-broadcast-pipeline.md)), KIS 실시간체결가로 국내 21종목([ADR-030](decisions/030-kis-realtime-tick-ingestion.md)), Toss로 미국 전체+국내 나머지 최대 100종목([ADR-031](decisions/031-toss-realtime-tick-ingestion.md)) 연동 완료. 둘 다 컴파일·테스트는 그린이지만, 플랫폼 앱키가 실제로 발급되기 전까지 실 서버 라이브 검증은 못 했다 — 발급 절차는 [platform-api-keys.md](platform-api-keys.md) 참고 |
 | Quant Lab 룰셋 빌더 UI | ✅ 완료 — `/quant-lab` 룰셋 빌더·백테스트 상세(자산곡선/거래내역 포함)·전략 마켓·제작자 수익 페이지 모두 구현됨 |
 | Quant Lab 포워드 테스트 | ✅ 완료 ([ADR-024](decisions/024-quant-lab-forward-test.md)) — 장 마감 후(KST 16:00) 일 1회 평가, `quant_forward_tests`/`quant_forward_test_equity`에 상태·자산곡선 저장, `/topic/rulesets/{id}/signals`로 신호 실시간 푸시. 단일 종목만 지원(백테스트와 동일 제약) |
 | Quant Lab 유니버스/스크리너 설정 | ✅ 완료 (좁은 범위) — 룰셋 빌더에서 시장(국내/해외)·시가총액 구간을 `universeJson`에 저장하고, 백테스트/포워드 테스트의 종목 선택기가 그 범위 안에서 검색(`/api/screener`, `/api/screener/search`)하도록 좁혀줌. 여러 종목을 동시에 백테스트/포워드 테스트하는 진짜 유니버스 스크리닝(다종목 실행)은 범위 밖 — 여전히 한 번에 한 종목만 검증한다 |
-| Strategy Market | 룰셋 보호(서버사이드 실행, fingerprint) 메커니즘은 이미 설계됨 |
-| 리밸런싱 실행 자동화 | `PortfolioOptimizerService`의 목표 비중 계산은 이미 있음 — 현재 보유 대비 diff → 임계값 초과분만 기존 OMS/브로커 계층으로 주문하는 실행 로직이 없음 |
-| 조건주문 (OCO/OTO, TP/SL) | `Order` 도메인은 현재 MARKET/LIMIT만 지원 — 기존 OMS를 대체하지 않고 그 위에 얹는 감시 컴포넌트로 설계 |
+| Strategy Market | ✅ 신호 접근 제어 완료([ADR-035](decisions/035-strategy-market-signal-access-control.md)) — 판매자 등록 → 구매자 구독 → 신호 전달 플로우 감사 후, 누구나 아무 룰셋의 신호나 구독 가능했던 STOMP 인가 누락을 수정(소유자/유료 구독자만 SUBSCRIBE 허용, 실 서버 라이브 검증 완료). 결제(Toss PG)는 여전히 스텁이라 유료 구독은 UI에서 "준비 중"으로 막아둠 — 별도 라운드 필요. 룰셋 보호(서버사이드 실행, SHA-256 fingerprint)는 설계는 됐지만 fingerprint 필드가 실제 검증 경로에서 아직 쓰이지 않음 |
+| 리밸런싱 실행 자동화 | ✅ 실브로커리지 한정, 수동 실행으로 완료([ADR-034](decisions/034-rebalancing-execution.md)) — 목표 비중 저장 → 보유 대비 diff 계산 → 임계값 초과 종목만 `BrokerageService.submitOrder()`로 실행(리스크 게이트 그대로 적용). 라이브 검증 완료: 리스크 한도 초과 시 정상 거부, 정상 범위에서는 실제 FILLED 주문까지 확인. 모의투자·스케줄 자동 실행은 범위 밖 |
+| 조건주문 (OCO/OTO, TP/SL) | ✅ 단일 트리거+OCO 완료([ADR-032](decisions/032-conditional-orders.md)) — Mock 데이터로 end-to-end 라이브 검증까지 완료(발동 → 리스크 게이트 통과 → 실제 주문 FILLED, OCO 형제 자동 취소 확인). 브로커 네이티브 조건주문은 쓰지 않는다(ADR-025 리스크 게이트 우회 위험). OTO(주문 체결이 트리거)는 범위 밖 — 가격이 아니라 체결 이벤트가 트리거라 별도 메커니즘 필요 |
 | AI 자동 매수/매도 | **가드레일 필수** — LLM은 주문 제안(Order Proposal)만 생성하고, 리스크 검증 → 사용자 승인 → 기존 Order Executor(OMS) 경유 없이는 절대 자동 실행하지 않는다. "감정 태그 ≠ 투자 조언" 원칙과 동일한 선을 지킨다 |
 | 소셜 커뮤니티 | 검토 중 — 우선순위 낮음 |
 | 가상 투자 미션 / 친구 대결 리그 | 검토 중 — 우선순위 낮음 |

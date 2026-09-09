@@ -99,9 +99,12 @@ export interface MarketStrategy {
   ruleset_id: string;
   name: string;
   description: string | null;
+  price: number;
   subscribe_count: number;
   author_email: string;
   created_at: string;
+  // ADR-035 — 현재 로그인 사용자가 이 전략을 구독 중인지. 비로그인 조회 시 항상 false.
+  isSubscribed: boolean;
 }
 
 // Quant Lab forward test (ADR-024) — /api/quant/rulesets/{id}/forward-test*

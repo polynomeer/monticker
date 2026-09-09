@@ -82,19 +82,23 @@ Start as **Modular Monolith + async workers + Redis + TimescaleDB**. Microservic
        ╔══════════════════════════════════════════════════════╗
        ║       Apache Kafka  :9092 / :29092                   ║
        ║  market.ticks │ tick-processed │ order-filled │ ...  ║
-       ╚═╦═══════╦════╦════════════════════════════╦══════════╝
-         │       │    │                            │
-       PUB     SUB  PUB SUB                      SUB
-         │       │    │    │                       │
-  ┌──────┴──┐ ┌──▼────┴──┐ ┌──▼──────┐ ┌────────────────┐ ┌──────────────────┐
-  │worker-  │ │worker-   │ │worker- │ │market-gateway │ │broadcast-gateway │
-  │market   │ │event     │ │alert   │ │(Go)           │ │(Netty :9090)     │
-  └─────────┘ └──────────┘ └────────┘ └───────────────┘ └──────────────────┘
+       ╚═╦═══════╦════╦═══════════════════╝
+         │       │    │
+       PUB     SUB  PUB SUB
+         │       │    │    │
+  ┌──────┴──┐ ┌──▼────┴──┐ ┌──▼──────┐ ┌───────────────┐
+  │worker-  │ │worker-   │ │worker- │ │market-gateway │
+  │market   │ │event     │ │alert   │ │(Go)           │
+  └─────────┘ └──────────┘ └────────┘ └───────────────┘
                  │ JDBC + Redis (shared)
         ┌────────┴──────────────────┐
         │  TimescaleDB :5432        │   Redis :6379
         └───────────────────────────┘
 ```
+실시간 시세 푸시(브라우저까지)는 이 다이어그램 밖의 별도 경로다 — `backend/api`의
+`PriceBroadcaster`가 `market.ticks`를 직접 구독해 STOMP(`/topic/stocks/{id}`)로 발행한다
+(ADR-029). 여기 있던 Netty 기반 커스텀 WebSocket 브로드캐스트 게이트웨이는 프론트엔드
+클라이언트가 한 번도 존재한 적이 없어 ADR-033으로 제거됐다.
 
 ---
 
@@ -155,10 +159,9 @@ Tracing:    Jaeger (all-in-one)
 ```
 Ingestion:  Go (goroutine-per-stock tick generator/gateway)
 Bus:        Kafka (KRaft mode, single broker)
-Broadcast:  Netty (WebSocket server, bypasses Spring STOMP)
 ```
 
-See [ADR-005](decisions/005-kafka-go-gateway-netty-broadcast.md) and [kafka-tick-pipeline.md](technical/kafka-tick-pipeline.md). Disabled by default — the in-process `MockPriceGenerator` path remains the default for local dev.
+See [ADR-005](decisions/005-kafka-go-gateway-netty-broadcast.md) and [kafka-tick-pipeline.md](technical/kafka-tick-pipeline.md). Disabled by default — the in-process `MockPriceGenerator` path remains the default for local dev. Real-time browser push (STOMP, always on regardless of this profile) is handled separately by `PriceBroadcaster` in `backend/api` — see [ADR-029](decisions/029-price-broadcast-pipeline.md). ADR-005 originally also introduced a Netty-based custom WebSocket broadcast gateway here; it was removed in [ADR-033](decisions/033-remove-netty-broadcast-gateway.md) after never gaining a frontend client.
 
 ---
 
@@ -241,14 +244,12 @@ MockPriceGenerator (@Scheduled 1s)   ← swaps to KisPriceProvider when KIS keys
 ```
 Go Market Gateway (goroutine per stock, 1s tick loop)
   └── produce → Kafka topic: market.ticks (key=stockId)
-        ├── TickKafkaConsumer (Worker, @KafkaListener)
-        │     └── RedisTickWriter / CandleAggregator / EventDetector
-        │           └── produce → Kafka topic: market.events (on detection)
-        └── Netty Broadcast Gateway (Kafka consumer)
-              └── WebSocket clients (ws://localhost:9090/ws)
+        └── TickKafkaConsumer (Worker, @KafkaListener)
+              └── RedisTickWriter / CandleAggregator / EventDetector
+                    └── produce → Kafka topic: market.events (on detection)
 ```
 
-Replaces the `MockPriceGenerator` polling loop with a push-based Kafka consumer. See [kafka-tick-pipeline.md](technical/kafka-tick-pipeline.md).
+Replaces the `MockPriceGenerator` polling loop with a push-based Kafka consumer. See [kafka-tick-pipeline.md](technical/kafka-tick-pipeline.md). Browser-facing real-time push is a separate path — `backend/api`'s `MarketTickBroadcastConsumer` consumes `market.ticks` independently (its own consumer group) and forwards via STOMP; see [ADR-029](decisions/029-price-broadcast-pipeline.md).
 
 ### KIS WebSocket (when KIS_APP_KEY + KIS_APP_SECRET set)
 
@@ -899,7 +900,6 @@ make up-full
 | `backend/api` | 8080 | `full` / `msa` | API gateway, JWT auth, strangler-fig proxy |
 | `quant-engine` | 8082 | `msa` | analytics, quant, backtest |
 | `trading-service` | 8083 | `msa` | paper trading, matching, wallet |
-| `broadcast-gateway` | 9090 | `kafka` | Netty WebSocket fan-out |
 | `kafka` | 9092 / 29092 | `full` / `kafka` / `msa` | event bus |
 | `postgres` (TimescaleDB) | 5432 | always | shared DB |
 | `redis` | 6379 | always | tick cache, candle, orderbook |
@@ -910,7 +910,7 @@ make up-full
 
 | Topic | Producer | Consumer |
 |-------|----------|----------|
-| `market.ticks` | `worker-market`, `market-gateway` (Go) | `worker-event`, `broadcast-gateway` |
+| `market.ticks` | `worker-market`, `market-gateway` (Go) | `worker-event`, `backend/api` (`monticker-api-broadcast` group, ADR-029 — STOMP push + ADR-032 conditional-order evaluation) |
 | `market.tick-processed` | `worker-event` | `worker-alert` |
 | `market.events` | `worker-event` | — |
 | `trading.order-filled` | `trading-service` (`@AFTER_COMMIT`) | `quant-engine` (`QUANT_TRADING_EVENTS_ENABLED=true`) |
@@ -1298,7 +1298,7 @@ portfolio_positions (
 | [ADR-002](decisions/002-timescaledb.md) | Use TimescaleDB for Time-Series Market Data | Accepted |
 | [ADR-003](decisions/003-stock-events-central.md) | Centralize Stock Event Detection in Worker | Accepted |
 | [ADR-004](decisions/004-redis-streams-over-kafka.md) | Redis Streams over Kafka for MVP | Accepted (superseded by ADR-005) |
-| [ADR-005](decisions/005-kafka-go-gateway-netty-broadcast.md) | Introduce Kafka, Go Ingestion Gateway, Netty Broadcast | Accepted |
+| [ADR-005](decisions/005-kafka-go-gateway-netty-broadcast.md) | Introduce Kafka, Go Ingestion Gateway, Netty Broadcast | Accepted (Netty Broadcast portion superseded by ADR-033; Kafka/Go remain) |
 | [ADR-006](decisions/006-kafka-dlt-retry-strategy.md) | @RetryableTopic + Dead Letter Topic for Kafka Fault Isolation | Accepted |
 | [ADR-007](decisions/007-idempotency-key-filter.md) | Idempotency Key Filter for Mutating Order Endpoints | Accepted |
 | [ADR-008](decisions/008-outbox-pattern-spring-modulith.md) | Outbox Pattern via Spring Modulith Events Kafka | Accepted |
@@ -1317,3 +1317,4 @@ portfolio_positions (
 | [ADR-021](decisions/021-candles-1d-realtime-upsert.md) | candles_1d 무기록 버그 — CandleAggregator 실시간 upsert로 해결 | Accepted |
 | [ADR-022](decisions/022-tick-consumer-msa-role-gating.md) | msa 프로필 3중 market.ticks 중복 소비 제거 | Accepted |
 | [ADR-023](decisions/023-commercialization-pivot.md) | MVP 졸업 — 상용 서비스 전환 (BYOK 브로커 연동, 실시세, AI 가드레일) | Accepted |
+| [ADR-033](decisions/033-remove-netty-broadcast-gateway.md) | Remove Netty Broadcast Gateway (never had a frontend client) | Accepted |

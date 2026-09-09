@@ -1,6 +1,8 @@
 package com.monticker.api.alert.domain
 
 import jakarta.persistence.*
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import java.time.Instant
 
 @Entity
@@ -19,6 +21,7 @@ class AlertRule(
     @Enumerated(EnumType.STRING)
     val ruleType: AlertRuleType,
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(nullable = false, columnDefinition = "JSONB")
     val conditionJson: String,
 

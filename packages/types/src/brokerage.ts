@@ -121,3 +121,53 @@ export interface ConditionalOrderResponse {
   createdAt: string;
   triggeredAt: string | null;
 }
+
+// ADR-034 — 리밸런싱 실행 자동화(실브로커리지, 수동 실행).
+export type RebalanceTargetSource = "OPTIMIZER" | "MANUAL";
+export type RebalanceExecutionStatus = "EXECUTING" | "COMPLETED" | "PARTIALLY_FAILED";
+export type RebalanceLegStatus = "EXECUTED" | "FAILED";
+
+export interface SaveRebalanceTargetRequest {
+  weights: Record<string, number>;
+  thresholdPct: number;
+  source: RebalanceTargetSource;
+}
+
+export interface RebalanceTargetResponse {
+  id: number;
+  weights: Record<string, number>;
+  thresholdPct: number;
+  source: RebalanceTargetSource;
+  updatedAt: string;
+}
+
+export interface RebalanceLegResponse {
+  symbol: string;
+  side: BrokerageOrderSide;
+  targetWeight: number;
+  currentWeight: number;
+  diffPct: number;
+  quantity: number;
+}
+
+export interface RebalancePreviewResponse {
+  totalValue: number;
+  legs: RebalanceLegResponse[];
+}
+
+export interface RebalanceExecutionLegResponse {
+  symbol: string;
+  side: BrokerageOrderSide;
+  quantity: number;
+  status: RebalanceLegStatus;
+  executedOrderId: number | null;
+  failReason: string | null;
+}
+
+export interface RebalanceExecutionResponse {
+  id: number;
+  status: RebalanceExecutionStatus;
+  requestedAt: string;
+  completedAt: string | null;
+  legs: RebalanceExecutionLegResponse[];
+}

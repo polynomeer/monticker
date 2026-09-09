@@ -3,6 +3,8 @@
 ## Status
 Accepted (supersedes the "stay on Redis Streams" stance of ADR-004 for the realtime tick/event bus)
 
+**Note (2026-09-08):** Decision item 3 (the Netty broadcast gateway) was removed — see [ADR-033](033-remove-netty-broadcast-gateway.md). Items 1–2 (Kafka, the Go `market-gateway`) remain adopted and unaffected.
+
 ## Context
 
 ADR-004 chose Redis Streams over Kafka for the MVP, reasoning that tick volume was low and Kafka's operational overhead wasn't justified. That reasoning still holds **for the application's actual traffic** — this project does not have production-scale tick volume.

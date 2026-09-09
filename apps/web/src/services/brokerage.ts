@@ -7,6 +7,10 @@ import type {
   ConnectBrokerageRequest,
   CreateConditionalOrderRequest,
   CreateOcoOrderRequest,
+  RebalanceExecutionResponse,
+  RebalancePreviewResponse,
+  RebalanceTargetResponse,
+  SaveRebalanceTargetRequest,
   SubmitBrokerageOrderRequest,
   PageResponse,
 } from "@monticker/types";
@@ -118,6 +122,36 @@ export async function getConditionalOrders(page: number, size = 20): Promise<Pag
 
 export async function cancelConditionalOrder(id: number): Promise<ConditionalOrderResponse> {
   const res = await authFetch(`/api/brokerage/conditional-orders/${id}`, { method: "DELETE" });
+  await throwIfNotOk(res);
+  return res.json();
+}
+
+// ── 리밸런싱 (ADR-034) ───────────────────────────────────────────────────────
+
+export async function getRebalanceTarget(): Promise<RebalanceTargetResponse | null> {
+  const res = await authFetch("/api/rebalance/target");
+  await throwIfNotOk(res);
+  return res.json();
+}
+
+export async function saveRebalanceTarget(req: SaveRebalanceTargetRequest): Promise<RebalanceTargetResponse> {
+  const res = await authFetch("/api/rebalance/target", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  await throwIfNotOk(res);
+  return res.json();
+}
+
+export async function previewRebalance(): Promise<RebalancePreviewResponse> {
+  const res = await authFetch("/api/rebalance/preview");
+  await throwIfNotOk(res);
+  return res.json();
+}
+
+export async function executeRebalance(): Promise<RebalanceExecutionResponse> {
+  const res = await authFetch("/api/rebalance/execute", { method: "POST" });
   await throwIfNotOk(res);
   return res.json();
 }

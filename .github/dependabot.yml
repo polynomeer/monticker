@@ -63,10 +63,6 @@ updates:
     directory: "/services/market-gateway"
     schedule:
       interval: "weekly"
-  - package-ecosystem: "docker"
-    directory: "/services/broadcast-gateway"
-    schedule:
-      interval: "weekly"
 
   # CI 워크플로 자체의 액션 버전
   - package-ecosystem: "github-actions"

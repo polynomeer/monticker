@@ -21,6 +21,8 @@
 
 | 문서 | 다루는 것 |
 |---|---|
+| [docs/human-action-items.md](human-action-items.md) | 이 문서·product.md·legal-review-brief.md·deployment.md 전체에서 **사람만 할 수 있는 항목**만 추려 모은 실행 체크리스트 |
+| [docs/engineering-backlog.md](engineering-backlog.md) | 반대로 **코드로 구현 가능한 나머지 작업**만 모은 목록 — 다음에 뭘 만들지 고를 때 |
 | [ADR-023](decisions/023-commercialization-pivot.md) | 상용화 전환 결정, BYOK 원칙, AI 가드레일 |
 | [docs/product.md](product.md) — "상용화 로드맵" | 기능 단위 활성화 순서 (Quant Lab UI, Strategy Market, 실주문 등) |
 | [docs/architecture.md](architecture.md) — "Brokerage Adapter" | BYOK 어댑터 설계, 서킷브레이커/암호화/동시성 요구사항 |
