@@ -19,7 +19,7 @@
 
 - [ ] **OTO(One-Triggers-Other) 구현** — 주문 "체결" 이벤트가 트리거라 가격 틱(`MarketTickReceivedEvent`)과는 다른 소스가 필요. `BrokerageOrder.fill()` 시점을 관찰하는 별도 이벤트/리스너 설계부터 시작. [ADR-032 Revisit When](decisions/032-conditional-orders.md#revisit-when)
 - [ ] **동일 계좌의 타 채널(HTS 등) 거래와의 조율** — 지금 조건부 주문은 순수 monticker 내부 상태라 사용자가 HTS로 직접 거래하면 인지하지 못한다. 실시간 잔고/포지션 동기화 설계 필요.
-- [ ] **[human-action-items.md](human-action-items.md)에서 이미 넘어온 500/409 버그 수정** — `GET /api/brokerage/account`가 신규 사용자에게 500 대신 409를 반환하도록 `GlobalExceptionHandler` 키워드 매칭 수정 (task_a9a6cb87로 이미 진행 중이면 중복 착수 금지, 완료 여부 먼저 확인).
+- [x] **500/409 버그 수정** — ✅ 완료(2026-09-08, `485767e`). `GET /api/brokerage/account`가 미연동 신규 사용자에게 500을 반환하던 문제 — `GlobalExceptionHandler`의 409 키워드 매칭이 "없음"만 잡고 실제 예외 메시지의 "없습니다"는 놓쳤던 게 원인. 신규 가입 테스트 사용자로 라이브 확인.
 
 ## 3. 리밸런싱 실행 자동화
 
@@ -27,7 +27,7 @@
 - [ ] **모의투자 리밸런싱** — `MatchingService.submitOrderChecked`/`OrderSagaOrchestrator` 경로로 한정해 별도 실행기 필요(`PaperTradingService.buy/sell`는 리스크 게이트가 없어 재사용 금지). [ADR-034 Revisit When](decisions/034-rebalancing-execution.md#revisit-when)
 - [ ] **스케줄 기반 자동 실행** — 지금 만든 diff 계산+순차 실행 로직을 `@Scheduled` 잡에서 재사용, 트리거만 추가. [ADR-034 Revisit When](decisions/034-rebalancing-execution.md#revisit-when)
 - [ ] **`PortfolioOptimizerService` 결과를 목표 비중에 바로 저장하는 편의 플로우** — 지금은 목표 비중을 수동 입력만 지원한다. 프론트에서 `/api/analytics/portfolio/optimize` 결과를 `/api/rebalance/target`에 그대로 전달하는 "최적화 결과로 저장" 버튼을 추가할 수 있다(백엔드 변경 불필요, 프론트 전용 작업).
-- [ ] **(발견됨) `PortfolioOptimization.weightsJson`/`AlertRule.conditionJson`도 같은 jsonb 바인딩 버그를 가질 수 있음** — `RebalanceTarget.weightsJson` 저장 중 라이브로 발견: `columnDefinition="jsonb"`만으론 Hibernate가 INSERT 시 varchar로 바인딩해 Postgres가 캐스트를 거부한다(`@JdbcTypeCode(SqlTypes.JSON)` 필요, `QuantBacktestResult`가 이미 쓰던 패턴). 이 두 파일은 같은 방식(`columnDefinition`만, `@JdbcTypeCode` 없음)이라 INSERT 시 동일하게 깨질 가능성이 있음 — 확인 필요.
+- [x] **`PortfolioOptimization`/`AlertRule` jsonb 바인딩 버그 수정** — ✅ 완료(2026-09-09, `b105ce7`). `RebalanceTarget.weightsJson`에서 발견된 것과 같은 버그(`columnDefinition="jsonb"`만으론 부족, `@JdbcTypeCode(SqlTypes.JSON)` 필요)가 `AlertRule.conditionJson`, `PortfolioOptimization.weightsJson`/`universeJson`/`frontierJson`에도 실제로 있었음 — `POST /api/alerts/rules`, `GET /api/analytics/portfolio/optimize`·`/frontier`에서 라이브로 재현 후 수정 확인, 전체 API 테스트 451/451 통과.
 
 ## 4. AI 자동 매수/매도 (가드레일 필수)
 
