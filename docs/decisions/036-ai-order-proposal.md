@@ -66,7 +66,7 @@ LLM 미설정(`anthropicConfig.isConfigured == false`)이거나 호출/파싱 �
 
 ## Revisit When
 
-- 실브로커리지로 확장할 때 — `BrokerageService.submitOrder()`도 같은 "승인 → 프론트가 별도 제출" 패턴을 따를지, 아니면 서버 사이드에서 직접 호출할지(브로커리지 모듈은 matching과 달리 이벤트 전용 제약이 없다) 재검토.
+- ~~실브로커리지로 확장할 때~~ — ✅ 완료(2026-09-09). 백엔드 변경 없이 프론트만 확장했다 — `OrderProposal`은 애초에 계좌를 몰랐고(`stockId`만 알았음), `BrokerageService.submitOrder()`도 `MatchingService`처럼 "사용자의 계좌"를 내부에서 resolve하므로, 같은 "승인 → 프론트가 별도 제출" 패턴이 그대로 들어맞았다. `matching/page.tsx`의 `AiProposalCard`를 `components/ai/OrderProposalCard`로 뽑아 `/brokerage/orders`에서도 재사용, 실계좌용 문구만 더 무겁게(`disclaimer` prop). mock 브로커리지로 라이브 검증: 제안 승인(주문 미제출) → 승인된 방향으로 별도 제출한 실주문이 리스크 게이트 통과 후 FILLED.
 - 정기 스캔 기반 자동 생성으로 확장할 때 — 알림/푸시 설계가 새로 필요하다.
 - 법률 검토가 끝난 뒤 — UI 문구, 승인 플로우에 추가 고지가 필요한지 재확인.
 - 제안↔실제 주문 연결 추적이 필요해질 때 — 승인 직후 프론트가 실제 orderId를 제안에 되돌려 기록하는 API 추가 검토.

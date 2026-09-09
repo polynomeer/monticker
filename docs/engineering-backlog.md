@@ -32,7 +32,7 @@
 ## 4. AI 자동 매수/매도 (가드레일 필수)
 
 - [x] **모의투자 한정, 수동 요청 트리거 — Order Proposal 1라운드** — ✅ 완료(2026-09-09, [ADR-036](decisions/036-ai-order-proposal.md)). `OrderProposal` 엔티티(제안 ≠ 주문, `order_proposals` 테이블)가 방향(BUY/SELL/HOLD)과 근거만 저장 — 수량·가격은 LLM이 절대 정하지 않고 사용자가 승인 후 주문 폼에서 직접 입력한다. 승인/거부는 제안 자체의 상태만 바꿀 뿐 주문을 제출하지 않는다 — `matching` 모듈이 "다른 모듈과의 통신은 이벤트만 허용"이라는 이 저장소의 확립된 경계를 지키기 위해, 실제 제출은 프론트가 기존 리스크 게이트 있는 `/api/matching/orders` 폼에 방향만 반영해 사용자가 직접 누르게 했다. `StockSummaryService`가 쓰던 이벤트/뉴스/가격 데이터 소스를 재사용했고, 가격 동향 조회 로직은 `PriceActionService`로 뽑아 두 서비스가 공유. 생성은 사용자가 명시적으로 요청할 때만(스케줄러 없음). 라이브 검증: unit 10/10 + 전체 API 스위트 462/462 + curl로 전 시나리오(생성 실패 안전 처리, 승인, 재승인 차단, 만료 차단, 소유자 격리 404, 거부) 확인 + 브라우저에서 버튼 클릭 → 에러 UI 표시까지 실제 확인.
-- [ ] **실브로커리지로 확장** — `BrokerageService.submitOrder()`도 같은 "승인 → 프론트가 별도 제출" 패턴을 따를지, 서버 사이드 직접 호출(브로커리지 모듈은 matching과 달리 이벤트 전용 제약이 없음)로 갈지 재검토 필요. [ADR-036 Revisit When](decisions/036-ai-order-proposal.md#revisit-when)
+- [x] **실브로커리지로 확장** — ✅ 완료(2026-09-09). 백엔드 변경 없음 — `OrderProposal`이 애초에 계좌를 모르는 구조(`stockId`만 앎)였고 `BrokerageService.submitOrder()`도 `MatchingService`처럼 "사용자 계좌"를 내부에서 resolve하므로 같은 "승인 → 프론트가 별도 제출" 패턴이 그대로 적용됨. `AiProposalCard`를 `components/ai/OrderProposalCard`로 공용화해 `/brokerage/orders`에도 재사용, 실계좌용 강화 문구 적용. mock 브로커리지로 라이브 검증: 제안 승인(주문 미제출) → 승인된 방향으로 별도 제출한 실주문이 리스크 게이트 통과 후 FILLED. [ADR-036](decisions/036-ai-order-proposal.md)
 - [ ] **정기 스캔 기반 자동 생성** — 스케줄러가 주기적으로 종목을 훑어 제안을 만드는 방식. 알림/푸시 설계 필요.
 - [ ] **투자자문업 라이선스 이슈 법률 검토 반영** — [human-action-items.md](human-action-items.md)에 반영 필요(사람이 처리할 일). 검토 결과에 따라 UI 문구·승인 플로우에 추가 고지가 필요할 수 있음.
 
