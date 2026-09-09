@@ -56,7 +56,7 @@
 ## 7. 인프라 코드 작업 (프로비저닝 자체는 human-action-items.md, 코드/스크립트는 여기)
 
 - [ ] **실 K8s 클러스터 배포 파이프라인** — 이미지는 GHCR까지 자동 푸시됨([.github/workflows/deploy-images.yml](../.github/workflows/deploy-images.yml)), 그 이미지를 실제 클러스터에 적용하는 CD 스텝(`kubectl apply`/ArgoCD/Flux 등)이 없음 — 클러스터가 실제로 생기면 이어서 작성
-- [ ] **PITR(WAL 아카이빙) 스크립트** — 백업/복구(`infra/db/`)는 로컬에서 리허설 완료, WAL 아카이빙은 실 프로덕션 Postgres가 있어야 리허설 가능 — 스크립트 자체는 미리 작성해둘 수 있음
+- [x] **PITR(WAL 아카이빙) 스크립트** — ✅ 완료(2026-09-09). "실 프로덕션 Postgres가 있어야 리허설 가능"이라는 전제가 틀렸음이 확인됨 — WAL 아카이빙은 Postgres 자체 기능이라 완전히 격리된 임시 Docker 컨테이너(dev DB는 건드리지 않음)로도 리허설 가능했다. `infra/db/pitr-basebackup.sh`/`pitr-restore.sh` 추가, 베이스 백업 → 카나리아 → 목표 시각 → 이후 데이터 → 목표 시각 복구 → 카나리아까지만 남고 이후 데이터 정확히 사라짐까지 실제로 확인([infra/db/README.md](../infra/db/README.md) 참고). 남은 건 실 프로덕션 Postgres에 `archive_mode`/`pg_hba.conf` 설정 적용뿐(`human-action-items.md`의 클러스터/DB 프로비저닝에 포함).
 
 ## 8. 우선순위 낮음 — 스펙부터 필요
 

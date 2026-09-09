@@ -83,7 +83,8 @@
 [docs/deployment.md](deployment.md)가 외부 서비스 등록(OAuth, PG, KIS)과 환경변수 체크리스트를 이미 다룬다. 여기서는 그 다음 단계, 즉 "실제로 띄우고 운영하는" 부분만 다룬다. 실제 클라우드 계정·도메인이 필요한 항목은 이 세션에서 대신 처리할 수 없어 미완료로 남았다 — 그 외에는 실제로 실행/검증했다.
 
 - [x] **K8s 매니페스트 검증 (정적 검증만 — 실 클러스터 없음).** `kubectl kustomize infra/k8s/overlays/{dev,prod}`로 렌더링해 에러 없이 24개 리소스가 나오는 것 확인, dev/prod 오버레이가 실제로 다르게 패치되는지(replica 수, 이미지 태그, MSA URL) diff로 확인. `kubectl apply --dry-run`은 API 서버 연결이 필요해서(kind/minikube 미설치) 여기까지만 — 실 클러스터 적용 검증은 여전히 미확인.
-- [x] **DB 백업/복구 — 실제로 리허설함.** [infra/db/](../infra/db/README.md)에 `backup.sh`/`restore.sh` 추가. 로컬 dev DB에 실제로 백업→카나리아 행 삽입→복구를 실행해 정확히 백업 시점 상태로 돌아오는 것을 확인(README.md에 수치 기록). PITR(WAL 아카이빙)은 실 프로덕션 Postgres가 있어야 리허설 가능 — 미완료로 남김.
+- [x] **DB 백업/복구 — 실제로 리허설함.** [infra/db/](../infra/db/README.md)에 `backup.sh`/`restore.sh` 추가. 로컬 dev DB에 실제로 백업→카나리아 행 삽입→복구를 실행해 정확히 백업 시점 상태로 돌아오는 것을 확인(README.md에 수치 기록).
+- [x] **PITR(WAL 아카이빙) — 스크립트 작성 + 실제로 리허설함(2026-09-09).** `infra/db/pitr-basebackup.sh`/`pitr-restore.sh` 추가. dev DB가 아니라 완전히 격리된 임시 Docker 컨테이너에 아카이빙을 켜서 리허설: 베이스 백업 → 카나리아 삽입 → 목표 시각 기록 → 이후 데이터 삽입 → 목표 시각으로 복구 → 카나리아까지만 남고 이후 데이터는 정확히 사라짐을 확인. 실 프로덕션 Postgres에 `archive_mode`/`archive_command`/`pg_hba.conf` 설정을 적용하고 다시 리허설하는 것만 남음(사람이 프로비저닝한 뒤).
 - [x] **모니터링 알림 채널 — 로컬에서 엔드투엔드로 실제 연결 확인.** 부수적으로 두 가지를 새로 발견해 고쳤다:
   - `resilience4j-micrometer` 의존성이 없어서 서킷브레이커 상태가 Prometheus에 전혀 노출되지 않고 있었음 → 추가 후 `resilience4j_circuitbreaker_state` 게이지 노출 확인.
   - **`/actuator/prometheus`가 SecurityConfig에서 `denyAll()`이었음 — Prometheus 자신의 스크레이프 요청도 401로 막혀 모니터링 전체가 애초에 동작 불능이었다.** Ingress가 `/actuator/**`를 라우팅하지 않아(공인 인터넷에서 원천 차단) 실제 보안 경계는 네트워크 토폴로지이므로 `permitAll()`로 변경.
