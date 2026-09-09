@@ -1,7 +1,7 @@
 # 빌드 컨텍스트는 저장소 루트여야 한다 (docker build -f apps/web/Dockerfile . 에서 루트).
 # apps/web은 pnpm 워크스페이스 멤버라 package.json(apps/web/)과 pnpm-lock.yaml/.npmrc(루트)가
 # 서로 다른 디렉터리에 있어서, 이 둘을 동시에 요구하는 한 이 파일 단독 컨텍스트로는 못 만든다.
-FROM node:20-alpine AS deps
+FROM node:26-alpine AS deps
 WORKDIR /app
 RUN npm install -g pnpm@9
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
@@ -13,7 +13,7 @@ COPY packages/types/package.json packages/types/package.json
 # 세 package.json이 전부 존재해야 하지만, 실제로 설치되는 건 web 쪽 의존성뿐이다.
 RUN pnpm install --frozen-lockfile --ignore-scripts --filter @monticker/web...
 
-FROM node:20-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 RUN npm install -g pnpm@9
 COPY --from=deps /app ./
@@ -22,7 +22,7 @@ COPY packages/types packages/types
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm --filter @monticker/web build
 
-FROM node:20-alpine AS runner
+FROM node:26-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
