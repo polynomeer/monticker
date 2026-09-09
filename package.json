@@ -1,6 +1,7 @@
 {
   "name": "monticker",
   "private": true,
+  "packageManager": "pnpm@9.15.9",
   "pnpm": {
     "overrides": {
       "zustand>@types/react": "^19.2.18",
