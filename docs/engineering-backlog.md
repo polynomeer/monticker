@@ -6,6 +6,23 @@
 
 ---
 
+## 0. UI/UX 품질 (상용배포 준비보다 우선)
+
+2026-09-09, 사용자 판단: 상용배포 준비(K8s 파이프라인 등 §7)보다 상용제품 수준의 UI/UX 품질을 먼저 끌어올리는 게 우선. [ui-benchmarks.md](ui-benchmarks.md)의 "monticker 실제 화면 갭 분석"(같은 날 작성)에서 외부 증권앱 15개 심층 벤치마크 체크리스트를 monticker 실제 코드와 대조해 나온 구체적 갭들 — 착수 전 [ui-benchmarks.md](ui-benchmarks.md)의 우선순위 후보 섹션을 먼저 읽을 것.
+
+- [ ] **홈 대시보드 연결** — `PortfolioSnapshot`/`MarketSummary`/`RecentEvents`/`WatchlistSummary`/`TopMovers`(전부 [apps/web/src/components/home/](../apps/web/src/components/home/))가 이미 완성돼 실제 백엔드 API를 호출하도록 작성돼 있으나 [app/page.tsx](../apps/web/src/app/page.tsx) 어디에서도 import되지 않는 고아 코드로 방치돼 있음(전체 커밋 이력 확인, 죽은 지 오래됨). 지금 홈은 스크리너(종목 랭킹)만 있어 "5초 안에 내 자산 상태 파악"이 전혀 안 됨 — 벤치마크 보고서가 공통으로 지적하는 "홈은 콘텐츠 피드가 아니라 계좌 상태를 보여줘야 한다"는 원칙과 정확히 어긋남. 배치 전에 `PortfolioSnapshot.tsx` 등 일부 컴포넌트의 하드코딩된 hex 색상(`#ff5050`/`#4a8fd4`)을 `market-up`/`market-down` 토큰으로 교체 필요, API 응답 스키마가 지금 백엔드와 여전히 맞는지도 재검증 필요(오래 방치됐던 코드라 드리프트 가능성).
+- [ ] **"최근 본 종목" 기능 신설** — 관심종목과 개념이 혼동되고 있음(코드에 "최근 본 종목" 자체가 없음). `localStorage`만으로 구현 가능해 서버 변경 불필요 — 관심종목([app/watchlist/page.tsx](../apps/web/src/app/watchlist/page.tsx))과 구분되는 별도 위젯으로 홈 또는 검색 결과 근처에 배치.
+- [ ] **주문 사후관리 통합 뷰** — 일반 주문([app/brokerage/orders/page.tsx](../apps/web/src/app/brokerage/orders/page.tsx)), 조건부 주문([app/brokerage/conditional-orders/page.tsx](../apps/web/src/app/brokerage/conditional-orders/page.tsx)), 모의투자 체결([app/matching/page.tsx](../apps/web/src/app/matching/page.tsx))이 최소 2~3개 페이지로 흩어져 있어 미체결/부분체결/조건상태를 한곳에서 볼 수 없음. 외부 벤치마크 보고서의 P0 항목("주문 사후관리 일원화")과 정확히 일치 — 타임라인 형태의 통합 뷰 설계부터 시작.
+- [ ] **관심종목 그룹 고도화** — 그룹 생성은 있으나([app/watchlist/page.tsx](../apps/web/src/app/watchlist/page.tsx)) 정렬·표시 컬럼·거래세션 필터·그룹 단위 알림 규칙 설정 UI가 없음.
+- [ ] **종목 상세 내 크로스 내비게이션** — 차트 이벤트 마커, 뉴스, 이벤트 타임라인이 같은 페이지에 탭으로 공존만 할 뿐 서로 클릭으로 연결되지 않음(차트 마커 클릭 → 관련 뉴스로 스크롤 등). AI 요약(`SummaryPanel` bare 모드)에도 "AI 생성" 배지·근거 인용이 없어 객관 정보와 시각적으로 구분되지 않음.
+- [ ] **주문 사전 검증 정보 보강** — 수수료가 체결 후에만 표시되고(사전 추정 없음), 환율/거래세션 상태 표시가 어떤 주문 폼에도 없음. 해외주식 주문 시 특히 중요.
+- [ ] **알림 조건 확장** — 지금은 가격(이상/이하)·거래량급증뿐. RSI/이동평균 교차 같은 기술적 조건, "보유종목이 -N% 하락" 같은 보유상태 기반 알림 없음.
+- [ ] **차트 고급 모드** — 드로잉 툴, 차트 위 주문선, 자유 지표 추가가 전혀 없음(RSI/MACD는 별도 서브탭일 뿐 메인 차트 오버레이 아님). 비용이 큰 항목이라 후순위 — 착수 시 [ui-benchmarks.md](ui-benchmarks.md)의 TradingView/Robinhood 항목(차트 위 매수/매도 퀵버튼) 참고.
+- [ ] **목표/전략 단위 자산 뷰** — Quant Lab의 "전략" 개념과 실제 브로커리지 보유종목을 연결하는 뷰가 없음. 데이터 모델 변경 필요, 장기 항목.
+- [ ] **정기매수(적립식) 기능** — 코드에 개념 자체가 없음. Trading 212 Pies/Trade Republic Savings Plan처럼 "주기 설정"이 아니라 "목표·배분" 관점으로 설계할 것([ui-benchmarks.md](ui-benchmarks.md) 참고). 신규 도메인 기능이라 장기 항목.
+- [ ] **접근성 — 정보 밀도/큰 글씨 모드** — 다크·라이트 토글과 `aria-label`은 있으나 글자 크기·고대비 모드 옵션이 없음. mPOP 큰글씨홈 사례 참고.
+- [ ] **신규 기능 온보딩 보강** — [app/onboarding/page.tsx](../apps/web/src/app/onboarding/page.tsx)가 관심종목/알림/Quant Lab 백테스트만 다루고 조건부 주문·AI 주문 제안 같은 최근 추가 기능은 미포함.
+
 ## 1. 실시간 시세 파이프라인 후속 (ADR-029~031)
 
 - [ ] **KIS 41건 등록 한도가 커넥션당인지 앱키당 전역인지 실 서버로 확인** — 플랫폼 KIS 앱키가 발급되면([human-action-items.md §2-1](human-action-items.md#2-1-실시간-시세-플랫폼-키-adr-030031)) 가장 먼저 할 일. 결과에 따라 다음 항목(다중 커넥션 풀링)이 유효한 확장 경로인지, 아니면 여러 앱키가 필요한지가 갈린다. [ADR-030 Revisit When](decisions/030-kis-realtime-tick-ingestion.md#revisit-when)
@@ -73,7 +90,9 @@
 
 ## 우선순위 제안
 
-의존관계 없이 바로 시작 가능한 순서:
+2026-09-09 기준 최우선: **§0 UI/UX 품질** — 상용배포 준비(§7 K8s 등)보다 먼저 진행하기로 사용자와 합의. 그중에서도 "홈 대시보드 연결"이 구현 비용 대비 임팩트가 가장 커서 첫 착수 대상.
+
+그 다음, 의존관계 없이 바로 시작 가능한 순서:
 
 1. ~~500/409 버그 수정~~ — ✅ 완료(2026-09-08, `485767e`)
 2. ~~Netty `broadcast-gateway` 정리 결정~~ — ✅ 완료(2026-09-08, ADR-033)
