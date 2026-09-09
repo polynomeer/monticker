@@ -47,7 +47,8 @@
 
 ## 6. QA/CI
 
-- [ ] Phase 6 게이트: 백엔드/프론트 CI 통합테스트 스위트 전체 그린 유지 — 이번 세션 각 라운드마다 개별 확인했지만, 전체 스위트를 한 번에 돌리는 최종 확인은 별도로 필요
+- [x] **백엔드(api/worker/trading-service/quant-engine) 전체 스위트 최초 일괄 실행 및 확인** — ✅ 완료(2026-09-09). 개별 라운드마다 부분 확인은 했지만 4개 모듈을 한 번에 돌린 건 이번이 처음 — 실제 버그 2건 발견·수정: (1) `PostgresIntegrationTest`의 companion object 공유 Testcontainers 컨테이너가 `@Container`의 클래스별 afterAll 훅 때문에 먼저 끝난 서브클래스가 아직 실행 중인 다른 서브클래스의 컨테이너를 죽이는 레이스 — 3연속 전체 스위트 실행마다 매번 다른 클래스가 "Connection refused"로 실패, 수동 start()+stop() 미호출로 전환 후 3연속 클린 확인. (2) `apps/mobile`이 `@react-navigation/native@^6.1.0`을 선언했지만 실제 라우터인 `expo-router@~4.0.0`은 내부적으로 v7을 요구해 두 메이저 버전이 동시 설치되며 `@types/react` 18/19가 뒤섞여 `tsc --noEmit`이 깨짐 — 선언 버전을 v7로 정정. 최종: api 469/469, worker 80/80, trading-service 21/21, quant-engine 22/22, web lint+unit 37/37(사용 안 하는 `fmt` 헬퍼 lint 에러도 같이 수정), mobile typecheck 클린.
+- [ ] **`next build`(그리고 순수 `tsc --noEmit`)가 `apps/web/src/app/subscription/billing/callback/page.tsx`의 유일한 `<Suspense>` 사용처에서 타입 에러로 실패** — 완전히 사전 존재하던 버그로 확인(원래 lockfile로 되돌려도 재현, 캐시 문제 아님, `@types/react` 물리적 중복도 아님, react/react-dom 버전은 일치) — `next@15.1.0`이 훨씬 최신인 `react@19.2.x`/`@types/react@19.2.x`와 서브버전 스큐를 겪고 있을 가능성이 유력. `web-ci.yml`의 build 스텝과 `e2e-ci.yml`을 실제로 깨뜨릴 수 있어 §6이 완전히 끝난 게 아님 — 상세 진단은 별도 태스크(task_29c57f70)로 분리.
 - [ ] `scripts/load-test/k6-smoke.js` 부하테스트 시나리오 확장 — 지금은 스크리너/로그인/모의투자 주문 3종만. 실브로커 주문(BYOK) 경로, 조건부 주문 발동 경로는 아직 부하테스트 시나리오에 없음
 
 ## 7. 인프라 코드 작업 (프로비저닝 자체는 human-action-items.md, 코드/스크립트는 여기)
