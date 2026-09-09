@@ -12,4 +12,6 @@ apps/mobile/*
 !apps/mobile/package.json
 packages/types/*
 !packages/types/package.json
+!packages/types/src
+!packages/types/tsconfig.json
 *.md
