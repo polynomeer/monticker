@@ -1,6 +1,11 @@
 packages:
   - "apps/*"
   - "packages/*"
+# @types/react 관련 overrides/packageExtensions(팬텀 호이스트 충돌 방지, 예: Suspense
+# JSX 타입 에러)는 여기가 아니라 루트 package.json의 "pnpm" 필드에 있다 — pnpm는 v11부터
+# 이 설정들을 pnpm-workspace.yaml로 옮겼고, 이 저장소가 CI/Docker에서 실제로 고정해 쓰는
+# pnpm@9는 여전히 package.json#pnpm에서만 읽는다(pnpm-workspace.yaml에 두면 v9는 조용히
+# 무시한다 — 실제로 겪은 회귀, docs/engineering-backlog.md §6 참고).
 allowBuilds:
   sharp: set this to true or false
   unrs-resolver: set this to true or false

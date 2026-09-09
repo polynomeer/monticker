@@ -19,7 +19,6 @@ import type { RebalanceExecutionResponse } from "@monticker/types";
 interface StockHit { id: number; symbol: string; name: string; }
 interface WeightRow { symbol: string; name: string; weightPct: string; }
 
-function fmt(n: number) { return n.toLocaleString("ko-KR", { maximumFractionDigits: 0 }); }
 function pct(n: number) { return (n * 100).toFixed(2); }
 
 export default function RebalancePage() {

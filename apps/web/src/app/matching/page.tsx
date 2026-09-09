@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { CheckCircle, Prohibit, Check, X } from "@phosphor-icons/react";
+import { CheckCircle, Prohibit, Check, X, Sparkle } from "@phosphor-icons/react";
 import { authFetch } from "@/services/api";
 import { Card } from "@/components/ui/Card";
 import OrderBook from "@/components/stock/OrderBook";
@@ -35,6 +35,12 @@ interface RiskCheckResult {
 
 interface SubmitOrderResponse {
   order: OrderDto; fills: FillDto[]; message: string;
+}
+
+interface OrderProposalDto {
+  id: number; stockId: number; side: "BUY" | "SELL" | "HOLD";
+  reasoning: string; status: "PENDING" | "APPROVED" | "REJECTED";
+  createdAt: string; expiresAt: string;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -80,9 +86,111 @@ function RiskPreview({ result }: { result: RiskCheckResult }) {
   );
 }
 
+// ── AI 주문 제안 (ADR-036) ────────────────────────────────────────────────────
+
+function AiProposalCard({ stockId, onApprove }: { stockId: number; onApprove: (side: "BUY" | "SELL") => void }) {
+  const [proposal, setProposal] = useState<OrderProposalDto | null>(null);
+
+  // 종목이 바뀌면 이전 제안은 더 이상 유효하지 않다.
+  useEffect(() => setProposal(null), [stockId]);
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const res = await authFetch("/api/ai/order-proposals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stockId }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.message ?? "제안 생성 실패"); }
+      return res.json() as Promise<OrderProposalDto>;
+    },
+    onSuccess: (data) => setProposal(data),
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await authFetch(`/api/ai/order-proposals/${proposal!.id}/approve`, { method: "POST" });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.message ?? "승인 실패"); }
+      return res.json() as Promise<OrderProposalDto>;
+    },
+    onSuccess: (data) => {
+      setProposal(data);
+      if (data.side === "BUY" || data.side === "SELL") onApprove(data.side);
+    },
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: async () => {
+      const res = await authFetch(`/api/ai/order-proposals/${proposal!.id}/reject`, { method: "POST" });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.message ?? "거부 실패"); }
+      return res.json() as Promise<OrderProposalDto>;
+    },
+    onSuccess: (data) => setProposal(data),
+  });
+
+  const isExpired = proposal ? new Date(proposal.expiresAt).getTime() < Date.now() : false;
+  const sideStyle = proposal?.side === "BUY" ? "border-[#ff5050]/30 bg-[#ff5050]/5"
+    : proposal?.side === "SELL" ? "border-[#4a8fd4]/30 bg-[#4a8fd4]/5"
+    : "border-gray-300 dark:border-dracula-line bg-gray-50 dark:bg-dracula-bg";
+  const sideLabel = proposal?.side === "BUY" ? "매수 제안" : proposal?.side === "SELL" ? "매도 제안" : "보류 제안";
+  const sideColor = proposal?.side === "BUY" ? "text-[#ff5050]" : proposal?.side === "SELL" ? "text-[#4a8fd4]" : "text-gray-500 dark:text-dracula-comment";
+
+  return (
+    <Card className="p-5 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-dracula-fg inline-flex items-center gap-1.5">
+          <Sparkle size={14} weight="bold" className="text-dracula-purple" aria-hidden /> AI 주문 제안
+        </h2>
+        <button onClick={() => createMutation.mutate()} disabled={createMutation.isPending}
+          className="shrink-0 text-xs px-3 py-1.5 rounded-lg bg-dracula-purple/10 text-dracula-purple font-medium hover:bg-dracula-purple/20 active:scale-95 transition-all duration-150 disabled:opacity-40">
+          {createMutation.isPending ? "생성 중..." : "제안 받기"}
+        </button>
+      </div>
+      <p className="text-[11px] text-gray-400 dark:text-dracula-comment">
+        이 제안은 투자자문이 아니며, 모의투자 참고용 시뮬레이션 정보입니다.
+      </p>
+
+      {createMutation.isError && (
+        <p className="text-xs text-dracula-red">{(createMutation.error as Error).message}</p>
+      )}
+
+      {proposal && (
+        <div className={`p-3 rounded-xl border text-xs space-y-2 animate-fade-up ${sideStyle}`}>
+          <div className="flex items-center justify-between">
+            <span className={`font-bold ${sideColor}`}>{sideLabel}</span>
+            <span className="text-gray-400 dark:text-dracula-comment">
+              {proposal.status === "APPROVED" ? "승인됨"
+                : proposal.status === "REJECTED" ? "거부됨"
+                : isExpired ? "만료됨"
+                : `~${new Date(proposal.expiresAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}까지 유효`}
+            </span>
+          </div>
+          <p className="text-gray-600 dark:text-dracula-fg">{proposal.reasoning}</p>
+
+          {proposal.status === "PENDING" && !isExpired && proposal.side !== "HOLD" && (
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button onClick={() => rejectMutation.mutate()} disabled={rejectMutation.isPending}
+                className="py-1.5 rounded-lg border border-gray-300 dark:border-dracula-line text-gray-500 dark:text-dracula-comment text-xs font-medium hover:bg-gray-100 dark:hover:bg-dracula-line/30 active:scale-95 transition-all duration-150 disabled:opacity-40">
+                거부
+              </button>
+              <button onClick={() => approveMutation.mutate()} disabled={approveMutation.isPending}
+                className="py-1.5 rounded-lg bg-dracula-purple text-white text-xs font-semibold hover:opacity-90 active:scale-95 transition-all duration-150 disabled:opacity-40">
+                승인 — 주문폼에 반영
+              </button>
+            </div>
+          )}
+          {(approveMutation.isError || rejectMutation.isError) && (
+            <p className="text-dracula-red">{((approveMutation.error ?? rejectMutation.error) as Error).message}</p>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 // ── Order Form ──────────────────────────────────────────────────────────────
 
-function OrderForm({ stockId, setStockId }: { stockId: number; setStockId: (id: number) => void }) {
+function OrderForm({ stockId, setStockId, presetSide }: { stockId: number; setStockId: (id: number) => void; presetSide?: "BUY" | "SELL" }) {
   const qc = useQueryClient();
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
   const [orderType, setOrderType] = useState<"MARKET" | "LIMIT">("MARKET");
@@ -90,6 +198,12 @@ function OrderForm({ stockId, setStockId }: { stockId: number; setStockId: (id: 
   const [limitPrice, setLimitPrice] = useState("");
   const [riskResult, setRiskResult] = useState<RiskCheckResult | null>(null);
   const [result, setResult] = useState<SubmitOrderResponse | null>(null);
+
+  // ADR-036 — AI 제안 승인 시 이 폼에 방향만 반영한다. 실제 제출은 사용자가 수량을
+  // 확인하고 아래 주문 버튼을 직접 눌러야 한다 — 승인이 곧바로 주문으로 이어지지 않는다.
+  useEffect(() => {
+    if (presetSide) setSide(presetSide);
+  }, [presetSide]);
 
   const riskCheckMutation = useMutation({
     mutationFn: async () => {
@@ -347,6 +461,7 @@ function OrderHistoryPanel() {
 
 export default function MatchingPage() {
   const [stockId, setStockId] = useState(2);
+  const [presetSide, setPresetSide] = useState<"BUY" | "SELL" | undefined>(undefined);
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8 animate-fade-up">
@@ -358,11 +473,14 @@ export default function MatchingPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6">
-        {/* 좌: 호가창 */}
-        <OrderBook stockId={stockId} />
+        {/* 좌: 호가창 + AI 제안 */}
+        <div className="space-y-6">
+          <OrderBook stockId={stockId} />
+          <AiProposalCard stockId={stockId} onApprove={setPresetSide} />
+        </div>
 
         {/* 우: 주문 입력 */}
-        <OrderForm stockId={stockId} setStockId={setStockId} />
+        <OrderForm stockId={stockId} setStockId={setStockId} presetSide={presetSide} />
       </div>
 
       {/* 하단: 미체결 주문 / 최근 체결 (탭 통합) */}
