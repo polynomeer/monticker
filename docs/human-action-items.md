@@ -17,6 +17,7 @@
 - [ ] **전자금융거래법 — 결제·정산 구조에 자체 라이선스 필요 여부** — [legal-review-brief.md §2-3](legal-review-brief.md#2-3-전자금융거래법--결제정산-구조에-회사-자체-라이선스가-필요한가)
 - [ ] **이용약관·개인정보처리방침 문구의 법적 충분성** (특히 면책·환불 조항) — [legal-review-brief.md §2-4](legal-review-brief.md#2-4-이용약관개인정보처리방침-문구의-법적-충분성)
 - [ ] **개인정보 국외 이전(Anthropic API 전송) 고지 의무 여부** — [legal-review-brief.md §2-5](legal-review-brief.md#2-5-개인정보-국외-이전-고지)
+- [ ] **AI 주문 제안(Order Proposal)이 투자자문업 규제 대상인가** (2026-09-09 추가, ADR-036) — [legal-review-brief.md §2-7](legal-review-brief.md#2-7-ai가-생성하는-매수매도-방향-제안이-투자자문업또는-유사투자자문업-규제-대상인가)
 - [ ] **통신판매업 신고 필요 여부** — [legal-review-brief.md §2-6](legal-review-brief.md#2-6-통신판매업-신고-필요-여부)
 - [ ] **사업자 등록** (개인사업자 vs 법인 선택 — 지분 구조·투자 유치 계획에 따라 세무사·법무사 상담 필요) — [legal-review-brief.md §3](legal-review-brief.md#3-사업자-등록--일반-절차-정보-참고용-최종-선택은-세무사법무사-상담-권장)
 - [ ] **Creator 수익 정산의 실제 세무 처리** (원천징수 등, [ADR-016](decisions/016-subscription-creator-revenue-sharing.md)) — 세무사 상담 필요
