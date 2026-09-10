@@ -8,6 +8,15 @@
 작성일: 2026-09-10 · 기준 커밋: `5d788b2` · 상태: **계획(Proposed)** — 여기의 설계 결정은
 착수 시점에 각각 ADR로 승격한다(§11).
 
+> **갱신 (2026-09-10)**: Phase 0의 4건이 ADR로 확정됐다 —
+> [ADR-038](decisions/038-broadcast-consumer-partition-assignment.md),
+> [ADR-039](decisions/039-drop-global-market-topic.md),
+> [ADR-040](decisions/040-kafka-topic-declaration.md),
+> [ADR-041](decisions/041-timescale-hypertable-promotion.md).
+> ADR 작성 과정에서 이 문서의 두 가지 판단이 바뀌었다: (1) fan-out 전용 티어를 **지금
+> 만들지 않는다**(§6.1.1), (2) **원시 틱을 Postgres에 저장하지 않기로 확정**했다(§6.2.1).
+> 해당 절에 표시해뒀다.
+
 ---
 
 ## 0. TL;DR
@@ -49,7 +58,7 @@
 
 | 데이터 | 산식 | 일 증가 | 연 증가(250 거래일) | 압축 후(10~20×) |
 |--------|------|--------|-------------------|----------------|
-| `price_ticks` | 30,000/s × 23,400s × ~100B | **~70 GB/day** | ~17.5 TB | 0.9 ~ 1.8 TB |
+| `price_ticks` † | 30,000/s × 23,400s × ~100B | **~70 GB/day** | ~17.5 TB | 0.9 ~ 1.8 TB |
 | `candles_1m` | 12,000 × 390 × ~120B | ~0.6 GB/day | ~150 GB | 10 ~ 15 GB |
 | `candles_1d` | 12,000 × ~120B | 1.5 MB/day | ~0.4 GB | 무시 가능 |
 | `stock_events` | 12,000 × ~50건 × ~1KB | ~0.6 GB/day | ~150 GB | 15 GB |
@@ -57,8 +66,13 @@
 | `ledger_events` | 500 TPS × 23,400s × 3 이벤트 × ~200B | ~7 GB/day | ~1.75 TB | 파티셔닝 필요 |
 | `orders` / `fills` | 500 TPS × 23,400s × ~300B | ~3.5 GB/day | ~0.9 TB | 파티셔닝 필요 |
 
+† **`price_ticks`는 현재 한 행도 쓰이지 않는다** — `PriceTickDbWriter`의 호출부가 0건이다(§3.5).
+위 수치는 "원시 틱을 Postgres에 저장한다면"이라는 가정 위의 투영이며, 이 가정 자체를
+[ADR-041](decisions/041-timescale-hypertable-promotion.md)이 **기각**했다. 표에 남겨둔 이유는
+"저장하지 않기로 한 결정이 얼마나 큰 비용을 피한 것인지"를 보여주기 위해서다.
+
 **결론 1**: 원시 틱을 OLTP와 같은 클러스터에 무기한 보관하는 설계는 불가능하다 →
-hypertable 압축 + 보존 + 오브젝트 스토리지 티어링이 **필수**.
+저장하지 않거나(ADR-041 채택), 저장한다면 오브젝트 스토리지 티어링이 **필수**.
 
 **결론 2**: 원장·주문은 압축이 아니라 **시간 파티셔닝 + 아카이브**로 다뤄야 한다.
 금융 원장은 삭제할 수 없다(§6.3.3).
@@ -170,8 +184,15 @@ Debezium CDC(`alert_rules` 테이블) 또는 Redis pub/sub 무효화로 전파�
 
 따라서 현재 `price_ticks` / `candles_1m` / `candles_1d`는 **평범한 Postgres 테이블**이다:
 chunk pruning 없음, 압축 없음, 보존 정책 없음, CAgg는 생성 조건(`IF EXISTS hypertable`)에
-걸려 만들어지지도 않는다. T2에서 `price_ticks`는 연 17.5TB로 단일 테이블에 쌓인다 →
-VACUUM/autovacuum 지옥, 인덱스 비대, 백업 불가.
+걸려 만들어지지도 않는다.
+
+> **추가 발견 (ADR-041 작성 중)**: `PriceTickDbWriter`는 `@Component`로 등록돼 있지만
+> **호출부가 0건**이고, `price_ticks`를 읽는 코드도 0건이다 — 이 테이블은 지금까지 단 한 행도
+> 쓰인 적이 없다. `LatencyTracker.recordDbWrite()`도 마찬가지라 `/api/latency`의 `dbWrite`
+> 단계는 항상 비어 있다. 그리고 CAgg는 `price_ticks`에서 집계하므로, 하이퍼테이블 전환이
+> 됐더라도 소스 데이터가 없어 비어 있었을 것이다 — 조건과 데이터 양쪽으로 이중으로 죽어 있었다.
+> → [ADR-041](decisions/041-timescale-hypertable-promotion.md)이 캔들만 승격하고 `price_ticks`와
+> 죽은 코드를 제거하기로 결정했다.
 
 추가로: hypertable로 전환한 뒤에는 **압축된 chunk를 UPDATE할 수 없다.**
 [CandleAggregator.upsertCandle](../backend/worker/src/main/kotlin/com/monticker/worker/marketdata/CandleAggregator.kt#L83)의
@@ -352,7 +373,16 @@ fanout-gateway pod
   └─ flush ticker 100ms → 구독자에게 배치 전송
 ```
 
-두 가지 선택지가 있고, **B를 권장**한다.
+> **결정 반영 ([ADR-038](decisions/038-broadcast-consumer-partition-assignment.md), 2026-09-10)**:
+> 아래 B안(전용 티어)은 **Phase 0에서 채택하지 않았다.** ADR 작성 중 확인한 것은, §3.1의
+> 정확성 결함이 티어 분리 없이 **파일 1개 변경**(브로드캐스트 컨슈머를 컨슈머 그룹 대신
+> 전 파티션 수동 할당으로 전환)으로 고쳐진다는 점이다. [ADR-033](decisions/033-remove-netty-broadcast-gateway.md)이
+> 남긴 교훈("클라이언트 없는 게이트웨이를 만들어놓고 방치했다")을 감안하면, 실측된 병목
+> 없이 새 서비스를 세우는 건 같은 실수의 반복이다. 따라서 **ADR-033은 유지되고**, 티어
+> 분리는 트리거(동접 5,000/pod, 또는 api pod CPU의 30% 이상이 fan-out)가 실측될 때
+> 착수한다. 아래 비교표는 그 시점의 판단 근거로 남겨둔다.
+
+두 가지 선택지가 있고, 트리거 도달 시 **B를 권장**한다.
 
 | 방식 | 내용 | 장점 | 단점 |
 |------|------|------|------|
@@ -432,6 +462,13 @@ fanout-gateway: market.summary 구독 → /topic/market-summary 로 그대로 �
 ### 6.2 시계열 저장 — Timescale 정상화 + 티어링
 
 #### 6.2.1 hypertable 전환을 배포 경로에 편입 (Phase 0)
+
+> **결정 반영 ([ADR-041](decisions/041-timescale-hypertable-promotion.md), 2026-09-10)**:
+> 아래 SQL 초안은 `price_ticks`도 함께 승격하고 `add_dimension`으로 공간 파티셔닝을
+> 거는 형태였다. ADR 작성 중 `price_ticks`가 **한 번도 쓰인 적 없는 테이블**임을 확인해
+> (§3.5), 최종 결정은 **캔들만 승격하고 `price_ticks`·`PriceTickDbWriter`·CAgg를 제거**하는
+> 것으로 바뀌었다. 공간 파티셔닝도 단일 노드에서는 chunk 수만 늘리므로 채택하지 않는다.
+> 확정된 SQL은 ADR-041을 본다.
 
 `infra/docker/init-timescaledb.sql`을 Flyway 마이그레이션으로 승격한다.
 기존 `V10`이 쓰는 "hypertable이면 실행" 방어 패턴을 그대로 유지하되, 순서를 뒤집는다.
@@ -815,11 +852,11 @@ order.commands (파티션 64, key=stockId)
 
 | # | 작업 | 근거 | 규모 |
 |---|------|------|------|
-| 0.1 | fan-out 티어 분리 또는 브로커 릴레이 도입 (§6.1.1) | §3.1 replicas≥2에서 틱 유실 | L |
-| 0.2 | `/topic/market` 제거 → `market.summary` 1Hz (§6.1.4) | §3.2 | M |
-| 0.3 | Kafka 토픽 명시 선언 + auto-create off (§6.5.1) | §3.3 | S |
-| 0.4 | hypertable 전환을 Flyway로 승격 + CI 검증 (§6.2.1) | §3.5, ADR-021이 이미 지적 | M |
-| 0.5 | 압축·보존 정책 도입 (§6.2.2) | §3.5 | S |
+| 0.1 | 브로드캐스트 컨슈머 전 파티션 수동 할당 + conflation ([ADR-038](decisions/038-broadcast-consumer-partition-assignment.md)) | §3.1 replicas≥2에서 틱 유실 | S |
+| 0.2 | `/topic/market` 제거 → `market.summary` 1Hz ([ADR-039](decisions/039-drop-global-market-topic.md)) | §3.2 | M |
+| 0.3 | Kafka 토픽 명시 선언 + auto-create off ([ADR-040](decisions/040-kafka-topic-declaration.md)) — **0.1 배포 이후** | §3.3 | S |
+| 0.4 | 캔들 hypertable 승격 + CI 검증 ([ADR-041](decisions/041-timescale-hypertable-promotion.md)) | §3.5, ADR-021이 이미 지적 | M |
+| 0.5 | 압축 정책 + `price_ticks`/죽은 코드 제거 ([ADR-041](decisions/041-timescale-hypertable-promotion.md)) | §3.5 | S |
 | 0.6 | 원장 커서 페이징 + 스냅샷 (§6.3.4) | §3.6 | M |
 | 0.7 | 알림 룰 인메모리 인덱스 (§6.10) | §3.4 | M |
 | 0.8 | 부하 테스트 시나리오 확장 (§10) — 현 상태 기준선 확보 | 이후 모든 판단의 근거 | M |
@@ -935,22 +972,25 @@ order.commands (파티션 64, key=stockId)
 ## 11. 필요한 ADR 목록
 
 착수 시 아래 ADR을 작성한다(CLAUDE.md의 ADR 작성 기준에 전부 해당).
+Phase 0의 4건은 **작성 완료**됐다.
 
-| 번호(예정) | 제목 | 대체/갱신 대상 |
-|-----------|------|--------------|
-| ADR-038 | 전용 fan-out 게이트웨이 재도입 (vs 외부 STOMP 브로커 릴레이) | **ADR-033을 Superseded로** |
-| ADR-039 | `/topic/market` 폐지 및 1Hz 시장 요약 스냅샷 | — |
-| ADR-040 | Kafka 토픽 명시 선언 · 파티션 설계 · 스키마 레지스트리 | ADR-005 보강 |
-| ADR-041 | TimescaleDB hypertable 승격 · 압축 · 보존 · 아카이브 티어링 | **ADR-002 보강** |
-| ADR-042 | 캔들 파이프라인 Redis 상태 + 배치 INSERT | **ADR-021을 Superseded로** |
-| ADR-043 | 원장 스냅샷 도입 (전체 replay 폐지) | **ADR-013 보강/수정** |
-| ADR-044 | 알림 룰 인메모리 인덱스 + CDC 무효화 | ADR-003 관련 |
-| ADR-045 | 읽기 복제본 라우팅 · PgBouncer | — |
-| ADR-046 | 도메인별 DB 물리 분리 | ADR-001 보강 |
-| ADR-047 | 매칭 엔진 stockId 샤딩 · 주문 접수 비동기화 | ADR-011 보강 |
-| ADR-048 | Debezium CDC 기반 ES 인덱싱 (dual-write 폐지) | — |
-| ADR-049 | Redis Bloom 전환 | **ADR-010을 Superseded로** |
-| ADR-050 | 셀 아키텍처 · 사용자 샤딩 | ADR-009 보강 |
+| 번호 | 제목 | 대체/갱신 대상 | 상태 |
+|-----|------|--------------|------|
+| [ADR-038](decisions/038-broadcast-consumer-partition-assignment.md) | 브로드캐스트 컨슈머 전 파티션 수동 할당 + conflation | ADR-029 갱신 노트. **ADR-033은 유지**(전용 티어를 지금 만들지 않기로 결정) | ✅ Accepted |
+| [ADR-039](decisions/039-drop-global-market-topic.md) | `/topic/market` 폐지 — 시장 요약 1Hz + 가시 종목 구독 | — | ✅ Accepted |
+| [ADR-040](decisions/040-kafka-topic-declaration.md) | Kafka 토픽 코드 선언 · auto-create 폐지 · 파티션 설계 | ADR-005/006 보강 (스키마 레지스트리는 Phase 1로 분리) | ✅ Accepted |
+| [ADR-041](decisions/041-timescale-hypertable-promotion.md) | 캔들 hypertable 승격·압축, **원시 틱 미저장 확정** | ADR-002 갱신 노트, ADR-021 제약 추가 | ✅ Accepted |
+| ADR-042 (예정) | 캔들 파이프라인 Redis 상태 + 배치 INSERT | **ADR-021을 Superseded로** | 미작성 |
+| ADR-043 (예정) | 원장 스냅샷 도입 (전체 replay 폐지) | **ADR-013 보강/수정** | 미작성 |
+| ADR-044 (예정) | 알림 룰 인메모리 인덱스 + CDC 무효화 | ADR-003 관련 | 미작성 |
+| ADR-045 (예정) | 읽기 복제본 라우팅 · PgBouncer | — | 미작성 |
+| ADR-046 (예정) | 도메인별 DB 물리 분리 | ADR-001 보강 | 미작성 |
+| ADR-047 (예정) | 매칭 엔진 stockId 샤딩 · 주문 접수 비동기화 | ADR-011 보강 | 미작성 |
+| ADR-048 (예정) | Debezium CDC 기반 ES 인덱싱 (dual-write 폐지) | — | 미작성 |
+| ADR-049 (예정) | Redis Bloom 전환 | **ADR-010을 Superseded로** | 미작성 |
+| ADR-050 (예정) | 셀 아키텍처 · 사용자 샤딩 | ADR-009 보강 | 미작성 |
+| ADR-0NN (예정) | Kafka 스키마 레지스트리 (Avro/Protobuf) | ADR-040 후속 | 미작성 |
+| ADR-0NN (예정) | fan-out 전용 티어 분리 | ADR-038의 Revisit 조건 도달 시 | 미작성 |
 
 ---
 

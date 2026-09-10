@@ -1322,3 +1322,7 @@ portfolio_positions (
 | [ADR-022](decisions/022-tick-consumer-msa-role-gating.md) | msa 프로필 3중 market.ticks 중복 소비 제거 | Accepted |
 | [ADR-023](decisions/023-commercialization-pivot.md) | MVP 졸업 — 상용 서비스 전환 (BYOK 브로커 연동, 실시세, AI 가드레일) | Accepted |
 | [ADR-033](decisions/033-remove-netty-broadcast-gateway.md) | Remove Netty Broadcast Gateway (never had a frontend client) | Accepted |
+| [ADR-038](decisions/038-broadcast-consumer-partition-assignment.md) | 시세 브로드캐스트 컨슈머 — 전 파티션 수동 할당 + conflation | Accepted |
+| [ADR-039](decisions/039-drop-global-market-topic.md) | `/topic/market` 폐지 — 시장 요약 1Hz + 가시 종목 구독 | Accepted |
+| [ADR-040](decisions/040-kafka-topic-declaration.md) | Kafka 토픽 코드 선언 · auto-create 폐지 · 파티션 설계 | Accepted |
+| [ADR-041](decisions/041-timescale-hypertable-promotion.md) | TimescaleDB hypertable 승격·압축, 원시 틱 미저장 확정 | Accepted |
