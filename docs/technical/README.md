@@ -67,6 +67,12 @@ monticker의 핵심 기술 구현에 대한 심층 기술 문서입니다.
 | [opentelemetry-tracing.md](./opentelemetry-tracing.md) | OpenTelemetry 분산 추적 | Jaeger, Micrometer, OTLP |
 | [benchmark-debugging.md](./benchmark-debugging.md) | API 벤치마크 디버깅 포스트모템 | k6, Rate Limiter, SQL Alias |
 
+## 문제 해결 기록
+
+| 문서 | 주제 | 핵심 기술 |
+|------|------|-----------|
+| [troubleshooting-casebook.md](./troubleshooting-casebook.md) | 기술적 난제 해결 사례집 — 47건의 증상·조사·원인·해결·교훈 | 전 영역 (실시간·시계열·정합성·외부연동·성능·보안·빌드·프론트) |
+
 ## 관련 문서
 
 - [Architecture Overview](../architecture.md) — 전체 시스템 아키텍처
