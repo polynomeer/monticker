@@ -3,6 +3,8 @@
 ## Status
 Accepted
 
+**Note (2026-09-10):** 이 ADR이 서술한 "잔고 = 모든 LedgerEvent를 replay한 합산, 잔고를 별도 컬럼으로 관리하지 않음"은 **구현된 적이 없다.** 실제로 현금 잔고의 authoritative source는 `paper_accounts.cash` 컬럼이고(`PaperAccountQueryService.getCashBalance`), `ledger_events.balance_after`는 기록 시점 잔고의 비정규화 복사본으로 `ReceiptService`만 읽는다. 즉 실제 구조는 **"컬럼 잔고 + 병렬 append-only 감사 원장"**이다. [ADR-043](043-ledger-pagination-and-reconciliation.md)이 이 서술을 정정하고, 그 구조가 요구하는 안전장치(일일 대사)와 조회 페이징을 도입한다. append-only 원칙·이벤트 타입 체계·삭제 금지는 그대로 유효하므로 이 ADR은 Accepted로 유지된다.
+
 ## Context
 
 사용자의 투자 자산 상태를 어떻게 저장할 것인가를 결정해야 했다. 두 가지 방식이 있다:

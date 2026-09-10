@@ -8,14 +8,21 @@
 작성일: 2026-09-10 · 기준 커밋: `5d788b2` · 상태: **계획(Proposed)** — 여기의 설계 결정은
 착수 시점에 각각 ADR로 승격한다(§11).
 
-> **갱신 (2026-09-10)**: Phase 0의 4건이 ADR로 확정됐다 —
+> **갱신 (2026-09-10)**: Phase 0 전 항목이 ADR로 확정됐다 —
 > [ADR-038](decisions/038-broadcast-consumer-partition-assignment.md),
 > [ADR-039](decisions/039-drop-global-market-topic.md),
 > [ADR-040](decisions/040-kafka-topic-declaration.md),
-> [ADR-041](decisions/041-timescale-hypertable-promotion.md).
-> ADR 작성 과정에서 이 문서의 두 가지 판단이 바뀌었다: (1) fan-out 전용 티어를 **지금
-> 만들지 않는다**(§6.1.1), (2) **원시 틱을 Postgres에 저장하지 않기로 확정**했다(§6.2.1).
-> 해당 절에 표시해뒀다.
+> [ADR-041](decisions/041-timescale-hypertable-promotion.md),
+> [ADR-042](decisions/042-outbox-based-es-indexing.md),
+> [ADR-043](decisions/043-ledger-pagination-and-reconciliation.md),
+> [ADR-044](decisions/044-alert-rule-in-memory-index.md),
+> [ADR-045](decisions/045-performance-slo-and-verification-harness.md).
+> ADR을 쓰면서 이 문서의 판단 네 가지가 바뀌었고, 해당 절에 정정 박스로 표시해뒀다:
+> (1) fan-out 전용 티어를 **지금 만들지 않는다**(§6.1.1),
+> (2) **원시 틱을 Postgres에 저장하지 않기로 확정**했다(§6.2.1),
+> (3) ES dual-write 제거는 CDC가 아니라 **Outbox**로 한다(§6.7),
+> (4) **§3.6의 "잔고 = replay" 진단이 틀렸다** — 잔고는 이미 컬럼이고, 진짜 문제는
+> 컬럼 잔고와 원장의 드리프트를 감지할 수단이 없다는 것이다(§3.6, §6.3.4).
 
 ---
 
@@ -172,8 +179,14 @@ T1(3,000/s)에서 이미 랙이 쌓이기 시작한다.
 커넥션·플래너·네트워크 왕복 비용이 그대로 나간다. `@Async("alertDispatchExecutor")`라
 스레드풀이 포화되면 알림이 조용히 지연되거나 큐에서 밀린다.
 
-대응: §6.10 — 룰을 워커 메모리에 `Map<stockId, List<Rule>>`로 상주시키고, 변경은
-Redis pub/sub으로 전 워커에 전파한다(룰 변경은 초당 수 건 수준이라 CDC는 과하다).
+> **추가 발견 (ADR-044 작성 중)**: 더 비싼 경로가 따로 있다. `VOLUME_SURGE` 룰은
+> 평가할 때마다 `candles_1d`에 **20일치 AVG 집계 서브쿼리 2개**를 돌린다 —
+> 틱 × 해당 종목의 VOLUME_SURGE 룰 수만큼이다. 그런데 `avg_vol`은 확정된 과거 거래일
+> 평균이라 **장중에 변하지 않는다**. 캐시 문제가 아니라 계산 위치가 잘못된 문제다.
+
+대응: §6.10 — 룰을 워커 메모리에 종목별 정렬 인덱스로 상주시키고, `avg_vol`은 장 시작 전
+배치 1회로 옮긴다. 변경 전파는 Redis pub/sub
+([ADR-044](decisions/044-alert-rule-in-memory-index.md)).
 
 ### 3.5 [높음] TimescaleDB 기능이 전부 미가동
 
@@ -205,10 +218,21 @@ chunk pruning 없음, 압축 없음, 보존 정책 없음, CAgg는 생성 조건
   `findAllByUserIdOrderByCreatedAtDesc(userId: Long): List<LedgerEvent>` — LIMIT 없음
 - 근거: [ADR-013](decisions/013-append-only-ledger-wallet.md) "잔고 = 이벤트 replay 합산"
 
-이벤트 소싱을 스냅샷 없이 쓰고 있다. 활성 유저의 원장이 10만 건이면 지갑 화면 한 번에
-10만 행을 JPA 엔티티로 힙에 올린다. 동시 100명이면 OOM.
+활성 유저의 원장이 10만 건이면 지갑 화면 한 번에 10만 행을 JPA 엔티티로 힙에 올린다.
+동시 100명이면 OOM. 특히 `WalletService.getWalletMap`은 **10줄을 보여주려고 전체를 읽고
+`.take(10)`** 한다.
 
-대응: §6.3.4 — 일 단위 잔고 스냅샷 + 스냅샷 이후 델타만 replay, 조회는 커서 페이징.
+> **진단 정정 (ADR-043 작성 중)**: 위 두 번째 근거("잔고 = 이벤트 replay 합산")는
+> **ADR-013의 서술을 그대로 옮긴 것이고, 코드는 그렇게 동작하지 않는다.**
+> 현금 잔고의 authoritative source는 `paper_accounts.cash` **컬럼**이고
+> (`PaperAccountQueryService.getCashBalance`), `ledger_events.balance_after`는 비정규화
+> 복사본이며 `ReceiptService`만 읽는다. 즉 **잔고 계산은 이미 O(1)**이고, 문서가 서술한
+> 이벤트 소싱은 구현된 적이 없다.
+> 따라서 실제 결함은 (1) 표시용 조회의 unbounded 쿼리, (2) **컬럼 잔고와 원장이 어긋나도
+> 감지할 수단이 없음** 두 가지다. 후자가 실제 자금이 걸리면 더 중요하다.
+
+대응: §6.3.4 — 커서 페이징 + 대사(reconciliation)용 스냅샷
+([ADR-043](decisions/043-ledger-pagination-and-reconciliation.md)).
 
 ### 3.7 [높음] 매칭 엔진 단일 인스턴스 · 상태가 힙에 있음
 
@@ -618,23 +642,29 @@ CREATE TABLE ledger_events_2026_09 PARTITION OF ledger_events
 파티션 키가 `created_at`이므로 PK를 `(id, created_at)` 복합으로 바꿔야 한다 →
 **마이그레이션 시 FK 처리 필요**(현재 `paper_trade_id`, `stock_id` FK 존재).
 
-#### 6.3.4 원장 스냅샷 (Phase 0~1)
+#### 6.3.4 원장 커서 페이징 + 대사 스냅샷 (Phase 0)
+
+확정: [ADR-043](decisions/043-ledger-pagination-and-reconciliation.md).
+
+- `findAllByUserIdOrderByCreatedAtDesc`를 **삭제**하고 커서 페이징으로 교체
+  (`WHERE user_id=? AND id < :cursor ORDER BY id DESC LIMIT 50`).
+  정렬 키는 `created_at`이 아니라 **`id`** — 같은 트랜잭션에서 만들어진 이벤트끼리
+  `created_at`이 동일할 수 있어 안정적 커서가 되지 못한다.
+- `WalletService.getWalletMap`은 전체를 읽고 `.take(10)` 하지 않고 **LIMIT 10으로 조회**한다.
 
 ```
-ledger_snapshots (user_id, as_of_date, cash, reserved, last_event_id, PRIMARY KEY(user_id, as_of_date))
+ledger_snapshots (user_id, as_of_date, ledger_sum, account_cash, last_event_id,
+                  PRIMARY KEY (user_id, as_of_date))
 
-잔고 조회:
-  snap = SELECT * FROM ledger_snapshots WHERE user_id=? ORDER BY as_of_date DESC LIMIT 1
-  delta = SELECT COALESCE(SUM(amount),0) FROM ledger_events
-            WHERE user_id=? AND id > snap.last_event_id
-  balance = snap.cash + delta
+일일 대사:
+  ledgerSum = snap.ledger_sum + SUM(amount) WHERE id > snap.last_event_id
+  if |ledgerSum - paper_accounts.cash| > ε  →  알람 (자동 교정하지 않는다)
 ```
 
-- 야간 배치가 유저별 스냅샷 생성(활성 유저만).
-- `findAllByUserIdOrderByCreatedAtDesc`는 **삭제**하고 커서 페이징
-  (`WHERE user_id=? AND id < :cursor ORDER BY id DESC LIMIT 50`)으로 교체.
-- [ADR-013](decisions/013-append-only-ledger-wallet.md)의 "잔고 = 전체 replay"를 수정하는
-  결정이므로 새 ADR 필요(§11).
+> **스냅샷의 목적이 §3.6 정정으로 바뀌었다.** replay 가속이 아니다(잔고는 이미 컬럼이다).
+> **대사 비용을 O(전체 원장)에서 O(당일 델타)로 낮추는 것**이 목적이다.
+> 컬럼 잔고와 병렬 원장이 공존하는 구조에서는 둘이 어긋날 수 있고,
+> 실제 자금이 오가는 서비스에서 그걸 확인하지 않는 건 성립하지 않는다.
 
 #### 6.3.5 읽기 복제본 라우팅 (Phase 1)
 
@@ -890,9 +920,9 @@ order.commands (파티션 64, key=stockId)
 | 0.3 | Kafka 토픽 명시 선언 + auto-create off ([ADR-040](decisions/040-kafka-topic-declaration.md)) — **0.1 배포 이후** | §3.3 | S |
 | 0.4 | 캔들 hypertable 승격 + CI 검증 ([ADR-041](decisions/041-timescale-hypertable-promotion.md)) | §3.5, ADR-021이 이미 지적 | M |
 | 0.5 | 압축 정책 + `price_ticks`/죽은 코드 제거 ([ADR-041](decisions/041-timescale-hypertable-promotion.md)) | §3.5 | S |
-| 0.6 | 원장 커서 페이징 + 스냅샷 (§6.3.4) | §3.6 | M |
-| 0.7 | 알림 룰 인메모리 인덱스 (§6.10) | §3.4 | M |
-| 0.8 | 부하 테스트 시나리오 확장 (§10) — 현 상태 기준선 확보 | 이후 모든 판단의 근거 | M |
+| 0.6 | 원장 커서 페이징 + 대사 스냅샷 ([ADR-043](decisions/043-ledger-pagination-and-reconciliation.md)) | §3.6 | M |
+| 0.7 | 알림 룰 인메모리 인덱스 + 평가/발송 분리 ([ADR-044](decisions/044-alert-rule-in-memory-index.md)) | §3.4 | M |
+| 0.8 | SLO 정의 + 검증 하네스 확장 ([ADR-045](decisions/045-performance-slo-and-verification-harness.md)) | 이후 모든 판단의 근거 | M |
 
 > 0.8을 먼저 하는 것도 방법이다. **기준선 없이 최적화하면 개선을 증명할 수 없다.**
 > `bench/`에 k6 하네스가 이미 있으므로 시나리오만 추가하면 된다.
@@ -985,7 +1015,12 @@ order.commands (파티션 64, key=stockId)
 
 ## 10. 검증 전략
 
+확정: [ADR-045](decisions/045-performance-slo-and-verification-harness.md)
+(워크로드 클래스별 SLO, 도구 분리, 정합성 하네스, 로컬/전용 환경 구분).
+
 기존 `bench/`(k6)를 확장한다. 각 Phase의 완료 조건 = 아래 시나리오 통과.
+참고로 `bench/results/`에는 **2026-06-24 smoke 1건**밖에 없다 —
+load/stress/spike는 정의만 있고 실행된 적이 없다.
 
 | 시나리오 | 내용 | 통과 기준 |
 |---------|------|----------|
@@ -1020,14 +1055,15 @@ order.commands (파티션 64, key=stockId)
 | [ADR-040](decisions/040-kafka-topic-declaration.md) | Kafka 토픽 코드 선언 · auto-create 폐지 · 파티션 설계 | ADR-005/006 보강 (스키마 레지스트리는 Phase 1로 분리) |
 | [ADR-041](decisions/041-timescale-hypertable-promotion.md) | 캔들 hypertable 승격·압축, **원시 틱 미저장 확정** | ADR-002 갱신 노트, ADR-021 제약 추가 |
 | [ADR-042](decisions/042-outbox-based-es-indexing.md) | ES 인덱싱을 **Outbox 단일 파이프라인**으로 통일, **CDC 미채택** | ADR-008 패턴 확장. §6.7의 Debezium 안을 대체 |
+| [ADR-043](decisions/043-ledger-pagination-and-reconciliation.md) | 원장 커서 페이징 + **대사(reconciliation) 스냅샷** | **ADR-013 서술 정정**(잔고=replay는 구현된 적 없음). §3.6 진단 정정 |
+| [ADR-044](decisions/044-alert-rule-in-memory-index.md) | 알림 룰 인메모리 인덱스 · `avg_vol` 배치화 · 평가/발송 분리 | ADR-003 관련. ADR-040에 `notify.commands` 토픽 추가 |
+| [ADR-045](decisions/045-performance-slo-and-verification-harness.md) | 워크로드별 SLO 정의 + 검증 하네스 범위 (정합성 포함) | — |
 
 ### 미작성 (착수 시 번호 부여)
 
 | 제목 | 대체/갱신 대상 | Phase |
 |------|--------------|-------|
 | 캔들 파이프라인 Redis 상태 + 배치 INSERT | **ADR-021을 Superseded로** | 1 |
-| 원장 스냅샷 도입 (전체 replay 폐지) | **ADR-013 보강/수정** | 0~1 |
-| 알림 룰 인메모리 인덱스 + Redis pub/sub 무효화 | ADR-003 관련 | 0 |
 | 읽기 복제본 라우팅 · PgBouncer | — | 1 |
 | Kafka 스키마 레지스트리 (Avro/Protobuf) | ADR-040 후속 | 1 |
 | Redis Bloom 전환 | **ADR-010을 Superseded로** | 1 |

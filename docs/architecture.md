@@ -1327,3 +1327,6 @@ portfolio_positions (
 | [ADR-040](decisions/040-kafka-topic-declaration.md) | Kafka 토픽 코드 선언 · auto-create 폐지 · 파티션 설계 | Accepted |
 | [ADR-041](decisions/041-timescale-hypertable-promotion.md) | TimescaleDB hypertable 승격·압축, 원시 틱 미저장 확정 | Accepted |
 | [ADR-042](decisions/042-outbox-based-es-indexing.md) | ES 인덱싱 Outbox 단일 파이프라인 통일 (CDC 미채택) | Accepted |
+| [ADR-043](decisions/043-ledger-pagination-and-reconciliation.md) | 원장 커서 페이징 + 대사 스냅샷 (ADR-013 서술 정정) | Accepted |
+| [ADR-044](decisions/044-alert-rule-in-memory-index.md) | 알림 룰 인메모리 인덱스 · 평가/발송 분리 | Accepted |
+| [ADR-045](decisions/045-performance-slo-and-verification-harness.md) | 워크로드별 SLO 정의 + 검증 하네스 범위 | Accepted |

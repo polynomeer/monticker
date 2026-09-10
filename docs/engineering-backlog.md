@@ -88,6 +88,30 @@
 
 ---
 
+## 9. ADR 작성 중 발견 — 범위 밖으로 분리한 것
+
+[scale-out-plan.md](scale-out-plan.md)의 Phase 0 ADR(038~045)을 쓰면서 확인했지만,
+해당 ADR의 범위가 아니라 따로 남긴 항목들.
+
+- [ ] **지갑 화면의 `reservedCash`/`settlementPending`이 하드코딩 0** —
+  `WalletService.getWalletMap`이 두 값을 `BigDecimal.ZERO`로 반환한다. "돈의 이동 지도"가
+  절반만 실데이터라는 뜻이다. 예약금은 `paper_accounts`의 예약 상태에서,
+  정산대기는 T+2 정산 스케줄러([ADR-014](decisions/014-t2-paper-settlement-scheduler.md))가
+  관리하는 미정산 건에서 계산해야 한다.
+  발견: [ADR-043](decisions/043-ledger-pagination-and-reconciliation.md) 작성 중.
+- [ ] **`alert_rules.stock_id`가 NULL인 룰은 절대 평가되지 않는다** —
+  컬럼은 nullable인데 `AlertEvaluator.fetchRulesForStock`은 `WHERE stock_id = ?`로만 읽는다.
+  NULL이 "전 종목 대상"을 의도한 건지, 그냥 쓰이지 않는 제약인지 확인이 필요하다.
+  전자라면 종목별 인덱스와 별개로 글로벌 룰 리스트가 필요하다
+  ([ADR-044](decisions/044-alert-rule-in-memory-index.md) Revisit 조건).
+  발견: ADR-044 작성 중.
+- [ ] **전용 부하 테스트 환경 구축** — 지금 `bench/`는 로컬 docker-compose를 때린다.
+  절대 처리량·SLO 판정에는 prod 유사 환경이 필요하다
+  ([ADR-045](decisions/045-performance-slo-and-verification-harness.md) §5).
+  Phase 1 선행 작업. 프로비저닝 자체는 [human-action-items.md](human-action-items.md).
+
+---
+
 ## 우선순위 제안
 
 2026-09-09 기준 최우선: **§0 UI/UX 품질** — 상용배포 준비(§7 K8s 등)보다 먼저 진행하기로 사용자와 합의. 그중에서도 "홈 대시보드 연결"이 구현 비용 대비 임팩트가 가장 커서 첫 착수 대상.
