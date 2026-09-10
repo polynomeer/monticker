@@ -29,7 +29,7 @@
 | 1 | STOMP 인메모리 브로커 | `enableSimpleBroker` | **replicas ≥ 2 (= 현재 prod)** | 외부 브로커 릴레이 또는 전용 fan-out 티어 |
 | 2 | `/topic/market` 전역 브로드캐스트 | 모든 틱 × 모든 클라이언트 | 동접 ~1,000 | 1Hz 집계 스냅샷으로 대체 |
 | 3 | Kafka 단일 파티션 | `num.partitions` 미지정(=1) | 틱 ~5k/s | 토픽 선언 + 파티션 128~512 |
-| 4 | 틱당 알림 룰 DB 조회 | `SELECT ... WHERE stock_id=?` per tick | 틱 ~2k/s | 인메모리 룰 인덱스 + CDC 갱신 |
+| 4 | 틱당 알림 룰 DB 조회 | `SELECT ... WHERE stock_id=?` per tick | 틱 ~2k/s | 인메모리 룰 인덱스 + 변경 전파 |
 | 5 | hypertable 미적용 | `init-timescaledb.sql` 미연결 | 틱 누적 ~5억 행 | Flyway/부트스트랩으로 승격 + 압축·보존 정책 |
 | 6 | 원장 전체 조회 | `findAllByUserIdOrderByCreatedAtDesc` | 유저당 이벤트 ~10만 | 스냅샷 + 페이징 |
 | 7 | 매칭 엔진 단일 인스턴스 | JVM 내 `TreeMap` | 주문 ~2k TPS | stockId 샤딩 + 단일 라이터 |
@@ -173,7 +173,7 @@ T1(3,000/s)에서 이미 랙이 쌓이기 시작한다.
 스레드풀이 포화되면 알림이 조용히 지연되거나 큐에서 밀린다.
 
 대응: §6.10 — 룰을 워커 메모리에 `Map<stockId, List<Rule>>`로 상주시키고, 변경은
-Debezium CDC(`alert_rules` 테이블) 또는 Redis pub/sub 무효화로 전파한다.
+Redis pub/sub으로 전 워커에 전파한다(룰 변경은 초당 수 건 수준이라 CDC는 과하다).
 
 ### 3.5 [높음] TimescaleDB 기능이 전부 미가동
 
@@ -251,7 +251,16 @@ Kafka Streams state store / RocksDB로 외부화한다.
 쓰기량이 커지면 실패율 × 쓰기량 = 무시할 수 없는 드리프트가 된다. `@PostConstruct`
 전체 재동기화도 인덱스가 수천만 건이 되면 기동 시간이 감당 안 된다.
 
-대응: §6.7 — Outbox/CDC 기반 단방향 인덱싱 파이프라인.
+> **추가 확인 (ADR-042 작성 중)**: 이건 용량 문제이기 이전에 **지금도 정확성 문제**다.
+> [`WatchlistService`](../backend/api/src/main/kotlin/com/monticker/api/watchlist/application/WatchlistService.kt#L52)는
+> 클래스 레벨 `@Transactional`인데 `indexToEs`를 **커밋 전에** 호출한다 — 롤백되면 ES에
+> 유령 문서가 남는다. dual-write 호출부는 api·worker 두 서비스에 걸쳐 **6곳**이고,
+> `news_articles` 인덱스는 **두 개의 독립적인 `NewsDocument` 클래스**(worker/api)가
+> 각자 매핑을 정의한다 — 한쪽만 필드를 추가하면 조용히 어긋난다. 6곳 모두 실패를
+> `log.warn`으로 삼켜 드리프트를 감지할 메트릭이 없다.
+
+대응: §6.7 — Outbox 기반 단방향 인덱싱 파이프라인
+([ADR-042](decisions/042-outbox-based-es-indexing.md)).
 
 ### 3.11 [중간] 인메모리 Bloom Filter (뉴스 중복 제거)
 
@@ -319,7 +328,7 @@ Client ──► Global LB ──► │  Edge: WAF · TLS · rate limit        
                                           │ 90일 초과
                                    ┌──────▼──────┐      ┌────────────────┐
                                    │ Object store│      │ ES cluster     │
-                                   │ (Parquet)   │      │ ← CDC(Debezium)│
+                                   │ (Parquet)   │      │ ← Outbox 인덱서 │
                                    └─────────────┘      └────────────────┘
 ```
 
@@ -584,6 +593,14 @@ Spring Modulith 경계([ADR-019](decisions/019-spring-modulith-boundary-conventi
 정리돼 있으므로, 물리 분리의 걸림돌은 "쿼리에서 직접 조인하는 곳"뿐이다 —
 착수 전 `grep`으로 크로스 도메인 조인 목록을 뽑아 API 호출 또는 읽기모델로 대체한다.
 
+**CDC가 필요해지는 지점이 여기다.** DB가 갈리면 크로스 DB 읽기모델을 유지해야 하는데,
+애플리케이션 이벤트만으로 커버하려면 **모든 쓰기 경로에 발행을 붙여야 한다.**
+이 저장소는 `JdbcTemplate` 직접 쓰기가 많아(`WalletService`, `BehaviorScoreService`,
+각종 Collector) 누락이 사실상 확정이다. CDC는 쓰기 경로를 몰라도 WAL에서 잡는다 —
+[ADR-042](decisions/042-outbox-based-es-indexing.md)가 ES 인덱싱에 대해 CDC를 기각하면서
+"DB 물리 분리 시점에는 다시 옳은 답이 된다"고 남긴 Revisit 조건이 이것이다.
+따라서 **CDC 도입은 이 작업의 전제 조건**이며, 순서는 `CDC 파이프라인 구축 → DB 분리`다.
+
 #### 6.3.3 시간 파티셔닝 (Phase 2)
 
 `ledger_events` / `orders` / `fills` / `alert_histories`는 월 단위 declarative partitioning.
@@ -757,13 +774,27 @@ spring.kafka.listener.concurrency: 8   # pod당 8 스레드, pod 8개 → 64 컨
   (`news-000001`, ILM: hot 7d → warm 30d → delete/archive). 현재는 단일 인덱스라
   샤드가 무한 증가한다.
 - `stocks`는 작고 변경이 드물다 → 샤드 1, replica N (읽기 확장).
-- **Dual-write 제거**: Debezium이 Postgres WAL을 읽어 `cdc.*` 토픽으로 보내고,
-  인덱서 워커가 소비해 ES에 bulk 색인한다.
+- **Dual-write 제거 — Outbox 방식으로 통일한다**
+  ([ADR-042](decisions/042-outbox-based-es-indexing.md)):
+
   ```
-  Postgres WAL → Debezium → Kafka cdc.news_articles → es-indexer → ES bulk (배치 1000건/1s)
+  도메인 이벤트 @Externalized → event_publication(같은 트랜잭션)
+      → Kafka search.index (key = "{index}:{docId}")
+      → EsIndexingConsumer → ES Bulk (배치 1,000건 / 1초)
   ```
-  이렇게 하면 ES 장애 시에도 Kafka에 이벤트가 남아 자동 복구되고, `@PostConstruct`
-  전체 재동기화가 필요 없어진다(리인덱싱은 Kafka 오프셋 리셋으로).
+
+  ES 장애 시에도 Kafka에 이벤트가 남아 자동 복구되고, `@PostConstruct` 전체 재동기화가
+  필요 없어진다(재색인은 오프셋 리셋으로).
+
+  > **정정 (2026-09-10)**: 이 절은 처음에 **Debezium CDC**를 적었다. ADR-042를 쓰면서
+  > 실제 코드를 확인한 결과 판단을 뒤집었다. 결정적 이유는 **CDC가 조인된 문서를 만들지
+  > 못한다**는 것이다 — `WatchlistItemDocument`는 `watchlist_items` + `watchlist_groups` +
+  > `stocks` 3-way 조인 결과라, CDC로 행 변경을 받아도 인덱서가 DB를 다시 조회해야 한다.
+  > 즉 CDC를 써도 "변경 감지"만 얻고 "문서 구성"은 여전히 앱 몫이다. 게다가 dual-write
+  > 지점이 6곳뿐이라(§3.10) CDC의 고정비(`wal_level=logical`, Kafka Connect 운영,
+  > replication slot 미소비 시 WAL 디스크 풀 리스크)를 정당화하지 못한다.
+  > **CDC 자체를 버린 건 아니다** — 도메인별 DB 물리 분리(§6.3.2, Phase 2) 시점에는
+  > 다시 옳은 답이 된다(ADR-042 Revisit When).
 - 대량 색인 시 `refresh_interval: 30s`, replica 0으로 색인 후 replica 복구.
 
 ### 6.8 주문 · 체결 — 매칭 엔진 샤딩
@@ -817,7 +848,9 @@ order.commands (파티션 64, key=stockId)
 ```
 
 - **룰 인덱스**: `worker-alert` 기동 시 전체 활성 룰 로드 → `Map<stockId, List<Rule>>`.
-  변경은 Debezium CDC(`alert_rules`) 또는 Redis pub/sub `alert:rules:invalidate`로 전파.
+  변경은 Redis pub/sub `alert:rules:invalidate`로 전 워커에 전파한다.
+  룰 CRUD는 초당 수 건 수준이라 CDC를 끌어올 이유가 없다 —
+  `AlertService`가 이미 유일한 쓰기 경로이므로 발행 지점도 한 곳이다.
   T2 기준 활성 룰 500만 건이라도 종목당 평균 400건 → 메모리 수백 MB, 조회 O(1).
 - **가격 임계값은 정렬 구조로**: 종목당 룰을 임계가 정렬 리스트로 유지하면 틱 가격으로
   이진 탐색해 "이번에 새로 넘긴 룰"만 뽑을 수 있다 → 전체 스캔 제거.
@@ -874,7 +907,7 @@ order.commands (파티션 64, key=stockId)
 | 1.4 | 캔들 파이프라인 Redis화 + 배치 INSERT (ADR-021 대체) | 6.2.3 |
 | 1.5 | 스크리너 ZSET 사전 계산 | 6.4.3 |
 | 1.6 | Kafka 스키마 레지스트리 | 6.5.3 |
-| 1.7 | ES 3노드 + ILM 롤오버 | 6.7 |
+| 1.7 | ES 3노드 + ILM 롤오버 + **Outbox 인덱싱 전환**([ADR-042](decisions/042-outbox-based-es-indexing.md)) | 6.7 |
 | 1.8 | Redis Bloom 전환 + 수집기 샤딩 | 6.6 |
 | 1.9 | L2 Caffeine 캐시 | 6.4.2 |
 | 1.10 | 관측성: 컨슈머 랙·WS 커넥션 메트릭, 꼬리 샘플링 | 6.11 |
@@ -886,7 +919,7 @@ order.commands (파티션 64, key=stockId)
 | 2.1 | 도메인별 DB 분리 (tsdb → trading-db 순) | 6.3.2 |
 | 2.2 | `ledger_events`/`orders`/`fills` 월 파티셔닝 | 6.3.3 |
 | 2.3 | 매칭 엔진 stockId 샤딩 + 주문 접수 202 비동기화 | 6.8 |
-| 2.4 | Debezium CDC 도입 (ES 인덱싱·알림 룰 무효화·읽기모델) | 6.7, 6.10 |
+| 2.4 | Debezium CDC 도입 — **크로스 DB 읽기모델 용도**(2.1의 전제 조건) | 6.3.2 |
 | 2.5 | 틱 아카이브 파이프라인 (Parquet → 오브젝트 스토리지) | 6.2.2 |
 | 2.6 | 백테스트 실행기를 DuckDB/Parquet으로 이전 + 잡 큐 | 6.9 |
 | 2.7 | CDN + Next.js ISR/edge 캐싱 | 6.4.2 |
@@ -972,25 +1005,37 @@ order.commands (파티션 64, key=stockId)
 ## 11. 필요한 ADR 목록
 
 착수 시 아래 ADR을 작성한다(CLAUDE.md의 ADR 작성 기준에 전부 해당).
-Phase 0의 4건은 **작성 완료**됐다.
 
-| 번호 | 제목 | 대체/갱신 대상 | 상태 |
-|-----|------|--------------|------|
-| [ADR-038](decisions/038-broadcast-consumer-partition-assignment.md) | 브로드캐스트 컨슈머 전 파티션 수동 할당 + conflation | ADR-029 갱신 노트. **ADR-033은 유지**(전용 티어를 지금 만들지 않기로 결정) | ✅ Accepted |
-| [ADR-039](decisions/039-drop-global-market-topic.md) | `/topic/market` 폐지 — 시장 요약 1Hz + 가시 종목 구독 | — | ✅ Accepted |
-| [ADR-040](decisions/040-kafka-topic-declaration.md) | Kafka 토픽 코드 선언 · auto-create 폐지 · 파티션 설계 | ADR-005/006 보강 (스키마 레지스트리는 Phase 1로 분리) | ✅ Accepted |
-| [ADR-041](decisions/041-timescale-hypertable-promotion.md) | 캔들 hypertable 승격·압축, **원시 틱 미저장 확정** | ADR-002 갱신 노트, ADR-021 제약 추가 | ✅ Accepted |
-| ADR-042 (예정) | 캔들 파이프라인 Redis 상태 + 배치 INSERT | **ADR-021을 Superseded로** | 미작성 |
-| ADR-043 (예정) | 원장 스냅샷 도입 (전체 replay 폐지) | **ADR-013 보강/수정** | 미작성 |
-| ADR-044 (예정) | 알림 룰 인메모리 인덱스 + CDC 무효화 | ADR-003 관련 | 미작성 |
-| ADR-045 (예정) | 읽기 복제본 라우팅 · PgBouncer | — | 미작성 |
-| ADR-046 (예정) | 도메인별 DB 물리 분리 | ADR-001 보강 | 미작성 |
-| ADR-047 (예정) | 매칭 엔진 stockId 샤딩 · 주문 접수 비동기화 | ADR-011 보강 | 미작성 |
-| ADR-048 (예정) | Debezium CDC 기반 ES 인덱싱 (dual-write 폐지) | — | 미작성 |
-| ADR-049 (예정) | Redis Bloom 전환 | **ADR-010을 Superseded로** | 미작성 |
-| ADR-050 (예정) | 셀 아키텍처 · 사용자 샤딩 | ADR-009 보강 | 미작성 |
-| ADR-0NN (예정) | Kafka 스키마 레지스트리 (Avro/Protobuf) | ADR-040 후속 | 미작성 |
-| ADR-0NN (예정) | fan-out 전용 티어 분리 | ADR-038의 Revisit 조건 도달 시 | 미작성 |
+**미작성 항목에는 번호를 미리 배정하지 않는다.** ADR 번호는 CLAUDE.md 규칙상
+"기존 최대 번호 + 1"로 작성 시점에 정해지므로, 예약해두면 작성 순서가 바뀔 때마다
+어긋난다(실제로 ADR-042는 원래 "캔들 파이프라인"으로 예약돼 있었으나 ES 인덱싱이
+먼저 작성되면서 그 번호를 가져갔다).
+
+### 작성 완료
+
+| 번호 | 제목 | 대체/갱신 대상 |
+|-----|------|--------------|
+| [ADR-038](decisions/038-broadcast-consumer-partition-assignment.md) | 브로드캐스트 컨슈머 전 파티션 수동 할당 + conflation | ADR-029 갱신 노트. **ADR-033은 유지**(전용 티어를 지금 만들지 않기로 결정) |
+| [ADR-039](decisions/039-drop-global-market-topic.md) | `/topic/market` 폐지 — 시장 요약 1Hz + 가시 종목 구독 | — |
+| [ADR-040](decisions/040-kafka-topic-declaration.md) | Kafka 토픽 코드 선언 · auto-create 폐지 · 파티션 설계 | ADR-005/006 보강 (스키마 레지스트리는 Phase 1로 분리) |
+| [ADR-041](decisions/041-timescale-hypertable-promotion.md) | 캔들 hypertable 승격·압축, **원시 틱 미저장 확정** | ADR-002 갱신 노트, ADR-021 제약 추가 |
+| [ADR-042](decisions/042-outbox-based-es-indexing.md) | ES 인덱싱을 **Outbox 단일 파이프라인**으로 통일, **CDC 미채택** | ADR-008 패턴 확장. §6.7의 Debezium 안을 대체 |
+
+### 미작성 (착수 시 번호 부여)
+
+| 제목 | 대체/갱신 대상 | Phase |
+|------|--------------|-------|
+| 캔들 파이프라인 Redis 상태 + 배치 INSERT | **ADR-021을 Superseded로** | 1 |
+| 원장 스냅샷 도입 (전체 replay 폐지) | **ADR-013 보강/수정** | 0~1 |
+| 알림 룰 인메모리 인덱스 + Redis pub/sub 무효화 | ADR-003 관련 | 0 |
+| 읽기 복제본 라우팅 · PgBouncer | — | 1 |
+| Kafka 스키마 레지스트리 (Avro/Protobuf) | ADR-040 후속 | 1 |
+| Redis Bloom 전환 | **ADR-010을 Superseded로** | 1 |
+| 도메인별 DB 물리 분리 | ADR-001 보강 | 2 |
+| **Debezium CDC 도입 — 크로스 DB 읽기모델** | ADR-042의 Revisit 조건. DB 분리의 전제 조건 | 2 |
+| 매칭 엔진 stockId 샤딩 · 주문 접수 비동기화 | ADR-011 보강 | 2 |
+| fan-out 전용 티어 분리 | ADR-038의 Revisit 조건 도달 시 | 2~3 |
+| 셀 아키텍처 · 사용자 샤딩 | ADR-009 보강 | 3 |
 
 ---
 

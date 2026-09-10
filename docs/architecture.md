@@ -1326,3 +1326,4 @@ portfolio_positions (
 | [ADR-039](decisions/039-drop-global-market-topic.md) | `/topic/market` 폐지 — 시장 요약 1Hz + 가시 종목 구독 | Accepted |
 | [ADR-040](decisions/040-kafka-topic-declaration.md) | Kafka 토픽 코드 선언 · auto-create 폐지 · 파티션 설계 | Accepted |
 | [ADR-041](decisions/041-timescale-hypertable-promotion.md) | TimescaleDB hypertable 승격·압축, 원시 틱 미저장 확정 | Accepted |
+| [ADR-042](decisions/042-outbox-based-es-indexing.md) | ES 인덱싱 Outbox 단일 파이프라인 통일 (CDC 미채택) | Accepted |
