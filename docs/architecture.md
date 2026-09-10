@@ -877,6 +877,10 @@ wallet:snapshot:{userId}           # 최신 wallet 스냅샷 캐시 (TTL 30s)
 | 4 | Kafka always-on — all ticks route through `market.ticks` | ✅ implemented |
 | 5 | Extract `trading-service` (:8083), distributed tx via `@AFTER_COMMIT` | ✅ implemented |
 
+Stage 6 이후(대규모 트래픽·데이터 가정)는 [scale-out-plan.md](scale-out-plan.md)에서 다룬다 —
+현재 구조에서 먼저 깨지는 지점(인메모리 STOMP 브로커, `/topic/market` 전역 브로드캐스트,
+Kafka 단일 파티션, 미가동 hypertable 등)의 인벤토리와 Phase 0~4 전환 계획.
+
 ---
 
 ## MSA Architecture
