@@ -92,6 +92,38 @@ class AlertEvaluator(
                 val threshold = (condition["threshold"] as? Number)?.toDouble() ?: return
                 currentPrice < BigDecimal.valueOf(threshold)
             }
+            "RSI_BELOW", "RSI_ABOVE" -> {
+                val period    = (condition["period"] as? Number)?.toInt() ?: 14
+                val threshold = (condition["threshold"] as? Number)?.toDouble() ?: return
+                val rsi = fetchRsi(rule.stockId, period) ?: return
+                if (rule.ruleType == "RSI_BELOW") rsi < threshold else rsi > threshold
+            }
+            "PRICE_BELOW_MA", "PRICE_ABOVE_MA" -> {
+                val period = (condition["period"] as? Number)?.toInt() ?: 20
+                val ma = jdbc.queryForObject(
+                    """
+                    SELECT AVG(close) FROM (
+                        SELECT close FROM candles_1d WHERE stock_id = ?
+                        ORDER BY candle_time DESC LIMIT ?
+                    ) t
+                    """,
+                    Double::class.java, rule.stockId, period,
+                ) ?: return
+                if (rule.ruleType == "PRICE_BELOW_MA") currentPrice < BigDecimal.valueOf(ma) else currentPrice > BigDecimal.valueOf(ma)
+            }
+            "HOLDING_DROP" -> {
+                val dropPct = (condition["dropPct"] as? Number)?.toDouble() ?: return
+                // 이 종목을 실제로 보유 중인 사용자에게만 의미가 있다 — 포지션이 없으면
+                // (전량 매도했거나 애초에 안 산 경우) 평가할 기준 자체가 없어 조용히 skip.
+                val avgBuyPrice = jdbc.query(
+                    "SELECT avg_buy_price FROM portfolio_positions WHERE user_id = ? AND stock_id = ? AND net_qty > 0",
+                    { rs, _ -> rs.getBigDecimal("avg_buy_price") },
+                    rule.userId, rule.stockId,
+                ).firstOrNull() ?: return
+                if (avgBuyPrice <= BigDecimal.ZERO) return
+                val actualDropPct = (avgBuyPrice - currentPrice).toDouble() / avgBuyPrice.toDouble() * 100
+                actualDropPct >= dropPct
+            }
             "VOLUME_SURGE" -> {
                 val surgeRatio = (condition["surgeRatio"] as? Number)?.toDouble() ?: 2.0
                 val period     = (condition["period"] as? Number)?.toInt() ?: 20
@@ -123,6 +155,32 @@ class AlertEvaluator(
             else -> false
         }
         if (triggered) dispatchAlert(rule, currentPrice)
+    }
+
+    // candles_1d 종가로 RSI(period)를 계산한다. backend/api의 quant/IndicatorEngine.rsi()와
+    // 알고리즘은 동일(Wilder smoothing)하지만, worker 모듈이 api 모듈에 대한 그레이들
+    // 의존성이 없어(백테스팅 엔진을 워커까지 끌어오면 배포 단위가 불필요하게 커진다)
+    // 순수 계산 로직만 별도로 옮겨왔다 — quant-engine 모듈에도 이미 동일 클래스가
+    // 중복 존재하는 것과 같은 이유다. 참고: docs/decisions/ 에 공유 지표 모듈 추출은
+    // 아직 없음 — RSI/MA 조건이 늘어나면 그때 재검토.
+    private fun fetchRsi(stockId: Long, period: Int): Double? {
+        val closes = jdbc.query(
+            "SELECT close FROM candles_1d WHERE stock_id = ? ORDER BY candle_time DESC LIMIT ?",
+            { rs, _ -> rs.getBigDecimal("close").toDouble() },
+            stockId, period * 3,
+        ).asReversed()
+        if (closes.size <= period) return null
+
+        val changes = closes.zipWithNext { a, b -> b - a }
+        var avgGain = changes.subList(0, period).filter { it > 0 }.sum() / period
+        var avgLoss = changes.subList(0, period).filter { it < 0 }.map { -it }.sum() / period
+        for (i in period until changes.size) {
+            val change = changes[i]
+            avgGain = (avgGain * (period - 1) + (if (change > 0) change else 0.0)) / period
+            avgLoss = (avgLoss * (period - 1) + (if (change < 0) -change else 0.0)) / period
+        }
+        if (avgLoss == 0.0) return 100.0
+        return 100.0 - 100.0 / (1 + avgGain / avgLoss)
     }
 
     private fun dispatchAlert(rule: AlertRuleRow, currentPrice: BigDecimal) {
@@ -209,10 +267,15 @@ class AlertEvaluator(
     }
 
     private fun buildMessage(rule: AlertRuleRow, price: BigDecimal) = when (rule.ruleType) {
-        "PRICE_ABOVE"  -> "가격이 ₩${price.toLong().formatKR()} 이상이 되었습니다"
-        "PRICE_BELOW"  -> "가격이 ₩${price.toLong().formatKR()} 이하가 되었습니다"
-        "VOLUME_SURGE" -> "거래량이 평균 대비 급증했습니다 (현재가 ₩${price.toLong().formatKR()})"
-        else           -> "알림 조건 충족: ${rule.ruleType}"
+        "PRICE_ABOVE"    -> "가격이 ₩${price.toLong().formatKR()} 이상이 되었습니다"
+        "PRICE_BELOW"    -> "가격이 ₩${price.toLong().formatKR()} 이하가 되었습니다"
+        "VOLUME_SURGE"   -> "거래량이 평균 대비 급증했습니다 (현재가 ₩${price.toLong().formatKR()})"
+        "RSI_BELOW"      -> "RSI가 과매도 구간에 진입했습니다 (현재가 ₩${price.toLong().formatKR()})"
+        "RSI_ABOVE"      -> "RSI가 과매수 구간에 진입했습니다 (현재가 ₩${price.toLong().formatKR()})"
+        "PRICE_BELOW_MA" -> "가격이 이동평균선 아래로 이탈했습니다 (현재가 ₩${price.toLong().formatKR()})"
+        "PRICE_ABOVE_MA" -> "가격이 이동평균선 위로 돌파했습니다 (현재가 ₩${price.toLong().formatKR()})"
+        "HOLDING_DROP"   -> "보유 종목이 평단가 대비 큰 폭으로 하락했습니다 (현재가 ₩${price.toLong().formatKR()})"
+        else             -> "알림 조건 충족: ${rule.ruleType}"
     }
 
     private fun Long.formatKR() = "%,d".format(this)
