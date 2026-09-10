@@ -1,7 +1,9 @@
 # monticker — 대규모 트래픽·데이터 대응 아키텍처 전환 계획
 
 > Read this when: 동시접속·틱 처리량·저장 데이터량이 지금의 10~1000배가 된다고 가정하고
-> 어디를 먼저 고쳐야 하는지 판단할 때. 현재 구조 설명은 [architecture.md](architecture.md),
+> 어디를 먼저 고쳐야 하는지 판단할 때. **가용성(장애 대응) 축은
+> [resilience-plan.md](resilience-plan.md)를 먼저 본다** — 그쪽의 P0 7건은 규모와 무관하게
+> 오늘 발생 가능한 전면 장애이며, Phase 0보다 먼저 처리해야 한다. 현재 구조 설명은 [architecture.md](architecture.md),
 > 상용화 체크리스트는 [launch-plan.md](launch-plan.md), 구현 대기열은
 > [engineering-backlog.md](engineering-backlog.md)를 본다. 이 문서는 **규모(scale)** 축만 다룬다.
 
