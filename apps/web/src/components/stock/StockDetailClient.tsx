@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import StockChart from "./chart/StockChart";
@@ -60,8 +60,16 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
   const [showVwap, setShowVwap] = useState(false);
   const [alertHighlight, setAlertHighlight] = useState(false);
   const [chartHeight, setChartHeight] = useState(300);
+  const [highlightEventId, setHighlightEventId] = useState<number | null>(null);
   const chartAreaRef = useRef<HTMLDivElement>(null);
   const { record: recordRecentlyViewed } = useRecentlyViewedStocks();
+
+  // 차트 이벤트 마커 클릭 → 이벤트 탭으로 전환하고 해당 이벤트로 스크롤+강조
+  // (크로스 내비게이션 — 차트/뉴스/이벤트가 탭으로 공존만 하고 서로 연결되지 않던 문제)
+  const handleEventMarkerClick = useCallback((eventId: number) => {
+    setLeftTab("events");
+    setHighlightEventId(eventId);
+  }, []);
 
   useEffect(() => {
     recordRecentlyViewed({ stockId, symbol, name: stockName, market });
@@ -148,7 +156,7 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
 
         {/* ===== 좌측: 차트 ===== */}
         <div className="flex min-h-0 flex-col gap-3.5">
-          <Card className="flex flex-[1.35] min-h-0 flex-col overflow-hidden p-0">
+          <Card outerClassName="flex flex-[1.35] min-h-0" className="flex flex-col min-h-0 overflow-hidden p-0">
             <div className="flex flex-0 items-center gap-2 border-b border-gray-100 dark:border-white/5 px-3.5 py-2">
               <span className="text-xs font-bold text-gray-900 dark:text-dracula-fg">차트</span>
               <div className="flex-1" />
@@ -174,6 +182,7 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
                     events={events}
                     height={chartHeight}
                     vwapData={showVwap ? vwapData : undefined}
+                    onEventClick={handleEventMarkerClick}
                   />
                 )}
               </div>
@@ -200,7 +209,7 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
             </div>
           </Card>
 
-          <Card className="flex flex-1 min-h-0 flex-col overflow-hidden p-0">
+          <Card outerClassName="flex flex-1 min-h-0" className="flex flex-col min-h-0 overflow-hidden p-0">
             <div className="flex flex-0 items-center gap-1 px-3.5 pt-2.5">
               {LEFT_TABS.map(t => (
                 <button key={t.value} onClick={() => setLeftTab(t.value)}
@@ -215,9 +224,16 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
             </div>
             <div className="mx-3.5 h-px bg-gray-100 dark:border-white/5 dark:bg-white/5" />
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              {leftTab === "summary" && <SummaryPanel stockId={stockId} symbol={symbol} bare />}
+              {leftTab === "summary" && <SummaryPanel stockId={stockId} symbol={symbol} bare onNavigate={setLeftTab} />}
               {leftTab === "news" && <NewsPanel stockId={stockId} bare />}
-              {leftTab === "events" && <EventTimeline stockId={stockId} bare />}
+              {leftTab === "events" && (
+                <EventTimeline
+                  stockId={stockId}
+                  bare
+                  highlightEventId={highlightEventId}
+                  onViewNews={() => setLeftTab("news")}
+                />
+              )}
               {leftTab === "community" && <StockCommentPanel stockId={stockId} bare />}
             </div>
           </Card>

@@ -52,6 +52,7 @@ export default function EChartsAdapter({
   height = 420,
   theme,
   vwapData,
+  onEventClick,
 }: ChartAdapterProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef     = useRef<import("echarts").ECharts | null>(null);
@@ -81,6 +82,9 @@ export default function EChartsAdapter({
             value: e.title.slice(0, 6),
             itemStyle: { color: EVENT_COLORS[e.eventType] ?? EVENT_COLORS.default },
             symbolSize: e.importanceScore > 70 ? 14 : 9,
+            // markPoint 데이터 항목에 자유 필드를 얹어두면 클릭 이벤트의 params.data로
+            // 그대로 돌아온다 — 이벤트 타임라인으로 점프할 때 이 id로 정확히 매칭한다.
+            eventId: e.id,
           };
         })
         .filter(Boolean);
@@ -339,6 +343,13 @@ export default function EChartsAdapter({
       const opt = buildOption();
       if (opt) chart.setOption(opt as Parameters<typeof chart.setOption>[0]);
 
+      chart.on("click", (params) => {
+        const p = params as { componentType?: string; data?: { eventId?: number } };
+        if (p.componentType === "markPoint" && p.data?.eventId != null) {
+          onEventClick?.(p.data.eventId);
+        }
+      });
+
       const onResize = () => {
         if (containerRef.current && chartRef.current && !chartRef.current.isDisposed()) {
           chartRef.current.resize({ width: containerRef.current.clientWidth });
@@ -355,7 +366,7 @@ export default function EChartsAdapter({
         chartRef.current = null;
       }
     };
-  }, [candles, events, height, theme, buildOption]);
+  }, [candles, events, height, theme, buildOption, onEventClick]);
 
   return (
     <div
