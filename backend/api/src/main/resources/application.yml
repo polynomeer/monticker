@@ -29,6 +29,12 @@ spring:
       initialize-schema: never   # V17 Flyway 마이그레이션으로 관리
     job:
       enabled: false             # 기동 시 자동 실행 방지 — BatchJobScheduler가 직접 실행
+  # Spring Boot 3의 ES 접속 키는 spring.elasticsearch.uris 다. 이전에는 spring.data.elasticsearch.uris
+  # (Boot 3에 존재하지 않는 키)에 두어 ELASTICSEARCH_URI가 조용히 무시되고 기본값 localhost:9200을 썼다 —
+  # 컨테이너 배포에서는 ES에 한 번도 연결된 적이 없었고 전부 DB 폴백으로 동작했다.
+  # CH-04 카오스 실험이 search_fallback_total로 잡아냈다 (resilience-plan §6.3).
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URI:http://localhost:9200}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -39,8 +45,6 @@ spring:
       connect-timeout: 500ms
     mongodb:
       uri: ${MONGODB_URI:mongodb://monticker:monticker@localhost:27017/monticker?authSource=admin}
-    elasticsearch:
-      uris: ${ELASTICSEARCH_URI:http://localhost:9200}
   kafka:
     bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
     producer:

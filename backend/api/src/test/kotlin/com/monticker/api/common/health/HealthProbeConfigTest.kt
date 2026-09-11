@@ -50,4 +50,15 @@ class HealthProbeConfigTest {
         val hikari = ((yaml["spring"] as Map<String, Any>)["datasource"] as Map<String, Any>)["hikari"] as Map<String, Any>
         assertThat(hikari["connection-init-sql"] as String).contains("statement_timeout")
     }
+
+    @Suppress("UNCHECKED_CAST")
+    @Test
+    fun `ES 접속 URI는 Boot 3의 유효한 키(spring_elasticsearch_uris)에 있다`() {
+        // spring.data.elasticsearch.uris 는 Boot 3에 존재하지 않아 조용히 무시된다 — CH-04에서 발견.
+        val yaml = Yaml().load<Map<String, Any>>(javaClass.getResourceAsStream("/application.yml"))
+        val spring = yaml["spring"] as Map<String, Any>
+        assertThat((spring["elasticsearch"] as Map<String, Any>)["uris"] as String).contains("ELASTICSEARCH_URI")
+        val data = spring["data"] as Map<String, Any>
+        assertThat(data).doesNotContainKey("elasticsearch")
+    }
 }
