@@ -923,7 +923,7 @@ order.commands (파티션 64, key=stockId)
 | 0.4 ✅ | 캔들 hypertable 승격 + CI 검증 ([ADR-041](decisions/041-timescale-hypertable-promotion.md)) — V42, 통합 테스트 4건 | §3.5, ADR-021이 이미 지적 | M |
 | 0.5 ✅ | 압축 정책 + `price_ticks`/죽은 코드 제거 ([ADR-041](decisions/041-timescale-hypertable-promotion.md)) — 같은 V42 | §3.5 | S |
 | 0.6 | 원장 커서 페이징 + 대사 스냅샷 ([ADR-043](decisions/043-ledger-pagination-and-reconciliation.md)) | §3.6 | M |
-| 0.7 | 알림 룰 인메모리 인덱스 + 평가/발송 분리 ([ADR-044](decisions/044-alert-rule-in-memory-index.md)) | §3.4 | M |
+| 0.7 ✅ | 알림 룰 인메모리 인덱스 + 평가/발송 분리 ([ADR-044](decisions/044-alert-rule-in-memory-index.md)) — `67ef564` `53f5902`. **가설 정정**: L-03 상한의 실제 원인은 감지기 Redis 왕복([ADR-046](decisions/046-detector-state-in-memory.md)), 600→5,000 tick/s | §3.4 | M |
 | 0.8 | SLO 정의 + 검증 하네스 확장 ([ADR-045](decisions/045-performance-slo-and-verification-harness.md)) | 이후 모든 판단의 근거 | M |
 
 > 0.8을 먼저 하는 것도 방법이다. **기준선 없이 최적화하면 개선을 증명할 수 없다.**
@@ -1060,6 +1060,7 @@ load/stress/spike는 정의만 있고 실행된 적이 없다.
 | [ADR-043](decisions/043-ledger-pagination-and-reconciliation.md) | 원장 커서 페이징 + **대사(reconciliation) 스냅샷** | **ADR-013 서술 정정**(잔고=replay는 구현된 적 없음). §3.6 진단 정정 |
 | [ADR-044](decisions/044-alert-rule-in-memory-index.md) | 알림 룰 인메모리 인덱스 · `avg_vol` 배치화 · 평가/발송 분리 | ADR-003 관련. ADR-040에 `notify.commands` 토픽 추가 |
 | [ADR-045](decisions/045-performance-slo-and-verification-harness.md) | 워크로드별 SLO 정의 + 검증 하네스 범위 (정합성 포함) | — |
+| [ADR-046](decisions/046-detector-state-in-memory.md) | 감지기 EMA 상태 Redis → 메모리 (틱당 Redis 왕복 7→1) | ADR-003 보강. L-03 프로파일링 결과 |
 
 ### 미작성 (착수 시 번호 부여)
 
