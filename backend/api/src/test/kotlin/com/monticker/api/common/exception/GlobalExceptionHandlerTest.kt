@@ -115,4 +115,15 @@ class GlobalExceptionHandlerTest {
         assertThat(resp.body?.timestamp).isNotNull()
         assertThat(resp.body?.status).isEqualTo(400)
     }
+
+    // CH-06 실험에서 발견: 브레이커 OPEN이 500으로 나가면 "우리 버그"로 오염되고 클라이언트는
+    // 재시도 여부를 알 수 없다. 503 + Retry-After 로 매핑한다.
+    @Test
+    fun `ExternalServiceUnavailableException은 503과 Retry-After를 반환한다`() {
+        val resp = handler.handleExternalUnavailable(
+            ExternalServiceUnavailableException("kis", "KIS API 장애로 서킷브레이커가 열려 있습니다.", retryAfterSeconds = 30))
+        assertThat(resp.statusCode.value()).isEqualTo(503)
+        assertThat(resp.headers.getFirst("Retry-After")).isEqualTo("30")
+        assertThat(resp.body!!.detail).isEqualTo("service=kis")
+    }
 }

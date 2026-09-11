@@ -1,6 +1,7 @@
 package com.monticker.api.brokerage.infrastructure
 
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.monticker.api.common.exception.ExternalServiceUnavailableException
 import com.monticker.api.common.http.HttpTimeouts
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
@@ -87,7 +88,7 @@ class KisBrokerageClient(
             }
         } catch (e: CallNotPermittedException) {
             log.warn("[CircuitBreaker:kis] 요청 차단됨 — 토큰 발급 건너뜀")
-            throw IllegalStateException("KIS API 장애로 서킷브레이커가 열려 있습니다. 잠시 후 다시 시도하세요.", e)
+            throw ExternalServiceUnavailableException("kis", "KIS API 장애로 서킷브레이커가 열려 있습니다. 잠시 후 다시 시도하세요.", e)
         } catch (e: RestClientException) {
             log.error("[KIS] 토큰 발급 실패: {}", e.message)
             throw IllegalStateException("KIS 토큰 발급 실패: ${e.message}", e)
