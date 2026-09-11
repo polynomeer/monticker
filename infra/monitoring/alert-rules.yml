@@ -1,42 +1,141 @@
+# monticker 알람 규칙 — docker-compose(prometheus.yml)와 K8s(infra/monitoring/kustomization.yaml)가
+# 같은 파일을 쓴다. resilience-plan §4.5의 3계층:
+#
+#   severity: critical → Page  (사람을 깨운다. 사용자가 지금 아프다)
+#   severity: warning  → Ticket(업무시간 대응. 곧 아프다)
+#   그 외             → 대시보드에만 (알람 아님)
+#
+# 원칙: 알람은 증상(사용자가 겪는 것)에 건다. "CPU 80%"는 알람이 아니라 대시보드 항목이다.
+# 사용자가 아프지 않으면 깨우지 않는다 — 신뢰를 잃은 신호는 신호가 아니다.
+#
+# 메트릭 출처: Spring Boot Actuator(Micrometer) + resilience4j-micrometer + 이 저장소가 직접 등록한
+# 카운터(redis_command_failed_total, search_fallback_total, candle_flush_failed_total,
+# alert_rule_eval_failed_total, dlt_messages_total, ws_active_connections, outbox_pending_total,
+# saga_incomplete_total). 규칙을 추가할 때는 그 메트릭이 실제로 노출되는지 먼저 확인할 것 —
+# 존재하지 않는 메트릭에 건 알람은 영원히 조용하다.
+
 groups:
-  - name: monticker-availability
+  # ───────────────────────────── Page ─────────────────────────────
+  - name: monticker-page
     rules:
-      - alert: ServiceDown
-        expr: up{job=~"monticker-.*"} == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "{{ $labels.job }} 다운"
-          description: "{{ $labels.job }}({{ $labels.instance }})이 1분 이상 스크레이프에 응답하지 않습니다."
-
-      - alert: HighHttpErrorRate
+      - alert: AllReplicasDown
+        # 단일 pod 다운은 K8s가 처리한다. 사용자가 아픈 건 전부 죽었을 때다.
         expr: |
-          sum by (application) (rate(http_server_requests_seconds_count{status=~"5.."}[5m]))
+          sum by (job) (up{job=~"monticker-(api|trading-service)"}) == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.job }} 전 replica 다운"
+          description: "{{ $labels.job }}의 모든 인스턴스가 1분 이상 스크레이프에 응답하지 않습니다. 사용자에게 서비스가 보이지 않는 상태입니다."
+
+      - alert: ApiErrorBudgetBurn
+        expr: |
+          sum by (application) (rate(http_server_requests_seconds_count{application="monticker-api", status=~"5.."}[5m]))
           /
-          sum by (application) (rate(http_server_requests_seconds_count[5m]))
-          > 0.05
+          sum by (application) (rate(http_server_requests_seconds_count{application="monticker-api"}[5m]))
+          > 0.01
         for: 5m
-        labels:
-          severity: critical
+        labels: { severity: critical }
         annotations:
-          summary: "{{ $labels.application }} 5xx 비율 5% 초과"
-          description: "지난 5분간 {{ $labels.application }}의 5xx 응답 비율이 5%를 넘었습니다. 실거래(브로커 주문) 경로일 경우 즉시 확인 필요."
+          summary: "API 5xx 비율 1% 초과"
+          description: "지난 5분간 5xx 비율 {{ $value | humanizePercentage }}. 조회 SLO(99.9%)의 에러버짓을 빠르게 소진 중입니다."
 
-  - name: monticker-resilience
-    rules:
-      # KIS/Toss 등 브로커 API 서킷브레이커가 OPEN이면 실주문이 전부 REJECTED로 폴백 중이라는 뜻이다.
-      - alert: CircuitBreakerOpen
-        expr: resilience4j_circuitbreaker_state{state="open"} == 1
+      - alert: ApiLatencyHigh
+        # application.yml의 percentiles-histogram 설정이 있어야 버킷이 노출된다.
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(http_server_requests_seconds_bucket{application="monticker-api", uri!~"/actuator.*"}[5m]))
+          ) > 0.5
+        for: 10m
+        labels: { severity: critical }
+        annotations:
+          summary: "API p95 지연 500ms 초과"
+          description: "10분 이상 p95 {{ $value | humanizeDuration }}. 조회 SLO(p95 < 200ms)의 2.5배입니다."
+
+      - alert: OrderPathDown
+        # 실제 돈이 움직이는 엔드포인트만 따로 본다. 전체 5xx 비율에 묻히면 안 된다.
+        expr: |
+          sum (rate(http_server_requests_seconds_count{uri=~"/api/(brokerage|matching)/orders", status=~"5.."}[2m]))
+          /
+          sum (rate(http_server_requests_seconds_count{uri=~"/api/(brokerage|matching)/orders"}[2m]))
+          > 0.05
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "주문 경로 5xx 5% 초과"
+          description: "주문 접수 엔드포인트의 5xx 비율이 {{ $value | humanizePercentage }}입니다. 실거래 주문이 실패하고 있을 수 있습니다."
+
+      - alert: BrokerCircuitOpen
+        # KIS/Toss 브레이커가 열리면 실주문이 전부 즉시 실패 처리된다.
+        expr: |
+          resilience4j_circuitbreaker_state{name=~"kis|toss", state="open"} == 1
         for: 30s
-        labels:
-          severity: critical
+        labels: { severity: critical }
         annotations:
-          summary: "서킷브레이커 {{ $labels.name }} OPEN"
-          description: "{{ $labels.name }} 서킷브레이커가 열렸습니다 — 해당 외부 API 호출이 즉시 실패 처리되고 있습니다(브로커라면 실주문이 막힌 상태)."
+          summary: "브로커 서킷브레이커 {{ $labels.name }} OPEN"
+          description: "{{ $labels.name }} 증권사 API 호출이 차단 중입니다 — 실주문이 막힌 상태. 증권사 장애인지 우리 쪽 타임아웃인지 확인할 것 (runbook: broker-cb-open)."
 
-  - name: monticker-resources
+      - alert: TickPipelineStalled
+        # 장중인데 틱이 흐르지 않는다. 시간대 조건은 KST 09:00~15:30 (UTC 00:00~06:30) 평일.
+        expr: |
+          (
+            sum(rate(tick_latency_total_pipeline_seconds_count[3m])) == 0
+            or
+            max(kafka_consumer_fetch_manager_records_lag_max{topic="market.ticks"}) > 60000
+          )
+          and on() (hour() >= 0 and hour() < 7 and day_of_week() >= 1 and day_of_week() <= 5)
+        for: 3m
+        labels: { severity: critical }
+        annotations:
+          summary: "장중 틱 파이프라인 정지"
+          description: "장중인데 3분간 처리된 틱이 0이거나 market.ticks 컨슈머 랙이 60,000건을 넘었습니다. 사용자에게 시세가 멈춰 보입니다 (runbook: tick-stalled)."
+
+      - alert: LedgerMismatch
+        # ADR-043 대사 배치가 올리는 카운터. 잔고 정합성 에러버짓은 0 — 하나라도 나면 조사한다.
+        # 자동 교정 금지 (runbook: ledger-mismatch).
+        expr: increase(ledger_reconciliation_mismatch_total[1h]) > 0
+        labels: { severity: critical }
+        annotations:
+          summary: "원장-잔고 불일치 감지"
+          description: "지난 1시간 대사에서 {{ $value }}건의 컬럼 잔고 vs 원장 합계 불일치가 발생했습니다. 자동 교정하지 말고 조사할 것."
+
+      - alert: IdempotencyStoreDown
+        # 멱등성은 fail-closed(ADR/P0-1)라 Redis가 죽으면 주문이 503으로 거절된다. 사용자가 즉시 아프다.
+        expr: increase(redis_command_failed_total{op=~"idempotency_.*"}[2m]) > 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "멱등성 저장소(Redis) 실패 — 주문 거절 중"
+          description: "IdempotencyFilter가 Redis에 접근하지 못해 주문·결제 요청을 503으로 거절하고 있습니다 (runbook: redis-down)."
+
+  # ───────────────────────────── Ticket ─────────────────────────────
+  - name: monticker-ticket
     rules:
+      - alert: RedisFailOpenSustained
+        # 레이트리밋·캐시가 fail-open으로 5분 넘게 돌고 있다 — 남용 방어가 꺼진 채 운영 중.
+        expr: sum by (op) (increase(redis_command_failed_total{policy="open"}[5m])) > 10
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Redis fail-open 지속 (op={{ $labels.op }})"
+          description: "5분간 {{ $value }}회 Redis 실패로 fail-open이 발동했습니다. 서비스는 살아있지만 레이트리밋/캐시 없이 돌고 있습니다."
+
+      - alert: HikariPoolNearExhaustion
+        expr: hikaricp_connections_active / hikaricp_connections_max > 0.9
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.application }} DB 커넥션 풀 90% 이상"
+          description: "느린 쿼리나 커넥션 누수를 의심할 것. statement_timeout이 발동하고 있는지 로그 확인."
+
+      - alert: HikariPendingThreads
+        expr: hikaricp_connections_pending > 5
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.application }} 커넥션 대기 스레드 {{ $value }}개"
+          description: "요청이 DB 커넥션을 기다리고 있습니다. 풀 고갈 직전 신호."
+
       - alert: HighJvmHeapUsage
         expr: |
           sum by (application) (jvm_memory_used_bytes{area="heap"})
@@ -44,18 +143,91 @@ groups:
           sum by (application) (jvm_memory_max_bytes{area="heap"} > 0)
           > 0.85
         for: 10m
-        labels:
-          severity: warning
+        labels: { severity: warning }
         annotations:
-          summary: "{{ $labels.application }} 힙 사용률 85% 초과"
-          description: "10분 이상 힙 사용률이 85%를 넘었습니다. GC 압박 또는 메모리 누수 가능성."
+          summary: "{{ $labels.application }} 힙 85% 초과"
+          description: "10분 이상 힙 사용률 85% 초과. GC 압박 또는 누수 가능성. 알림 룰 인덱스(ADR-044)나 캔들 상태가 커지고 있는지 확인."
 
-      - alert: HikariPoolNearExhaustion
-        expr: |
-          hikaricp_connections_active / hikaricp_connections_max > 0.9
+      - alert: NonBrokerCircuitOpen
+        # 브로커 외 CB(yahoo, naver, dart, expo, MSA 프록시)는 폴백이 있어 사용자가 즉시 아프지는 않다.
+        expr: resilience4j_circuitbreaker_state{name!~"kis|toss", state="open"} == 1
         for: 5m
-        labels:
-          severity: warning
+        labels: { severity: warning }
         annotations:
-          summary: "{{ $labels.application }} DB 커넥션 풀 90% 이상 사용 중"
-          description: "커넥션 풀이 고갈에 가까워지고 있습니다 — 느린 쿼리나 커넥션 누수를 의심할 것."
+          summary: "서킷브레이커 {{ $labels.name }} OPEN 5분 지속"
+          description: "{{ $labels.name }}이 폴백으로 동작 중입니다. 외부 API 상태를 확인할 것."
+
+      - alert: DltMessagesGrowing
+        expr: sum by (topic) (increase(dlt_messages_total[15m])) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "DLT 유입: {{ $labels.topic }}"
+          description: "지난 15분간 {{ $value }}건이 재시도 후 DLT로 갔습니다. 수동 재처리 대상 — 원인을 보고 재발행할 것."
+
+      - alert: OutboxBacklog
+        expr: outbox_pending_total > 100 or outbox_oldest_age_seconds > 600
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Outbox 적체"
+          description: "event_publication에 미완료 이벤트 {{ $value }}건 또는 10분 이상 된 이벤트가 있습니다. Kafka 발행이 막혀 있을 수 있습니다."
+
+      - alert: SagaIncomplete
+        expr: saga_incomplete_total > 0
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "미완료 Saga {{ $value }}건 15분 잔류"
+          description: "order_sagas에 STARTED/COMPENSATING 상태가 15분 이상 남아 있습니다. 자동 복구(5분 주기)가 실패 중 — 수동 검토."
+
+      - alert: SearchFallbackSustained
+        # ES가 죽은 채 몇 주가 지나도 모르는 상황을 막는다 (resilience-plan §A6).
+        expr: sum by (index) (increase(search_fallback_total[10m])) > 20
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "검색 폴백 지속 (index={{ $labels.index }})"
+          description: "ES 검색이 10분 이상 DB 폴백으로 동작 중입니다. 사용자는 검색 품질 저하만 겪지만 ES 상태를 확인할 것."
+
+      - alert: CandleFlushFailing
+        expr: increase(candle_flush_failed_total[10m]) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "캔들 저장 실패"
+          description: "지난 10분간 {{ $value }}건의 candles_1m/1d upsert가 실패했습니다. 압축 chunk 충돌(ADR-041)이나 DB 문제. 조용히 캔들이 비어가는 중."
+
+      - alert: AlertRuleEvalFailing
+        # VOLUME_SURGE가 무효 SQL로 한 번도 발동한 적 없었던 사고의 재발 방지 (ADR-044).
+        expr: sum by (ruleType) (increase(alert_rule_eval_failed_total[10m])) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "알림 룰 평가 실패 (ruleType={{ $labels.ruleType }})"
+          description: "지난 10분간 {{ $value }}건 평가 실패. 이 룰 타입의 알림이 조용히 발동하지 않고 있습니다."
+
+      - alert: BacktestQueueSaturated
+        expr: executor_queued_tasks{name="backtestExecutor"} >= 20
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "백테스트 큐 포화"
+          description: "bulkhead 큐(20)가 5분 이상 가득 찼습니다. 신규 요청은 429로 거절 중. quant-engine 확장 검토."
+
+      - alert: WsConnectionsSkewed
+        # 한 pod에 연결이 몰리면 그 pod의 fan-out 비용이 편중된다 (ADR-038).
+        expr: |
+          max(ws_active_connections) > 2 * (avg(ws_active_connections) + 50)
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "WebSocket 연결 pod 편중"
+          description: "최대 {{ $value }} 연결인 pod가 평균의 2배를 넘습니다. LB 세션 고정이나 재연결 폭주를 확인."
+
+      - alert: ExternalHttpSlow
+        # 타임아웃(P0-2) 전에 "느리다"를 먼저 본다. slowCallDurationThreshold를 넘긴 호출 비율(%).
+        # resilience4j가 슬라이딩 윈도우 기준으로 계산해 게이지로 노출한다(-1 = 표본 부족).
+        expr: resilience4j_circuitbreaker_slow_call_rate > 20
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "외부 호출 느림: {{ $labels.name }}"
+          description: "{{ $labels.name }} 호출의 {{ $value }}%가 slow-call 임계를 넘었습니다. 브레이커가 열리기 전 단계."
