@@ -144,6 +144,13 @@ management:
         enabled: true
     tags:
       application: monticker-api
+    distribution:
+      # ApiLatencyHigh 알람(alert-rules.yml)이 histogram_quantile로 p95를 계산하려면 버킷이 필요하다.
+      # slo 경계는 resilience-plan §4.3의 조회 SLO(p95 200ms, p99 500ms) 기준.
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 50ms,100ms,200ms,500ms,1s,2s
   tracing:
     sampling:
       probability: 1.0
