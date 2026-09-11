@@ -57,4 +57,11 @@ class PriceBroadcasterTest {
         broadcaster.flush()
         verify(exactly = 0) { template.convertAndSend(any<String>(), any<Any>()) }
     }
+
+    // ADR-039 — 전역 토픽은 폐지됐다. 다시 생기면 L-02의 50,000 msg/s로 돌아간다.
+    @Test
+    fun `전역 topic market 으로는 아무것도 보내지 않는다`() {
+        broadcaster.broadcast(tick(1, 100)); broadcaster.flush()
+        verify(exactly = 0) { template.convertAndSend("/topic/market", any<Any>()) }
+    }
 }

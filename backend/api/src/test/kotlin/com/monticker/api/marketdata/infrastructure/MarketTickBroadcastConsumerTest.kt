@@ -18,7 +18,7 @@ class MarketTickBroadcastConsumerTest {
 
     @Test
     fun `파티션 n개 전부를 END 위치로 할당한다 — 하나라도 빠지면 그 파티션의 종목은 어떤 클라이언트도 못 받는다`() {
-        val a = MarketTickBroadcastConsumer.assignmentsFor(256)
+        val a = AllPartitionsListener.assignmentsFor("market.ticks", 256)
         assertThat(a).hasSize(256)
         assertThat(a.map { it.partition }).containsExactlyElementsOf(0 until 256)
         assertThat(a.map { it.topic }.toSet()).containsExactly("market.ticks")
