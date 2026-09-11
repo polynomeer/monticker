@@ -13,6 +13,17 @@ patches:
     target:
       kind: HorizontalPodAutoscaler
       name: api-hpa
+  # prod: 개장 전 예약 스케일업 값(P1-4). BASE는 위 minReplicas와 같아야 장 마감 후 원복이 맞다.
+  - patch: |-
+      - op: replace
+        path: /data/PREOPEN_MIN_REPLICAS
+        value: "6"
+      - op: replace
+        path: /data/BASE_MIN_REPLICAS
+        value: "3"
+    target:
+      kind: ConfigMap
+      name: scaling-schedule
 
 images:
   - name: monticker/api
