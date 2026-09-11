@@ -10,6 +10,9 @@ spring:
       maximum-pool-size: 20
       minimum-idle: 5
       connection-timeout: 3000
+      # resilience-plan §A4 / P1-3 — 느린 쿼리가 커넥션을 무한정 잡고 풀을 고갈시키는 것을 막는다.
+      # 물리 커넥션마다 1회 실행된다. 10s: 순수 OLTP — 주문·체결·원장. 10초 넘는 쿼리는 이미 사고다.
+      connection-init-sql: "SET statement_timeout = '10s'"
   jpa:
     hibernate:
       ddl-auto: validate
