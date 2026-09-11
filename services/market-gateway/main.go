@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -44,8 +45,15 @@ func main() {
 	producer := kafkaproducer.New(brokers)
 	defer producer.Close()
 
-	log.Printf("market-gateway: publishing to kafka brokers=%s topic=%s", brokers, kafkaproducer.TicksTopic)
-	generator.Run(ctx, stocks, producer, 1*time.Second)
+	// TICK_INTERVAL_MS: 종목당 틱 간격. 기본 1000ms(=종목 수 tick/s). 부하 시나리오 L-03(tick-storm)이
+	// 20ms 등으로 낮춰 초당 수만 틱을 만든다 — resilience-plan §5.1.
+	interval := 1000 * time.Millisecond
+	if v, err := strconv.Atoi(getenv("TICK_INTERVAL_MS", "1000")); err == nil && v > 0 {
+		interval = time.Duration(v) * time.Millisecond
+	}
+	log.Printf("market-gateway: publishing to kafka brokers=%s topic=%s interval=%s (~%d tick/s)",
+		brokers, kafkaproducer.TicksTopic, interval, int(float64(len(stocks))/interval.Seconds()))
+	generator.Run(ctx, stocks, producer, interval)
 	log.Println("market-gateway: shutting down")
 }
 
