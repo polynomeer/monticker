@@ -6,6 +6,11 @@
 
 작성일: 2026-09-10 · 기준 커밋: `00d7bd6` · 상태: **판정 결과 + 설계안**
 
+> **진행 (2026-09-11)**: §3의 **P0 7건 전부 구현·커밋 완료.** 상세는 §3.1.
+> 구현 중 추가로 발견: `trading-service`가 `replicas: 2`였다 — 호가창이 pod 메모리에 있어
+> 두 pod의 주문이 서로 체결되지 않는다(§E6이 "현재는 단일 인스턴스라 안전"이라고 적은 게
+> 틀렸다). 1로 고정했다. 다음 단계는 P1-1(K8s 관측 스택)과 §5 부하 기준선.
+
 ---
 
 ## 0. 판정 요약
@@ -264,7 +269,7 @@ RestClient.builder()
 | E3 | Saga 미완료 잔류 | **가능** | 5분 주기 `recoverIncomplete()` |
 | E4 | 캔들 유실 | **부분** | 인메모리 상태, 리밸런스·강제종료 시 유실 |
 | E5 | ES 드리프트 | **불가** | dual-write 실패를 `log.warn`으로 삼킴 ([ADR-042](decisions/042-outbox-based-es-indexing.md)) |
-| E6 | 이중 체결 | **부분** | 매칭 엔진 단일 인스턴스라 현재는 안전. 샤딩 시 위험 |
+| E6 | 이중 체결 / 미체결 | **불가 → 수정됨** | ~~단일 인스턴스라 안전~~ **틀렸다** — `trading-service.yaml`이 `replicas: 2`였고 호가창은 pod 메모리에 있다. 두 pod에 나뉜 주문은 서로 체결되지 않는다. `6871c0d`에서 1 + Recreate로 고정 |
 | E7 | 조용한 계산 오류 | **불가** | `VOLUME_SURGE`가 무효 SQL로 **한 번도 발동한 적 없었던** 전례([ADR-044](decisions/044-alert-rule-in-memory-index.md)) |
 
 **E7이 이 저장소의 구조적 패턴이다.** `runCatching`/`catch` 후 `WARN`/`DEBUG`만 남기는
@@ -306,6 +311,24 @@ RestClient.builder()
 
 Phase 0의 ADR-038~045는 이 목록과 **직교한다** — 저쪽은 규모, 이쪽은 가용성이다.
 **P0는 Phase 0보다 먼저 한다.** Phase 0을 검증하려면 그전에 관측이 가능해야 한다.
+
+### 3.1 P0 실행 기록 (2026-09-11)
+
+| 항목 | 커밋 | 검증 |
+|------|------|------|
+| P0-1 Redis 실패 정책 | `bf4900c` | `RedisGuard` fail-open(레이트리밋·로그인 카운터·캐시) / fail-closed(멱등성 → 503+Retry-After). 카운터 `redis_command_failed_total{op,policy}`. Lettuce 타임아웃 200ms. 단위 테스트 27건 |
+| P0-2 HTTP 타임아웃 + slow-call CB | `557c832` `5e34eb0` | api RestClient 3곳·RestTemplate 1곳·HttpRequest 1곳, worker HttpRequest 8곳. CB 9개 전부 `slowCallRateThreshold`. **매달리는 서버를 띄워 타임아웃 발동을 실측**하는 테스트 포함 |
+| P0-3 Alertmanager 채널 | `92f8b9a` | `SLACK_WEBHOOK_URL` → sed 렌더링, critical/warning 채널 분리. 양쪽 모드 컨테이너 기동 확인. **웹훅 발급은 사람 몫** — [human-action-items §3](human-action-items.md) |
+| P0-4 `X-Bench` 우회 | `bf4900c` | `app.rate-limit.bench-bypass-enabled` 기본 false, local/dev만 true |
+| P0-5 백업 스케줄 + 리허설 | `8845fee` | CronJob 매일 03:15 KST + 주 1회 복원 리허설. 로컬에서 **리허설 PASS**(9 테이블, 캔들 217,051행 일치). S3 버킷은 사람 몫 |
+| P0-6 readiness에 db | `c9d2b63`~`d4ceb60` | 4개 서비스. liveness에는 넣지 않음(재시작 루프 방지). yml 파싱 테스트로 고정 |
+| P0-7 PDB + topologySpread | `e99d63c` | replica≥2인 6개 배포. `kubectl kustomize` 렌더링 확인 |
+| (추가) trading-service replica 1 고정 | `6871c0d` | §E6 정정 — 인메모리 호가창 |
+
+전체 단위 테스트: api 492/492, worker 83/83.
+
+**아직 검증하지 않은 것**: 카오스 실험 CH-01/02/06/08은 관측 스택(P1-1)이 있어야 "성공"을
+증명할 수 있다. 지금은 단위 테스트가 각 정책의 동작을 고정했을 뿐, 실제 Redis를 죽여본 건 아니다.
 
 ---
 
