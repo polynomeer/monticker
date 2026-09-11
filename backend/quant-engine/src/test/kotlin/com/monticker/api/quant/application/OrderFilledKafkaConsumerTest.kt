@@ -1,5 +1,6 @@
 package com.monticker.api.quant.application
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.api.matching.events.OrderFilledEvent
 import org.apache.kafka.clients.consumer.ConsumerRecord
@@ -16,7 +17,7 @@ import java.time.Instant
  */
 class OrderFilledKafkaConsumerTest {
 
-    private val consumer = OrderFilledKafkaConsumer()
+    private val consumer = OrderFilledKafkaConsumer(SimpleMeterRegistry())
     private val mapper   = ObjectMapper().findAndRegisterModules()
 
     private fun record(payload: String) =
