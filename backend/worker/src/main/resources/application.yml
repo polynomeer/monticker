@@ -10,6 +10,9 @@ spring:
       maximum-pool-size: 20
       minimum-idle: 5
       connection-timeout: 3000
+      # resilience-plan §A4 / P1-3 — 느린 쿼리가 커넥션을 무한정 잡고 풀을 고갈시키는 것을 막는다.
+      # 물리 커넥션마다 1회 실행된다. 60s: 캔들 백필·수집 배치는 길 수 있으나 무제한은 아니다.
+      connection-init-sql: "SET statement_timeout = '60s'"
       idle-timeout: 600000
   jpa:
     hibernate:
