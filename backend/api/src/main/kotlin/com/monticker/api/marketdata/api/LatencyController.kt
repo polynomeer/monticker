@@ -16,7 +16,6 @@ import java.util.concurrent.TimeUnit
  *
  * 측정 구간:
  *   - redisWrite   : tick 생성 → Redis SET 완료
- *   - dbWrite      : tick 생성 → price_ticks INSERT 완료
  *   - broadcast    : tick 생성 → WebSocket 발신 완료
  *   - totalPipeline: tick 생성 → 브로드캐스트 (전체)
  */
@@ -42,7 +41,6 @@ class LatencyController(private val meterRegistry: MeterRegistry) {
 
         return ResponseEntity.ok(mapOf(
             "redisWrite"    to stats("tick.latency.redis_write"),
-            "dbWrite"       to stats("tick.latency.db_write"),
             "broadcast"     to stats("tick.latency.broadcast"),
             "totalPipeline" to stats("tick.latency.total_pipeline"),
             "_note"         to "단위: ms. Worker가 실행 중이어야 값이 채워집니다.",

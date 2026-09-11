@@ -1,6 +1,7 @@
 package com.monticker.api.common.cache
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import com.monticker.api.screener.application.ScreenerResult
 import com.monticker.api.screener.domain.ScreenerItem
 import org.assertj.core.api.Assertions.assertThat
@@ -58,7 +59,7 @@ class CacheConfigIntegrationTest {
         // 컨테이너 밖에서 직접 생성할 때는 이걸 우리가 호출해줘야
         // getCache("screener")가 커스텀 직렬화 설정이 아닌 기본(JDK 직렬화) 설정으로
         // 폴백하지 않는다.
-        val cacheManager = CacheConfig(jacksonObjectMapper()).cacheManager(connectionFactory)
+        val cacheManager = CacheConfig(jacksonObjectMapper(), SimpleMeterRegistry()).cacheManager(connectionFactory)
         cacheManager.afterPropertiesSet()
         val cache = cacheManager.getCache(CacheConfig.SCREENER)!!
 
