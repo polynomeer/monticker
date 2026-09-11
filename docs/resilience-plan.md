@@ -698,11 +698,99 @@ route:
 `spring.data.redis.timeout=200ms`가 발동해 요청이 2초씩 매달리지 않는다. 동시 20요청이 1초 안에
 끝났다 — 스레드 고갈 없음. **수정 전이었다면 Lettuce 기본 60초 × 20 = 요청마다 1분씩 매달렸다.**
 
+#### CH-06 브로커(KIS) 4초 지연 — **PASS** (2026-09-11, 수정 2건 후) — P0-2 완료 판정
+
+`bench/chaos/kis-stub.py`가 KIS 자리에서 **정상 JSON을 4초 뒤에** 돌려준다 —
+slowCallDurationThreshold(3s)보다 느리고 read 타임아웃(5s)보다 빠르므로 호출은 전부 "성공"이다.
+failureRate 0%에서 slow-call 감지만이 브레이커를 열 수 있는 조건이다.
+
+| 호출 | 결과 | 소요 |
+|------|------|------|
+| connect #1~#5 | 200 (성공하지만 느림) | 4,033~4,044ms |
+| **connect #6** | **503 + Retry-After: 30** | **41ms** — `slow_call_rate=83%`, `state=open` |
+| connect #7, #8 | 503 | 7~8ms |
+| 무관한 API(스크리너), 브레이커 OPEN 중 | 200 | 11ms |
+| 동시 10건 connect, OPEN 중 | 즉시 거절 | 10건 357ms |
+| 스텁 정상화 + 30s 대기 → half-open 프로브 2회 | 200, 200 | `state=closed` |
+
+**실패율 0%인데 브레이커가 열렸다.** P0-2 이전이었다면 CB는 영원히 CLOSED였고, 모든 호출이
+(타임아웃도 없었으므로) 무한정 매달렸다. 자동 복구까지 사람 개입 0.
+
+**이 실험이 찾아낸 것 — 둘 다 실험 없이는 못 봤다:**
+1. **`0bdd39c` — 운영 브로커 클라이언트가 부팅조차 안 됐다.** `KisBrokerageClient`가
+   `${app.kis.base-url}`, `TossBrokerageClient`가 `${app.toss.base-url}`을 읽는데 yml의 실제 키는
+   `app.brokerage.kis.base-url` / `app.brokerage.toss.base-url`이다. 두 빈은 `mock.enabled=false`
+   — 운영에서만 — 생성되므로 로컬·CI에서 한 번도 인스턴스화된 적이 없었다. 실험 1단계
+   "`BROKERAGE_MOCK_ENABLED=false`로 기동"에서 `PlaceholderResolutionException`. 2026-08-05 도입
+   이후 계속. 실제 yml로 운영 조건 부팅을 시도하는 테스트(`RealBrokerageClientsBootTest`)를 추가했다 —
+   `PropertySourcesPlaceholderConfigurer` 없이는 `ApplicationContextRunner`가 미해결 placeholder를
+   무시해 이 테스트도 오탐한다는 것까지 확인했다.
+2. **`ad81823` — 브레이커 OPEN이 500으로 나갔다.** 500은 "우리 버그"라 에러버짓 알람을 오염시키고
+   클라이언트는 재시도 여부를 모른다. `ExternalServiceUnavailableException` → 503 + Retry-After(30).
+
+**부수 관찰**: 잔고 조회의 CB-open 폴백이 `BrokerageBalance(ZERO, ZERO, [])`다 — 증권사 장애 중
+사용자에게 **잔고 0원**이 보인다. 우아한 실패가 아니라 오해를 부르는 실패다. 빈 값 대신
+"조회 불가" 상태를 돌려주는 게 맞다. [engineering-backlog §9](engineering-backlog.md)에 남긴다.
+
+#### CH-04 Elasticsearch 정지 — **PASS** (2026-09-11, 수정 1건 후) — 그리고 더 큰 발견
+
+| 단계 | stocks 검색 | events 검색 | `search_fallback_total` |
+|------|-----------|-----------|------------------------|
+| 정상 | 200 92ms | 200 59ms | stocks 0, stock_events 1* |
+| ES 정지 | 200 75ms | 200 13ms | stocks +1, stock_events +1 |
+| 복구 후 | 200 106ms | 200 23ms | stocks +0, stock_events +1* |
+
+5xx 0건 — 폴백 설계(§A6)는 확인대로 잘 동작한다. 그런데:
+
+**`a05c82f` `acfd448` — ES를 멈추기 전부터 폴백 카운터가 올라가고 있었다.**
+`spring.data.elasticsearch.uris`는 **Spring Boot 3에 존재하지 않는 키**다(autoconfigure 3.5.16
+메타데이터로 확인; 유효한 키는 `spring.elasticsearch.uris`). `ELASTICSEARCH_URI`가 api·worker 모두에서
+조용히 무시되고 기본값 `localhost:9200`을 썼다. 컨테이너 안의 localhost:9200에는 아무것도 없으므로
+**docker-compose·K8s 배포에서는 ES에 한 번도 연결된 적이 없고 모든 검색이 DB 폴백이었다.**
+로컬 bare-metal(ES가 9200)에서만 우연히 동작해 아무도 몰랐다. **P1-2에서 추가한 카운터가 정확히
+이걸 위해 있었고, 추가한 지 몇 시간 만에 잡아냈다.**
+
+\* 수정 후에도 `stock_events`는 ES가 떠 있는데 폴백한다 — 원인이 다르다. 라이브 인덱스가
+`@Setting`/`@Field` 정의가 아니라 **첫 문서 쓰기의 동적 매핑**으로 만들어져 `eventTime: text`,
+`eventType: text`, `stocks.symbol: text`(keyword여야 함)다. 날짜 정렬이 `Fielddata is disabled`로
+실패하고, nori·edge_ngram·keyword boost 등 [elasticsearch.md](elasticsearch.md)가 설명하는 검색
+설계가 **실제로 적용된 적이 없다.** api 쪽 문서는 `createIndex = false`(누군가 만들어 주길 기대),
+worker 쪽은 기본값 — 인덱스 소유자가 없다는 [ADR-042](decisions/042-outbox-based-es-indexing.md)의
+문제 그대로다. ADR-042 구현 시 "인덱서가 명시적 매핑으로 인덱스를 만들고, 기동 시 라이브 매핑을
+기대 매핑과 대조한다"를 필수 항목으로 넣는다. 지금은 고치지 않는다.
+
+#### CH-03 Postgres primary 정지 — **PASS** (2026-09-11)
+
+| 단계 | readiness | liveness | 요청 |
+|------|-----------|----------|------|
+| 정상 | 200 | 200 | — |
+| **DB 정지** | **503** (즉시) | **200** (내내) | 스크리너·주문 500 **3.0s**(Hikari connection-timeout) — 매달리지 않음. stocks 검색은 ES로 200 |
+| 복구 후 | 200, **MTTR 2s** | 200 | 주문 409(정상) |
+
+P0-6이 의도대로 동작한다 — readiness는 떨어지고(LB 제외) liveness는 유지된다(재시작 루프 없음).
+K8s에서는 이 시점에 pod가 엔드포인트에서 빠진다. 사람 개입 0.
+**부수 관찰**: DB 없는 동안의 요청이 500이다. readiness가 pod를 빼므로 실효 영향은 작지만, 503이
+더 정직하다. 우선순위 낮음.
+
+#### 실험이 찾아낸 결함 요약 (2026-09-11, 하루)
+
+| 실험 | 발견 | 심각도 | 커밋 |
+|------|------|-------|------|
+| CH-01 | 멱등성 503 본문 charset 깨짐 | 낮음 | `44cf413` |
+| CH-01 | Redis 정지 중 회원가입 500 | 중간 | `44cf413` |
+| CH-06 | **운영 브로커 클라이언트 부팅 불가** (잘못된 프로퍼티 키, 8/5 이후) | **치명** | `0bdd39c` |
+| CH-06 | 브레이커 OPEN → 500 | 중간 | `ad81823` |
+| CH-04 | **ES가 컨테이너 배포에서 한 번도 연결된 적 없음** (Boot 3에 없는 키) | **높음** | `a05c82f` `acfd448` |
+| CH-04 | ES 인덱스가 동적 매핑 — 검색 설계 미적용 | 높음 | ADR-042로 |
+| CH-06 | 잔고 조회 CB 폴백이 0원 | 중간 | backlog §9 |
+
+**단위 테스트 500개가 통과하는 코드에서 카오스 실험 4개가 반나절 만에 치명 1·높음 2를 찾았다.**
+공통점: 전부 "운영에서만 켜지는 경로"이거나 "실패를 삼키는 경로"다. 로컬·CI가 절대 밟지 않는 곳.
+
 #### 아직 실행하지 않은 것
 
-CH-03(Postgres 정지), CH-04(ES 정지), CH-06(KIS 지연), CH-08(노드 손실)은 다음 순서다.
-CH-06은 KIS 모의 서버를 지연시킬 수단(toxiproxy를 `KIS_BASE_URL` 앞에)이 같은 방식으로 가능하다.
-CH-08은 K8s 클러스터가 있어야 한다.
+CH-05(Kafka), CH-07(SIGKILL), CH-09(리밸런스)는 Kafka+worker 기동이 필요하다. CH-08(노드 손실)은
+K8s 클러스터가 있어야 한다. CH-11(디스크), CH-12(인증서)는 스테이징에서.
 
 ### 6.4 게임데이 운영
 
@@ -721,7 +809,7 @@ CH-08은 K8s 클러스터가 있어야 한다.
 
 ```
 [지금 ~ 1주]  P0-1 ~ P0-7   ← 상용 오픈의 최소 조건. Phase 0보다 먼저.   ✅ 2026-09-11
-              └ 완료 판정: CH-01 ✅, CH-02 ✅, CH-06 (다음), CH-08 (클러스터 필요)
+              └ 완료 판정: CH-01 ✅ CH-02 ✅ CH-03 ✅ CH-04 ✅ CH-06 ✅, CH-08 (클러스터 필요)
 
 [1 ~ 3주]     P1-1 (K8s 관측 스택) + §4.4 메트릭 계측
               └ 이게 되어야 Phase 0의 효과를 측정할 수 있다

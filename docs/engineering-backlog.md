@@ -105,6 +105,15 @@
   전자라면 종목별 인덱스와 별개로 글로벌 룰 리스트가 필요하다
   ([ADR-044](decisions/044-alert-rule-in-memory-index.md) Revisit 조건).
   발견: ADR-044 작성 중.
+- [ ] **브로커 잔고 조회의 서킷브레이커 폴백이 "0원"** — `KisBrokerageClient.getBalance`의
+  CB-open 경로가 `BrokerageBalance(ZERO, ZERO, [])`를 돌려준다. 증권사 장애 중 사용자에게 잔고가
+  0원으로 보인다 — 우아한 실패가 아니라 오해를 부르는 실패. "조회 불가" 상태(nullable 또는
+  `available=false`)로 바꾸고 프론트가 그걸 표시해야 한다. 발견: CH-06 실험
+  ([resilience-plan §6.3](resilience-plan.md)).
+- [ ] **ES 인덱스가 동적 매핑으로 생성됨 — 검색 설계 미적용** — `stock_events.eventTime: text`,
+  `stocks.symbol: text` 등. `@Setting`/`@Field`가 적용된 적이 없어 날짜 정렬이 실패하고
+  nori/edge_ngram이 안 붙는다. [ADR-042](decisions/042-outbox-based-es-indexing.md) 구현의 필수
+  항목(단일 인덱서가 명시적 매핑으로 생성 + 기동 시 매핑 대조). 발견: CH-04 실험.
 - [ ] **전용 부하 테스트 환경 구축** — 지금 `bench/`는 로컬 docker-compose를 때린다.
   절대 처리량·SLO 판정에는 prod 유사 환경이 필요하다
   ([ADR-045](decisions/045-performance-slo-and-verification-harness.md) §5).

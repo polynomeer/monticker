@@ -7,6 +7,9 @@
 |---------|------|----------|------|
 | `ch01-redis-down.sh` | Redis 전면 정지 | 2026-09-11 | **PASS** (수정 2건 후) |
 | `ch02-redis-latency.sh` | Redis 2초 지연 (toxiproxy) | 2026-09-11 | **PASS** |
+| `ch03-postgres-down.sh` | Postgres 정지 | 2026-09-11 | **PASS** — readiness 503/liveness 200, MTTR 2s |
+| `ch04-elasticsearch-down.sh` | ES 정지 | 2026-09-11 | **PASS** (수정 1건 후) — ES가 컨테이너에서 한 번도 연결된 적 없던 것을 발견 |
+| `ch06-broker-latency.sh` + `kis-stub.py` | KIS 4초 지연 (slow-call) | 2026-09-11 | **PASS** (수정 2건 후) — 운영 브로커 클라이언트 부팅 불가를 발견 |
 
 ## 원칙
 
@@ -29,4 +32,9 @@ KAFKA_BROKERS=localhost:1 SPRING_PROFILES_ACTIVE=local ./gradlew bootRun --args=
 
 # 실험
 API=http://localhost:58080 COMPOSE_ENV="REDIS_PORT=56379" bench/chaos/ch01-redis-down.sh
+
+# CH-06은 KIS 스텁 + 운영 브로커 모드가 필요하다
+DELAY_MS=0 PORT=59443 python3 bench/chaos/kis-stub.py &
+# API를 추가로 BROKERAGE_MOCK_ENABLED=false KIS_BASE_URL=http://localhost:59443 로 기동
+API=http://localhost:58080 STUB=http://localhost:59443 bench/chaos/ch06-broker-latency.sh
 ```
