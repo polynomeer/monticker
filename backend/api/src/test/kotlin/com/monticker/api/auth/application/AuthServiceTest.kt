@@ -56,6 +56,25 @@ class AuthServiceTest {
         assertThat(result.refreshToken).isNotBlank()
     }
 
+    // CH-01 실험에서 발견: Redis 정지 중 가입이 500이었다. 인증 메일 토큰 저장은 가입의 부수 효과라
+    // fail-open — 계정·토큰은 발급하고 메일만 건너뛴다(/resend-verification으로 나중에 가능).
+    @Test
+    fun `Redis가 없어도 가입은 성공하고 인증 메일만 건너뛴다`() {
+        every { userRepository.existsByEmail("nored@test.com") } returns false
+        every { userRepository.save(any()) } answers {
+            firstArg<User>().apply {
+                val f = User::class.java.getDeclaredField("id"); f.isAccessible = true; f.set(this, 2L)
+            }
+        }
+        every { valueOps.set(any<String>(), any<String>(), any<java.time.Duration>()) } throws
+            org.springframework.data.redis.RedisConnectionFailureException("down")
+
+        val result = service.signup("nored@test.com", "password1!", "무레디스")
+
+        assertThat(result.accessToken).isNotBlank()
+        verify(exactly = 0) { emailService.sendVerificationEmail(any(), any()) }
+    }
+
     @Test
     fun `signup throws when email already exists`() {
         every { userRepository.existsByEmail("dup@test.com") } returns true

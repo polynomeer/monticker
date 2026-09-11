@@ -52,7 +52,8 @@ class IdempotencyFilterTest {
 
         assertThat(res.status).isEqualTo(503)
         assertThat(res.getHeader("Retry-After")).isEqualTo("2")
-        assertThat(res.contentAsString).contains("\"status\":503")
+        assertThat(res.characterEncoding).isEqualToIgnoringCase("UTF-8")   // 한글 메시지가 '?'로 깨지면 안 된다
+        assertThat(res.contentAsString).contains("\"status\":503").contains("잠시 후 다시 시도해주세요")
         assertThat(chain.request).isNull()             // 주문 핸들러까지 도달하지 않았다
         assertThat(registry.counter("redis_command_failed_total", "op", "idempotency_get", "policy", "closed").count())
             .isEqualTo(1.0)

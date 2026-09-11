@@ -50,7 +50,10 @@ class AuthService(
                 nickname     = nickname,
             )
         )
-        sendVerificationEmail(user)
+        // 인증 메일은 가입의 부수 효과다. Redis(토큰 저장소)가 없다고 가입 자체를 500으로 실패시키지
+        // 않는다 — 계정과 토큰은 발급하고, 메일은 /resend-verification으로 나중에 받을 수 있다.
+        // CH-01 실험에서 Redis 정지 중 가입이 500으로 떨어지는 것을 확인해 fail-open으로 바꿨다 (P0-1).
+        guard.failOpen(op = "signup_verify_token", fallback = Unit) { sendVerificationEmail(user) }
         return issueTokens(user)
     }
 

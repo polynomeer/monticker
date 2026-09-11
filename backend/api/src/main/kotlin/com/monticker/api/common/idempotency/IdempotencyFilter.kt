@@ -122,6 +122,8 @@ class IdempotencyFilter(
         log.warn("멱등성 저장소 불가 — 요청 거절(fail-closed): userId={} key={}", userId, key)
         response.status = HttpStatus.SERVICE_UNAVAILABLE.value()
         response.setHeader("Retry-After", "2")
+        // 서블릿 기본 인코딩은 ISO-8859-1이라 한글 메시지가 '?'로 깨진다 — CH-01 실험에서 실제로 확인했다.
+        response.characterEncoding = "UTF-8"
         response.contentType = MediaType.APPLICATION_JSON_VALUE
         // GlobalExceptionHandler와 같은 형태 — 필터 레이어라 핸들러를 거치지 않으므로 직접 만든다.
         response.writer.write(objectMapper.writeValueAsString(mapOf(
