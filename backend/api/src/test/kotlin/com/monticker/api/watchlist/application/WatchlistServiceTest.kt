@@ -1,5 +1,7 @@
 package com.monticker.api.watchlist.application
 
+import com.monticker.api.common.metrics.SearchMetrics
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import com.monticker.api.stock.application.StockService
 import com.monticker.api.stock.domain.Market
 import com.monticker.api.stock.domain.Stock
@@ -22,7 +24,7 @@ class WatchlistServiceTest {
     private val stockService = mockk<StockService>()
     private val watchlistSearchRepository = mockk<WatchlistSearchRepository>(relaxed = true)
     private val esOps = mockk<ElasticsearchOperations>(relaxed = true)
-    private val service = WatchlistService(groupRepository, itemRepository, stockService, watchlistSearchRepository, esOps)
+    private val service = WatchlistService(groupRepository, itemRepository, stockService, watchlistSearchRepository, esOps, SearchMetrics(SimpleMeterRegistry()))
 
     @Test
     fun `createGroup throws when name is blank`() {

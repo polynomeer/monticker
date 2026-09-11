@@ -1,5 +1,6 @@
 package com.monticker.api.alert.application
 
+import com.monticker.api.common.metrics.SearchMetrics
 import com.monticker.api.alert.domain.AlertRule
 import com.monticker.api.alert.domain.AlertRuleType
 import com.monticker.api.alert.infrastructure.AlertHistoryDocument
@@ -22,6 +23,7 @@ class AlertService(
     private val jdbc: JdbcTemplate,
     private val alertHistorySearchRepository: AlertHistorySearchRepository,
     private val esOps: ElasticsearchOperations,
+    private val searchMetrics: SearchMetrics,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     @Transactional(readOnly = true)
@@ -143,6 +145,7 @@ class AlertService(
                 .map { hit -> AlertHistoryResult.from(hit.content, hit.score) }
                 .toList()
         } catch (e: Exception) {
+            searchMetrics.fallback("alert_histories")
             log.warn("ES alert history search failed for userId={}: {}", userId, e.message)
             emptyList()
         }

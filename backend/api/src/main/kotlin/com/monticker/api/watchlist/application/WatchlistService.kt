@@ -1,5 +1,6 @@
 package com.monticker.api.watchlist.application
 
+import com.monticker.api.common.metrics.SearchMetrics
 import com.monticker.api.stock.application.StockService
 import com.monticker.api.watchlist.domain.WatchlistGroup
 import com.monticker.api.watchlist.domain.WatchlistItem
@@ -21,6 +22,7 @@ class WatchlistService(
     private val stockService: StockService,
     private val watchlistSearchRepository: WatchlistSearchRepository,
     private val esOps: ElasticsearchOperations,
+    private val searchMetrics: SearchMetrics,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -99,6 +101,7 @@ class WatchlistService(
                 .map { hit -> WatchlistSearchResult.from(hit.content, hit.score) }
                 .toList()
         } catch (e: Exception) {
+            searchMetrics.fallback("watchlist_items")
             log.warn("ES watchlist search failed for userId={}: {}", userId, e.message)
             emptyList()
         }
