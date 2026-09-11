@@ -30,6 +30,10 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      # 명시하지 않으면 Lettuce 기본 60초 — Redis가 느려지면 요청이 60초씩 매달려 Tomcat 스레드가
+      # 고갈된다(resilience-plan §A2). 시세 조회에 200ms 넘게 걸리면 그건 이미 장애다.
+      timeout: 200ms
+      connect-timeout: 500ms
     mongodb:
       uri: ${MONGODB_URI:mongodb://monticker:monticker@localhost:27017/monticker?authSource=admin}
     elasticsearch:

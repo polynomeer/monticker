@@ -1,23 +1,31 @@
 package com.monticker.api.common.config
 
+import com.monticker.api.common.redis.RedisGuard
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
 import java.time.Duration
 
 @Component
-class RateLimitFilter(private val redis: StringRedisTemplate) : OncePerRequestFilter() {
+class RateLimitFilter(
+    private val redis: StringRedisTemplate,
+    private val guard: RedisGuard,
+    // X-Bench 헤더 우회는 부하 테스트 편의 기능이다. 기본값 false — 운영에서 켜져 있으면
+    // 헤더 한 줄로 레이트리밋 전체를 무력화할 수 있다 (resilience-plan §F5, P0-4).
+    // local/dev 프로파일만 true로 둔다.
+    @Value("\${app.rate-limit.bench-bypass-enabled:false}") private val benchBypassEnabled: Boolean,
+) : OncePerRequestFilter() {
 
     override fun doFilterInternal(
         req: HttpServletRequest,
         res: HttpServletResponse,
         chain: FilterChain,
     ) {
-        // 벤치마크 요청은 rate limit 제외
-        if (req.getHeader("X-Bench") == "true") {
+        if (benchBypassEnabled && req.getHeader("X-Bench") == "true") {
             chain.doFilter(req, res)
             return
         }
@@ -47,9 +55,12 @@ class RateLimitFilter(private val redis: StringRedisTemplate) : OncePerRequestFi
         chain.doFilter(req, res)
     }
 
-    private fun isRateLimited(key: String, limit: Int, window: Duration): Boolean {
-        val count = redis.opsForValue().increment("rate:$key") ?: 1L
-        if (count == 1L) redis.expire("rate:$key", window)
-        return count > limit
-    }
+    // Redis 장애 시 fail-open: 레이트리밋은 남용 방어이지 서비스 성립 조건이 아니다.
+    // 이 필터는 /api/** 전체에 걸리므로, 여기서 예외가 새면 Redis 장애 = 전면 장애가 된다.
+    private fun isRateLimited(key: String, limit: Int, window: Duration): Boolean =
+        guard.failOpen(op = "rate_limit", fallback = false) {
+            val count = redis.opsForValue().increment("rate:$key") ?: 1L
+            if (count == 1L) redis.expire("rate:$key", window)
+            count > limit
+        }
 }

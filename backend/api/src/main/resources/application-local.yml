@@ -1,3 +1,8 @@
 spring:
   jpa:
     show-sql: true
+
+app:
+  rate-limit:
+    # 부하 테스트(bench/)가 X-Bench 헤더로 IP 레이트리밋을 우회하도록 허용. 운영 프로파일에는 없다 — 기본값 false.
+    bench-bypass-enabled: true

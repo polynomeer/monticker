@@ -3,6 +3,8 @@ package com.monticker.api.auth.application
 import com.monticker.api.auth.domain.User
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
 import com.monticker.api.auth.infrastructure.UserRepository
+import com.monticker.api.common.redis.RedisGuard
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.*
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -34,7 +36,8 @@ class AuthServiceTest {
         every { it.opsForValue() } returns valueOps
     }
     private val emailService = mockk<EmailService>(relaxed = true)
-    private val service = AuthService(userRepository, provider, encoder, jdbc, redis, emailService)
+    private val guard = RedisGuard(SimpleMeterRegistry())
+    private val service = AuthService(userRepository, provider, encoder, jdbc, redis, emailService, guard)
 
     @Test
     fun `signup creates user and returns tokens`() {
