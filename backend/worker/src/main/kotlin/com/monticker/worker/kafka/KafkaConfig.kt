@@ -22,6 +22,7 @@ import org.springframework.kafka.core.MicrometerConsumerListener
 @ConditionalOnProperty(name = ["ingestion.source"], havingValue = "kafka")
 class KafkaConfig(
     @Value("\${kafka.brokers:localhost:9092}") private val brokers: String,
+    @Value("\${spring.kafka.listener.concurrency:1}") private val concurrency: Int,
     private val meterRegistry: MeterRegistry,
 ) {
     @Bean
@@ -44,6 +45,9 @@ class KafkaConfig(
     fun kafkaListenerContainerFactory(): ConcurrentKafkaListenerContainerFactory<String, String> {
         val factory = ConcurrentKafkaListenerContainerFactory<String, String>()
         factory.consumerFactory = consumerFactory()
+        // 파티션 수(ADR-040)까지 병렬 소비. 종목별 상태(CandleAggregator, 감지기 EMA)는 키=stockId라
+        // 같은 종목이 항상 같은 파티션/스레드로 오므로 스레드 간 공유가 없다.
+        factory.setConcurrency(concurrency)
         return factory
     }
 }

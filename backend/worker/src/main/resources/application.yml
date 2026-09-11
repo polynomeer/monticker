@@ -36,6 +36,10 @@ spring:
     username: ${MAIL_USERNAME:}
     password: ${MAIL_PASSWORD:}
   kafka:
+    listener:
+      # ADR-040 파티션 수까지 병렬 소비. 로컬 12 파티션 기준 4. 운영은 파티션 수에 맞춰 ConfigMap으로.
+      # L-03: 단일 스레드 ~2,000 tick/s → 스레드 수만큼 선형에 가깝게 늘어난다(같은 종목은 같은 스레드).
+      concurrency: ${KAFKA_CONSUMER_CONCURRENCY:4}
     # TickKafkaConsumer(@KafkaListener)는 ingestion.source=kafka가 아닌 한(기본값
     # internal) Spring Boot 자동구성 ConsumerFactory를 쓴다 — 이 값이 없으면 KAFKA_BROKERS를
     # 무시하고 Spring Boot 기본값(localhost:9092)에 그대로 접속한다. 아래 kafka.brokers(비
