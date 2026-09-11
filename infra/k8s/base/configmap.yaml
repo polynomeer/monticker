@@ -9,6 +9,14 @@ data:
   REDIS_PORT: "6379"
   KAFKA_BROKERS: "kafka:9092"
   INGESTION_SOURCE: "internal"
+  # ADR-040 — Kafka 토픽 파티션/복제 (backend/api KafkaTopicConfig가 읽는다). base = 초기 상용(T1).
+  # T2 목표(market.ticks 256 등)는 ADR-040 §3 표. 복제 계수 3은 멀티 브로커 전환 후.
+  KAFKA_REPLICATION_FACTOR: "1"
+  KAFKA_PARTITIONS_MARKET_TICKS: "64"
+  KAFKA_PARTITIONS_TICK_PROCESSED: "32"
+  KAFKA_PARTITIONS_MARKET_EVENTS: "16"
+  KAFKA_PARTITIONS_TRADING: "16"
+  KAFKA_PARTITIONS_RETRY: "4"
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4318"
   PINPOINT_ENABLE: "false"
   PINPOINT_COLLECTOR_IP: "pinpoint-collector"
