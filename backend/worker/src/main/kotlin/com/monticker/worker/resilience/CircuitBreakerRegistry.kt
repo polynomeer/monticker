@@ -21,6 +21,8 @@ class CircuitBreakerConfiguration {
         registry.circuitBreaker("kisApi",
             CircuitBreakerConfig.custom()
                 .failureRateThreshold(50f)          // 실패율 50% 초과 시 OPEN
+                .slowCallRateThreshold(50f)                 // P0-2: 느린 호출도 실패로 본다
+                .slowCallDurationThreshold(Duration.ofSeconds(3))
                 .slidingWindowSize(10)               // 최근 10회 기준
                 .waitDurationInOpenState(Duration.ofSeconds(30))  // 30초 후 HALF_OPEN
                 .permittedNumberOfCallsInHalfOpenState(3)
@@ -32,6 +34,8 @@ class CircuitBreakerConfiguration {
         registry.circuitBreaker("expoPush",
             CircuitBreakerConfig.custom()
                 .failureRateThreshold(60f)
+                .slowCallRateThreshold(50f)                 // P0-2: 느린 호출도 실패로 본다
+                .slowCallDurationThreshold(Duration.ofSeconds(5))
                 .slidingWindowSize(5)
                 .waitDurationInOpenState(Duration.ofSeconds(60))
                 .permittedNumberOfCallsInHalfOpenState(2)
@@ -43,6 +47,8 @@ class CircuitBreakerConfiguration {
         registry.circuitBreaker("naverNews",
             CircuitBreakerConfig.custom()
                 .failureRateThreshold(50f)
+                .slowCallRateThreshold(50f)                 // P0-2: 느린 호출도 실패로 본다
+                .slowCallDurationThreshold(Duration.ofSeconds(5))
                 .slidingWindowSize(4)
                 .waitDurationInOpenState(Duration.ofMinutes(5))
                 .permittedNumberOfCallsInHalfOpenState(1)
@@ -54,6 +60,8 @@ class CircuitBreakerConfiguration {
         registry.circuitBreaker("dartApi",
             CircuitBreakerConfig.custom()
                 .failureRateThreshold(50f)
+                .slowCallRateThreshold(50f)                 // P0-2: 느린 호출도 실패로 본다
+                .slowCallDurationThreshold(Duration.ofSeconds(5))
                 .slidingWindowSize(4)
                 .waitDurationInOpenState(Duration.ofMinutes(10))
                 .permittedNumberOfCallsInHalfOpenState(1)

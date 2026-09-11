@@ -1,5 +1,6 @@
 package com.monticker.worker.disclosure
 
+import com.monticker.worker.common.HttpTimeouts
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
@@ -61,6 +62,7 @@ class DartClient(
         val req = HttpRequest.newBuilder()
             .uri(URI.create(url))
             .GET()
+            .timeout(HttpTimeouts.COLLECTOR_READ)
             .build()
 
         val res = http.send(req, HttpResponse.BodyHandlers.ofString())

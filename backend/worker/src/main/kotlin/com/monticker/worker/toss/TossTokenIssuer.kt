@@ -1,5 +1,6 @@
 package com.monticker.worker.toss
 
+import com.monticker.worker.common.HttpTimeouts
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -56,6 +57,7 @@ class TossTokenIssuer(
                 .uri(URI.create("$baseUrl/oauth2/token"))
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.ofString(form))
+                .timeout(HttpTimeouts.BROKER_READ)
                 .build()
             val res = http.send(req, HttpResponse.BodyHandlers.ofString())
             if (res.statusCode() != 200) {

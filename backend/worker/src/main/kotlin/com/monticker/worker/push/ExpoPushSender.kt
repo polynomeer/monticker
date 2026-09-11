@@ -1,5 +1,6 @@
 package com.monticker.worker.push
 
+import com.monticker.worker.common.HttpTimeouts
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import org.slf4j.LoggerFactory
@@ -65,6 +66,7 @@ class ExpoPushSender(
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
+                .timeout(HttpTimeouts.PUSH_READ)
                 .build()
 
             val response = http.send(request, HttpResponse.BodyHandlers.ofString())
