@@ -175,6 +175,30 @@ KIS API는 계좌별 앱 키/시크릿으로 OAuth2 토큰을 발급받아 사�
 | `ELASTICSEARCH_URI` | Elasticsearch | ✅ |
 | `MAIL_USERNAME` / `MAIL_PASSWORD` | 이메일 발송 | 선택 |
 | `ANTHROPIC_API_KEY` | AI 분석 기능 | 선택 |
+| `SLACK_WEBHOOK_URL` | 알람 전달 채널. 비어 있으면 Alertmanager가 **무발송 모드** — 장애를 사람이 우연히 발견하는 상태 ([resilience-plan P0-3](resilience-plan.md)) | ✅ |
+| `GRAFANA_ADMIN_PASSWORD` | Grafana 관리자 비밀번호 (`/grafana`로 Ingress 노출됨) | ✅ |
+| `BACKUP_S3_URL` + `AWS_*` | DB 백업 오프박스 업로드 (`monticker-backup-secrets`). 없으면 PVC에만 남아 클러스터와 함께 죽는다 | ✅ |
+
+---
+
+## 4-1. 관측 스택 (K8s)
+
+[resilience-plan §4](resilience-plan.md)의 P1-1로 `infra/monitoring/`이 kustomize 리소스로 포함된다.
+`kubectl apply -k infra/k8s/overlays/prod` 한 번에 Prometheus·Alertmanager·Grafana가 같이 뜬다.
+
+| 구성요소 | 접근 | 비고 |
+|---------|------|------|
+| Grafana | `https://<host>/grafana` (Ingress) | 자체 로그인. 대시보드 `api-overview`, `tick-pipeline` 자동 프로비저닝 |
+| Prometheus | `kubectl port-forward -n monticker svc/prometheus 9090` | 인증이 없어 Ingress에 노출하지 않는다 |
+| Alertmanager | `kubectl port-forward -n monticker svc/alertmanager 9093` | 동일. 사일런스는 여기서 |
+
+- 스크레이프 대상은 pod 어노테이션(`prometheus.io/scrape|path|port`)으로 자동 발견된다.
+  새 배포를 추가하면 어노테이션만 붙이면 된다.
+- 알람 규칙(`infra/monitoring/alert-rules.yml`)과 대시보드는 docker-compose와 **같은 파일**이다.
+  규칙을 바꾸면 `kubectl rollout restart deploy/prometheus -n monticker`(ConfigMap 해시 접미사를
+  쓰지 않으므로 자동 재시작되지 않는다).
+- 개장 전 예약 스케일업(`scaling-schedule.yaml`, P1-4)의 `BASE_MIN_REPLICAS`는 overlay의
+  `api-hpa.minReplicas`와 **같아야** 장 마감 후 원복이 맞다.
 
 ---
 

@@ -327,8 +327,27 @@ Phase 0의 ADR-038~045는 이 목록과 **직교한다** — 저쪽은 규모, �
 
 전체 단위 테스트: api 492/492, worker 83/83.
 
-**아직 검증하지 않은 것**: 카오스 실험 CH-01/02/06/08은 관측 스택(P1-1)이 있어야 "성공"을
-증명할 수 있다. 지금은 단위 테스트가 각 정책의 동작을 고정했을 뿐, 실제 Redis를 죽여본 건 아니다.
+### 3.2 P1 실행 기록 (2026-09-11)
+
+| 항목 | 커밋 | 내용 |
+|------|------|------|
+| P1-1 K8s 관측 스택 | `dbe01fe` | `infra/monitoring/`을 kustomize 루트로 — 규칙·대시보드·Alertmanager 템플릿이 compose와 **단일 소스**. pod 어노테이션 기반 SD, api·worker 어노테이션 추가(없어서 HTTP 메트릭이 안 잡히고 있었다). Grafana만 `/grafana`로 노출 |
+| P1-1 알람 재구성 | `3f7c9e4` `cff8860` | 5개 → **page 8 + ticket 14**. `ServiceDown`을 page에서 뺌(단일 pod는 K8s 몫). HTTP 히스토그램 버킷 노출(p95 알람용). `promtool check rules` 22 OK |
+| P1-2 삼켜지는 예외 계측 | `348152a` `8959378` `a97d596` `fd84258` | `candle_flush_failed_total`, `alert_rule_eval_failed_total{ruleType}`(+**룰 단위 격리** — 한 룰의 예외가 나머지를 막던 구조 수정), `dlt_messages_total{topic}` ×3, `search_fallback_total{index}` ×8, `ws_active_connections`, `outbox_pending_total`/`outbox_oldest_age_seconds`/`saga_incomplete_total`. worker 커스텀 Kafka 팩토리에 `MicrometerConsumerListener`(랙 메트릭이 없었다) |
+| P1-3 `statement_timeout` | `235d9d3`~`cdced0e` | api 30s / worker 60s / trading 10s / quant 120s. 실제 Postgres에서 취소 발생 확인 |
+| P1-4 예약 스케일업 | `b3a0f01` | 08:45 KST minReplicas↑, 15:45 KST 원복. prod 6/3 |
+
+전체 단위 테스트: api 495/495, worker 84/84, quant-engine 6/6(해당 클래스).
+
+**§4.4 카탈로그 중 아직 없는 것**: `ledger_reconciliation_mismatch_total`(ADR-043 구현 시),
+`redis_command_duration_seconds`(Lettuce 타임아웃으로 대신함), `external_http_*`(resilience4j
+`slow_call_rate`로 대신함), `tick_pipeline_latency`(기존 `tick.latency.*` 타이머가 이미 노출).
+**§4.6 대시보드 5종은 아직 기존 2종뿐이다** — 새 메트릭이 실제로 흐르는 걸 본 뒤 만든다.
+메트릭 없이 만든 대시보드는 빈 패널이다.
+
+**아직 검증하지 않은 것**: 카오스 실험 CH-01/02/06/08. 관측 스택은 이제 있지만 **실제 클러스터에
+적용된 적은 없다**(human-action-items §3의 클러스터 프로비저닝이 선행). 로컬 compose에서는
+Redis를 실제로 죽여보는 CH-01을 지금 할 수 있다 — 다음 단계.
 
 ---
 
