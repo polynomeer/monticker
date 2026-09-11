@@ -590,20 +590,18 @@ CREATE TABLE portfolio_optimizations (
 
 ## TimescaleDB Tables
 
-### price_ticks
+### ~~price_ticks~~ — 제거됨 (V42, [ADR-041](decisions/041-timescale-hypertable-promotion.md))
 
-```sql
-CREATE TABLE price_ticks (
-    stock_id   BIGINT         NOT NULL,
-    price      NUMERIC(18, 4) NOT NULL,
-    volume     BIGINT         NOT NULL,
-    trade_time TIMESTAMPTZ    NOT NULL,
-    PRIMARY KEY (stock_id, trade_time)
-);
-SELECT create_hypertable('price_ticks', 'trade_time');
-```
+원시 틱은 Postgres에 저장하지 않는다. 이 테이블은 V4에서 만들어진 뒤 **한 행도 쓰인 적이 없었고**
+(쓰기 코드의 호출부 0건, 읽는 곳 0건) V42가 비어 있음을 확인하고 드롭했다. 틱은 Kafka `market.ticks`
+(retention 6h)에만 흐르며, 장기 보관이 필요해지면 Parquet/오브젝트 스토리지 경로를 만든다
+(scale-out-plan §6.2.2, Phase 2).
 
-### candles
+### candles — TimescaleDB hypertable (V42)
+
+`candles_1m`(chunk 7일, 14일 후 압축)·`candles_1d`(chunk 30일, 90일 후 압축). 압축은 `segmentby = stock_id`.
+`compress_after`는 upsert 윈도우보다 뒤여야 한다 — 압축 chunk는 UPDATE 불가([ADR-021](decisions/021-candles-1d-realtime-upsert.md)의
+당일 upsert와의 계약). 보존 정책은 없다(캔들은 삭제하지 않는다). Continuous Aggregate는 채택하지 않았다.
 
 ```sql
 CREATE TABLE candles_1m (
@@ -861,8 +859,7 @@ stocks
   ├── stock_sector_mappings → sectors
   ├── stock_events  ◄── news_articles (via news_stock_mappings)
   │                 ◄── disclosures
-  │                 ◄── price_ticks (system generated)
   │                 ◄── user notes / simulation_trades
   │                 ◄── quant_signals
-  └── price_ticks / candles_* (TimescaleDB)
+  └── candles_* (TimescaleDB hypertable, V42)
 ```

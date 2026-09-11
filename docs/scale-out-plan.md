@@ -919,9 +919,9 @@ order.commands (파티션 64, key=stockId)
 |---|------|------|------|
 | 0.1 ✅ | 브로드캐스트 컨슈머 전 파티션 수동 할당 + conflation ([ADR-038](decisions/038-broadcast-consumer-partition-assignment.md)) — `d614339`, 2 인스턴스 라이브 검증 | §3.1 replicas≥2에서 틱 유실 | S |
 | 0.2 ✅ | `/topic/market` 제거 → `market.summary` 1Hz ([ADR-039](decisions/039-drop-global-market-topic.md)) — `3180a45` `002d11d` `e7200d1`, L-02 p95 7.6s→139ms | §3.2 | M |
-| 0.3 | Kafka 토픽 명시 선언 + auto-create off ([ADR-040](decisions/040-kafka-topic-declaration.md)) — **0.1 배포 이후** | §3.3 | S |
-| 0.4 | 캔들 hypertable 승격 + CI 검증 ([ADR-041](decisions/041-timescale-hypertable-promotion.md)) | §3.5, ADR-021이 이미 지적 | M |
-| 0.5 | 압축 정책 + `price_ticks`/죽은 코드 제거 ([ADR-041](decisions/041-timescale-hypertable-promotion.md)) | §3.5 | S |
+| 0.3 ✅ | Kafka 토픽 명시 선언 + auto-create off ([ADR-040](decisions/040-kafka-topic-declaration.md)) — `14d0c7b` `d351eef`, 라이브: 16 토픽 선언 파티션으로 생성 | §3.3 | S |
+| 0.4 ✅ | 캔들 hypertable 승격 + CI 검증 ([ADR-041](decisions/041-timescale-hypertable-promotion.md)) — V42, 통합 테스트 4건 | §3.5, ADR-021이 이미 지적 | M |
+| 0.5 ✅ | 압축 정책 + `price_ticks`/죽은 코드 제거 ([ADR-041](decisions/041-timescale-hypertable-promotion.md)) — 같은 V42 | §3.5 | S |
 | 0.6 | 원장 커서 페이징 + 대사 스냅샷 ([ADR-043](decisions/043-ledger-pagination-and-reconciliation.md)) | §3.6 | M |
 | 0.7 | 알림 룰 인메모리 인덱스 + 평가/발송 분리 ([ADR-044](decisions/044-alert-rule-in-memory-index.md)) | §3.4 | M |
 | 0.8 | SLO 정의 + 검증 하네스 확장 ([ADR-045](decisions/045-performance-slo-and-verification-harness.md)) | 이후 모든 판단의 근거 | M |

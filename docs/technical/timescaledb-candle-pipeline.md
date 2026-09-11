@@ -24,7 +24,13 @@ monticker의 파이프라인은 세 단계로 구성된다.
 2. **집계**: Worker의 `CandleAggregator`가 틱을 분 단위로 메모리에서 묶어 `candles_1m`과 `candles_1d`에 함께 upsert한다.
 3. **조회**: API 서버의 `CandleRepository`가 `candles_1m` / `candles_1d` 테이블을 시간 범위 기준으로 조회한다.
 
-> **현재 상태 요약**: `price_ticks` / `candles_1m` / `candles_1d`는 모두 `V4__create_market_data.sql`이 만든 일반 PostgreSQL 테이블이다. TimescaleDB hypertable 전환 스크립트(`infra/docker/init-timescaledb.sql`)는 어떤 환경의 `docker-compose.yml`/CI에서도 실행되지 않으므로, 아래에서 "hypertable"이라고 부르는 내용은 **아직 활성화되지 않은 설계**다. 무엇이 실제로 동작하는지는 9장을 먼저 참고한다.
+> **현재 상태 요약 (2026-09-11 갱신)**: [ADR-041](../decisions/041-timescale-hypertable-promotion.md)의 V42가
+> `candles_1m`/`candles_1d`를 **실제로 hypertable로 승격**했고(로컬 dev DB 224k+47k행 → 54+14 chunk, 3.3초),
+> 압축 정책(14일/90일, `segmentby=stock_id`)을 걸었다. CI의 `CandleHypertableIntegrationTest`가 실제
+> TimescaleDB 컨테이너에서 이 상태를 검증한다. **`price_ticks`는 드롭됐다** — 한 행도 쓰인 적이 없었고
+> `PriceTickDbWriter`도 삭제됐다. Continuous Aggregate(V10)는 채택하지 않았다(소스가 사라졌고 `candles_*`는
+> `CandleAggregator`가 직접 쓰는 실체 테이블이다). 아래 본문 중 `price_ticks`·CAgg·`init-timescaledb.sql`을
+> 다루는 부분은 **역사 기록**이다.
 
 ---
 
