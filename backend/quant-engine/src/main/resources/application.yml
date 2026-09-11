@@ -10,6 +10,9 @@ spring:
       maximum-pool-size: 10
       minimum-idle: 2
       connection-timeout: 3000
+      # resilience-plan §A4 / P1-3 — 느린 쿼리가 커넥션을 무한정 잡고 풀을 고갈시키는 것을 막는다.
+      # 물리 커넥션마다 1회 실행된다. 120s: 백테스트·최적화는 수십 초가 정상 범위.
+      connection-init-sql: "SET statement_timeout = '120s'"
   jpa:
     hibernate:
       ddl-auto: validate
