@@ -2,9 +2,14 @@
 
 import { useMarketPricesWs } from "@/hooks/useMarketPricesWs";
 
+const MAX_DISPLAY = 12;
+
 export default function MarketSummary() {
   const { prices, connected } = useMarketPricesWs();
-  const list = Object.values(prices);
+  // 스트림에 잡힌 종목이 누적되며 카드 하나가 계속 자랄 수 있어 최근 갱신 상위 N개로 제한
+  const list = Object.values(prices)
+    .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+    .slice(0, MAX_DISPLAY);
 
   return (
     <div className="border border-gray-200 dark:border-dracula-line dark:bg-dracula-bg rounded-lg p-4">

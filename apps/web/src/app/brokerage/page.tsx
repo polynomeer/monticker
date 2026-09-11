@@ -2,26 +2,18 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ShieldCheck, HourglassMedium, CheckCircle, XCircle } from "@phosphor-icons/react";
-import { type Icon } from "@phosphor-icons/react";
+import { ShieldCheck } from "@phosphor-icons/react";
 import { getAccessToken } from "@/services/auth";
-import { useBrokerageAccount, useBrokerageBalance, useBrokerageOrders, useBrokerageSettlements, useCancelBrokerageOrder } from "@/hooks/useBrokerage";
-import { useToast } from "@/hooks/useToast";
+import { useBrokerageAccount, useBrokerageBalance, useBrokerageOrders, useConditionalOrders, useBrokerageSettlements } from "@/hooks/useBrokerage";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { OrderRow } from "@/components/brokerage/OrderRow";
+import { ConditionalOrderRow } from "@/components/brokerage/ConditionalOrderRow";
 import { brokerageProviderLabel } from "@/lib/brokerageProvider";
-import type { BrokerageOrderResponse, BrokerageSettlementResponse } from "@monticker/types";
+import type { BrokerageOrderResponse, BrokerageSettlementResponse, ConditionalOrderResponse } from "@monticker/types";
 
 function fmt(n: number) { return n.toLocaleString("ko-KR", { maximumFractionDigits: 0 }); }
 function pnlColor(n: number) { return n > 0 ? "text-dracula-red" : n < 0 ? "text-dracula-cyan" : "text-gray-500 dark:text-dracula-comment"; }
-
-const ORDER_STATUS_META: Record<string, { label: string; icon: Icon; color: string }> = {
-  SUBMITTED:        { label: "접수됨",   icon: HourglassMedium, color: "text-dracula-orange" },
-  FILLED:           { label: "체결 완료", icon: CheckCircle,     color: "text-dracula-green" },
-  PARTIALLY_FILLED: { label: "부분 체결", icon: HourglassMedium, color: "text-dracula-cyan" },
-  CANCELLED:        { label: "취소됨",   icon: XCircle,          color: "text-gray-500 dark:text-dracula-comment" },
-  REJECTED:         { label: "거부됨",   icon: XCircle,          color: "text-dracula-red" },
-};
 
 const SETTLEMENT_STATUS_META: Record<string, { label: string; color: string }> = {
   PENDING: { label: "대기 중",   color: "text-dracula-orange" },
@@ -29,48 +21,9 @@ const SETTLEMENT_STATUS_META: Record<string, { label: string; color: string }> =
   FAILED:  { label: "실패",      color: "text-dracula-red" },
 };
 
-function OrderRow({ o }: { o: BrokerageOrderResponse }) {
-  const meta = ORDER_STATUS_META[o.status] ?? { label: o.status, icon: HourglassMedium, color: "text-gray-500" };
-  const { toast } = useToast();
-  const cancelOrder = useCancelBrokerageOrder();
-
-  const handleCancel = async () => {
-    try {
-      await cancelOrder.mutateAsync(o.id);
-      toast({ type: "success", title: "취소 완료", message: "주문이 취소되었습니다." });
-    } catch (e) {
-      toast({ type: "error", title: "취소 실패", message: (e as Error).message });
-    }
-  };
-
-  return (
-    <Card className="p-4 flex items-center gap-3">
-      <meta.icon size={18} weight="bold" className={meta.color} aria-hidden />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className={`text-xs font-medium ${o.side === "BUY" ? "text-dracula-red" : "text-dracula-cyan"}`}>{o.side === "BUY" ? "매수" : "매도"}</span>
-          <span className="text-sm font-semibold text-gray-900 dark:text-dracula-fg">{o.symbol}</span>
-          <span className="text-xs text-gray-500 dark:text-dracula-comment">{o.quantity}주</span>
-          <span className={`text-xs ${meta.color}`}>{meta.label}</span>
-        </div>
-        <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">
-          {o.avgFillPrice ? `체결가 ₩${fmt(o.avgFillPrice)}` : o.orderType === "LIMIT" ? `지정가 ₩${fmt(o.limitPrice ?? 0)}` : "시장가"}
-          {" · "}{new Date(o.submittedAt).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
-        </p>
-        {o.rejectReason && <p className="text-xs text-dracula-red mt-0.5">{o.rejectReason}</p>}
-      </div>
-      {o.status === "SUBMITTED" && (
-        <button
-          onClick={handleCancel}
-          disabled={cancelOrder.isPending}
-          className="shrink-0 px-3 py-1.5 rounded-lg border border-dracula-red/40 text-dracula-red text-xs font-medium hover:bg-dracula-red/10 transition-colors disabled:opacity-40"
-        >
-          {cancelOrder.isPending ? "취소 중..." : "주문 취소"}
-        </button>
-      )}
-    </Card>
-  );
-}
+type TimelineEntry =
+  | { kind: "REGULAR"; at: string; order: BrokerageOrderResponse }
+  | { kind: "CONDITIONAL"; at: string; order: ConditionalOrderResponse };
 
 function SettlementRow({ s }: { s: BrokerageSettlementResponse }) {
   const meta = SETTLEMENT_STATUS_META[s.status] ?? { label: s.status, color: "text-gray-500" };
@@ -104,6 +57,7 @@ export default function BrokerageDashboardPage() {
   const { data: account, isLoading: accountLoading } = useBrokerageAccount();
   const { data: balance, isLoading: balanceLoading } = useBrokerageBalance(!!account);
   const { data: ordersData, isLoading: ordersLoading } = useBrokerageOrders(ordersPage, !!account && tab === "orders");
+  const { data: conditionalData, isLoading: conditionalLoading } = useConditionalOrders(ordersPage, !!account && tab === "orders");
   const { data: settlementsData, isLoading: settlementsLoading } = useBrokerageSettlements(settlementsPage, !!account && tab === "settlements");
 
   if (!isLoggedIn) return (
@@ -136,7 +90,18 @@ export default function BrokerageDashboardPage() {
 
   const holdings = balance?.holdings ?? [];
   const orders = ordersData?.content ?? [];
+  const conditionalOrders = conditionalData?.content ?? [];
   const settlements = settlementsData?.content ?? [];
+
+  // 일반 주문과 조건부 주문은 별도 API(별도 페이지네이션)지만 같은 계좌·같은 돈이라
+  // "지금 뭐가 대기 중인지" 확인에는 한 화면에서 시간순으로 같이 보여야 한다.
+  // 모의투자(matching)는 완전히 다른 돈이라 의도적으로 여기 섞지 않는다.
+  const timeline: TimelineEntry[] = [
+    ...orders.map((order): TimelineEntry => ({ kind: "REGULAR", at: order.submittedAt, order })),
+    ...conditionalOrders.map((order): TimelineEntry => ({ kind: "CONDITIONAL", at: order.createdAt, order })),
+  ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+
+  const ordersTotalPages = Math.max(ordersData?.totalPages ?? 0, conditionalData?.totalPages ?? 0);
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 sm:py-8 animate-fade-up">
@@ -242,21 +207,30 @@ export default function BrokerageDashboardPage() {
         )
       )}
 
-      {/* 주문내역 */}
+      {/* 주문내역 — 일반 주문 + 조건부 주문을 시간순으로 합쳐서 보여준다. 모의투자(matching)는
+          별도 계좌(가상 자금)라 여기 섞지 않고 /matching에 따로 둔다. */}
       {tab === "orders" && (
-        ordersLoading ? (
+        (ordersLoading || conditionalLoading) ? (
           <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-16 rounded-xl bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15 bg-[length:200%_100%] animate-shimmer" />)}</div>
-        ) : orders.length === 0 ? (
+        ) : timeline.length === 0 ? (
           <div className="text-center py-16 border border-dashed border-gray-300 dark:border-dracula-line rounded-xl text-gray-500 dark:text-dracula-comment text-sm">
             주문 내역이 없습니다.
           </div>
         ) : (
           <>
-            <div className="space-y-2">{orders.map(o => <OrderRow key={o.id} o={o} />)}</div>
-            {(ordersData?.totalPages ?? 0) > 1 && (
+            <div className="space-y-2">
+              {timeline.map(entry => entry.kind === "REGULAR"
+                ? <OrderRow key={`regular-${entry.order.id}`} o={entry.order} showTypeBadge />
+                : <ConditionalOrderRow key={`conditional-${entry.order.id}`} o={entry.order} showTypeBadge />
+              )}
+            </div>
+            <p className="text-[10px] text-gray-400 dark:text-dracula-comment text-center mt-3">
+              조건부 주문만 따로 관리하려면 <Link href="/brokerage/conditional-orders" className="underline hover:text-gray-600 dark:hover:text-dracula-fg">조건부 주문 페이지</Link>에서 확인하세요.
+            </p>
+            {ordersTotalPages > 1 && (
               <div className="flex justify-center gap-3 mt-6">
                 {ordersPage > 0 && <button onClick={() => setOrdersPage(p => p - 1)} className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg text-sm font-medium hover:bg-gray-200 dark:hover:bg-dracula-comment transition-all duration-150">이전</button>}
-                {ordersPage < (ordersData?.totalPages ?? 1) - 1 && <button onClick={() => setOrdersPage(p => p + 1)} className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg text-sm font-medium hover:bg-gray-200 dark:hover:bg-dracula-comment transition-all duration-150">다음</button>}
+                {ordersPage < ordersTotalPages - 1 && <button onClick={() => setOrdersPage(p => p + 1)} className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg text-sm font-medium hover:bg-gray-200 dark:hover:bg-dracula-comment transition-all duration-150">다음</button>}
               </div>
             )}
           </>

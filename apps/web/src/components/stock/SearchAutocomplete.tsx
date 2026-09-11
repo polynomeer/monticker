@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
 import { cn } from "@/lib/utils";
 import type { ScreenerItem } from "@/hooks/useScreener";
+import { useRecentlyViewedStocks } from "@/hooks/useRecentlyViewedStocks";
 
 const MARKET_TABS = [
   { key: "all",      label: "전체" },
@@ -23,9 +24,10 @@ export default function SearchAutocomplete() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
   const chartTheme = useThemeStore(s => CHART_THEMES[s.chartTheme]);
+  const { entries: recentlyViewed } = useRecentlyViewedStocks();
 
   useEffect(() => {
-    if (query.length < 1) { setResults([]); setOpen(false); return; }
+    if (query.length < 1) { setResults([]); return; }
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(async () => {
       setLoading(true);
@@ -58,6 +60,10 @@ export default function SearchAutocomplete() {
         type="text"
         value={query}
         onChange={e => setQuery(e.target.value)}
+        onFocus={() => {
+          if (query.length < 1) { if (recentlyViewed.length > 0) setOpen(true); }
+          else if (filtered.length > 0) setOpen(true);
+        }}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         aria-label="종목 검색"
         placeholder="종목 검색..."
@@ -70,7 +76,31 @@ export default function SearchAutocomplete() {
       {loading && (
         <span className="absolute right-2 top-2 text-gray-400 dark:text-dracula-comment text-xs">...</span>
       )}
-      {open && (
+      {open && query.length < 1 && (
+        <div className="absolute top-full left-0 mt-1 w-72
+                       bg-white dark:bg-dracula-bg
+                       border border-gray-200 dark:border-dracula-line
+                       rounded-lg shadow-lg dark:shadow-[0_4px_24px_rgba(0,0,0,0.5)]
+                       z-50 overflow-hidden">
+          <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold text-gray-400 dark:text-dracula-comment">최근 본 종목</p>
+          <ul className="max-h-72 overflow-y-auto">
+            {recentlyViewed.map(e => (
+              <li key={e.stockId} className="border-b border-gray-100 dark:border-dracula-line last:border-0">
+                <button
+                  onMouseDown={() => { setQuery(""); setOpen(false); router.push(`/stocks/${e.symbol}`); }}
+                  className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-dracula-line flex items-center justify-between transition-colors"
+                >
+                  <span className="text-sm font-medium text-gray-900 dark:text-dracula-fg truncate">{e.name}</span>
+                  <span className="text-[10px] text-gray-400 dark:text-dracula-comment shrink-0 ml-2">
+                    {e.symbol} · {isDomestic(e.market) ? "국내" : "해외"}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {open && query.length >= 1 && (
         <div className="absolute top-full left-0 mt-1 w-72
                        bg-white dark:bg-dracula-bg
                        border border-gray-200 dark:border-dracula-line

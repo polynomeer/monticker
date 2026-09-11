@@ -29,7 +29,28 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko" suppressHydrationWarning>
-      <body className="min-h-screen font-sans antialiased bg-dracula-fg dark:bg-dracula-bg text-gray-900 dark:text-dracula-fg bg-mesh-light dark:bg-mesh-dark bg-no-repeat bg-fixed">
+      {/*
+        suppressHydrationWarning on <html>/<body> only silences mismatches in
+        that element's OWN attributes/text — it does not cover child-node
+        mismatches (e.g. a browser extension inserting a DOM node into <body>
+        before hydration; confirmed by reproducing this locally).
+
+        Separately, and more likely what recurs in this app: production
+        builds can throw a *nondeterministic* "Hydration failed" (minified
+        React error #418) under server/CPU load with no app-code mismatch at
+        all — React's concurrent renderer racing hydration against other
+        work. Confirmed locally (0/60 hits serially, occasional hits only
+        under concurrent requests) and matches a long-standing, still-open
+        upstream issue: https://github.com/vercel/next.js/issues/43159.
+        There is no known app-level fix for that class; it self-heals via
+        client re-render with no visible symptom. See e2e/hydration.spec.ts
+        for the regression guard this repo CAN enforce (no *app-introduced*
+        SSR/CSR mismatch on first load).
+      */}
+      <body
+        suppressHydrationWarning
+        className="min-h-screen font-sans antialiased bg-dracula-fg dark:bg-dracula-bg text-gray-900 dark:text-dracula-fg bg-mesh-light dark:bg-mesh-dark bg-no-repeat bg-fixed"
+      >
         <QueryProvider>
           <ThemeProvider>
             <NavBar />

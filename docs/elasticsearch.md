@@ -14,7 +14,7 @@ monticker 백엔드에 적용된 ES 인덱스·API·파이프라인 레퍼런스
 | 원칙 | 내용 |
 |---|---|
 | **DB 우선** | DB가 항상 authoritative. ES는 검색 레이어이며 장애 시 DB로 fallback한다. |
-| **Dual-write** | DB 저장 성공 후 ES 인덱싱. ES 실패는 `WARN` 로그만 남기고 트랜잭션에 영향 없음. |
+| **Dual-write** ⚠️ | DB 저장 성공 후 ES 인덱싱. ES 실패는 `WARN` 로그만 남기고 트랜잭션에 영향 없음. **[ADR-042](decisions/042-outbox-based-es-indexing.md)가 이 방식을 Outbox 기반 단일 인덱싱 파이프라인으로 대체하기로 결정했다** — 아래 내용은 전환 전 현행 구조다. |
 | **@PostConstruct 동기화** | 앱 기동 시 최근 N건을 DB→ES 배치 동기화. ES가 비어 있어도 서비스 정상 동작. |
 | **nori_analyzer** | 한국어 형태소 분석. `nori_readingform` + `lowercase` 필터 조합. |
 | **userId 격리** | 사용자 범위 검색(관심종목·알림)은 `userId` filter 필수 적용. |

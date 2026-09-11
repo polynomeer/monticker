@@ -12,9 +12,10 @@ interface Props {
   events?: EventMarker[];
   height?: number;
   vwapData?: Array<{ time: number; vwap: string }>;
+  onEventClick?: (eventId: number) => void;
 }
 
-export default function StockChart({ candles, events = [], height = 340, vwapData }: Props) {
+export default function StockChart({ candles, events = [], height = 340, vwapData, onEventClick }: Props) {
   const { resolvedTheme } = useTheme();
   const { chartTheme }    = useThemeStore();
   const ct                = CHART_THEMES[chartTheme] ?? CHART_THEMES.default;
@@ -47,6 +48,7 @@ export default function StockChart({ candles, events = [], height = 340, vwapDat
       height={height}
       theme={theme}
       vwapData={vwapData}
+      onEventClick={onEventClick}
     />
   );
 }

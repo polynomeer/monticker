@@ -877,6 +877,10 @@ wallet:snapshot:{userId}           # 최신 wallet 스냅샷 캐시 (TTL 30s)
 | 4 | Kafka always-on — all ticks route through `market.ticks` | ✅ implemented |
 | 5 | Extract `trading-service` (:8083), distributed tx via `@AFTER_COMMIT` | ✅ implemented |
 
+Stage 6 이후(대규모 트래픽·데이터 가정)는 [scale-out-plan.md](scale-out-plan.md)에서 다룬다 —
+현재 구조에서 먼저 깨지는 지점(인메모리 STOMP 브로커, `/topic/market` 전역 브로드캐스트,
+Kafka 단일 파티션, 미가동 hypertable 등)의 인벤토리와 Phase 0~4 전환 계획.
+
 ---
 
 ## MSA Architecture
@@ -1318,3 +1322,11 @@ portfolio_positions (
 | [ADR-022](decisions/022-tick-consumer-msa-role-gating.md) | msa 프로필 3중 market.ticks 중복 소비 제거 | Accepted |
 | [ADR-023](decisions/023-commercialization-pivot.md) | MVP 졸업 — 상용 서비스 전환 (BYOK 브로커 연동, 실시세, AI 가드레일) | Accepted |
 | [ADR-033](decisions/033-remove-netty-broadcast-gateway.md) | Remove Netty Broadcast Gateway (never had a frontend client) | Accepted |
+| [ADR-038](decisions/038-broadcast-consumer-partition-assignment.md) | 시세 브로드캐스트 컨슈머 — 전 파티션 수동 할당 + conflation | Accepted |
+| [ADR-039](decisions/039-drop-global-market-topic.md) | `/topic/market` 폐지 — 시장 요약 1Hz + 가시 종목 구독 | Accepted |
+| [ADR-040](decisions/040-kafka-topic-declaration.md) | Kafka 토픽 코드 선언 · auto-create 폐지 · 파티션 설계 | Accepted |
+| [ADR-041](decisions/041-timescale-hypertable-promotion.md) | TimescaleDB hypertable 승격·압축, 원시 틱 미저장 확정 | Accepted |
+| [ADR-042](decisions/042-outbox-based-es-indexing.md) | ES 인덱싱 Outbox 단일 파이프라인 통일 (CDC 미채택) | Accepted |
+| [ADR-043](decisions/043-ledger-pagination-and-reconciliation.md) | 원장 커서 페이징 + 대사 스냅샷 (ADR-013 서술 정정) | Accepted |
+| [ADR-044](decisions/044-alert-rule-in-memory-index.md) | 알림 룰 인메모리 인덱스 · 평가/발송 분리 | Accepted |
+| [ADR-045](decisions/045-performance-slo-and-verification-harness.md) | 워크로드별 SLO 정의 + 검증 하네스 범위 | Accepted |

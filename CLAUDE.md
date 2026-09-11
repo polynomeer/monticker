@@ -53,6 +53,7 @@ Accepted | Deprecated | Superseded by ADR-NNN
 ## Reference Docs
 
 - [docs/product.md](docs/product.md) — product identity, feature axes, product scope, key design decisions
+- [docs/scale-out-plan.md](docs/scale-out-plan.md) — 대규모 트래픽·데이터 대응 아키텍처 전환 계획: 병목 인벤토리, 목표 아키텍처, Phase 0~4 로드맵
 - [docs/launch-plan.md](docs/launch-plan.md) — commercial launch checklist: tech debt gates, legal/compliance, security, infra, phased rollout
 - [docs/legal-review-brief.md](docs/legal-review-brief.md) — briefing pack (facts + question list, not legal advice) to hand an actual lawyer for Phase 1 sign-off
 - [docs/architecture.md](docs/architecture.md) — system architecture, tech stack, module boundaries, API design

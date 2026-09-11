@@ -12,7 +12,7 @@ interface Portfolio {
 }
 
 function fmt(n: number) { return n.toLocaleString("ko-KR", { maximumFractionDigits: 0 }); }
-function pnlColor(n: number) { return n > 0 ? "text-[#ff5050]" : n < 0 ? "text-[#4a8fd4]" : "dark:text-dracula-comment"; }
+function pnlColor(n: number) { return n > 0 ? "text-market-up" : n < 0 ? "text-market-down" : "dark:text-dracula-comment"; }
 function sign(n: number) { return n > 0 ? "+" : ""; }
 
 export default function PortfolioSnapshot() {

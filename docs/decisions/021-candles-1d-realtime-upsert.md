@@ -3,6 +3,8 @@
 ## Status
 Accepted
 
+**Note (2026-09-10):** [ADR-041](041-timescale-hypertable-promotion.md)이 `candles_1d`를 hypertable로 승격하고 압축 정책을 건다. 압축된 chunk는 UPDATE할 수 없으므로, 이 ADR의 **당일 행 실시간 upsert**와 `compress_after`(90일) 사이에 계약이 생겼다 — upsert 윈도우를 넓히거나 `compress_after`를 줄이면 `flush()`가 실패한다. 두 값을 바꿀 때는 반드시 함께 검토할 것.
+
 ## Context
 
 `V4__create_market_data.sql`은 `candles_1d` 테이블을 만들지만, 저장소 전체에서 이 테이블에

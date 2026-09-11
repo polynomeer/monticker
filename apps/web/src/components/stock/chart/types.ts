@@ -9,6 +9,7 @@ export interface CandleData {
 }
 
 export interface EventMarker {
+  id: number;
   time: number;
   eventType: string;
   title: string;
@@ -34,6 +35,8 @@ export interface ChartAdapterProps {
   height?: number;
   theme: ChartTheme;
   vwapData?: VwapPoint[];
+  /** 차트 위 이벤트 마커를 클릭했을 때 — 이벤트 타임라인으로 점프하는 크로스 내비게이션용 */
+  onEventClick?: (eventId: number) => void;
 }
 
 // ── 어댑터 구현체가 준수해야 할 인터페이스 ───────────────────

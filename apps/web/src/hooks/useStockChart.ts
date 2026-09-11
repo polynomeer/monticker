@@ -48,9 +48,10 @@ async function fetchEvents(stockId: number): Promise<EventMarker[]> {
   if (!res.ok) return [];
   const data = await res.json();
   const mapped: EventMarker[] = data.map((e: {
-    eventTime: string; eventType: string;
+    id: number; eventTime: string; eventType: string;
     title: string; importanceScore: number;
   }) => ({
+    id:              e.id,
     time:            Math.floor(new Date(e.eventTime).getTime() / 1000),
     eventType:       e.eventType,
     title:           e.title,

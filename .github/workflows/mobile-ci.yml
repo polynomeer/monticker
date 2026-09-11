@@ -32,5 +32,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # image-size: GHSA-w3rx-r6r6-pgpr / GHSA-5p2g-fcmc-qvqq는 patched_versions가
+      # "<0.0.0"(업스트림 패치 없음)라 override로 해결 불가. Metro가 개발자 자신의
+      # 로컬 에셋만 처리하는 빌드 경로라 실질 위험이 낮아 예외 처리.
+      - name: Audit dependencies (high+ severity, apps/mobile scope)
+        working-directory: .
+        run: node scripts/ci/audit-scope.js apps/mobile --allow image-size
+
       - name: TypeScript check
         run: pnpm exec tsc --noEmit

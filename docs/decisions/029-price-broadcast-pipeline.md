@@ -3,6 +3,8 @@
 ## Status
 Accepted
 
+**Note (2026-09-10):** 이 ADR의 Consequences는 "각 그룹이 독립적으로 전체 파티션을 읽는다"고 적었으나, 그건 **그룹 안의 인스턴스가 1개일 때만** 참이다. `backend/api`가 여러 replica로 뜨면 같은 `monticker-api-broadcast` 그룹의 인스턴스끼리 파티션을 나눠 갖게 되고, 인메모리 SimpleBroker는 pod 로컬이라 일부 클라이언트가 틱을 받지 못한다. [ADR-038](038-broadcast-consumer-partition-assignment.md)이 브로드캐스트 컨슈머를 전 파티션 수동 할당으로 바꿔 이를 고친다. 나머지 결정(Kafka 직접 구독, `latest`, worker의 `bootstrap-servers` 수정)은 그대로 유효하다.
+
 ## Context
 
 실시간 시세 파이프라인을 Mock에서 실데이터(KIS/Toss)로 전환하는 작업에 착수하기 전, 현재 파이프라인을 끝까지 추적해보니 **Mock이든 실데이터든 지금은 프론트엔드에 실시간 푸시가 전혀 가지 않는다**는 훨씬 근본적인 문제를 발견했다.
