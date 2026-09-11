@@ -1,6 +1,7 @@
 package com.monticker.api.brokerage.infrastructure
 
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.monticker.api.common.http.HttpTimeouts
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import org.slf4j.LoggerFactory
@@ -55,8 +56,10 @@ class KisBrokerageClient(
     // 모의투자 서버(openapivts)인지에 따라 TR_ID 접두사(실전 T/C, 모의 V)가 달라진다.
     private val isVirtual = baseUrl.contains("vts")
 
+    // requestFactory 없이 build()하면 read 타임아웃이 무제한이다 — KIS가 느려지면 스레드가 매달린다 (P0-2).
     private val restClient = RestClient.builder()
         .baseUrl(baseUrl)
+        .requestFactory(HttpTimeouts.requestFactory(HttpTimeouts.BROKER_READ))
         .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
         .build()
 

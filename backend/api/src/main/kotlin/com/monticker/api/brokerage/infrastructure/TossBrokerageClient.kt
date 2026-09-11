@@ -1,5 +1,6 @@
 package com.monticker.api.brokerage.infrastructure
 
+import com.monticker.api.common.http.HttpTimeouts
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import org.slf4j.LoggerFactory
@@ -42,8 +43,10 @@ class TossBrokerageClient(
     private val log = LoggerFactory.getLogger(javaClass)
     private val cb = cbRegistry.circuitBreaker("toss")
 
+    // requestFactory 없이 build()하면 read 타임아웃이 무제한이다 (P0-2).
     private val restClient = RestClient.builder()
         .baseUrl(baseUrl)
+        .requestFactory(HttpTimeouts.requestFactory(HttpTimeouts.BROKER_READ))
         .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
         .build()
 

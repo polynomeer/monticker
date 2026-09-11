@@ -1,5 +1,6 @@
 package com.monticker.api.wallet.application
 
+import com.monticker.api.common.http.HttpTimeouts
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.api.wallet.domain.BehaviorGrade
 import com.monticker.api.wallet.events.GradeChangedEvent
@@ -93,6 +94,7 @@ class GradeChangedEventListener(
                 .uri(URI.create(EXPO_PUSH_URL))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(payload))
+                .timeout(HttpTimeouts.INTERNAL_READ)   // java.net.http는 read 타임아웃이 요청 단위다 (P0-2)
                 .build()
             val response = http.send(request, HttpResponse.BodyHandlers.ofString())
             log.info("[GradeChanged] push sent: userId={} status={}", event.userId, response.statusCode())
