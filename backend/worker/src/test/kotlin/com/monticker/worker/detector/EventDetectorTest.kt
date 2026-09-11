@@ -20,18 +20,11 @@ import java.time.Instant
  */
 class EventDetectorTest {
 
-    private val redisTemplate = mockk<StringRedisTemplate>()
     private val writer = mockk<StockEventWriter>(relaxed = true)
-    private val ops = mockk<ValueOperations<String, String>>()
 
-    private val priceSpikeDetector = PriceSpikeDetector(redisTemplate, writer)
-    private val volumeSurgeDetector = VolumeSurgeDetector(redisTemplate, writer)
+    private val priceSpikeDetector = PriceSpikeDetector(writer)
+    private val volumeSurgeDetector = VolumeSurgeDetector(writer)
     private val eventDetector = EventDetector(volumeSurgeDetector, priceSpikeDetector)
-
-    @BeforeEach
-    fun setup() {
-        every { redisTemplate.opsForValue() } returns ops
-    }
 
     private fun makeTick(price: BigDecimal, volume: Long) = GeneratedTick(
         stockId = 1L, symbol = "005930", market = "KOSPI",
@@ -41,11 +34,9 @@ class EventDetectorTest {
     @Test
     fun `detect는 가격과 거래량 감지기를 모두 실행하여 두 이벤트를 모두 기록한다`() {
         // 가격: prev=70000, ema=0.01(작음) → 71500이면 큰 ratio로 스파이크
-        every { ops.get("detector:price:prev:005930") } returns "70000"
-        every { ops.get("detector:price:ema:005930") } returns "0.01"
+        priceSpikeDetector.seed("005930", BigDecimal("70000"), 0.01)
         // 거래량: ema=3000 → 15000이면 5배 서지
-        every { ops.get("detector:volume:ema:005930") } returns "3000.0"
-        every { ops.set(any(), any()) } just Runs
+        volumeSurgeDetector.seed("005930", 3000.0)
 
         eventDetector.detect(makeTick(price = BigDecimal("71500"), volume = 15_000))
 
@@ -55,9 +46,8 @@ class EventDetectorTest {
 
     @Test
     fun `detectWithType은 가격 급등과 거래량 급증이 동시에 감지되면 PRICE_SPIKE를 우선한다`() {
-        every { ops.get("detector:price:prev:005930") } returns "70000"
-        every { ops.get("detector:price:ema:005930") } returns "0.01"
-        every { ops.get("detector:volume:ema:005930") } returns "3000.0"
+        priceSpikeDetector.seed("005930", BigDecimal("70000"), 0.01)
+        volumeSurgeDetector.seed("005930", 3000.0)
 
         val result = eventDetector.detectWithType(makeTick(price = BigDecimal("71500"), volume = 15_000))
 
@@ -67,9 +57,8 @@ class EventDetectorTest {
     @Test
     fun `detectWithType은 거래량 급증만 감지되면 VOLUME_SURGE를 반환한다`() {
         // 가격은 스파이크 기준(ratio 3x) 미만으로 유지
-        every { ops.get("detector:price:prev:005930") } returns "70000"
-        every { ops.get("detector:price:ema:005930") } returns "10.0" // 충분히 큰 ema → ratio < 3
-        every { ops.get("detector:volume:ema:005930") } returns "3000.0" // 15000/3000 = 5x
+        priceSpikeDetector.seed("005930", BigDecimal("70000"), 10.0) // 충분히 큰 ema → ratio < 3
+        volumeSurgeDetector.seed("005930", 3000.0)                    // 15000/3000 = 5x
 
         val result = eventDetector.detectWithType(makeTick(price = BigDecimal("70050"), volume = 15_000))
 
@@ -79,7 +68,6 @@ class EventDetectorTest {
     @Test
     fun `detectWithType은 아무 것도 감지되지 않으면 null을 반환한다`() {
         // 가격/거래량 모두 첫 틱(EMA 미초기화)이라 감지 불가
-        every { ops.get(any()) } returns null
 
         val result = eventDetector.detectWithType(makeTick(price = BigDecimal("70000"), volume = 1_000))
 

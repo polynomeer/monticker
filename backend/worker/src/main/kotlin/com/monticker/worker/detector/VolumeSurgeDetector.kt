@@ -2,8 +2,8 @@ package com.monticker.worker.detector
 
 import com.monticker.worker.marketdata.GeneratedTick
 import org.slf4j.LoggerFactory
-import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Component
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Detects volume surges by comparing current tick volume against
@@ -16,33 +16,24 @@ import org.springframework.stereotype.Component
  *   3× EMA  → meaningful signal (importanceScore 60)
  *   5× EMA  → strong signal    (importanceScore 85)
  */
+/** ADR-046 — 거래량 EMA 상태를 메모리에 둔다 (PriceSpikeDetector 주석 참고: 틱당 Redis 왕복이 처리 상한이었다). */
 @Component
 class VolumeSurgeDetector(
-    private val redisTemplate: StringRedisTemplate,
     private val writer: StockEventWriter,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val emaAlpha = 0.1  // smoothing factor
 
+    private val emas = ConcurrentHashMap<String, Double>()   // symbol → 거래량 EMA
+
+    fun seed(symbol: String, ema: Double) { emas[symbol] = ema }
+
     fun detect(tick: GeneratedTick) {
-        val emaKey = "detector:volume:ema:${tick.symbol}"
-        val rawEma = redisTemplate.opsForValue().get(emaKey)
-
         val currentVolume = tick.volume.toDouble()
-
-        if (rawEma == null) {
-            // Initialize EMA with first observation
-            redisTemplate.opsForValue().set(emaKey, currentVolume.toString())
-            return
-        }
-
-        val ema = rawEma.toDouble()
+        val ema = emas[tick.symbol]
+        if (ema == null) { emas[tick.symbol] = currentVolume; return }   // 첫 관측으로 초기화
         val ratio = if (ema > 0) currentVolume / ema else 1.0
-
-        // Update EMA
-        val newEma = emaAlpha * currentVolume + (1 - emaAlpha) * ema
-        redisTemplate.opsForValue().set(emaKey, newEma.toString())
-
+        emas[tick.symbol] = emaAlpha * currentVolume + (1 - emaAlpha) * ema
         if (ratio < 3.0) return
 
         val score = when {
@@ -71,10 +62,8 @@ class VolumeSurgeDetector(
 
     /** 이벤트 기록 없이 서지 여부만 반환한다 (Spring Integration Router 전용). */
     fun detectWithResult(tick: GeneratedTick): Boolean {
-        val emaKey = "detector:volume:ema:${tick.symbol}"
-        val rawEma = redisTemplate.opsForValue().get(emaKey) ?: return false
-        val ema    = rawEma.toDouble()
-        val ratio  = if (ema > 0) tick.volume.toDouble() / ema else 1.0
+        val ema = emas[tick.symbol] ?: return false
+        val ratio = if (ema > 0) tick.volume.toDouble() / ema else 1.0
         return ratio >= 3.0
     }
 }

@@ -2,8 +2,8 @@ package com.monticker.worker.detector
 
 import com.monticker.worker.marketdata.GeneratedTick
 import org.slf4j.LoggerFactory
-import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Component
+import java.util.concurrent.ConcurrentHashMap
 import java.math.BigDecimal
 
 /**
@@ -14,43 +14,41 @@ import java.math.BigDecimal
  *   change > 3× EMA of change  → spike detected
  *   direction determines PRICE_SPIKE vs PRICE_DROP
  */
+/**
+ * ADR-046 — 감지기 상태(직전 가격, 변동률 EMA)는 프로세스 메모리에 둔다.
+ * 이전에는 Redis에 두어 틱마다 GET/SET 4회를 동기로 했다 — L-03 프로파일링에서 컨슈머 스레드 스택 15개 중
+ * 13개가 이 Redis 대기였고, 틱당 Redis 왕복 7회(시세 SET 1 + 가격 감지기 4 + 거래량 감지기 2)가 워커 처리
+ * 상한 ~600 tick/s의 실제 원인이었다. 같은 종목은 항상 같은 파티션/컨슈머로 오므로(키=stockId) 메모리 상태로
+ * 충분하고, 재시작 시 잃는 건 EMA 워밍업(~20틱)뿐이다.
+ */
 @Component
 class PriceSpikeDetector(
-    private val redisTemplate: StringRedisTemplate,
     private val writer: StockEventWriter,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val emaAlpha = 0.1
 
+    /** symbol → (직전 가격, 변동률 EMA). EMA는 두 번째 틱부터 존재한다. */
+    class State(@Volatile var prev: BigDecimal, @Volatile var ema: Double?)
+    private val states = ConcurrentHashMap<String, State>()
+
+    /** 테스트·재시작 후 상태 주입용 */
+    fun seed(symbol: String, prev: BigDecimal, ema: Double?) { states[symbol] = State(prev, ema) }
+    fun stateCount(): Int = states.size
+
     fun detect(tick: GeneratedTick) {
-        val prevKey = "detector:price:prev:${tick.symbol}"
-        val emaKey  = "detector:price:ema:${tick.symbol}"
-
-        val rawPrev = redisTemplate.opsForValue().get(prevKey)
-
-        if (rawPrev == null) {
-            redisTemplate.opsForValue().set(prevKey, tick.price.toPlainString())
-            return
-        }
-
-        val prev = BigDecimal(rawPrev)
+        val st = states[tick.symbol]
+        if (st == null) { states[tick.symbol] = State(tick.price, null); return }
+        val prev = st.prev
         val change = tick.price.subtract(prev).abs()
         val changePct = if (prev > BigDecimal.ZERO)
             change.divide(prev, 6, java.math.RoundingMode.HALF_UP).toDouble() * 100
         else 0.0
-
-        // Update previous price
-        redisTemplate.opsForValue().set(prevKey, tick.price.toPlainString())
-
-        val rawEma = redisTemplate.opsForValue().get(emaKey)
-        if (rawEma == null) {
-            redisTemplate.opsForValue().set(emaKey, changePct.toString())
-            return
-        }
-
-        val ema = rawEma.toDouble()
+        st.prev = tick.price
+        val ema = st.ema
+        if (ema == null) { st.ema = changePct; return }
         val newEma = emaAlpha * changePct + (1 - emaAlpha) * ema
-        redisTemplate.opsForValue().set(emaKey, newEma.toString())
+        st.ema = newEma
 
         val ratio = if (ema > 0.001) changePct / ema else 0.0
         if (ratio < 3.0) return
@@ -86,15 +84,12 @@ class PriceSpikeDetector(
 
     /** 이벤트 기록 없이 스파이크 여부만 반환한다 (Spring Integration Router 전용). */
     fun detectWithResult(tick: GeneratedTick): Boolean {
-        val prevKey = "detector:price:prev:${tick.symbol}"
-        val emaKey  = "detector:price:ema:${tick.symbol}"
-        val rawPrev = redisTemplate.opsForValue().get(prevKey) ?: return false
-        val rawEma  = redisTemplate.opsForValue().get(emaKey)  ?: return false
-        val prev    = java.math.BigDecimal(rawPrev)
+        val st = states[tick.symbol] ?: return false
+        val ema = st.ema ?: return false
+        val prev = st.prev
         val change  = tick.price.subtract(prev).abs()
         val changePct = if (prev > java.math.BigDecimal.ZERO)
             change.divide(prev, 6, java.math.RoundingMode.HALF_UP).toDouble() * 100 else 0.0
-        val ema   = rawEma.toDouble()
         val ratio = if (ema > 0.001) changePct / ema else 0.0
         return ratio >= 3.0
     }
