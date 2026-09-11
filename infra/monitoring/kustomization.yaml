@@ -1,0 +1,41 @@
+# K8s 관측 스택 (resilience-plan §4.1 / P1-1).
+#
+# 이 kustomization의 루트가 infra/monitoring/ 인 이유: kustomize는 루트 밖 파일을 읽지 못한다.
+# alert-rules.yml, grafana/dashboards/*.json, alertmanager*.yml은 docker-compose도 그대로 쓰는
+# 단일 소스이고, 여기서 configMapGenerator로 실어 K8s와 compose가 같은 규칙·대시보드를 본다.
+# 복사본을 두면 반드시 어긋난다.
+#
+# 적용: infra/k8s/base/kustomization.yaml 이 ../../monitoring 을 resource로 포함한다.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: monticker
+
+resources:
+  - k8s/rbac.yaml
+  - k8s/prometheus-config.yaml
+  - k8s/prometheus.yaml
+  - k8s/alertmanager.yaml
+  - k8s/grafana.yaml
+
+configMapGenerator:
+  - name: prometheus-rules
+    files:
+      - alert-rules.yml
+  - name: alertmanager-templates
+    files:
+      - alertmanager.yml
+      - alertmanager.slack.tpl.yml
+  - name: grafana-datasources
+    files:
+      - grafana/provisioning/datasources/prometheus.yml
+  - name: grafana-dashboard-providers
+    files:
+      - grafana/provisioning/dashboards/dashboards.yml
+  - name: grafana-dashboards
+    files:
+      - grafana/dashboards/api-overview.json
+      - grafana/dashboards/tick-pipeline.json
+
+generatorOptions:
+  disableNameSuffixHash: true   # Deployment가 고정 이름으로 참조한다. 갱신 시 pod 재시작은 rollout restart로.

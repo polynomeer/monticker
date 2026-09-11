@@ -14,6 +14,10 @@ spec:
     metadata:
       labels:
         app: api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8080"
     spec:
       # resilience-plan §D3 / P0-7 — replica가 한 노드/존에 몰리지 않게 한다.
       # 이 설정이 없으면 노드 1대 손실이 전면 장애가 된다. ScheduleAnyway: 노드가 1개뿐인

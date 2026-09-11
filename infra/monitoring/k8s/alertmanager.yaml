@@ -1,0 +1,86 @@
+# Alertmanager (resilience-plan §4.5 / P0-3, P1-1).
+# docker-compose와 같은 방식: SLACK_WEBHOOK_URL이 있으면 alertmanager.slack.tpl.yml을 렌더링,
+# 없으면 무발송 alertmanager.yml. 렌더링은 initContainer가 하고 emptyDir로 넘긴다.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: monticker
+  labels:
+    app: alertmanager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      initContainers:
+        - name: render-config
+          image: busybox:1.36
+          env:
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: monticker-secrets
+                  key: SLACK_WEBHOOK_URL
+                  optional: true
+          command:
+            - /bin/sh
+            - -c
+            - |
+              if [ -n "$SLACK_WEBHOOK_URL" ]; then
+                sed "s|__SLACK_WEBHOOK_URL__|$SLACK_WEBHOOK_URL|g" /templates/alertmanager.slack.tpl.yml > /rendered/alertmanager.yml
+                echo "[alertmanager] Slack receiver 활성화"
+              else
+                cp /templates/alertmanager.yml /rendered/alertmanager.yml
+                echo "[alertmanager] SLACK_WEBHOOK_URL 미설정 — 무발송 모드. 알람은 UI에서만 보인다 (human-action-items §3)"
+              fi
+          volumeMounts:
+            - name: templates
+              mountPath: /templates
+            - name: rendered
+              mountPath: /rendered
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:v0.27.0
+          args:
+            - --config.file=/etc/alertmanager/alertmanager.yml
+            - --storage.path=/alertmanager
+          ports:
+            - containerPort: 9093
+          volumeMounts:
+            - name: rendered
+              mountPath: /etc/alertmanager
+            - name: data
+              mountPath: /alertmanager
+          readinessProbe:
+            httpGet: { path: /-/ready, port: 9093 }
+          livenessProbe:
+            httpGet: { path: /-/healthy, port: 9093 }
+          resources:
+            requests: { cpu: "50m",  memory: "64Mi" }
+            limits:   { cpu: "200m", memory: "256Mi" }
+      volumes:
+        - name: templates
+          configMap:
+            name: alertmanager-templates
+        - name: rendered
+          emptyDir: {}
+        - name: data
+          emptyDir: {}      # 사일런스·알림 상태. 재시작 시 사라져도 알람은 Prometheus가 다시 보낸다
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: monticker
+spec:
+  selector:
+    app: alertmanager
+  ports:
+    - port: 9093
+      targetPort: 9093
