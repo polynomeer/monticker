@@ -42,4 +42,12 @@ class HealthProbeConfigTest {
         val probes = healthConfig()["probes"] as Map<String, Any>
         assertThat(probes["enabled"]).isEqualTo(true)
     }
+
+    @Suppress("UNCHECKED_CAST")
+    @Test
+    fun `DB 커넥션에 statement_timeout이 걸려 있다 — 느린 쿼리가 풀을 고갈시키지 않도록`() {
+        val yaml = Yaml().load<Map<String, Any>>(javaClass.getResourceAsStream("/application.yml"))
+        val hikari = ((yaml["spring"] as Map<String, Any>)["datasource"] as Map<String, Any>)["hikari"] as Map<String, Any>
+        assertThat(hikari["connection-init-sql"] as String).contains("statement_timeout")
+    }
 }

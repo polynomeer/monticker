@@ -10,6 +10,9 @@ spring:
       maximum-pool-size: 20
       minimum-idle: 5
       connection-timeout: 3000
+      # resilience-plan §A4 / P1-3 — 느린 쿼리가 커넥션을 무한정 잡고 풀을 고갈시키는 것을 막는다.
+      # 물리 커넥션마다 1회 실행된다. 30s: OLTP + 모놀리스 모드의 백테스트/분석 조회. 원장 전체 조회(ADR-043 전) 같은 폭주는 여기서 잘린다.
+      connection-init-sql: "SET statement_timeout = '30s'"
       idle-timeout: 600000
   jpa:
     hibernate:
