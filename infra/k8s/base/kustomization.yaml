@@ -18,3 +18,4 @@ resources:
   - worker-alert.yaml
   - jaeger.yaml
   - ingress.yaml
+  - pdb.yaml

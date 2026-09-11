@@ -1,0 +1,73 @@
+# resilience-plan §D3 / P0-7 — 자발적 중단(노드 drain, 클러스터 업그레이드) 중에도
+# 각 서비스의 replica가 최소 1개는 남도록 한다. 이게 없으면 drain 한 번에 동시 evict되어
+# 다운타임이 난다.
+#
+# replica 1인 배포(worker, market-gateway, jaeger, trading-service)에는 PDB를 두지 않는다 —
+# minAvailable: 1 이면 drain이 영원히 막히고, maxUnavailable: 1 이면 아무것도 보호하지 않는다.
+# 그 서비스들은 replica를 늘리는 게 답이지 PDB가 답이 아니다.
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api-pdb
+  namespace: monticker
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: web-pdb
+  namespace: monticker
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: web
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: quant-engine-pdb
+  namespace: monticker
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: quant-engine
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: worker-market-pdb
+  namespace: monticker
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: worker-market
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: worker-event-pdb
+  namespace: monticker
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: worker-event
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: worker-alert-pdb
+  namespace: monticker
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: worker-alert
