@@ -94,6 +94,24 @@ monitoring-status:
 	@echo "\n--- Grafana ---"
 	@curl -s http://localhost:3001/api/health | python3 -m json.tool 2>/dev/null || echo "DOWN"
 
+# ── DB Backup (resilience-plan P0-5) ───────────────────────────
+# 로컬 compose Postgres 대상. 운영은 infra/k8s/base/db-backup.yaml CronJob이 같은 스크립트를 돈다.
+# 도구(pg_dump 등)는 호스트에 설치하지 않고 DB와 같은 메이저의 컨테이너 안에서 실행한다.
+
+DB_TOOL_IMAGE ?= timescale/timescaledb:latest-pg16
+
+db-backup:
+	docker run --rm --network monticker_default -v "$(PWD)/infra/db:/db" -v "$(PWD)/infra/db/backups:/backups" \
+	  -e DB_HOST=postgres -e BACKUP_DIR=/backups $(DB_TOOL_IMAGE) bash /db/backup.sh
+
+# 백업 → 스크래치 DB 복구 → 행 수 대조 → 스크래치 삭제. 원본은 읽기만 한다.
+db-restore-rehearsal:
+	docker run --rm --network monticker_default -v "$(PWD)/infra/db:/db" \
+	  -e DB_HOST=postgres -e BACKUP_DIR=/tmp/rehearsal $(DB_TOOL_IMAGE) bash /db/rehearse-restore.sh
+
+db-backup-image:
+	docker build -f infra/docker/db-backup/Dockerfile -t monticker/db-backup:latest infra/db
+
 # ── Pinpoint APM ───────────────────────────────────────────────
 # UI: http://localhost:18080  초기 기동 2~3분 소요 (HBase 스키마 초기화)
 # 에이전트 활성화: PINPOINT_ENABLE=true docker compose --profile full --profile pinpoint up

@@ -23,3 +23,5 @@ images:
     newTag: "1.0.0"
   - name: monticker/market-gateway
     newTag: "1.0.0"
+  - name: monticker/db-backup
+    newTag: "1.0.0"

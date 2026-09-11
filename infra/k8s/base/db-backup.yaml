@@ -1,0 +1,109 @@
+# resilience-plan §D7 / P0-5 — infra/db/backup.sh를 매일 실행한다.
+#
+# 이 매니페스트가 생기기 전에는 백업 스크립트가 어떤 스케줄에도 연결돼 있지 않았다.
+# "스크립트가 있다"와 "백업이 찍힌다"는 다른 말이다 (init-timescaledb.sql이 그랬듯).
+#
+# 03:15 KST(18:15 UTC) — 한국·미국 장 모두 닫힌 뒤, 야간 배치(T+2 정산 등)가 끝난 시각.
+# 백업은 PVC에 남기고, BACKUP_S3_URL이 설정돼 있으면 오브젝트 스토리지에도 올린다.
+# PVC만으로는 부족하다 — 클러스터가 죽으면 같이 죽는다. 운영에서는 S3 업로드가 필수다.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: db-backups
+  namespace: monticker
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: db-backup
+  namespace: monticker
+spec:
+  schedule: "15 18 * * *"
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid          # 이전 백업이 안 끝났으면 겹쳐 돌리지 않는다
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 7          # 실패 이력은 넉넉히 — 알람이 이걸 본다
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600    # 1시간 넘게 걸리면 뭔가 잘못됐다
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: backup
+              image: monticker/db-backup:latest
+              env:
+                - name: DB_HOST
+                  value: postgres
+                - name: DB_PORT
+                  value: "5432"
+                - name: DB_NAME
+                  value: monticker
+                - name: BACKUP_DIR
+                  value: /backups
+                - name: RETENTION_DAYS
+                  value: "14"
+              envFrom:
+                - secretRef:
+                    name: monticker-secrets     # DB_USER, DB_PASSWORD → PGPASSWORD
+                - secretRef:
+                    name: monticker-backup-secrets
+                    optional: true              # BACKUP_S3_URL, AWS_* — 없으면 PVC에만 남긴다
+              # backup.sh는 PGPASSWORD를 읽는다. Secret의 DB_PASSWORD를 그 이름으로 넘긴다.
+              command: ["/bin/bash", "-c", "export PGPASSWORD=\"$DB_PASSWORD\"; exec /opt/db/backup.sh"]
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+              resources:
+                requests: { cpu: "100m", memory: "256Mi" }
+                limits:   { cpu: "1",    memory: "1Gi" }
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: db-backups
+---
+# 주 1회 복원 리허설 — 백업이 실제로 복구 가능한지 스크래치 DB에서 검증한다.
+# 실패하면 Job이 Failed로 남고, kube-state-metrics 기반 알람(P1-1)이 이를 잡는다.
+# 원본 DB는 읽기만 하고, 스크래치 DB(monticker_restore_check)는 끝나면 지운다.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: db-restore-rehearsal
+  namespace: monticker
+spec:
+  schedule: "45 18 * * 0"            # 일요일 03:45 KST
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 4
+  failedJobsHistoryLimit: 4
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 7200
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: rehearsal
+              image: monticker/db-backup:latest
+              env:
+                - name: DB_HOST
+                  value: postgres
+                - name: DB_NAME
+                  value: monticker
+                - name: BACKUP_DIR
+                  value: /tmp/rehearsal
+              envFrom:
+                - secretRef:
+                    name: monticker-secrets
+              command: ["/bin/bash", "-c", "export PGPASSWORD=\"$DB_PASSWORD\"; exec /opt/db/rehearse-restore.sh"]
+              resources:
+                requests: { cpu: "200m", memory: "512Mi" }
+                limits:   { cpu: "2",    memory: "2Gi" }

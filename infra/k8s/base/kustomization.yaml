@@ -19,3 +19,4 @@ resources:
   - jaeger.yaml
   - ingress.yaml
   - pdb.yaml
+  - db-backup.yaml
