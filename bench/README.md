@@ -1,4 +1,20 @@
-# monticker API Benchmark
+# monticker Benchmark
+
+> 2026-09-11 — resilience-plan §5 / ADR-045 에 따라 시나리오를 확장했다.
+> `scenarios/rest.js`(L-01), `scenarios/ws-fanout.js`(L-02), `scenarios/tick-storm.sh`(L-03), `chaos/`(카오스 실험).
+> 기존 `scenarios/api.js`는 그대로 두되 임계값이 SLO와 다르므로 새 작업은 `rest.js`를 쓴다.
+> 기준선 결과와 해석: [docs/resilience-plan.md §5.5](../docs/resilience-plan.md).
+
+```bash
+# L-01 REST (BASE_URL은 대상 API)
+k6 run --env SCENARIO=baseline --env BASE_URL=http://localhost:8080 bench/scenarios/rest.js
+# L-02 WS fan-out — GLOBAL=1 이면 /topic/market(전역, ADR-039 폐지 예정)도 구독해 "before"를 잰다
+k6 run --env SCENARIO=baseline --env HOLD=40 --env GLOBAL=1 --env BASE_URL=http://localhost:8080 bench/scenarios/ws-fanout.js
+# L-03 틱 폭주 — Go 게이트웨이 빌드 후 (cd services/market-gateway && go build -o /tmp/mg .)
+GATEWAY=/tmp/mg WORKER=http://localhost:8081 KAFKA_BROKERS=localhost:29092 DB_URL=postgres://... bench/scenarios/tick-storm.sh
+```
+
+## (이전) API Benchmark
 
 ## 빠른 시작
 
