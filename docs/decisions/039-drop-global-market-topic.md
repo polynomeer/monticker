@@ -3,6 +3,8 @@
 ## Status
 Accepted
 
+**구현 (2026-09-11):** api `3180a45`, worker `002d11d`, web `e7200d1`(같은 작업 단위). L-02 500 연결: 연결당 199→19 msg/s, e2e p95 7.6s→139ms. 후속으로 남긴 것 — 스크리너는 "로드된 페이지" 단위 구독이며 TanStack Virtual 가시 행 단위(§Decision 2)는 아직이다. 결과: [resilience-plan §5.5](../resilience-plan.md).
+
 ## Context
 
 [`PriceBroadcaster`](../../backend/api/src/main/kotlin/com/monticker/api/marketdata/infrastructure/PriceBroadcaster.kt)는

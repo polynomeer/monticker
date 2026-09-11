@@ -917,8 +917,8 @@ order.commands (파티션 64, key=stockId)
 
 | # | 작업 | 근거 | 규모 |
 |---|------|------|------|
-| 0.1 | 브로드캐스트 컨슈머 전 파티션 수동 할당 + conflation ([ADR-038](decisions/038-broadcast-consumer-partition-assignment.md)) | §3.1 replicas≥2에서 틱 유실 | S |
-| 0.2 | `/topic/market` 제거 → `market.summary` 1Hz ([ADR-039](decisions/039-drop-global-market-topic.md)) | §3.2 | M |
+| 0.1 ✅ | 브로드캐스트 컨슈머 전 파티션 수동 할당 + conflation ([ADR-038](decisions/038-broadcast-consumer-partition-assignment.md)) — `d614339`, 2 인스턴스 라이브 검증 | §3.1 replicas≥2에서 틱 유실 | S |
+| 0.2 ✅ | `/topic/market` 제거 → `market.summary` 1Hz ([ADR-039](decisions/039-drop-global-market-topic.md)) — `3180a45` `002d11d` `e7200d1`, L-02 p95 7.6s→139ms | §3.2 | M |
 | 0.3 | Kafka 토픽 명시 선언 + auto-create off ([ADR-040](decisions/040-kafka-topic-declaration.md)) — **0.1 배포 이후** | §3.3 | S |
 | 0.4 | 캔들 hypertable 승격 + CI 검증 ([ADR-041](decisions/041-timescale-hypertable-promotion.md)) | §3.5, ADR-021이 이미 지적 | M |
 | 0.5 | 압축 정책 + `price_ticks`/죽은 코드 제거 ([ADR-041](decisions/041-timescale-hypertable-promotion.md)) | §3.5 | S |
