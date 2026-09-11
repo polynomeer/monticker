@@ -33,7 +33,6 @@ class LatencyTracker(private val meterRegistry: MeterRegistry) {
             .register(meterRegistry)
 
     private val redisTimer     = timer("tick.latency.redis_write")
-    private val dbTimer        = timer("tick.latency.db_write")
     private val broadcastTimer = timer("tick.latency.broadcast")
     private val totalTimer     = timer("tick.latency.total_pipeline")
 
@@ -45,12 +44,6 @@ class LatencyTracker(private val meterRegistry: MeterRegistry) {
     fun recordRedisWrite(stockId: Long) {
         tickTimestamps[stockId]?.let {
             redisTimer.record(Duration.between(it, Instant.now()))
-        }
-    }
-
-    fun recordDbWrite(stockId: Long) {
-        tickTimestamps[stockId]?.let {
-            dbTimer.record(Duration.between(it, Instant.now()))
         }
     }
 
@@ -71,8 +64,6 @@ class LatencyTracker(private val meterRegistry: MeterRegistry) {
         "totalTicks"          to tickCount.get(),
         "redisWrite_p50ms"    to redisTimer.percentile(0.5,  TimeUnit.MILLISECONDS),
         "redisWrite_p99ms"    to redisTimer.percentile(0.99, TimeUnit.MILLISECONDS),
-        "dbWrite_p50ms"       to dbTimer.percentile(0.5,     TimeUnit.MILLISECONDS),
-        "dbWrite_p99ms"       to dbTimer.percentile(0.99,    TimeUnit.MILLISECONDS),
         "broadcast_p50ms"     to broadcastTimer.percentile(0.5,  TimeUnit.MILLISECONDS),
         "broadcast_p99ms"     to broadcastTimer.percentile(0.99, TimeUnit.MILLISECONDS),
         "totalPipeline_p50ms" to totalTimer.percentile(0.5,  TimeUnit.MILLISECONDS),
