@@ -1,5 +1,6 @@
 package com.monticker.worker.kafka
 
+import io.micrometer.core.instrument.MeterRegistry
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.worker.alert.TickProcessedEvent
 import com.monticker.worker.detector.EventDetector
@@ -57,6 +58,7 @@ class TickKafkaConsumer(
     private val eventDetector: EventDetector,
     private val latencyTracker: LatencyTracker,
     private val eventPublisher: ApplicationEventPublisher,
+    private val meterRegistry: MeterRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val objectMapper = ObjectMapper().findAndRegisterModules()
@@ -90,6 +92,7 @@ class TickKafkaConsumer(
 
     @DltHandler
     fun onTickDlt(record: ConsumerRecord<String, String>) {
+        meterRegistry.counter("dlt_messages_total", "topic", "market.ticks").increment()   // 알람: DltMessagesGrowing (P1-2)
         log.error(
             "[DLT] market.ticks 최종 실패 — 수동 검토 필요. " +
             "topic={} partition={} offset={} key={}",

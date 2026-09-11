@@ -1,5 +1,6 @@
 package com.monticker.worker.kafka
 
+import io.micrometer.core.instrument.MeterRegistry
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.worker.alert.AlertEvaluator
 import org.apache.kafka.clients.consumer.ConsumerRecord
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Component
 @ConditionalOnExpression("'\${worker.role:all}' == 'alert'")
 class AlertKafkaConsumer(
     private val alertEvaluator: AlertEvaluator,
+    private val meterRegistry: MeterRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val objectMapper = ObjectMapper().findAndRegisterModules()
@@ -40,6 +42,7 @@ class AlertKafkaConsumer(
 
     @DltHandler
     fun onTickProcessedDlt(record: ConsumerRecord<String, String>) {
+        meterRegistry.counter("dlt_messages_total", "topic", "market.tick-processed").increment()   // 알람: DltMessagesGrowing (P1-2)
         log.error(
             "[DLT] market.tick-processed 최종 실패 — 알림 평가 누락. " +
             "topic={} partition={} offset={} key={}",

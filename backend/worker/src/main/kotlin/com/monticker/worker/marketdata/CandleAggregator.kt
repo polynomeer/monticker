@@ -1,6 +1,7 @@
 package com.monticker.worker.marketdata
 
 import com.monticker.worker.common.DistributedLock
+import io.micrometer.core.instrument.MeterRegistry
 import jakarta.annotation.PreDestroy
 import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
@@ -25,7 +26,12 @@ import java.util.concurrent.ConcurrentHashMap
 class CandleAggregator(
     private val jdbc: JdbcTemplate,
     txManager: PlatformTransactionManager,
+    meterRegistry: MeterRegistry,
 ) {
+    // resilience-plan §E4 / P1-2 — flush 실패는 로그만 남으면 조용히 캔들이 비어간다.
+    // 압축 chunk 충돌(ADR-041)이 이 카운터로 드러나야 한다. 알람: CandleFlushFailing.
+    private val flushFailed = meterRegistry.counter("candle_flush_failed_total")
+
     private val log = LoggerFactory.getLogger(javaClass)
     private val KST = ZoneId.of("Asia/Seoul")
     private val tx = TransactionTemplate(txManager)
@@ -77,6 +83,7 @@ class CandleAggregator(
                 upsertCandle("candles_1d", c.stockId, dayStart, c)
             }
         } catch (e: Exception) {
+            flushFailed.increment()
             log.error("Candle flush failed for stock {}: {}", c.stockId, e.message)
         }
     }

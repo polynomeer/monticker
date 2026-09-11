@@ -1,5 +1,6 @@
 package com.monticker.worker.alert
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import com.monticker.worker.push.ExpoPushSender
 import io.mockk.*
 import org.assertj.core.api.Assertions.assertThat
@@ -21,7 +22,8 @@ class AlertEvaluatorTest {
     private val esOps = mockk<ElasticsearchOperations>(relaxed = true)
     private val redis = mockk<StringRedisTemplate>(relaxed = true)
     private val mailSender = mockk<JavaMailSender>(relaxed = true)
-    private val evaluator = AlertEvaluator(jdbc, pushSender, esOps, redis, mailSender)
+    private val meterRegistry = SimpleMeterRegistry()
+    private val evaluator = AlertEvaluator(jdbc, pushSender, esOps, redis, mailSender, meterRegistry)
 
     @BeforeEach
     fun setup() {
@@ -401,5 +403,30 @@ class AlertEvaluatorTest {
         evaluator.processAlert(stockId = 5L, price = BigDecimal("95000"))
 
         verify(exactly = 0) { pushSender.send(any()) }
+    }
+
+    // resilience-plan §E7 / P1-2 — 한 룰의 실패가 같은 종목의 다른 룰을 막지 않고, 실패는 카운터로 남는다.
+    @Test
+    fun `한 룰의 평가 예외가 다른 룰의 평가를 막지 않고 ruleType별 실패 카운터를 올린다`() {
+        val broken = AlertRuleRow(id = 1L, userId = 10L, stockId = 5L,
+            ruleType = "VOLUME_SURGE", conditionJson = """{"surgeRatio": 2.0}""")
+        val healthy = AlertRuleRow(id = 2L, userId = 10L, stockId = 5L,
+            ruleType = "PRICE_ABOVE", conditionJson = """{"threshold": 70000}""")
+        every { jdbc.query(any<String>(), any<RowMapper<AlertRuleRow>>(), 5L) } returns listOf(broken, healthy)
+        // VOLUME_SURGE의 집계 쿼리가 실패한다 (예: 무효 SQL — ADR-044가 기록한 실제 사고)
+        every { jdbc.queryForMap(any<String>(), *anyVararg()) } throws RuntimeException("bad SQL")
+        stubCooldownAcquired(true)
+        stubHistoryInsert(7L)
+        every { jdbc.queryForList(any<String>(), String::class.java, *anyVararg()) } returns listOf("ExponentPushToken[x]")
+        every { jdbc.update(any<String>(), *anyVararg()) } returns 1
+
+        evaluator.processAlert(stockId = 5L, price = BigDecimal("75000"))
+
+        // 두 번째(정상) 룰은 그대로 발동했다
+        verify(exactly = 1) { pushSender.send(any()) }
+        assertThat(meterRegistry.counter("alert_rule_eval_failed_total", "ruleType", "VOLUME_SURGE").count())
+            .isEqualTo(1.0)
+        assertThat(meterRegistry.counter("alert_rule_eval_failed_total", "ruleType", "PRICE_ABOVE").count())
+            .isEqualTo(0.0)
     }
 }

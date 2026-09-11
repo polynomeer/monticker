@@ -2,6 +2,7 @@ package com.monticker.worker.alert
 
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
+import io.micrometer.core.instrument.MeterRegistry
 import com.monticker.worker.push.ExpoPushSender
 import com.monticker.worker.push.PushMessage
 import org.slf4j.LoggerFactory
@@ -45,6 +46,7 @@ class AlertEvaluator(
     private val esOps: ElasticsearchOperations,
     private val redis: StringRedisTemplate,
     private val mailSender: JavaMailSender,
+    private val meterRegistry: MeterRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val objectMapper = ObjectMapper()
@@ -55,11 +57,24 @@ class AlertEvaluator(
 
     // AlertKafkaConsumer(role=alert)에서도 직접 호출한다
     fun processAlert(stockId: Long, price: java.math.BigDecimal) {
-        try {
-            val rules = fetchRulesForStock(stockId)
-            for (rule in rules) evaluateRule(rule, price)
+        val rules = try {
+            fetchRulesForStock(stockId)
         } catch (e: Exception) {
-            log.error("[AlertEvaluator] stockId={} 평가 오류: {}", stockId, e.message)
+            meterRegistry.counter("alert_rule_eval_failed_total", "ruleType", "_fetch").increment()
+            log.error("[AlertEvaluator] stockId={} 룰 조회 오류: {}", stockId, e.message)
+            return
+        }
+        // 룰 단위로 격리한다 — 이전에는 바깥 try/catch 하나라 한 룰의 예외가 같은 종목의 나머지 룰
+        // 평가를 전부 건너뛰게 했고, 그 실패는 로그로만 남았다. VOLUME_SURGE가 무효 SQL로
+        // "한 번도 발동한 적 없었던" 사고(ADR-044)가 정확히 이 구조에서 나왔다.
+        // 실패는 ruleType별 카운터로 남긴다. 알람: AlertRuleEvalFailing (resilience-plan §E7 / P1-2).
+        for (rule in rules) {
+            try {
+                evaluateRule(rule, price)
+            } catch (e: Exception) {
+                meterRegistry.counter("alert_rule_eval_failed_total", "ruleType", rule.ruleType).increment()
+                log.error("[AlertEvaluator] ruleId={} type={} 평가 오류: {}", rule.id, rule.ruleType, e.message)
+            }
         }
     }
 
