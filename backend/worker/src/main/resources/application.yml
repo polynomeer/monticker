@@ -59,6 +59,17 @@ management:
         include: health,info,metrics,prometheus
   endpoint:
     health:
+      # resilience-plan §A3 / P0-6 — readiness가 실제 서빙 가능 여부를 본다.
+      # 설정이 없으면 Spring 기본값(readinessState만)이라 DB가 죽어도 pod는 Ready로 남아
+      # 트래픽을 계속 받는다. db는 readiness에만 넣는다 — liveness에 넣으면 DB 장애가
+      # pod 재시작 루프를 유발해 복구가 더 느려진다. liveness는 프로세스 생존만 본다.
+      probes:
+        enabled: true        # K8s 밖(docker-compose)에서도 /readiness, /liveness 노출
+      group:
+        readiness:
+          include: readinessState,db
+        liveness:
+          include: livenessState
       show-details: always
       show-components: always
   metrics:
