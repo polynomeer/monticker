@@ -20,12 +20,16 @@ spring:
     show-sql: false
   flyway:
     enabled: false
+  # Spring Boot 3의 ES 접속 키는 spring.elasticsearch.uris 다. 이전에는 spring.data.elasticsearch.uris
+  # (Boot 3에 존재하지 않는 키)에 두어 ELASTICSEARCH_URI가 조용히 무시되고 기본값 localhost:9200을 썼다 —
+  # 컨테이너 배포에서는 ES에 한 번도 연결된 적이 없었고 전부 DB 폴백으로 동작했다.
+  # CH-04 카오스 실험이 search_fallback_total로 잡아냈다 (resilience-plan §6.3).
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URI:http://localhost:9200}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-    elasticsearch:
-      uris: ${ELASTICSEARCH_URI:http://localhost:9200}
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}
     port: ${MAIL_PORT:587}
