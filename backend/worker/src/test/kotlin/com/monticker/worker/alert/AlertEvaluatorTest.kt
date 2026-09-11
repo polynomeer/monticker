@@ -23,7 +23,10 @@ class AlertEvaluatorTest {
     private val redis = mockk<StringRedisTemplate>(relaxed = true)
     private val mailSender = mockk<JavaMailSender>(relaxed = true)
     private val meterRegistry = SimpleMeterRegistry()
-    private val evaluator = AlertEvaluator(jdbc, pushSender, esOps, redis, mailSender, meterRegistry)
+    // 인덱스는 loadAll() 전이라 DB 폴백 경로 — 기존 테스트의 jdbc 스텁이 그대로 유효하다.
+    // 지표 캐시는 TTL 0 — 테스트마다 다른 스텁이 들어가므로 캐시가 끼면 안 된다.
+    private val dispatcher = AlertDispatcher(jdbc, pushSender, esOps, redis, mailSender)
+    private val evaluator = AlertEvaluator(AlertRuleIndex(jdbc, meterRegistry), IndicatorCache(jdbc, ttlMs = 0), InlineTriggerSink(dispatcher), meterRegistry)
 
     @BeforeEach
     fun setup() {
