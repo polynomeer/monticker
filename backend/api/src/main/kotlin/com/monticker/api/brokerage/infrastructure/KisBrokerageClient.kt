@@ -45,7 +45,9 @@ import java.time.format.DateTimeFormatter
 @Component
 @ConditionalOnProperty("app.brokerage.mock.enabled", havingValue = "false")
 class KisBrokerageClient(
-    @Value("\${app.kis.base-url}") private val baseUrl: String,
+    // application.yml의 실제 키는 app.brokerage.kis.base-url 이다. app.kis.base-url 로 잘못 참조돼 있어
+    // BROKERAGE_MOCK_ENABLED=false(운영)에서 부팅이 실패했다 — CH-06 실험 1단계에서 발견 (resilience-plan §6.3).
+    @Value("\${app.brokerage.kis.base-url}") private val baseUrl: String,
     cbRegistry: CircuitBreakerRegistry,
 ) : BrokerageClient {
 

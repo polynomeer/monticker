@@ -36,7 +36,8 @@ import java.util.UUID
 @Component
 @ConditionalOnProperty("app.brokerage.mock.enabled", havingValue = "false")
 class TossBrokerageClient(
-    @Value("\${app.toss.base-url}") private val baseUrl: String,
+    // KisBrokerageClient와 같은 오류 — 실제 키는 app.brokerage.toss.base-url (CH-06 실험에서 발견).
+    @Value("\${app.brokerage.toss.base-url}") private val baseUrl: String,
     cbRegistry: CircuitBreakerRegistry,
 ) : BrokerageClient {
 
