@@ -36,11 +36,13 @@ class KafkaTopicConfig(private val props: KafkaTopicProperties) {
         const val MARKET_TICKS_ATTEMPTS = 3          // worker TickKafkaConsumer
         const val TICK_PROCESSED_ATTEMPTS = 3        // worker AlertKafkaConsumer
         const val ORDER_FILLED_ATTEMPTS = 4          // quant-engine OrderFilledKafkaConsumer
+        const val NOTIFY_ATTEMPTS = 3                // worker NotifyKafkaConsumer (ADR-044)
 
         val all: Map<String, Int> = mapOf(
             "market.ticks" to MARKET_TICKS_ATTEMPTS,
             "market.tick-processed" to TICK_PROCESSED_ATTEMPTS,
             "trading.order-filled" to ORDER_FILLED_ATTEMPTS,
+            "notify.commands" to NOTIFY_ATTEMPTS,
         )
 
         /** Spring Kafka SUFFIX_WITH_INDEX_VALUE + dltTopicSuffix "-dlt" 규칙 그대로. */
@@ -60,6 +62,8 @@ class KafkaTopicConfig(private val props: KafkaTopicProperties) {
     @Bean fun marketSummaryTopic()    = topic("market.summary",        1,                               Duration.ofHours(1))
     @Bean fun marketEventsTopic()     = topic("market.events",         props.partitions.marketEvents,   Duration.ofDays(7))
     @Bean fun tickProcessedTopic()    = topic("market.tick-processed", props.partitions.tickProcessed,  Duration.ofHours(1))
+    // ADR-044 — 평가→발송 분리. 키 = ruleId. 발송 워커가 느려도 틱 파이프라인이 밀리지 않는다.
+    @Bean fun notifyCommandsTopic()   = topic("notify.commands",       props.partitions.tickProcessed,  Duration.ofDays(1))
     // 유실 불가 — 복제 계수가 2 이상일 때만 minIsr가 의미 있다(단일 브로커에서 minIsr=2면 쓰기가 막힌다).
     @Bean fun orderFilledTopic()      = topic("trading.order-filled",   props.partitions.trading, Duration.ofDays(30), minIsrIfReplicated())
     @Bean fun orderCancelledTopic()   = topic("trading.order-cancelled", props.partitions.trading, Duration.ofDays(30), minIsrIfReplicated())

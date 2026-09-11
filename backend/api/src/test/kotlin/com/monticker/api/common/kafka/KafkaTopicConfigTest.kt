@@ -48,7 +48,8 @@ class KafkaTopicConfigTest {
             "market.ticks-retry-0", "market.ticks-retry-1", "market.ticks-dlt",
             "market.tick-processed-retry-0", "market.tick-processed-retry-1", "market.tick-processed-dlt",
             "trading.order-filled-retry-0", "trading.order-filled-retry-1", "trading.order-filled-retry-2", "trading.order-filled-dlt",
+            "notify.commands-retry-0", "notify.commands-retry-1", "notify.commands-dlt",
         )
-        assertThat(declared).hasSize(10)
+        assertThat(declared).hasSize(13)
     }
 }
