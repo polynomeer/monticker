@@ -12,6 +12,9 @@ jobs:
     permissions:
       contents: write # gradle/actions/dependency-submission가 Dependency Graph에 제출하는 데 필요
     strategy:
+      # 한 모듈이 실패해도 나머지는 끝까지 돌린다 — 기본 fail-fast는 첫 실패가 다른 모듈을
+      # cancel해서 그 모듈의 결과를 한 번도 못 보게 만든다.
+      fail-fast: false
       matrix:
         module: [api, worker, trading-service, quant-engine]
 
