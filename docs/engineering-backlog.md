@@ -102,14 +102,26 @@
   취소하면 유저는 1,012만 원을 갖는다. 대사(ADR-043)는 이걸 잡지 못한다 — 원장이 정직하게 기록하므로
   불변식은 성립한다. `reset`이 미체결 주문을 먼저 취소하거나(matching 모듈 호출) 초기화 금액에서
   예약금을 빼야 한다. 발견: ADR-043 라이브 검증 (`adr043-live.sh` 7단계).
-- [ ] **`columnDefinition = "jsonb"`만 있고 `@JdbcTypeCode(SqlTypes.JSON)`이 없는 String 컬럼 — INSERT가
-  전부 실패한다(null 포함)**. 원장·행동점수는 ADR-043에서 고쳤다(`5e113bb`). 남은 곳:
-  api `SubscriptionPlan.featuresJson`(시드 SQL로만 쓰이면 무해), `DetectedPattern.swingPointsJson`,
-  `TaxHarvestingLog.candidatesJson`; quant-engine `QuantBacktestResult`(×3), `RuleSet`(×2),
-  `PortfolioOptimization`(×3), `DetectedPattern`, `TaxHarvestingLog`. 각각 실제 INSERT 경로가 있는지
-  확인하고 `LedgerEventPersistenceIntegrationTest` 같은 실제-Hibernate 테스트를 붙일 것.
+- [x] **`columnDefinition = "jsonb"`만 있고 `@JdbcTypeCode(SqlTypes.JSON)`이 없는 String 컬럼 — INSERT가
+  전부 실패한다(null 포함)** — ✅ 완료(2026-09-13, api `7df79a0`, quant-engine `3e3aed0`).
+  원장·행동점수는 ADR-043에서 고쳤고(`5e113bb`), 나머지를 전수 수정했다. 실제 INSERT 경로 확인 결과:
+  api `DetectedPattern.swingPointsJson`(PatternRecognizerService.save — 패턴 감지가 전부 실패하고
+  있었음), `TaxHarvestingLog.candidatesJson`(TaxOptimizerService.save — 절세 시뮬레이션 전부 실패),
+  `SubscriptionPlan.features`(V27 시드 SQL로만 쓰임, 일관성 목적으로만 수정); quant-engine
+  `QuantBacktestResult`(×3, RuleSetService.runBacktest — 거래 없는 백테스트도 null 바인딩으로 실패),
+  `PortfolioOptimization`(×3 — api 쪽만 `b105ce7`에서 고쳐졌고 quant-engine 사본은 그대로였음),
+  `DetectedPattern`, `TaxHarvestingLog`, `RuleSet`(×2 — rule_sets는 V22에서 DROP, 쓰기 경로 없음,
+  일관성 목적). 모듈별 `JsonbColumnPersistenceIntegrationTest`가 실제 Hibernate 매핑으로 실제 스키마에
+  써 본다(주석 제거 시 정확히 그 Postgres 오류로 실패함을 확인). `grep -rn 'columnDefinition = "jsonb"'
+  backend/` 기준 `@JdbcTypeCode` 없는 곳 0건.
   **같은 결함이 `RebalanceTarget`에서 이미 한 번 발견·수정됐는데 나머지는 점검되지 않았다** —
   발견 시 같은 패턴을 전수 검색하는 습관이 필요하다.
+- [ ] **quant-engine `RuleSet` @Entity가 DROP된 `rule_sets` 테이블을 가리킨다** — V22에서 MongoDB로
+  이전하며 테이블을 지웠고 `RuleSetRepository`는 이미 `MongoRepository`인데, quant-engine의
+  `com.monticker.api.quant.domain.RuleSet`은 여전히 `@Entity @Table(name = "rule_sets")`이고
+  `@EntityScan` 패키지 안에 있다. `ddl-auto: validate`라면 기동 시 "missing table [rule_sets]"로
+  실패해야 정상 — 실제로 어떻게 기동되는지 확인하고, api 사본처럼 plain class로 바꿀 것.
+  발견: 위 jsonb 전수 수정 중.
 - [ ] **`alert_rules.stock_id`가 NULL인 룰은 절대 평가되지 않는다** —
   컬럼은 nullable인데 `AlertEvaluator.fetchRulesForStock`은 `WHERE stock_id = ?`로만 읽는다.
   NULL이 "전 종목 대상"을 의도한 건지, 그냥 쓰이지 않는 제약인지 확인이 필요하다.
