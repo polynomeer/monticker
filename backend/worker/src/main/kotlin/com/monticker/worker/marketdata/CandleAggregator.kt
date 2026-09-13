@@ -178,7 +178,11 @@ class CandleAggregator(
                 ORDER BY stock_id, date_trunc('day', candle_time AT TIME ZONE 'Asia/Seoul'), candle_time DESC
             )
             INSERT INTO candles_1d (stock_id, candle_time, open, high, low, close, volume)
-            SELECT b.stock_id, b.day, o.open, b.high, b.low, c.close, b.volume
+            -- b.day는 KST 벽시계 자정(timestamp without time zone)이라, 그대로 timestamptz 컬럼에 넣으면
+            -- 세션 타임존(pgjdbc가 JVM 기본 TZ로 맞춘다)으로 재해석된다 — UTC 컨테이너에서는 flush()가
+            -- 쓰는 KST 자정과 9시간 어긋난 별도 행이 생겨 하루에 일봉이 두 개가 된다. AT TIME ZONE으로
+            -- "이 벽시계는 KST다"를 명시해 flush()와 같은 Instant로 만든다.
+            SELECT b.stock_id, b.day AT TIME ZONE 'Asia/Seoul', o.open, b.high, b.low, c.close, b.volume
             FROM day_bounds b
             JOIN day_open  o ON o.stock_id = b.stock_id AND o.day = b.day
             JOIN day_close c ON c.stock_id = b.stock_id AND c.day = b.day
