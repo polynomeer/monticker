@@ -10,6 +10,9 @@
 | `ch03-postgres-down.sh` | Postgres 정지 | 2026-09-11 | **PASS** — readiness 503/liveness 200, MTTR 2s |
 | `ch04-elasticsearch-down.sh` | ES 정지 | 2026-09-11 | **PASS** (수정 1건 후) — ES가 컨테이너에서 한 번도 연결된 적 없던 것을 발견 |
 | `ch06-broker-latency.sh` + `kis-stub.py` | KIS 4초 지연 (slow-call) | 2026-09-11 | **PASS** (수정 2건 후) — 운영 브로커 클라이언트 부팅 불가를 발견 |
+| `ch05-kafka-down.sh` | Kafka 브로커 정지 (Outbox 실증) | 2026-09-13 | **PASS** (수정 3건 후) — Outbox가 한 번도 발행한 적 없던 것, 리스너 스레드 누수를 발견 |
+| `ch07-sigkill.sh` | API 프로세스 SIGKILL 중 주문 | 2026-09-13 | **PASS** — 미완료 0, 12명 대사 불일치 0, 재기동 15s |
+| `ch09-rebalance-storm.sh` | 틱 스톰 중 워커 재시작 10회 | 2026-09-13 | **PASS** — 그룹 LAG 0, DLT 0. 랙은 브로커 쪽으로 볼 것 |
 
 ## 원칙
 
@@ -38,3 +41,22 @@ DELAY_MS=0 PORT=59443 python3 bench/chaos/kis-stub.py &
 # API를 추가로 BROKERAGE_MOCK_ENABLED=false KIS_BASE_URL=http://localhost:59443 로 기동
 API=http://localhost:58080 STUB=http://localhost:59443 bench/chaos/ch06-broker-latency.sh
 ```
+
+## CH-05 / 07 / 09 (Kafka + 워커 필요)
+
+```bash
+# 인프라에 kafka 추가. 로컬 Docker VM 메모리가 빠듯하면 elasticsearch는 내려도 된다(api는 DB 폴백으로 동작).
+export KAFKA_PORT=59092 KAFKA_EXTERNAL_PORT=29092   # + 위의 포트들
+docker compose up -d postgres redis mongodb kafka mailhog
+
+# api·worker는 jar로 띄운다 — CH-07이 PID를 죽이고 같은 jar를 재기동한다
+(cd backend/api && ./gradlew bootJar -x test); (cd backend/worker && ./gradlew bootJar -x test)
+KAFKA_BROKERS=localhost:29092 SERVER_PORT=58080 … java -jar backend/api/build/libs/api-0.0.1-SNAPSHOT.jar &
+KAFKA_BROKERS=localhost:29092 SERVER_PORT=58081 KAFKA_CONSUMER_CONCURRENCY=4 java -jar backend/worker/build/libs/worker-0.0.1-SNAPSHOT.jar &
+
+API=http://localhost:58080 COMPOSE_ENV="KAFKA_PORT=59092 KAFKA_EXTERNAL_PORT=29092 …" bench/chaos/ch05-kafka-down.sh
+API=http://localhost:58080 bench/chaos/ch07-sigkill.sh          # 재기동 환경변수는 호출 셸에서 상속
+GATEWAY=$PWD/services/market-gateway/market-gateway WORKER_JAR=$PWD/backend/worker/build/libs/worker-0.0.1-SNAPSHOT.jar \
+  WORKER=http://localhost:58081 bench/chaos/ch09-rebalance-storm.sh
+```
+
