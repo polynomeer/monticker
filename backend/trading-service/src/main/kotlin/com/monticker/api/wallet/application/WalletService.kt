@@ -30,18 +30,30 @@ class WalletService(
         }
 
         val holdingsValue = calcHoldingsValue(userId)
-        val totalAssets = account.cash.amount + holdingsValue
-        val recentLedger = ledgerService.getLedger(userId).take(10)
+        val reservedCash = calcReservedCash(userId)
+        val totalAssets = account.cash.amount + reservedCash + holdingsValue
+        val recentLedger = ledgerService.getRecentLedger(userId, 10)
 
         return WalletMapResponse(
             availableCash = account.cash.amount,
-            reservedCash = BigDecimal.ZERO,
+            reservedCash = reservedCash,
             holdingsValue = holdingsValue,
             settlementPending = BigDecimal.ZERO,
             totalAssets = totalAssets,
             recentLedger = recentLedger,
         )
     }
+
+    /** ADR-043 — 미체결 BUY 주문 예약금 (limit_price × 잔량). backend/api WalletService.RESERVED_CASH_SQL과 같은 정의. */
+    private fun calcReservedCash(userId: Long): BigDecimal =
+        jdbc.queryForObject(
+            """
+            SELECT COALESCE(SUM(limit_price * (quantity - filled_qty)), 0)
+            FROM orders
+            WHERE user_id = ? AND side = 'BUY' AND status IN ('PENDING', 'PARTIALLY_FILLED')
+            """.trimIndent(),
+            BigDecimal::class.java, userId,
+        ) ?: BigDecimal.ZERO
 
     private fun calcHoldingsValue(userId: Long): BigDecimal {
         val rows = jdbc.queryForList(
