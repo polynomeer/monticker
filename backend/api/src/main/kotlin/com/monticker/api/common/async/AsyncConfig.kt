@@ -31,6 +31,14 @@ import java.util.concurrent.Executor
  *   alertDispatchExecutor보다 낮게 잡은 이유: 알림은 단순 푸시 전송이지만 이건 실제
  *   주문 제출까지 이어질 수 있어 무제한 병렬화보다 처리량을 의도적으로 제한한다.
  *
+ * moduleEventExecutor (기본 @Async 실행기 — CH-05에서 추가)
+ *   core=4, max=16, queue=1000 — 이름 없는 @Async, 즉 모든 @ApplicationModuleListener(원장 기록, Outbox
+ *   Kafka 외부화, quant 리스너 …)가 여기서 돈다. 이전엔 기본 실행기가 없어 Spring이 SimpleAsyncTaskExecutor
+ *   (요청마다 새 스레드, 상한 없음)로 폴백했다. Kafka 정지 실험에서 외부화 리스너가 send 퓨처를 delivery.timeout
+ *   (120s)까지 붙들고 있어 체결마다 스레드가 하나씩 늘어났다 — 주문 부하 중 브로커가 죽으면 스레드 폭발이다.
+ *   큐가 차면 AbortPolicy: 리스너 호출이 거절돼도 event_publication에 미완료로 남아 Outbox가 5분 뒤 재전송한다.
+ *   CallerRunsPolicy를 쓰지 않는 이유: 커밋 직후의 요청 스레드가 리스너를 대신 실행하며 매달리게 된다.
+ *
  * AsyncUncaughtExceptionHandler: 비동기 void 메서드 예외를 ERROR 레벨로 기록.
  */
 @Configuration
@@ -82,6 +90,20 @@ class AsyncConfig : AsyncConfigurer {
         setAwaitTerminationSeconds(30)
         initialize()
     }
+
+    @Bean("moduleEventExecutor")
+    fun moduleEventExecutor(): ThreadPoolTaskExecutor = ThreadPoolTaskExecutor().apply {
+        corePoolSize    = 4
+        maxPoolSize     = 16
+        queueCapacity   = 1000
+        setThreadNamePrefix("module-event-")
+        setRejectedExecutionHandler(java.util.concurrent.ThreadPoolExecutor.AbortPolicy())
+        setWaitForTasksToCompleteOnShutdown(true)
+        setAwaitTerminationSeconds(30)
+        initialize()
+    }
+
+    override fun getAsyncExecutor(): Executor = moduleEventExecutor()
 
     override fun getAsyncUncaughtExceptionHandler() = AsyncUncaughtExceptionHandler { ex, method, params ->
         log.error(

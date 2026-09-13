@@ -49,11 +49,23 @@ spring:
     bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # api의 유일한 프로듀서는 Modulith 외부화(@Externalized OrderFilledEvent 등)다. Modulith의
+      # KafkaJacksonConfiguration이 ByteArrayJsonMessageConverter를 등록해 페이로드를 byte[] JSON으로 만드므로
+      # 값 직렬화기는 ByteArraySerializer여야 한다. StringSerializer였을 때는 "Can't convert value of class [B"로
+      # 외부화가 100% 실패했다 — trading.order-filled가 Kafka에 한 번도 도달한 적이 없었다 (CH-05에서 발견).
+      # 컨슈머(quant-engine StringDeserializer)는 UTF-8 JSON 바이트를 그대로 읽는다.
+      value-serializer: org.apache.kafka.common.serialization.ByteArraySerializer
       acks: all           # 모든 ISR 확인 후 ACK — 유실 방지
       retries: 3
       properties:
         enable.idempotence: true   # 프로듀서 멱등성 (중복 발행 방지)
+        # CH-05 — 브로커가 죽어 있을 때 외부화 리스너 스레드가 send 퓨처를 붙드는 시간의 상한.
+        # 기본 delivery.timeout 120s는 스레드를 2분씩 점유한다. 10초 안에 못 보내면 실패로 끝내고
+        # event_publication의 미완료 행으로 남긴다 — OutboxResubmissionConfig가 5분 주기로 재전송한다.
+        # 짧은 끊김(<10s)은 프로듀서 버퍼가, 긴 장애는 Outbox가 담당한다.
+        max.block.ms: 5000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
     consumer:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
