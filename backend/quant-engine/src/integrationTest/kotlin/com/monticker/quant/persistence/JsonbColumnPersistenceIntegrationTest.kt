@@ -25,8 +25,8 @@ import java.time.LocalDate
  * TaxHarvestingLog(TaxOptimizerService)는 전부 실제 repository.save() 경로가 있다. mock 기반 단위테스트는
  * 이 결함을 못 본다 — 실제 Hibernate 매핑으로 실제(api가 마이그레이션한) 스키마에 써 본다.
  *
- * RuleSet 엔티티는 같은 수정을 받았지만 여기서 검증하지 않는다 — rule_sets 테이블은 V22에서 MongoDB로
- * 이전되며 DROP되어 validate 자체가 불가능하다(RuleSetRepository는 이미 MongoRepository).
+ * RuleSet은 여기 없다 — rule_sets 테이블은 V22에서 MongoDB로 이전되며 DROP됐고, RuleSet은 이제
+ * api 사본과 같은 plain class다(RuleSetDocument/RuleSetRepository가 실제 저장소).
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class JsonbColumnPersistenceIntegrationTest : PostgresIntegrationTest() {
