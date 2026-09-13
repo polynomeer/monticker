@@ -1,5 +1,6 @@
 package com.monticker.api.wallet.application
 
+import com.monticker.api.paper.events.PaperAccountResetEvent
 import com.monticker.api.paper.events.PaperSettlementCompletedEvent
 import com.monticker.api.paper.events.PaperTradeExecutedEvent
 import org.slf4j.LoggerFactory
@@ -42,5 +43,12 @@ class PaperTradeEventListener(
             tax          = event.tax,
             balanceAfter = event.balanceAfter,
         )
+    }
+
+    /** ADR-043 — 초기화로 인한 현금 변화를 원장에 남긴다. 지급이면 DEPOSIT, 회수면 WITHDRAWAL. */
+    @ApplicationModuleListener
+    fun onPaperAccountReset(event: PaperAccountResetEvent) {
+        log.info("[Wallet] PaperAccountResetEvent received: userId={} {} → {}", event.userId, event.previousCash, event.newCash)
+        ledgerService.recordReset(event.userId, event.previousCash, event.newCash)
     }
 }

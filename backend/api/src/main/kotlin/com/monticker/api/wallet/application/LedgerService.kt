@@ -159,6 +159,22 @@ class LedgerService(
         )
     }
 
+    /** 계좌 초기화 — 변화량이 0이면 기록하지 않는다 (초기 잔고 그대로였던 계좌). */
+    fun recordReset(userId: Long, previousCash: BigDecimal, newCash: BigDecimal) {
+        val delta = newCash - previousCash
+        if (delta.signum() == 0) return
+        ledgerRepo.save(
+            LedgerEvent(
+                userId       = userId,
+                eventType    = if (delta.signum() > 0) LedgerEventType.DEPOSIT else LedgerEventType.WITHDRAWAL,
+                amount       = delta,
+                balanceAfter = newCash,
+                description  = "모의투자 계좌 초기화",
+                metadataJson = """{"previousCash":$previousCash}""",
+            )
+        )
+    }
+
     /**
      * ADR-043 — 커서 페이징. limit은 [1, MAX_PAGE]로 clamp한다.
      * limit+1건을 읽어 다음 페이지 존재 여부를 정확히 판정한다 — "꽉 찬 마지막 페이지" 뒤에

@@ -58,6 +58,37 @@ class LedgerServiceTest {
         assertThat(slot.captured.stockId).isNull()
     }
 
+    // ADR-043 — 초기화는 (초기 잔고 − 직전 잔고)를 실현된 이동으로 남긴다. 부호에 따라 DEPOSIT/WITHDRAWAL.
+    @Test
+    fun `recordReset writes a DEPOSIT for the top-up back to the initial balance`() {
+        val slot = slot<LedgerEvent>()
+        every { ledgerRepo.save(capture(slot)) } answers { slot.captured }
+
+        service.recordReset(userId = 1L, previousCash = BigDecimal("4000000"), newCash = BigDecimal("10000000"))
+
+        assertThat(slot.captured.eventType).isEqualTo(LedgerEventType.DEPOSIT)
+        assertThat(slot.captured.amount).isEqualByComparingTo(BigDecimal("6000000"))
+        assertThat(slot.captured.balanceAfter).isEqualByComparingTo(BigDecimal("10000000"))
+    }
+
+    @Test
+    fun `recordReset writes a WITHDRAWAL when the account was above the initial balance`() {
+        val slot = slot<LedgerEvent>()
+        every { ledgerRepo.save(capture(slot)) } answers { slot.captured }
+
+        service.recordReset(userId = 1L, previousCash = BigDecimal("12000000"), newCash = BigDecimal("10000000"))
+
+        assertThat(slot.captured.eventType).isEqualTo(LedgerEventType.WITHDRAWAL)
+        assertThat(slot.captured.amount).isEqualByComparingTo(BigDecimal("-2000000"))
+    }
+
+    @Test
+    fun `recordReset writes nothing when the balance did not change`() {
+        service.recordReset(userId = 1L, previousCash = BigDecimal("10000000"), newCash = BigDecimal("10000000"))
+
+        verify(exactly = 0) { ledgerRepo.save(any()) }
+    }
+
     private fun event(id: Long, userId: Long = 1L) = LedgerEvent(
         id = id, userId = userId, eventType = LedgerEventType.FILL,
         amount = BigDecimal("-1000"), balanceAfter = BigDecimal("9000"),

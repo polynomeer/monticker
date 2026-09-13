@@ -54,14 +54,17 @@ class OrderFilledEventListener(
 
         if (event.refundAmount <= BigDecimal.ZERO) return
 
+        // ADR-043: 예약금 반환은 실현된 현금 이동이 아니다 — 제출 시 예약(reserveCash)은 원장에 없었으므로
+        // 이걸 DEPOSIT으로 적으면 원장 합이 잔고보다 refund만큼 커져 대사가 어긋난다. CASH_UNRESERVED는
+        // 타임라인에는 보이되 LedgerReconciliationService.CASH_EVENT_TYPES에서 제외된다.
         val balanceAfter = queryBalance(event.userId)
         ledgerRepo.save(
             LedgerEvent(
                 userId       = event.userId,
-                eventType    = LedgerEventType.DEPOSIT,
+                eventType    = LedgerEventType.CASH_UNRESERVED,
                 amount       = event.refundAmount,
                 balanceAfter = balanceAfter,
-                description  = "주문 취소 환불 (orderId=${event.orderId})",
+                description  = "주문 취소 — 예약금 해제 (orderId=${event.orderId})",
             )
         )
     }
