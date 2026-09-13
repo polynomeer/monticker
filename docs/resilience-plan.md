@@ -266,7 +266,8 @@ RestClient.builder()
 |---|---------|------|------|
 | E1 | 중복 주문 (네트워크 재시도) | **가능** | 멱등성 키 24h (단 Redis 의존 §A1) |
 | E2 | 잔고 드리프트 | **불가 → 가능** | ~~컬럼 잔고 vs 원장 대사 없음~~ 일일 대사 + `LedgerMismatch` 알람([ADR-043](decisions/043-ledger-pagination-and-reconciliation.md), `68773dd`). **구현 중 발견: 원장 INSERT가 전부 실패하고 있었다**(jsonb 바인딩, `5e113bb`) — E7의 또 다른 사례. 대사가 있었다면 첫날 잡혔을 결함 |
-| E3 | Saga 미완료 잔류 | **가능** | 5분 주기 `recoverIncomplete()` |
+| E3 | Saga 미완료 잔류 | **가능** | 5분 주기 `recoverIncomplete()`. CH-07: SIGKILL 후 미완료 0 — 사가 전체가 한 트랜잭션 |
+| E3′ | Outbox 이벤트 발행 | **불가 → 가능** | CH-05: **Kafka 외부화가 한 번도 성공한 적 없었다**(직렬화기 불일치, `6eca851`). 수정 후 브로커 정지 → 복구 280s에 재전송 완료 |
 | E4 | 캔들 유실 | **부분** | 인메모리 상태, 리밸런스·강제종료 시 유실 |
 | E5 | ES 드리프트 | **불가** | dual-write 실패를 `log.warn`으로 삼킴 ([ADR-042](decisions/042-outbox-based-es-indexing.md)) |
 | E6 | 이중 체결 / 미체결 | **불가 → 수정됨** | ~~단일 인스턴스라 안전~~ **틀렸다** — `trading-service.yaml`이 `replicas: 2`였고 호가창은 pod 메모리에 있다. 두 pod에 나뉜 주문은 서로 체결되지 않는다. `6871c0d`에서 1 + Recreate로 고정 |
@@ -901,10 +902,90 @@ K8s에서는 이 시점에 pod가 엔드포인트에서 빠진다. 사람 개입
 **단위 테스트 500개가 통과하는 코드에서 카오스 실험 4개가 반나절 만에 치명 1·높음 2를 찾았다.**
 공통점: 전부 "운영에서만 켜지는 경로"이거나 "실패를 삼키는 경로"다. 로컬·CI가 절대 밟지 않는 곳.
 
+#### CH-05 Kafka 브로커 정지 — **PASS** (2026-09-13, 수정 3건 후) — ADR-008 Outbox의 첫 실증
+
+[`ch05-kafka-down.sh`](../bench/chaos/ch05-kafka-down.sh). 주문 5건(매칭 엔진, DB 커밋) → `docker compose stop kafka`
+→ 65초 관측 → 복구 → 수렴 폴링. 브로커 도달 여부는 완료 플래그가 아니라 **토픽 끝 오프셋**으로 본다.
+
+| 단계 | 주문 | readiness | 외부화 미완료 | JVM 스레드 | 브로커 도달 |
+|------|------|-----------|-------------|-----------|-----------|
+| 정상 | 200 | 200 | 0 | 64 | 22 → 23 |
+| Kafka 정지 65s | 200 ×4 (5번째는 DailyLossRule 422, 아래) | **200** (Kafka는 readiness 그룹에 없다 — 맞다) | 4 | **69 고정** | 23 |
+| 복구 +280s | — | — | **0** | 69 | **27** (4건 전부) |
+
+**주입 전에 이미 깨져 있었다 — Outbox가 한 번도 발행한 적이 없었다 (`6eca851`).** 첫 실행의 "정상" 단계에서
+외부화 미완료가 6 → 7로 늘었다. `SerializationException: Can't convert value of class [B to StringSerializer`.
+Modulith의 `KafkaJacksonConfiguration`이 `ByteArrayJsonMessageConverter`를 등록해 이벤트를 byte[] JSON으로
+만드는데 api의 producer `value-serializer`가 `StringSerializer`였다. **`trading.order-filled`·`order-cancelled`는
+Kafka에 도달한 적이 없다** — quant-engine의 체결 컨슈머는 빈 토픽을 듣고 있었다. ADR-008은 "기록"만 검증됐고
+"발행"은 이 실험이 첫 검증이다. E7의 또 하나의 사례.
+
+**두 번째 실행에서 찾은 것 — 스레드 누수.** 정지 65초 동안 JVM 스레드 65 → 80. 스레드 덤프:
+`SimpleAsyncTaskExecutor-58`이 `AsyncExecutionInterceptor`에서 Kafka send 퓨처를 `get()`으로 기다리고 있었다 —
+`delivery.timeout.ms` 기본 120초까지. **기본 @Async 실행기가 없어**(AsyncConfig가 이름 붙은 풀 4개만 선언)
+Spring이 thread-per-task로 폴백했고, 모든 `@ApplicationModuleListener`(원장 기록·외부화·quant)가 거기서 돌았다.
+주문 50/s에 브로커가 죽으면 분당 3,000 스레드다. 수정: 기본 실행기를 `module-event-` 풀(4/16/1000, Abort)로,
+producer `delivery.timeout` 10s(`request.timeout` 5s, `max.block` 5s). 세 번째 실행: 스레드 69 고정,
+외부화는 10초 안에 실패해 미완료로 남고, **Outbox 5분 주기 재전송이 복구 후 280초에 4건을 전부 배달했다.**
+
+트레이드오프: 이전엔 프로듀서 버퍼가 120초 이내 끊김을 자체 복구했다(두 번째 실행에서 복구 1초 만에 도달).
+이제 10초 넘는 장애는 Outbox 경로(≤ 5분 + 1분 유예)를 탄다. 체결 이벤트의 소비자(quant 추적)는 분 단위
+지연을 감당할 수 있고, 스레드 폭발은 감당할 수 없다. 재전송 주기를 줄이는 건 멀티파드 중복 발행과 맞바꾸는
+일이라 그대로 둔다 — 컨슈머는 어차피 at-least-once여야 한다.
+
+**부수 발견 — `DailyLossRule`이 매수를 손실로 센다.** 5번째 주문이 422 "리스크 한도 초과: DailyLossRule".
+`RiskRuleQueryService.paperSnapshot`의 `dailyPnl`은 `SUM(SELL amount − BUY amount)` — 손익이 아니라
+**현금 흐름**이다. 1,000만 계좌에서 하루 30만 원(3%) 이상 사면 모든 매수가 막힌다. 보유 종목도 `paper_trades`
+(구 페이퍼 경로)에서만 읽어 매칭 엔진 체결은 집중도 계산에 안 잡힌다. [engineering-backlog §9](engineering-backlog.md).
+
+#### CH-07 API 프로세스 SIGKILL — **PASS** (2026-09-13)
+
+[`ch07-sigkill.sh`](../bench/chaos/ch07-sigkill.sh). 유저 12명이 BUY/SELL을 교대로 내는 중(유저당 2.5초 —
+`@RateLimited` 30/분) 10초 뒤 `kill -9`, 같은 jar 재기동, 즉시·자동복구 후 두 번 대사.
+
+| 항목 | 결과 |
+|------|------|
+| SIGKILL → readiness UP | **15s** (기동 12s) |
+| 주문 | 200 ×60 (BUY 36, SELL 24), 죽어 있는 동안 connection refused ×72 |
+| `event_publication` 미완료 / `order_sagas` 미완료 | **0 / 0** — 재기동 직후 |
+| ADR-043 대사 (12명) | **checked 12, mismatch 0** — 즉시·최종 모두 |
+
+Saga의 예약→주문→체결→정산이 한 DB 트랜잭션이라 죽는 순간의 요청은 통째로 롤백된다 — 반쯤 남는 게 없다.
+커밋 후 리스너(원장·외부화)는 밀리초 안에 끝나 이번엔 미완료로 잡힌 게 없었다. **주의**: 그래서 이 실행은
+"커밋 직후 리스너 실행 전에 죽는" 경로(Outbox 재전송이 메워야 하는 경로)를 실제로 밟지 못했다 — 그 경로는
+CH-05가 별도로 증명했다(미완료 4건 → 재전송 → 완료). 잔고 정합성 100%는 대사가 증언한다.
+
+#### CH-09 Kafka 리밸런스 반복 — **PASS** (2026-09-13)
+
+[`ch09-rebalance-storm.sh`](../bench/chaos/ch09-rebalance-storm.sh). 틱 ~220/s 유입 중 워커를 30초 간격으로
+10회 SIGTERM(graceful, K8s 기본) → 재기동. 랙은 브로커 쪽 `consumer-groups LAG`로 본다(워커 메트릭은
+그룹 재합류 전엔 없어서 0으로 읽힌다 — 첫 실행의 함정).
+
+| 사이클 | 종료 | 기동 | 재합류 시 LAG | 소진 |
+|--------|------|------|-------------|------|
+| 1~4 (재측정) | 1~2s | 6~13s | 202 ~ 808 틱 | 2 ~ 7s |
+| 10회 합계 | 종료 최대 8s | — | — | 생산 49,692틱, **그룹 LAG 0, DLT 증가 0, candle_flush_failed 0** |
+
+유실 0. 재시작당 8~15초의 소비 공백이 생기고 그만큼 랙이 쌓였다가 수 초 안에 소진된다. 캔들 유실은
+in-memory 집계 특성상 재시작 시점의 1분봉 일부다 — `candle_flush_failed`가 0인 건 "쓰기 실패가 없다"는 뜻이지
+"집계 손실이 없다"는 뜻이 아니다(§E4, 기록만). **주문 이벤트 컨슈머(quant-engine)는 로컬에서 띄우지 않았다** —
+그쪽 리밸런스는 같은 Spring Kafka 그룹 메커니즘이라 동일하게 동작할 것으로 보지만 측정하지 않았다.
+
+**환경 메모**: 로컬 Docker VM(7.6GB)에 다른 프로젝트 컨테이너가 상주해 CH-05 첫 실행 중 Kafka가 OOM-kill됐다
+(`exit 137`). 카오스 결과가 아니라 실험 환경 결함 — ES를 내리고 재실행했다. 전용 부하 환경 필요성의 또 다른 근거.
+
+#### 실험이 찾아낸 결함 요약 (2026-09-13 추가)
+
+| 실험 | 발견 | 심각도 | 커밋 |
+|------|------|-------|------|
+| CH-05 | **Outbox Kafka 외부화가 한 번도 발행된 적 없음** (byte[] vs StringSerializer) | **치명** | `6eca851` |
+| CH-05 | 기본 @Async 실행기 없음 → 리스너 thread-per-task, 브로커 장애 중 스레드 누수 | 높음 | `6eca851` |
+| CH-05 | producer delivery.timeout 120s가 스레드를 2분씩 점유 | 중간 | `6eca851` |
+| CH-05 | `DailyLossRule`이 매수를 손실로 계산 — 하루 3% 이상 매수 불가 | **높음** | backlog §9 |
+
 #### 아직 실행하지 않은 것
 
-CH-05(Kafka), CH-07(SIGKILL), CH-09(리밸런스)는 Kafka+worker 기동이 필요하다. CH-08(노드 손실)은
-K8s 클러스터가 있어야 한다. CH-11(디스크), CH-12(인증서)는 스테이징에서.
+CH-08(노드 손실)은 K8s 클러스터가 있어야 한다. CH-11(디스크), CH-12(인증서)는 스테이징에서.
 
 ### 6.4 게임데이 운영
 
