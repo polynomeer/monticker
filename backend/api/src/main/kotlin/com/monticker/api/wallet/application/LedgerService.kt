@@ -3,6 +3,7 @@ package com.monticker.api.wallet.application
 import com.monticker.api.wallet.domain.LedgerEvent
 import com.monticker.api.wallet.domain.LedgerEventType
 import com.monticker.api.wallet.infrastructure.LedgerEventRepository
+import org.springframework.data.domain.PageRequest
 import org.springframework.modulith.NamedInterface
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -22,6 +23,12 @@ data class LedgerEventDto(
     val createdAt: Instant,
 )
 
+/** ADR-043 — 커서 페이지. nextCursor가 null이면 마지막 페이지다. */
+data class LedgerPage(
+    val items: List<LedgerEventDto>,
+    val nextCursor: Long?,
+)
+
 /**
  * ADR-013/016: 원장 기록 진입점 — brokerage/subscription/settlement 정산 도메인에서 호출하는 공개 API.
  */
@@ -31,6 +38,10 @@ data class LedgerEventDto(
 class LedgerService(
     private val ledgerRepo: LedgerEventRepository,
 ) {
+    companion object {
+        const val DEFAULT_PAGE = 20
+        const val MAX_PAGE = 50
+    }
 
     fun recordBuy(userId: Long, tradeId: Long, stockId: Long, amount: BigDecimal, balanceAfter: BigDecimal) {
         ledgerRepo.save(
@@ -148,9 +159,26 @@ class LedgerService(
         )
     }
 
+    /**
+     * ADR-043 — 커서 페이징. limit은 [1, MAX_PAGE]로 clamp한다.
+     * limit+1건을 읽어 다음 페이지 존재 여부를 정확히 판정한다 — "꽉 찬 마지막 페이지" 뒤에
+     * 빈 페이지를 한 번 더 요청하게 만들지 않는다.
+     */
     @Transactional(readOnly = true)
-    fun getLedger(userId: Long): List<LedgerEventDto> =
-        ledgerRepo.findAllByUserIdOrderByCreatedAtDesc(userId).map { it.toDto() }
+    fun getLedger(userId: Long, cursor: Long? = null, limit: Int = DEFAULT_PAGE): LedgerPage {
+        val size = limit.coerceIn(1, MAX_PAGE)
+        val rows = ledgerRepo.findPage(userId, cursor ?: Long.MAX_VALUE, PageRequest.of(0, size + 1))
+        val page = rows.take(size)
+        return LedgerPage(
+            items = page.map { it.toDto() },
+            nextCursor = if (rows.size > size) page.last().id else null,
+        )
+    }
+
+    /** 지갑 메인 화면용 최근 n건 — DB에서 n건만 읽는다. 이전엔 전체를 읽고 take(10)했다. */
+    @Transactional(readOnly = true)
+    fun getRecentLedger(userId: Long, n: Int = 10): List<LedgerEventDto> =
+        ledgerRepo.findPage(userId, Long.MAX_VALUE, PageRequest.of(0, n)).map { it.toDto() }
 
     @Transactional(readOnly = true)
     fun getLedgerForDate(userId: Long, date: LocalDate): List<LedgerEventDto> {

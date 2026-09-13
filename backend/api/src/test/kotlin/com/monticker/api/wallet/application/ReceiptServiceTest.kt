@@ -7,6 +7,7 @@ import com.monticker.api.wallet.domain.LedgerEventType
 import com.monticker.api.wallet.infrastructure.LedgerEventRepository
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
@@ -25,7 +26,7 @@ class ReceiptServiceTest {
         val trade = PaperTradeSummary(id = 1L, userId = 1L, stockId = 100L, side = "BUY", quantity = 3, price = BigDecimal("70000"), amount = BigDecimal("210000"), tradedAt = java.time.Instant.now())
         every { tradeQueryService.getById(1L) } returns trade
         every { jdbc.queryForMap(any<String>(), eq(100L)) } returns mapOf("symbol" to "005930", "name" to "삼성전자")
-        every { ledgerRepo.findAll() } returns emptyList()
+        every { ledgerRepo.findTopByPaperTradeIdOrderByIdDesc(any()) } returns null
 
         val receipt = service.getReceipt(1L, 1L)
 
@@ -38,7 +39,7 @@ class ReceiptServiceTest {
         val trade = PaperTradeSummary(id = 1L, userId = 1L, stockId = 100L, side = "BUY", quantity = 1, price = BigDecimal("100000"), amount = BigDecimal("100000"), tradedAt = java.time.Instant.now())
         every { tradeQueryService.getById(1L) } returns trade
         every { jdbc.queryForMap(any<String>(), eq(100L)) } returns mapOf("symbol" to "005930", "name" to "삼성전자")
-        every { ledgerRepo.findAll() } returns emptyList()
+        every { ledgerRepo.findTopByPaperTradeIdOrderByIdDesc(any()) } returns null
 
         val receipt = service.getReceipt(1L, 1L)
 
@@ -52,7 +53,7 @@ class ReceiptServiceTest {
         val trade = PaperTradeSummary(id = 1L, userId = 1L, stockId = 100L, side = "SELL", quantity = 1, price = BigDecimal("100000"), amount = BigDecimal("100000"), tradedAt = java.time.Instant.now())
         every { tradeQueryService.getById(1L) } returns trade
         every { jdbc.queryForMap(any<String>(), eq(100L)) } returns mapOf("symbol" to "005930", "name" to "삼성전자")
-        every { ledgerRepo.findAll() } returns emptyList()
+        every { ledgerRepo.findTopByPaperTradeIdOrderByIdDesc(any()) } returns null
 
         val receipt = service.getReceipt(1L, 1L)
 
@@ -68,7 +69,7 @@ class ReceiptServiceTest {
             id = 1L, userId = 1L, eventType = LedgerEventType.FILL,
             amount = BigDecimal("-100000"), balanceAfter = BigDecimal("900000"), paperTradeId = 1L,
         )
-        every { ledgerRepo.findAll() } returns listOf(ledgerEntry)
+        every { ledgerRepo.findTopByPaperTradeIdOrderByIdDesc(1L) } returns ledgerEntry
 
         val receipt = service.getReceipt(1L, 1L)
 
@@ -86,7 +87,7 @@ class ReceiptServiceTest {
             id = 1L, userId = 1L, eventType = LedgerEventType.SETTLEMENT,
             amount = BigDecimal("100000"), balanceAfter = BigDecimal("1100000"), paperTradeId = 1L,
         )
-        every { ledgerRepo.findAll() } returns listOf(ledgerEntry)
+        every { ledgerRepo.findTopByPaperTradeIdOrderByIdDesc(1L) } returns ledgerEntry
 
         val receipt = service.getReceipt(1L, 1L)
 
@@ -99,7 +100,7 @@ class ReceiptServiceTest {
         val trade = PaperTradeSummary(id = 1L, userId = 1L, stockId = 100L, side = "BUY", quantity = 1, price = BigDecimal("100000"), amount = BigDecimal("100000"), tradedAt = java.time.Instant.now())
         every { tradeQueryService.getById(1L) } returns trade
         every { jdbc.queryForMap(any<String>(), eq(100L)) } returns mapOf("symbol" to "005930", "name" to "삼성전자")
-        every { ledgerRepo.findAll() } returns emptyList()
+        every { ledgerRepo.findTopByPaperTradeIdOrderByIdDesc(any()) } returns null
 
         val receipt = service.getReceipt(1L, 1L)
 
@@ -107,26 +108,24 @@ class ReceiptServiceTest {
         assertThat(receipt.balanceAfter).isNull()
     }
 
+    // ADR-043 — 이전엔 findAll()로 전 유저 원장을 힙에 올린 뒤 filter/maxBy로 골랐다.
+    // "가장 최근 행" 선택은 이제 DB(ORDER BY id DESC LIMIT 1)가 하고, 서비스는 전체 스캔을 하지 않아야 한다.
     @Test
-    fun `getReceipt picks the most recent ledger entry when multiple exist for the same trade`() {
+    fun `getReceipt looks the ledger row up by trade id instead of scanning the whole ledger`() {
         val trade = PaperTradeSummary(id = 1L, userId = 1L, stockId = 100L, side = "BUY", quantity = 1, price = BigDecimal("100000"), amount = BigDecimal("100000"), tradedAt = java.time.Instant.now())
         every { tradeQueryService.getById(1L) } returns trade
         every { jdbc.queryForMap(any<String>(), eq(100L)) } returns mapOf("symbol" to "005930", "name" to "삼성전자")
-        val older = LedgerEvent(
-            id = 1L, userId = 1L, eventType = LedgerEventType.FILL, amount = BigDecimal("-100000"),
-            balanceAfter = BigDecimal("950000"), paperTradeId = 1L,
-            createdAt = java.time.Instant.now().minusSeconds(60),
-        )
-        val newer = LedgerEvent(
+        val newest = LedgerEvent(
             id = 2L, userId = 1L, eventType = LedgerEventType.FILL, amount = BigDecimal("-100000"),
             balanceAfter = BigDecimal("900000"), paperTradeId = 1L,
-            createdAt = java.time.Instant.now(),
         )
-        every { ledgerRepo.findAll() } returns listOf(older, newer)
+        every { ledgerRepo.findTopByPaperTradeIdOrderByIdDesc(1L) } returns newest
 
         val receipt = service.getReceipt(1L, 1L)
 
         assertThat(receipt.balanceAfter).isEqualByComparingTo(BigDecimal("900000"))
+        verify(exactly = 1) { ledgerRepo.findTopByPaperTradeIdOrderByIdDesc(1L) }
+        verify(exactly = 0) { ledgerRepo.findAll() }
     }
 
     @Test
@@ -151,7 +150,7 @@ class ReceiptServiceTest {
         val trade = PaperTradeSummary(id = 1L, userId = 1L, stockId = 100L, side = "BUY", quantity = 1, price = BigDecimal("100000"), amount = BigDecimal("100000"), tradedAt = java.time.Instant.now())
         every { tradeQueryService.getById(1L) } returns trade
         every { jdbc.queryForMap(any<String>(), eq(100L)) } returns mapOf("symbol" to "005930", "name" to "삼성전자")
-        every { ledgerRepo.findAll() } returns emptyList()
+        every { ledgerRepo.findTopByPaperTradeIdOrderByIdDesc(any()) } returns null
 
         val receipt = service.getReceipt(1L, 1L)
 
