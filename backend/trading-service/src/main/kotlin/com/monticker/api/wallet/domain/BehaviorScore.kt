@@ -1,6 +1,8 @@
 package com.monticker.api.wallet.domain
 
 import jakarta.persistence.*
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import java.time.Instant
 import java.time.LocalDate
 
@@ -22,8 +24,12 @@ class BehaviorScore(
     @Column(name = "survival_score")
     val survivalScore: Int? = null,
 
+    @JdbcTypeCode(SqlTypes.JSON)
+
     @Column(name = "score_breakdown", columnDefinition = "jsonb")
     val scoreBreakdown: String? = null,
+
+    @JdbcTypeCode(SqlTypes.JSON)
 
     @Column(name = "feedback_json", columnDefinition = "jsonb")
     val feedbackJson: String? = null,
