@@ -1,6 +1,8 @@
 package com.monticker.api.subscription.domain
 
 import jakarta.persistence.*
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import java.math.BigDecimal
 import java.time.Instant
 
@@ -25,6 +27,7 @@ class SubscriptionPlan(
     @Column(nullable = false)
     val currency: String = "KRW",
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb", nullable = false)
     val features: String = "[]",
 
