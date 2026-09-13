@@ -265,7 +265,7 @@ RestClient.builder()
 | # | 시나리오 | 판정 | 근거 |
 |---|---------|------|------|
 | E1 | 중복 주문 (네트워크 재시도) | **가능** | 멱등성 키 24h (단 Redis 의존 §A1) |
-| E2 | 잔고 드리프트 | **불가** | 컬럼 잔고 vs 원장 대사 없음 ([ADR-043](decisions/043-ledger-pagination-and-reconciliation.md)) |
+| E2 | 잔고 드리프트 | **불가 → 가능** | ~~컬럼 잔고 vs 원장 대사 없음~~ 일일 대사 + `LedgerMismatch` 알람([ADR-043](decisions/043-ledger-pagination-and-reconciliation.md), `68773dd`). **구현 중 발견: 원장 INSERT가 전부 실패하고 있었다**(jsonb 바인딩, `5e113bb`) — E7의 또 다른 사례. 대사가 있었다면 첫날 잡혔을 결함 |
 | E3 | Saga 미완료 잔류 | **가능** | 5분 주기 `recoverIncomplete()` |
 | E4 | 캔들 유실 | **부분** | 인메모리 상태, 리밸런스·강제종료 시 유실 |
 | E5 | ES 드리프트 | **불가** | dual-write 실패를 `log.warn`으로 삼킴 ([ADR-042](decisions/042-outbox-based-es-indexing.md)) |
@@ -344,6 +344,23 @@ Phase 0의 ADR-038~045는 이 목록과 **직교한다** — 저쪽은 규모, �
 `slow_call_rate`로 대신함), `tick_pipeline_latency`(기존 `tick.latency.*` 타이머가 이미 노출).
 **§4.6 대시보드 5종은 아직 기존 2종뿐이다** — 새 메트릭이 실제로 흐르는 걸 본 뒤 만든다.
 메트릭 없이 만든 대시보드는 빈 패널이다.
+
+### 3.3 ADR-043 실행 기록 (2026-09-13) — E2
+
+| 항목 | 커밋 | 내용 |
+|------|------|------|
+| 커서 페이징 | `ef5fd12` `ccbac87` `0938819` | `findPage(id DESC)`, `{items, nextCursor}`, limit ≤ 50, limit+1 읽기. `ReceiptService`의 **전 유저 `findAll()`** 제거. 웹 무한 스크롤 |
+| 대사 배치 | `68773dd` `f7cf676` | 불변식 `cash + reserved = 초기 + Σ원장[현금 타입]`. 스냅샷 델타. `ledger_reconciliation_mismatch_total{mode}` + `checked_total`. 알람 3종(page/ticket/침묵). 자동 교정 없음 |
+| 원장 정직성 | `6fb374a` | 취소 환불 `DEPOSIT`→`CASH_UNRESERVED`, 초기화 이벤트 기록 |
+| **원장 INSERT 전부 실패** | `5e113bb` `69595aa` | `LedgerEvent.metadataJson` jsonb 바인딩. 라이브 첫 실행에서 주문 4건 체결됐는데 `ledger_events` 0행. `LedgerEventPersistenceIntegrationTest`(실제 Hibernate → 실제 Postgres) |
+| FK 해제 | `ef5fd12` (V43) | `paper_trade_id → paper_trades` FK가 매칭 엔진 경로(`fills.id`)를 막고 있었다 |
+
+라이브 검증(로컬): MARKET BUY 3 → LIMIT BUY 2(미체결) → LIMIT BUY 1 취소 → MARKET SELL 1.
+원장 FILL/CASH_UNRESERVED/SETTLEMENT 3행, `reservedCash` 128,182.7, 커서 2건씩 2페이지,
+대사 drift 0 → 잔고 +1원 조작 → `mismatch=t`, 카운터 1 → 초기화 → DEPOSIT 258,365.4, drift 0.
+단위 api 523/523, 통합 8/8, trading-service 20/20, web 40/40.
+
+**§4.4에서 이제 있는 것**: `ledger_reconciliation_mismatch_total`. **여전히 없는 것**은 위와 같다.
 
 **아직 검증하지 않은 것**: 카오스 실험 CH-01/02/06/08. 관측 스택은 이제 있지만 **실제 클러스터에
 적용된 적은 없다**(human-action-items §3의 클러스터 프로비저닝이 선행). 로컬 compose에서는

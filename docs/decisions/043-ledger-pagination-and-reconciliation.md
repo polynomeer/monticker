@@ -190,3 +190,89 @@ Superseded로 바꾸지 않는다.
   Outbox([ADR-008](008-outbox-pattern-spring-modulith.md))로 묶는 게 근본 해결이다.
 - **실브로커 잔고(BYOK)까지 대사 대상이 될 때** — 증권사 API의 잔고와 monticker의 기록을
   맞추는 건 더 복잡하다(체결 지연, T+2 정산). 별도 ADR이 필요하다.
+
+## 구현 노트 (2026-09-13)
+
+커밋 `ef5fd12` `6fb374a` `68773dd` `ccbac87` `0938819` `f7cf676` `5e113bb` `69595aa`.
+api 523/523, 통합 8/8(실제 Postgres), trading-service 20/20, web 40/40. 로컬 스택에서 주문 →
+취소 → 매도 → 대사 → 잔고 조작 → 초기화까지 라이브 검증.
+
+### 결정대로 구현한 것
+
+- **§1 커서 페이징** — `findPage(userId, cursor, pageable)`(정렬 키 `id`, 인덱스 `(user_id, id DESC)`),
+  `GET /api/wallet/ledger?cursor=&limit=` → `{items, nextCursor}`, limit ≤ 50, **limit+1건을 읽어**
+  꽉 찬 마지막 페이지 뒤에 빈 요청이 한 번 더 가지 않게 했다. `WalletService`는 10건만 읽는다.
+  `findAllByUserIdOrderByCreatedAtDesc` 삭제. 웹 원장 탭은 `useInfiniteQuery` 무한 스크롤
+  ([`WalletLedger.tsx`](../../apps/web/src/components/wallet/WalletLedger.tsx)) — 이전엔 이 탭이
+  `/api/wallet/ledger`를 호출조차 안 하고 `recentLedger` 10건만 보여 줬다.
+- **§2 스냅샷** — `ledger_snapshots(user_id, as_of_date, ledger_sum, account_cash, reserved_cash,
+  last_event_id, mismatch)`. 직전 스냅샷의 `(ledger_sum, last_event_id)`에서 델타만 더한다.
+  통합 테스트가 어제 스냅샷을 일부러 오염시켜 델타 경로를 탔음을 증명한다.
+- **§3 대사 배치** — `ledgerReconciliationJob` 17:30 KST(페이퍼 16:30·실거래 17:00 정산 후),
+  대상은 당일 원장 이벤트가 있는 유저. Job 파라미터 `date`가 인스턴스 식별자라 멀티파드에서
+  중복 실행이 거절된다. `POST /api/admin/batch/ledger-reconciliation?date=`로 수동·과거 재대사.
+  `ledger_reconciliation_mismatch_total{mode}` + `ledger_reconciliation_checked_total`.
+  **자동 교정 없음** — 통합 테스트가 1원 조작 후 잔고·원장이 그대로임을 확인한다.
+- **"최초 실행은 리포트만"** — `app.wallet.reconciliation.mode` (`LEDGER_RECON_MODE`). 코드 기본은
+  `alert`, 운영 ConfigMap은 `report`로 출발한다. 알람: `LedgerMismatch`(page, `mode="alert"`),
+  `LedgerMismatchReported`(ticket, `mode="report"`), `LedgerReconciliationDidNotRun`(ticket, 26h 침묵).
+  `report` → `alert` 전환은 [human-action-items §3](../human-action-items.md).
+
+### 결정에서 벗어난 것 — 불변식을 정확히 하려면 필요했다
+
+이 ADR의 §3은 `ledgerSum ≈ paper_accounts.cash`를 비교한다고 적었다. 코드를 따라가 보니
+**그 등식은 성립한 적이 없다.** 실제 불변식은:
+
+```
+paper_accounts.cash + reserved  =  10,000,000  +  Σ ledger.amount[현금 영향 타입]
+```
+
+- **초기 지급 1,000만 원은 원장에 없다** — `PaperAccount` 생성 시 DEPOSIT을 쓰지 않는다. 상수로 더한다.
+- **예약금(`reserved`)** — `OrderSagaOrchestrator.reserveCash`는 제출 시점에 `limit_price × 수량`을
+  cash에서 빼지만 원장에는 아무것도 쓰지 않는다(예약은 실현된 이동이 아니다). 미체결 BUY 주문의
+  `limit_price × (quantity − filled_qty)`를 잔고 쪽에 되돌려 더한다. 같은 SQL(`RESERVED_CASH_SQL`)로
+  지갑 화면의 `reservedCash`도 채웠다 — 백로그의 "하드코딩 0" 항목 절반이 이 김에 해결됐다
+  (`settlementPending`은 여전히 0, 별도).
+- **현금 영향 타입만 합산** — `SUBSCRIPTION_PAYMENT`(PG)·`CREATOR_*`(정산 계좌)·`BROKERAGE_SETTLEMENT`
+  (증권사 계좌)는 모의투자 현금과 무관한데 같은 테이블에 있다. `CASH_RESERVED/UNRESERVED`는 예약금
+  이동이라 `reserved` 항에서 이미 상쇄된다. 목록은 `LedgerReconciliationService.CASH_EVENT_TYPES`.
+
+그리고 불변식을 세우자 **원장 자체가 거짓말하는 경로 두 개**가 드러났다(`6fb374a`):
+
+- **주문 취소 환불이 `DEPOSIT`이었다.** 예약은 원장에 없었는데 반환만 입금으로 적히니 원장 합이
+  잔고보다 환불액만큼 커진다. `CASH_UNRESERVED`로 바꿨다 — 타임라인에는 남고 합계에서는 빠진다.
+- **계좌 초기화(`PaperTradingService.reset`)가 잔고를 1,000만으로 되돌리며 원장에 아무것도 안 썼다.**
+  초기화한 유저는 영구히 불일치였을 것이다. paper가 `PaperAccountResetEvent`를 내고 wallet이
+  `(초기 − 직전 잔고)`를 `DEPOSIT`/`WITHDRAWAL`("모의투자 계좌 초기화")로 기록한다.
+
+### 라이브 검증에서 발견한 결함 — ADR과 무관하지만 원장의 존재 자체에 관한 것
+
+- **원장 INSERT가 전부 실패하고 있었다** (`5e113bb`). `LedgerEvent.metadataJson`이
+  `columnDefinition = "jsonb"`만 있고 `@JdbcTypeCode(SqlTypes.JSON)`이 없어 Hibernate 6가 varchar로
+  바인딩하고 Postgres가 거부했다 — **null이어도**. 첫 라이브 실행에서 주문 4건이 체결·취소됐는데
+  `ledger_events`는 0행, `event_publication`에 미완료 5건. `BehaviorScore`도 같은 결함.
+  `RebalanceTarget`이 이미 같은 수정을 같은 설명과 함께 갖고 있었다 — 즉 **이 패턴이 한 번 발견되고도
+  같은 모듈 안의 다른 엔티티는 점검되지 않았다.** mock 단위테스트는 절대 못 본다;
+  `LedgerEventPersistenceIntegrationTest`가 실제 Hibernate 매핑으로 실제 스키마에 쓴다
+  (애노테이션을 지우면 실패함을 확인). 나머지 미수정 jsonb 컬럼은 [engineering-backlog §9](../engineering-backlog.md).
+- **`ledger_events.paper_trade_id → paper_trades(id)` FK가 매칭 엔진 경로를 막고 있었다.**
+  `OrderFilledEventListener`는 이 컬럼에 `fills.id`를 넣는다. V43에서 FK를 풀고 컬럼 코멘트로
+  이중 의미를 기록했다. 원장은 append-only 감사 기록이라 원 거래 행(`reset`이 지우는
+  `paper_trades`)이 사라져도 살아남아야 하므로 FK 부재가 맞다.
+- **`ReceiptService.getReceipt`가 `ledgerRepo.findAll()`** — 영수증 1장에 **전 유저** 원장을 힙에
+  올려 filter했다. ADR이 적은 "지갑 화면 10줄에 전체 로드"보다 나쁜 경로였다.
+  `findTopByPaperTradeIdOrderByIdDesc` + 부분 인덱스.
+
+### 알고 남겨 둔 것
+
+- **초기화 + 미체결 주문 = 돈이 생긴다.** `reset`은 cash를 1,000만으로 돌리지만 `orders`는 건드리지
+  않는다. 라이브 검증에서 예약금 128,182원을 둔 채 초기화하니 불변식은 성립했지만(원장이 정직하게
+  기록하므로) 그 주문이 나중에 취소되면 유저는 1,000만 + 128,182원을 갖는다. 대사가 잡을 수 없는
+  종류의 오류다 — 대사는 "장부와 잔고가 맞는가"를 보지 "장부가 옳은가"를 보지 않는다.
+  `reset`이 미체결 주문을 먼저 취소하거나 예약금을 초기화 금액에서 빼야 한다. matching 모듈의
+  변경이라 [engineering-backlog §9](../engineering-backlog.md).
+- **스냅샷 델타의 경계** — `id > last_event_id`로 델타를 잡으므로, 직전 대사 시점에 아직 커밋되지
+  않은(더 작은 id의) 트랜잭션이 있었다면 그 이벤트는 영영 합산되지 않는다. 배치가 장 마감 후
+  거래가 없는 시각에 돌고 원장 트랜잭션은 밀리초 단위라 실질적 위험은 낮지만, 불일치가 나면
+  이 가능성도 후보에 넣어야 한다. 의심되면 해당 유저의 스냅샷을 지우고 재대사하면 전체 합산으로 돌아간다.
+

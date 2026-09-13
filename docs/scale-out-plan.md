@@ -922,7 +922,7 @@ order.commands (파티션 64, key=stockId)
 | 0.3 ✅ | Kafka 토픽 명시 선언 + auto-create off ([ADR-040](decisions/040-kafka-topic-declaration.md)) — `14d0c7b` `d351eef`, 라이브: 16 토픽 선언 파티션으로 생성 | §3.3 | S |
 | 0.4 ✅ | 캔들 hypertable 승격 + CI 검증 ([ADR-041](decisions/041-timescale-hypertable-promotion.md)) — V42, 통합 테스트 4건 | §3.5, ADR-021이 이미 지적 | M |
 | 0.5 ✅ | 압축 정책 + `price_ticks`/죽은 코드 제거 ([ADR-041](decisions/041-timescale-hypertable-promotion.md)) — 같은 V42 | §3.5 | S |
-| 0.6 | 원장 커서 페이징 + 대사 스냅샷 ([ADR-043](decisions/043-ledger-pagination-and-reconciliation.md)) | §3.6 | M |
+| 0.6 ✅ | 원장 커서 페이징 + 대사 스냅샷 ([ADR-043](decisions/043-ledger-pagination-and-reconciliation.md)) — `ef5fd12`~`69595aa`. **라이브 검증에서 원장 INSERT가 전부 실패 중이었음을 발견**(jsonb 바인딩) — ADR-043 구현 노트 | §3.6 | M |
 | 0.7 ✅ | 알림 룰 인메모리 인덱스 + 평가/발송 분리 ([ADR-044](decisions/044-alert-rule-in-memory-index.md)) — `67ef564` `53f5902`. **가설 정정**: L-03 상한의 실제 원인은 감지기 Redis 왕복([ADR-046](decisions/046-detector-state-in-memory.md)), 600→5,000 tick/s | §3.4 | M |
 | 0.8 | SLO 정의 + 검증 하네스 확장 ([ADR-045](decisions/045-performance-slo-and-verification-harness.md)) | 이후 모든 판단의 근거 | M |
 

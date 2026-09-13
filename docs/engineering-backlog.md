@@ -93,12 +93,23 @@
 [scale-out-plan.md](scale-out-plan.md)의 Phase 0 ADR(038~045)을 쓰면서 확인했지만,
 해당 ADR의 범위가 아니라 따로 남긴 항목들.
 
-- [ ] **지갑 화면의 `reservedCash`/`settlementPending`이 하드코딩 0** —
-  `WalletService.getWalletMap`이 두 값을 `BigDecimal.ZERO`로 반환한다. "돈의 이동 지도"가
-  절반만 실데이터라는 뜻이다. 예약금은 `paper_accounts`의 예약 상태에서,
-  정산대기는 T+2 정산 스케줄러([ADR-014](decisions/014-t2-paper-settlement-scheduler.md))가
-  관리하는 미정산 건에서 계산해야 한다.
+- [ ] **지갑 화면의 `settlementPending`이 하드코딩 0** — ~~`reservedCash`도~~ 예약금은 ADR-043 구현에서
+  미체결 BUY 주문의 `limit_price × 잔량`으로 채웠다(`ef5fd12`). 정산대기는 T+2 정산 스케줄러
+  ([ADR-014](decisions/014-t2-paper-settlement-scheduler.md))가 관리하는 미정산 건에서 계산해야 한다.
   발견: [ADR-043](decisions/043-ledger-pagination-and-reconciliation.md) 작성 중.
+- [ ] **계좌 초기화가 미체결 주문의 예약금을 방치한다 — 돈이 생긴다** — `PaperTradingService.reset`은
+  cash를 1,000만으로 돌리지만 `orders`는 건드리지 않는다. 예약금 12만 원을 둔 채 초기화하고 그 주문을
+  취소하면 유저는 1,012만 원을 갖는다. 대사(ADR-043)는 이걸 잡지 못한다 — 원장이 정직하게 기록하므로
+  불변식은 성립한다. `reset`이 미체결 주문을 먼저 취소하거나(matching 모듈 호출) 초기화 금액에서
+  예약금을 빼야 한다. 발견: ADR-043 라이브 검증 (`adr043-live.sh` 7단계).
+- [ ] **`columnDefinition = "jsonb"`만 있고 `@JdbcTypeCode(SqlTypes.JSON)`이 없는 String 컬럼 — INSERT가
+  전부 실패한다(null 포함)**. 원장·행동점수는 ADR-043에서 고쳤다(`5e113bb`). 남은 곳:
+  api `SubscriptionPlan.featuresJson`(시드 SQL로만 쓰이면 무해), `DetectedPattern.swingPointsJson`,
+  `TaxHarvestingLog.candidatesJson`; quant-engine `QuantBacktestResult`(×3), `RuleSet`(×2),
+  `PortfolioOptimization`(×3), `DetectedPattern`, `TaxHarvestingLog`. 각각 실제 INSERT 경로가 있는지
+  확인하고 `LedgerEventPersistenceIntegrationTest` 같은 실제-Hibernate 테스트를 붙일 것.
+  **같은 결함이 `RebalanceTarget`에서 이미 한 번 발견·수정됐는데 나머지는 점검되지 않았다** —
+  발견 시 같은 패턴을 전수 검색하는 습관이 필요하다.
 - [ ] **`alert_rules.stock_id`가 NULL인 룰은 절대 평가되지 않는다** —
   컬럼은 nullable인데 `AlertEvaluator.fetchRulesForStock`은 `WHERE stock_id = ?`로만 읽는다.
   NULL이 "전 종목 대상"을 의도한 건지, 그냥 쓰이지 않는 제약인지 확인이 필요하다.

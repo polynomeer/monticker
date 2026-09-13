@@ -411,7 +411,12 @@ CREATE TABLE simulation_trades (
 
 ### ledger_events
 
-모든 잔고 변화의 원장. 잔고는 이벤트를 replay해서 계산한다.
+모든 잔고 변화의 append-only 원장. ~~잔고는 이벤트를 replay해서 계산한다.~~ **잔고의 authoritative
+source는 `paper_accounts.cash` 컬럼**이고 원장은 병렬 감사 기록이다 — 둘의 정합성은 일일 대사가
+확인한다([ADR-043](decisions/043-ledger-pagination-and-reconciliation.md)). 실제 스키마(V14+V43)는 아래
+초안과 다르다: 컬럼은 `paper_trade_id`(FK 없음 — paper 경로는 `paper_trades.id`, 매칭 엔진 경로는
+`fills.id`), 인덱스는 `(user_id, created_at DESC)` + **`(user_id, id DESC)`**(커서 페이징) +
+`(paper_trade_id) WHERE NOT NULL`(영수증). 조회는 `id` 커서로 페이징한다.
 
 ```sql
 CREATE TABLE ledger_events (
@@ -440,9 +445,28 @@ Event type flow per order:
 취소:       CASH_UNRESERVED
 ```
 
-### wallet_snapshots
+### ledger_snapshots (V43 — done)
 
-`ledger_events` replay 가속화를 위한 일별 스냅샷.
+일일 대사 스냅샷. 목적은 replay 가속이 아니라 **드리프트 감지와 "언제부터" 좁히기**. 불변식
+`account_cash + reserved_cash = 10,000,000 + ledger_sum`. `last_event_id`부터 델타만 더한다.
+
+```sql
+CREATE TABLE ledger_snapshots (
+    user_id        BIGINT        NOT NULL REFERENCES users(id),
+    as_of_date     DATE          NOT NULL,
+    ledger_sum     NUMERIC(18,4) NOT NULL,             -- 현금 영향 이벤트 타입만의 누적 합
+    account_cash   NUMERIC(18,4) NOT NULL,
+    reserved_cash  NUMERIC(18,4) NOT NULL DEFAULT 0,   -- 미체결 BUY 주문 limit_price × 잔량
+    last_event_id  BIGINT        NOT NULL,
+    mismatch       BOOLEAN       NOT NULL DEFAULT false,
+    created_at     TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, as_of_date)
+);
+```
+
+### wallet_snapshots (초안 — 미구현)
+
+`ledger_events` replay 가속화를 위한 일별 스냅샷. ADR-043이 `ledger_snapshots`로 대체했다.
 
 ```sql
 CREATE TABLE wallet_snapshots (
