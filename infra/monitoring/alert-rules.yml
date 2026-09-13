@@ -92,12 +92,29 @@ groups:
 
       - alert: LedgerMismatch
         # ADR-043 대사 배치가 올리는 카운터. 잔고 정합성 에러버짓은 0 — 하나라도 나면 조사한다.
-        # 자동 교정 금지 (runbook: ledger-mismatch).
-        expr: increase(ledger_reconciliation_mismatch_total[1h]) > 0
+        # 자동 교정 금지 (runbook: ledger-mismatch). mode="report"(최초 실행·정리 기간)는 페이지하지 않는다 — LedgerMismatchReported.
+        expr: increase(ledger_reconciliation_mismatch_total{mode="alert"}[1h]) > 0
         labels: { severity: critical }
         annotations:
           summary: "원장-잔고 불일치 감지"
-          description: "지난 1시간 대사에서 {{ $value }}건의 컬럼 잔고 vs 원장 합계 불일치가 발생했습니다. 자동 교정하지 말고 조사할 것."
+          description: "지난 1시간 대사에서 {{ $value }}건의 (잔고+예약금) vs (초기+원장 합) 불일치가 발생했습니다. 자동 교정하지 말고 조사할 것."
+
+      - alert: LedgerMismatchReported
+        # report 모드로 돌고 있는 동안의 불일치 — 페이지는 아니지만 티켓은 만든다. alert로 전환하려면 이게 0이어야 한다.
+        expr: increase(ledger_reconciliation_mismatch_total{mode="report"}[24h]) > 0
+        labels: { severity: ticket }
+        annotations:
+          summary: "원장 대사 리포트 모드에서 불일치 {{ $value }}건"
+          description: "LEDGER_RECON_MODE=report 상태. ledger_snapshots WHERE mismatch 로 유저·날짜를 찾아 조사하고, 0이 되면 alert 모드로 전환."
+
+      - alert: LedgerReconciliationDidNotRun
+        # 배치가 안 돌면 불일치도 안 보인다 — 침묵을 알람으로. 평일 17:30 KST 실행, 26시간 동안 checked 증가 0이면 이상.
+        expr: increase(ledger_reconciliation_checked_total[26h]) == 0 and on() (day_of_week() > 0 and day_of_week() < 6)
+        for: 30m
+        labels: { severity: ticket }
+        annotations:
+          summary: "원장 대사 배치가 26시간 동안 돌지 않음"
+          description: "ledgerReconciliationJob이 실행되지 않았거나 대상 유저가 0명입니다. BatchJobScheduler 로그와 batch_job_execution을 확인할 것."
 
       - alert: IdempotencyStoreDown
         # 멱등성은 fail-closed(ADR/P0-1)라 Redis가 죽으면 주문이 503으로 거절된다. 사용자가 즉시 아프다.
