@@ -20,6 +20,7 @@ class BatchJobScheduler(
     @Qualifier("paperSettlementJob")      private val paperSettlementJob: Job,
     @Qualifier("subscriptionRenewalJob")  private val subscriptionRenewalJob: Job,
     @Qualifier("brokerageSettlementJob")  private val brokerageSettlementJob: Job,
+    @Qualifier("ledgerReconciliationJob") private val ledgerReconciliationJob: Job,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -69,6 +70,15 @@ class BatchJobScheduler(
         log.info("Paper settlement job starting...")
         runJob(paperSettlementJob, JobParametersBuilder()
             .addString("date", LocalDate.now().toString())
+            .toJobParameters())
+    }
+
+    // 장 마감 후 17:30 KST — 페이퍼(16:30)·실거래(17:00) 정산이 원장을 다 쓴 뒤, 잔고 vs 원장 대사 (ADR-043)
+    @Scheduled(cron = "0 30 17 * * *", zone = "Asia/Seoul")
+    fun runLedgerReconciliation() {
+        log.info("Ledger reconciliation job starting...")
+        runJob(ledgerReconciliationJob, JobParametersBuilder()
+            .addString("date", LocalDate.now(java.time.ZoneId.of("Asia/Seoul")).toString())
             .toJobParameters())
     }
 

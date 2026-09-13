@@ -166,6 +166,11 @@ management:
       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
 
 app:
+  wallet:
+    # ADR-043 — 일일 원장 대사의 불일치 처리. alert: ERROR + LedgerMismatch 페이지 알람.
+    # report: WARN + mode="report" 카운터만 — 최초 실행에서 기존 드리프트를 조사·정리할 때까지 (운영 ConfigMap이 결정).
+    reconciliation:
+      mode: ${LEDGER_RECON_MODE:alert}
   # ADR-040 — Kafka 토픽 파티션/복제. 로컬 기본값. 운영 값(prod: ticks 64, T2 목표 256)은 K8s ConfigMap.
   # 파티션은 늘리기만 가능하고 늘리면 키→파티션 매핑이 바뀐다 — 장 마감 후, ADR-038 배포 이후에만.
   kafka:

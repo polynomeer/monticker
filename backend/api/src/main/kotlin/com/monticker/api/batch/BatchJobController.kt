@@ -23,6 +23,7 @@ class BatchJobController(
     @Qualifier("regimeClassificationJob") private val regimeJob: Job,
     @Qualifier("behaviorScoreJob")        private val scoreJob: Job,
     @Qualifier("candleBackfillJob")       private val backfillJob: Job,
+    @Qualifier("ledgerReconciliationJob") private val ledgerReconciliationJob: Job,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -42,6 +43,29 @@ class BatchJobController(
             .addLong("runId", System.currentTimeMillis())
             .toJobParameters())
         return ResponseEntity.ok(mapOf("jobName" to "behaviorScoreJob", "status" to execution.status.name))
+    }
+
+    /**
+     * ADR-043 원장 대사 수동 실행 — 최초 리포트 실행, 과거 날짜 재대사용.
+     * @param date 대사 기준일 (기본: 오늘 KST). 같은 날 재실행은 그날 스냅샷을 덮어쓴다.
+     */
+    @PostMapping("/ledger-reconciliation")
+    fun triggerLedgerReconciliation(
+        @RequestParam(required = false) date: String?,
+    ): ResponseEntity<Map<String, Any>> {
+        val asOf = date ?: LocalDate.now(java.time.ZoneId.of("Asia/Seoul")).toString()
+        val execution = jobLauncher.run(ledgerReconciliationJob, JobParametersBuilder()
+            .addString("date", asOf)
+            .addLong("runId", System.currentTimeMillis())
+            .toJobParameters())
+        val step = execution.stepExecutions.firstOrNull()
+        return ResponseEntity.ok(mapOf(
+            "jobName" to "ledgerReconciliationJob",
+            "date" to asOf,
+            "status" to execution.status.name,
+            "usersChecked" to (step?.writeCount ?: 0L),
+            "skipped" to (step?.skipCount ?: 0L),
+        ))
     }
 
     /**
