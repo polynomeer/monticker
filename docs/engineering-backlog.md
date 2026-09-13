@@ -116,12 +116,12 @@
   backend/` 기준 `@JdbcTypeCode` 없는 곳 0건.
   **같은 결함이 `RebalanceTarget`에서 이미 한 번 발견·수정됐는데 나머지는 점검되지 않았다** —
   발견 시 같은 패턴을 전수 검색하는 습관이 필요하다.
-- [ ] **quant-engine `RuleSet` @Entity가 DROP된 `rule_sets` 테이블을 가리킨다** — V22에서 MongoDB로
-  이전하며 테이블을 지웠고 `RuleSetRepository`는 이미 `MongoRepository`인데, quant-engine의
-  `com.monticker.api.quant.domain.RuleSet`은 여전히 `@Entity @Table(name = "rule_sets")`이고
-  `@EntityScan` 패키지 안에 있다. `ddl-auto: validate`라면 기동 시 "missing table [rule_sets]"로
-  실패해야 정상 — 실제로 어떻게 기동되는지 확인하고, api 사본처럼 plain class로 바꿀 것.
-  발견: 위 jsonb 전수 수정 중.
+- [x] **quant-engine `RuleSet` @Entity가 DROP된 `rule_sets` 테이블을 가리킨다** — ✅ 완료(2026-09-13,
+  `c46133c`). V22에서 MongoDB로 이전하며 테이블을 지웠는데 quant-engine 사본만 `@Entity @Table("rule_sets")`로
+  남아 `@EntityScan` 패키지 안에 있었다 — `ddl-auto: validate` 기준 기동 실패("missing table [rule_sets]",
+  통합 테스트로 재현). api 사본과 같은 plain class로 교체. `EntitySchemaValidationIntegrationTest`가
+  `@EntityScan` 3개 패키지의 모든 @Entity를 api 마이그레이션 스키마에 대고 validate하므로 다음 드리프트는
+  CI에서 잡힌다. 발견: 위 jsonb 전수 수정 중.
 - [ ] **`alert_rules.stock_id`가 NULL인 룰은 절대 평가되지 않는다** —
   컬럼은 nullable인데 `AlertEvaluator.fetchRulesForStock`은 `WHERE stock_id = ?`로만 읽는다.
   NULL이 "전 종목 대상"을 의도한 건지, 그냥 쓰이지 않는 제약인지 확인이 필요하다.
