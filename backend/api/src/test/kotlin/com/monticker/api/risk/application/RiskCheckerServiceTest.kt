@@ -21,7 +21,7 @@ class RiskCheckerServiceTest {
     private val objectMapper = ObjectMapper()
     private val riskRuleQueryService = RiskRuleQueryService(jdbc)
     private val auditLogger = RiskCheckAuditLogger(jdbc, objectMapper)
-    private val service = RiskCheckerService(riskLimitRepo, riskRuleQueryService, auditLogger)
+    private val service = RiskCheckerService(riskLimitRepo, riskRuleQueryService, auditLogger, io.micrometer.core.instrument.simple.SimpleMeterRegistry())
 
     private val userId = 1L
     private val stockId = 100L

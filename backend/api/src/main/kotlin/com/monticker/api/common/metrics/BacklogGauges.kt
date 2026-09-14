@@ -15,6 +15,10 @@ import java.util.concurrent.atomic.AtomicLong
  * 그 장치가 실패하고 있어도 아무 신호가 없다는 점도 같다. 30초마다 테이블을 세어 게이지로 올린다.
  * DB는 api·worker가 공유하므로 어느 서비스가 썼든 여기서 전부 보인다.
  * 알람: OutboxBacklog, SagaIncomplete.
+ *
+ * 이름에 _total을 붙이지 않는다 — Micrometer의 Prometheus 레지스트리는 **게이지**의 `_total` 접미사를 떼고 노출한다
+ * (`outbox_pending_total` → `outbox_pending`). 처음엔 `_total`로 등록했고 알람 규칙도 그 이름을 봐서, OutboxBacklog·
+ * SagaIncomplete는 **존재하지 않는 시계열을 보며 영영 울릴 수 없었다** — 대시보드 작업 중 실제 노출 이름과 대조해 발견.
  */
 @Component
 class BacklogGauges(
@@ -28,11 +32,11 @@ class BacklogGauges(
     private val sagaIncomplete  = AtomicLong(0)
 
     init {
-        Gauge.builder("outbox_pending_total", outboxPending) { it.get().toDouble() }
+        Gauge.builder("outbox_pending", outboxPending) { it.get().toDouble() }
             .description("event_publication에서 completion_date IS NULL인 이벤트 수").register(registry)
         Gauge.builder("outbox_oldest_age_seconds", outboxOldestAge) { it.get().toDouble() }
             .description("가장 오래된 미완료 Outbox 이벤트의 나이(초)").register(registry)
-        Gauge.builder("saga_incomplete_total", sagaIncomplete) { it.get().toDouble() }
+        Gauge.builder("saga_incomplete", sagaIncomplete) { it.get().toDouble() }
             .description("order_sagas에서 STARTED/COMPENSATING 상태인 건수").register(registry)
     }
 

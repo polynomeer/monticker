@@ -98,7 +98,8 @@ class MatchingService(
         req: SubmitOrderRequest,
     ): SubmitOrderResponse = submitOrder(userId, req)
 
-    @Timed("matching.submit_order", tags = ["module=matching"])
+    // @Timed("matching.submit_order")가 있었지만 submitOrderChecked·submitMarket이 this로 호출해 AOP를 건너뛰어
+    // 한 번도 기록된 적이 없었다(대시보드 작업 중 확인). 사가의 matching.saga.submit 타이머가 같은 구간을 잰다.
     fun submitOrder(userId: Long, req: SubmitOrderRequest): SubmitOrderResponse =
         sagaOrchestrator.execute(userId, req)
 

@@ -168,6 +168,10 @@ management:
       # slo 경계는 resilience-plan §4.3의 조회 SLO(p95 200ms, p99 500ms) 기준.
       percentiles-histogram:
         http.server.requests: true
+        # 대시보드가 histogram_quantile로 pod 간 합산 p99를 그린다 — 요약(summary) 분위수는 합산이 안 된다
+        matching.saga.submit: true
+        quant.backtest: true
+        search_index_lag_seconds: true
       slo:
         http.server.requests: 50ms,100ms,200ms,500ms,1s,2s
   tracing:

@@ -22,6 +22,16 @@ import org.springframework.stereotype.Component
  */
 @Component
 class RedisGuard(private val registry: MeterRegistry) {
+    init {
+        // 카운터는 첫 증가 때 생긴다 — 그 전엔 시계열이 없어 increase() 기반 알람·대시보드가 "데이터 없음"이다.
+        // 알려진 (op, policy) 조합을 0으로 미리 등록해 IdempotencyStoreDown·RedisFailOpenSustained가 처음부터 검증 가능하게 한다.
+        listOf("idempotency_get" to "closed", "idempotency_set" to "closed",
+               "rate_limit" to "open", "rate_limited_aspect" to "open",
+               "login_fail_get" to "open", "login_fail_incr" to "open", "login_fail_reset" to "open",
+               "signup_verify_token" to "open", "market_summary_get" to "open", "alert_rules_changed_publish" to "open")
+            .forEach { (op, policy) -> registry.counter("redis_command_failed_total", "op", op, "policy", policy) }
+    }
+
 
     private val log = LoggerFactory.getLogger(javaClass)
 

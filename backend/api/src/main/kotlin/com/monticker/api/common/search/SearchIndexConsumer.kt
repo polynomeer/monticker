@@ -34,6 +34,7 @@ class SearchIndexConsumer(
         .description("이벤트 외부화(Kafka 타임스탬프) → ES 색인 완료")
         .publishPercentiles(0.5, 0.95, 0.99).register(registry)
     private val registry = registry
+    private val dlt = registry.counter("dlt_messages_total", "topic", "search.index")   // 0으로 미리 등록 — 알람이 처음부터 검증 가능하게
 
     @KafkaListener(
         topics = ["search.index"], groupId = "monticker-search-indexer",
@@ -75,7 +76,7 @@ class SearchIndexConsumer(
 
     @KafkaListener(topics = ["search.index-dlt"], groupId = "monticker-search-indexer-dlt")
     fun onDlt(record: ConsumerRecord<String, String>) {
-        registry.counter("dlt_messages_total", "topic", "search.index").increment()   // 알람: DltMessagesGrowing (P1-2)
+        dlt.increment()   // 알람: DltMessagesGrowing · SearchIndexDltGrowing
         log.error("[DLT] search.index 최종 실패 — 문서가 ES에 반영되지 않았다. key={} payload={}", record.key(), record.value().take(500))
     }
 }

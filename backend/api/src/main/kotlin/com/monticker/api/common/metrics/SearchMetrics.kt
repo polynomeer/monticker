@@ -12,6 +12,12 @@ import org.springframework.stereotype.Component
  */
 @Component
 class SearchMetrics(private val registry: MeterRegistry) {
+    init {
+        // 카운터는 첫 증가 때 생긴다 — 폴백이 한 번도 없으면 시계열이 없어 대시보드·알람이 "데이터 없음"이다. 0으로 미리 등록.
+        listOf("stocks", "news_articles", "stock_events", "watchlist_items", "alert_histories")
+            .forEach { registry.counter("search_fallback_total", "index", it) }
+    }
+
     fun fallback(index: String) =
         registry.counter("search_fallback_total", "index", index).increment()
 }

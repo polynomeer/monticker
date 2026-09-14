@@ -64,6 +64,7 @@ class RiskCheckerService(
     private val riskLimitRepo: RiskLimitRepository,
     private val riskRuleQueryService: RiskRuleQueryService,
     private val auditLogger: RiskCheckAuditLogger,
+    private val registry: io.micrometer.core.instrument.MeterRegistry,
 ) {
     fun check(
         userId: Long,
@@ -112,6 +113,9 @@ class RiskCheckerService(
         }
 
         auditLogger.record(userId, stockId, side, qty, approved, blockedBy, checks, accountType)
+        // Trading 대시보드 "리스크 거부율" — 감사 로그는 DB에만 있어 추이를 볼 수 없었다. 룰 라벨은 5개로 유계.
+        registry.counter("risk_check_total", "account", accountType, "side", side,
+            "result", if (approved) "approved" else "blocked", "rule", blockedBy ?: "none").increment()
 
         return RiskCheckResult(approved = approved, blockedBy = blockedBy, severity = severity, checks = checks)
     }
