@@ -110,7 +110,7 @@ MockPriceGenerator ┘                                   │     └ RedisTickWr
                                                              └ ConditionalOrderEvaluator (@Async)
 
 backend/api (replicas 2, HPA 2~6)  ── strangler-fig proxy ──► quant-engine :8082
-                                                            └► trading-service :8083
+       └ matching·paper·wallet은 api 안 (trading-service는 ADR-048로 폐기 — 위임이 연결된 적 없었다)
 공유 인프라: TimescaleDB(단일) · Redis(단일) · Elasticsearch(single-node) · MongoDB(룰셋)
 ```
 
@@ -239,10 +239,13 @@ chunk pruning 없음, 압축 없음, 보존 정책 없음, CAgg는 생성 조건
 ### 3.7 [높음] 매칭 엔진 단일 인스턴스 · 상태가 힙에 있음
 
 - 근거: [architecture.md](architecture.md) "Order Book 자료구조" — `TreeMap` in-JVM
-- 근거: trading-service는 K8s에서 단일 Deployment
+- 근거: ~~trading-service는 K8s에서 단일 Deployment~~ **정정([ADR-048](decisions/048-retire-trading-service.md))**:
+  매칭은 trading-service가 아니라 **api**에서 돈다(위임이 연결된 적 없음). api는 HPA 2~6이다.
 
-OrderBook이 프로세스 힙에 있으므로 trading-service는 **수평 확장이 불가능**하다
-(replicas를 늘리면 종목별 호가창이 pod마다 갈라진다 = 체결 정합성 붕괴).
+OrderBook이 프로세스 힙에 있으므로 매칭 프로세스는 **수평 확장이 불가능**하다
+(replicas를 늘리면 종목별 호가창이 pod마다 갈라진다 = 체결 정합성 붕괴). 오늘 api가 6 pod여도 사고가 나지 않는
+이유는 사가가 `orderBookService.submit()`의 매칭 결과를 버려 호가창이 **보관만 하고 체결시키지 않기** 때문이다 —
+LIMIT 호가 체결을 실제로 구현하는 순간 §6.8이 선행 조건이 된다.
 T2 피크 5,000 TPS를 단일 JVM + 단일 Postgres 트랜잭션으로 처리해야 한다.
 
 대응: §6.8 — stockId 해시 샤딩 + 샤드당 단일 라이터 + Kafka 파티션 어피니티.
@@ -251,7 +254,7 @@ T2 피크 5,000 TPS를 단일 JVM + 단일 Postgres 트랜잭션으로 처리해
 
 - 근거: `application.yml` `hikari.maximum-pool-size: 20`, `connection-timeout: 3000`
 
-pod당 20 커넥션. API(HPA max 6) + worker 3종 + quant-engine + trading-service = 현재도
+pod당 20 커넥션. API(HPA max 6) + worker 3종 + quant-engine = 현재도
 최대 ~200 커넥션. T2에서 API를 40 pod로 늘리면 **800+ 커넥션** → 일반적인 Postgres
 `max_connections`(100~500)를 초과하고, 초과하지 않더라도 커넥션당 백엔드 프로세스 비용으로
 DB CPU가 잠식된다. `connection-timeout: 3000`이라 풀이 마르면 3초 뒤 대량 500이 터진다.

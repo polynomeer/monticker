@@ -7,6 +7,9 @@ Accepted
 
 MSA 서비스(`trading-service`, `quant-engine`)를 K8s에 배포했지만(ADR-001 후속), 두 가지 문제가 있었다:
 
+> **Note (2026-09-14)**: `trading-service`는 api가 실제로 위임을 연결한 적이 없어 [ADR-048](048-retire-trading-service.md)로
+> 폐기됐다. 이 ADR의 K8s DNS 서비스 탐색은 `quant-engine`(`QUANT_ENGINE_URL`)에 그대로 유효하다.
+
 1. **Service Discovery 미구성**: MSA 서비스 URL이 ConfigMap에 없어 API 서버가 항상 로컬 서비스를 직접 호출했다. K8s 배포 후에도 실질적으로 모놀리스 모드로 동작했다.
 2. **API Gateway 미흡**: 기존 NGINX Ingress는 단순 라우팅만 수행했고, Rate Limiting·Request ID 전파·보안 헤더·WebSocket 지원이 없었다.
 

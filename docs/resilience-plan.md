@@ -9,7 +9,8 @@
 > **진행 (2026-09-11)**: §3의 **P0 7건 전부 구현·커밋 완료.** 상세는 §3.1.
 > 구현 중 추가로 발견: `trading-service`가 `replicas: 2`였다 — 호가창이 pod 메모리에 있어
 > 두 pod의 주문이 서로 체결되지 않는다(§E6이 "현재는 단일 인스턴스라 안전"이라고 적은 게
-> 틀렸다). 1로 고정했다. 다음 단계는 P1-1(K8s 관측 스택)과 §5 부하 기준선.
+> 틀렸다). 1로 고정했다. **재정정 (2026-09-14, [ADR-048](decisions/048-retire-trading-service.md))**: 그 수정은
+> 잘못된 곳을 고쳤다 — 매칭은 trading-service가 아니라 api에서 돌고 있었다(위임이 연결된 적 없음). 아래 §E6 참고.
 
 ---
 
@@ -270,7 +271,7 @@ RestClient.builder()
 | E3′ | Outbox 이벤트 발행 | **불가 → 가능** | CH-05: **Kafka 외부화가 한 번도 성공한 적 없었다**(직렬화기 불일치, `6eca851`). 수정 후 브로커 정지 → 복구 280s에 재전송 완료 |
 | E4 | 캔들 유실 | **부분** | 인메모리 상태, 리밸런스·강제종료 시 유실 |
 | E5 | ES 드리프트 | **불가 → 가능** | ~~dual-write 실패를 `log.warn`으로 삼킴~~ ADR-042 구현 완료(2026-09-14): 아웃박스 → `search.index` → 벌크 컨슈머(재시도·DLT), 기동 시 매핑 대조(`search_index_mapping_mismatch`), `search_index_lag_seconds`. **구현 중 발견: 인덱스가 설계대로 만들어진 적이 없었다**(아무도 create를 안 불렀고 공식 이미지에 nori가 없다) |
-| E6 | 이중 체결 / 미체결 | **불가 → 수정됨** | ~~단일 인스턴스라 안전~~ **틀렸다** — `trading-service.yaml`이 `replicas: 2`였고 호가창은 pod 메모리에 있다. 두 pod에 나뉜 주문은 서로 체결되지 않는다. `6871c0d`에서 1 + Recreate로 고정 |
+| E6 | 이중 체결 / 미체결 | **불가 → 수정됨** | ~~단일 인스턴스라 안전~~ **틀렸다** — `trading-service.yaml`이 `replicas: 2`였고 호가창은 pod 메모리에 있다. 두 pod에 나뉜 주문은 서로 체결되지 않는다. `6871c0d`에서 1 + Recreate로 고정  **재정정(ADR-048)**: trading-service는 트래픽 0인 복사본이었고 실제 매칭 프로세스는 api(HPA 2~6)다. 오늘 사고가 없는 이유는 호가창이 inert(매칭 결과를 버림)이기 때문이지 단일 인스턴스라서가 아니다. LIMIT 호가 체결 구현 전 scale-out-plan §6.8 필수 |
 | E7 | 조용한 계산 오류 | **불가** | `VOLUME_SURGE`가 무효 SQL로 **한 번도 발동한 적 없었던** 전례([ADR-044](decisions/044-alert-rule-in-memory-index.md)) |
 
 **E7이 이 저장소의 구조적 패턴이다.** `runCatching`/`catch` 후 `WARN`/`DEBUG`만 남기는
@@ -324,7 +325,7 @@ Phase 0의 ADR-038~045는 이 목록과 **직교한다** — 저쪽은 규모, �
 | P0-5 백업 스케줄 + 리허설 | `8845fee` | CronJob 매일 03:15 KST + 주 1회 복원 리허설. 로컬에서 **리허설 PASS**(9 테이블, 캔들 217,051행 일치). S3 버킷은 사람 몫 |
 | P0-6 readiness에 db | `c9d2b63`~`d4ceb60` | 4개 서비스. liveness에는 넣지 않음(재시작 루프 방지). yml 파싱 테스트로 고정 |
 | P0-7 PDB + topologySpread | `e99d63c` | replica≥2인 6개 배포. `kubectl kustomize` 렌더링 확인 |
-| (추가) trading-service replica 1 고정 | `6871c0d` | §E6 정정 — 인메모리 호가창 |
+| (추가) trading-service replica 1 고정 | `6871c0d` | §E6 정정 — 인메모리 호가창. **ADR-048에서 재정정**: 트래픽 없는 서비스였다 |
 
 전체 단위 테스트: api 492/492, worker 83/83.
 

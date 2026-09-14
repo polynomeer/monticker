@@ -128,10 +128,8 @@ POST /api/paper/buy|sell ──▶ PaperTradingService (파사드)
 
 ### 알고 남긴 것
 
-- **MSA 모드 불일치.** `TRADING_SERVICE_URL`이 설정되면 `/api/matching/orders`는 trading-service로 위임되는데,
-  그 복사본에는 `PaperExecutionListener`도 매도 보유 확인도 없다. 파사드는 api 로컬 `MatchingService`를 부르므로
-  MSA 모드에서는 매칭 화면 주문만 계좌 기록이 빠진다. trading-service 복사본에 같은 변경을 넣거나 그 서비스를
-  정리해야 한다 — [engineering-backlog §9](../engineering-backlog.md).
+- ~~**MSA 모드 불일치.**~~ 해소 — 조사해 보니 api는 trading-service에 위임한 적이 없었고(`TradingServiceClient` 미사용),
+  그 복사본은 [ADR-048](048-retire-trading-service.md)로 폐기했다. 매칭은 언제나 api 안에서만 돌았다.
 - V44 백필 이전에 매칭 엔진으로 체결된 거래의 원장 행은 `paper_trade_id`에 fills.id를 담고 있어 백필된
   `paper_trades` 행과 링크되지 않는다(로컬 데이터뿐).
 

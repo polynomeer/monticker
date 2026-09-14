@@ -413,7 +413,7 @@ C-07이 도입한 실시간 upsert 때문에 `candles_1d`의 **가장 최근 행
 **해결**
 세 곳 모두에 `candle_time < todayStartKst` 필터를 넣었다. 기준 시각은 `CandleAggregator`가
 자기 일 버킷을 계산하는 것과 **동일한 방식**으로 계산해 경계가 어긋나지 않게 했다.
-MSA로 분리된 `quant-engine`·`trading-service`에도 같은 수정을 각각 반영했다(`41d1f20`, `f821e9b`).
+MSA로 분리된 `quant-engine`·`trading-service`에도 같은 수정을 각각 반영했다(`41d1f20`, `f821e9b`). (trading-service는 이후 [ADR-048](../decisions/048-retire-trading-service.md)로 폐기.)
 
 **교훈**
 쓰기 쪽에서 트레이드오프를 받아들이면(C-07의 "미확정 봉"), **읽는 쪽 전부**에 그 계약을

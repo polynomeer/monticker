@@ -67,18 +67,19 @@ Start as **Modular Monolith + async workers + Redis + TimescaleDB**. Microservic
 │       backend/api  :8080            │
 │  JWT Auth · Strangler-fig proxy     │
 │  QUANT_ENGINE_URL → quant-engine    │
-│  TRADING_SERVICE_URL → trading-svc  │
+│  paper · matching · wallet (in-proc)│
+│  @Externalized → order-filled       │
 └──────┬──────────────────┬───────────┘
-       │ HTTP proxy        │ HTTP proxy
-       ▼                   ▼
-┌─────────────┐   ┌────────────────────┐
-│quant-engine │   │  trading-service   │
-│  :8082      │   │  :8083             │
-│ analytics   │   │  paper · matching  │
-│ quant       │   │  wallet · batch    │
-│ backtest    │   │  @AFTER_COMMIT →   │
-└──────▲──────┘   └────────┬───────────┘
-       │CONSUME             │PRODUCE
+       │ HTTP proxy        │ PRODUCE (Modulith outbox)
+       ▼                   │
+┌─────────────┐            │
+│quant-engine │            │
+│  :8082      │            │
+│ analytics   │            │
+│ quant       │            │
+│ backtest    │            │
+└──────▲──────┘            │
+       │CONSUME             ▼
        ╔══════════════════════════════════════════════════════╗
        ║       Apache Kafka  :9092 / :29092                   ║
        ║  market.ticks │ tick-processed │ order-filled │ ...  ║
@@ -875,7 +876,7 @@ wallet:snapshot:{userId}           # 최신 wallet 스냅샷 캐시 (TTL 30s)
 | 2 | Split Worker by role (`WORKER_ROLE=market/event/alert`) | ✅ implemented |
 | 3 | Extract `quant-engine` as standalone service (:8082) | ✅ implemented |
 | 4 | Kafka always-on — all ticks route through `market.ticks` | ✅ implemented |
-| 5 | Extract `trading-service` (:8083), distributed tx via `@AFTER_COMMIT` | ✅ implemented |
+| 5 | ~~Extract `trading-service` (:8083)~~ — 추출은 됐으나 api가 위임을 연결한 적이 없어 4개월간 트래픽 0. **폐기**([ADR-048](decisions/048-retire-trading-service.md)). matching은 api 안의 모듈이며, 체결 이벤트는 api의 Modulith 외부화(`@Externalized`)가 발행한다 | ❌ retired |
 
 Stage 6 이후(대규모 트래픽·데이터 가정)는 [scale-out-plan.md](scale-out-plan.md)에서 다룬다 —
 현재 구조에서 먼저 깨지는 지점(인메모리 STOMP 브로커, `/topic/market` 전역 브로드캐스트,
@@ -890,7 +891,7 @@ Full diagram: see [MSA Architecture Diagram (Artifact)](https://claude.ai/code/a
 ### Deployment
 
 ```bash
-# MSA 전체 기동 (Kafka + quant-engine + trading-service + 3 workers)
+# MSA 전체 기동 (Kafka + quant-engine + 3 workers) — trading-service는 ADR-048로 폐기
 make up-msa
 
 # 단일 프로세스 모드 (Kafka + api + worker(role=all))
@@ -903,7 +904,6 @@ make up-full
 |---------|------|---------------|------|
 | `backend/api` | 8080 | `full` / `msa` | API gateway, JWT auth, strangler-fig proxy |
 | `quant-engine` | 8082 | `msa` | analytics, quant, backtest |
-| `trading-service` | 8083 | `msa` | paper trading, matching, wallet |
 | `kafka` | 9092 / 29092 | `full` / `kafka` / `msa` | event bus |
 | `postgres` (TimescaleDB) | 5432 | always | shared DB |
 | `redis` | 6379 | always | tick cache, candle, orderbook |
@@ -917,13 +917,14 @@ make up-full
 | `market.ticks` | `worker-market`, `market-gateway` (Go) | `worker-event`, `backend/api` (`monticker-api-broadcast` group, ADR-029 — STOMP push + ADR-032 conditional-order evaluation) |
 | `market.tick-processed` | `worker-event` | `worker-alert` |
 | `market.events` | `worker-event` | — |
-| `trading.order-filled` | `trading-service` (`@AFTER_COMMIT`) | `quant-engine` (`QUANT_TRADING_EVENTS_ENABLED=true`) |
-| `trading.order-cancelled` | `trading-service` (`@AFTER_COMMIT`) | — |
+| `trading.order-filled` | `backend/api` (Modulith `@Externalized`, Outbox) | `quant-engine` (`QUANT_TRADING_EVENTS_ENABLED=true`) |
+| `trading.order-cancelled` | `backend/api` (Modulith `@Externalized`, Outbox) | — |
+| `search.index` | `backend/api`, `worker` (Modulith `@Externalized`, [ADR-042](decisions/042-outbox-based-es-indexing.md)) | `backend/api` `SearchIndexConsumer` |
 
 ### MSA Key Design Decisions
 
-- **Strangler-fig proxy**: `QuantEngineClient` / `TradingServiceClient` in `backend/api` return `null` when URL env vars are unset → local service handles the request. Set `QUANT_ENGINE_URL` / `TRADING_SERVICE_URL` to route to standalone services.
-- **Distributed transaction safety**: `OrderEventKafkaPublisher` in `trading-service` uses `@TransactionalEventListener(AFTER_COMMIT)` — Kafka publish only fires after the matching transaction commits, preventing phantom order events on rollback.
+- **Strangler-fig proxy**: `QuantEngineClient` in `backend/api` returns `null` when `QUANT_ENGINE_URL` is unset → local service handles the request. (`TradingServiceClient` existed but was never wired — [ADR-048](decisions/048-retire-trading-service.md).)
+- **Distributed transaction safety**: order events are `@Externalized` Spring Modulith events ([ADR-008](decisions/008-outbox-pattern-spring-modulith.md)) — recorded in `event_publication` inside the matching transaction, published to Kafka after commit, resubmitted every 5 minutes if publishing failed. Verified under a broker outage in CH-05 ([resilience-plan §6.3](resilience-plan.md)).
 - **Worker role activation**: `@ConditionalOnExpression("'${worker.role:all}'.matches('market|all')")` activates components per role. The `all` default keeps the monolith worker behaviour.
 - **Tick ingestion dual-path**: `ingestion.source=internal` (default) → `MockPriceGenerator` → Kafka. `ingestion.source=kafka` → Go `market-gateway` → Kafka. Both paths converge at `market.ticks`.
 
@@ -1167,9 +1168,9 @@ NGINX (Gateway)
   └─ /**      → web:3000  (Next.js)
 
 api 내부:
-  ├─ TRADING_SERVICE_URL 설정됨 → trading-service:8083 (MSA)
   ├─ QUANT_ENGINE_URL 설정됨    → quant-engine:8082   (MSA)
   └─ 미설정                     → 로컬 서비스 직접 호출 (모놀리스)
+  (matching·paper·wallet은 항상 api 안 — ADR-048)
 ```
 
 2-tier Rate Limiting: Gateway(Ingress, 60rps/IP) → 앱(RateLimitFilter, 300req/min/IP + @RateLimited userId)
@@ -1181,22 +1182,21 @@ api 내부:
 ### K8s 환경 (prod/staging)
 
 ```
-api Pod → DNS 조회: trading-service → K8s Service → trading-service Pod(s)
+api Pod → DNS 조회: quant-engine → K8s Service → quant-engine Pod(s)
 ```
 
 | 서비스 | K8s DNS 이름 | 포트 | ConfigMap 키 |
 |-------|-------------|------|-------------|
-| trading-service | `trading-service.monticker.svc.cluster.local` | 8083 | `TRADING_SERVICE_URL` |
 | quant-engine | `quant-engine.monticker.svc.cluster.local` | 8082 | `QUANT_ENGINE_URL` |
 
-ConfigMap에 축약형(`http://trading-service:8083`)으로 설정된다. 네임스페이스 내부에서는 서비스 이름만으로 해석된다.
+ConfigMap에 축약형(`http://quant-engine:8082`)으로 설정된다. 네임스페이스 내부에서는 서비스 이름만으로 해석된다.
 
 ### 환경별 모드
 
-| 환경 | `TRADING_SERVICE_URL` | 동작 |
-|------|-----------------------|------|
+| 환경 | `QUANT_ENGINE_URL` | 동작 |
+|------|--------------------|------|
 | dev overlay | `""` (비움) | 모놀리스 모드 — api가 로컬 서비스 직접 호출 |
-| base / prod | `http://trading-service:8083` | MSA 모드 — K8s DNS로 서비스 탐색 |
+| base / prod | `http://quant-engine:8082` | MSA 모드 — K8s DNS로 서비스 탐색 |
 
 ### Readiness Probe = 서비스 헬스체크
 

@@ -180,6 +180,8 @@ TimescaleDB CAgg(`candles_1d_cagg`)는 그대로 두되 이번 fix에서 의존�
 
 ## 후속 수정 2 (2026-09-01) — quant-engine·trading-service 포크본 대조
 
+> trading-service 포크본은 [ADR-048](048-retire-trading-service.md)(2026-09-14)로 폐기됐다. 아래는 당시 기록이다.
+
 위 "스코프 밖으로 남긴 것"에서 분리했던 `backend/quant-engine`·`backend/trading-service`의
 동일 이름 서비스를 개별 대조해 `candle_time < todayStartKst` 필터를 반영했다. 두 모듈은
 공유 라이브러리가 아니라 완전히 분기된 포크본이라 각 파일의 실제 구현에 맞춰 개별 수정했다.

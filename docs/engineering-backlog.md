@@ -120,9 +120,10 @@
 - [x] ~~**모의투자 계좌에 거래 경로가 둘이고 서로를 모른다**~~ — [ADR-047](decisions/047-single-execution-path-for-paper-account.md)
   (2026-09-14, `bd4d363`): 매칭 엔진이 유일한 체결 경로, `/api/paper/buy|sell`은 파사드, paper는 계좌 기록 모듈.
   매칭 엔진의 공매도 허용도 함께 막았다.
-- [ ] **trading-service 복사본에 ADR-047이 없다** — MSA 모드(`TRADING_SERVICE_URL`)에서 매칭 화면 주문은 trading-service가
-  체결하는데 그쪽엔 `PaperExecutionListener`·매도 보유 확인이 없어 계좌 기록(포지션·정산·원장)이 빠진다. 복사본에 같은
-  변경을 넣거나(ADR-043 때처럼) trading-service를 정리할지 결정할 것. 이 복사본은 ADR-043·047 두 번 연속 발목을 잡았다.
+- [x] ~~**trading-service 복사본에 ADR-047이 없다**~~ — [ADR-048](decisions/048-retire-trading-service.md)(2026-09-14): 조사 결과
+  api는 한 번도 위임하지 않았고(`TradingServiceClient` 미사용) 서비스는 4개월간 트래픽 0. 폐기했다.
+- [ ] **`QUANT_ENGINE_URL` 위임은 실제로 연결돼 있는가** — trading-service와 같은 의심. `QuantEngineClient`가 컨트롤러에서
+  실제로 호출되는지, 운영 ConfigMap의 `http://quant-engine:8082`가 실효가 있는지 확인할 것. 발견: ADR-048 조사 중.
 - [ ] **브로커 잔고 조회의 서킷브레이커 폴백이 "0원"** — `KisBrokerageClient.getBalance`의
   CB-open 경로가 `BrokerageBalance(ZERO, ZERO, [])`를 돌려준다. 증권사 장애 중 사용자에게 잔고가
   0원으로 보인다 — 우아한 실패가 아니라 오해를 부르는 실패. "조회 불가" 상태(nullable 또는

@@ -176,7 +176,7 @@ Superseded로 바꾸지 않는다.
   "돈의 이동 지도"가 절반만 실데이터다. 대사 대상은 현금 잔고이므로 이 ADR과 독립적이지만,
   같은 화면의 신뢰성 문제이므로 [engineering-backlog.md](../engineering-backlog.md)에
   별도 항목으로 남긴다.
-- `trading-service`에도 동일한 `LedgerService`/`LedgerEventRepository` 복사본이 있다
+- ~~`trading-service`에도 동일한 `LedgerService`/`LedgerEventRepository` 복사본이 있다~~ (복사본은 [ADR-048](048-retire-trading-service.md)로 폐기 — 아래는 당시 서술)
   (MSA 분리 잔재). **두 곳을 함께 고쳐야 한다** — 한쪽만 고치면 모놀리스 모드와 MSA 모드의
   동작이 갈린다.
 
