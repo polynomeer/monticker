@@ -57,7 +57,7 @@ Start as **Modular Monolith + async workers + Redis + TimescaleDB**. Microservic
                               └──────────────────────────────┘
 ```
 
-### MSA mode (`make up-msa`)
+### 역할 분리 모드 (`make up-msa`) — 워커 3종 + Kafka. (quant-engine·trading-service는 [ADR-048](decisions/048-retire-trading-service.md)/[ADR-049](decisions/049-retire-quant-engine.md)로 폐기)
 
 ```
 [Next.js :3000]  [Expo Mobile]
@@ -65,20 +65,12 @@ Start as **Modular Monolith + async workers + Redis + TimescaleDB**. Microservic
         ▼
 ┌─────────────────────────────────────┐
 │       backend/api  :8080            │
-│  JWT Auth · Strangler-fig proxy     │
-│  QUANT_ENGINE_URL → quant-engine    │
+│  JWT Auth · 모듈러 모놀리스           │
+│  quant·analytics·backtest (bulkhead)│
 │  paper · matching · wallet (in-proc)│
 │  @Externalized → order-filled       │
-└──────┬──────────────────┬───────────┘
-       │ HTTP proxy        │ PRODUCE (Modulith outbox)
-       ▼                   │
-┌─────────────┐            │
-│quant-engine │            │
-│  :8082      │            │
-│ analytics   │            │
-│ quant       │            │
-│ backtest    │            │
-└──────▲──────┘            │
+└──────────────────────────┬──────────┘
+                           │ PRODUCE (Modulith outbox)
        │CONSUME             ▼
        ╔══════════════════════════════════════════════════════╗
        ║       Apache Kafka  :9092 / :29092                   ║
@@ -874,7 +866,7 @@ wallet:snapshot:{userId}           # 최신 wallet 스냅샷 캐시 (TTL 30s)
 |-------|--------|--------|
 | 1 | Modular Monolith + single Worker | ✅ baseline |
 | 2 | Split Worker by role (`WORKER_ROLE=market/event/alert`) | ✅ implemented |
-| 3 | Extract `quant-engine` as standalone service (:8082) | ✅ implemented |
+| 3 | ~~Extract `quant-engine` as standalone service (:8082)~~ — 추출은 됐으나 위임이 연결된 적 없어 트래픽 0. L-06 실측으로 in-process bulkhead가 충분함을 확인하고 **폐기**([ADR-049](decisions/049-retire-quant-engine.md)) | ❌ retired |
 | 4 | Kafka always-on — all ticks route through `market.ticks` | ✅ implemented |
 | 5 | ~~Extract `trading-service` (:8083)~~ — 추출은 됐으나 api가 위임을 연결한 적이 없어 4개월간 트래픽 0. **폐기**([ADR-048](decisions/048-retire-trading-service.md)). matching은 api 안의 모듈이며, 체결 이벤트는 api의 Modulith 외부화(`@Externalized`)가 발행한다 | ❌ retired |
 
@@ -891,7 +883,7 @@ Full diagram: see [MSA Architecture Diagram (Artifact)](https://claude.ai/code/a
 ### Deployment
 
 ```bash
-# MSA 전체 기동 (Kafka + quant-engine + 3 workers) — trading-service는 ADR-048로 폐기
+# 역할 분리 워커 기동 (Kafka + worker-market/event/alert) — quant-engine·trading-service는 ADR-048/049로 폐기
 make up-msa
 
 # 단일 프로세스 모드 (Kafka + api + worker(role=all))
@@ -903,7 +895,6 @@ make up-full
 | Service | Port | Docker Profile | Role |
 |---------|------|---------------|------|
 | `backend/api` | 8080 | `full` / `msa` | API gateway, JWT auth, strangler-fig proxy |
-| `quant-engine` | 8082 | `msa` | analytics, quant, backtest |
 | `kafka` | 9092 / 29092 | `full` / `kafka` / `msa` | event bus |
 | `postgres` (TimescaleDB) | 5432 | always | shared DB |
 | `redis` | 6379 | always | tick cache, candle, orderbook |
@@ -917,13 +908,13 @@ make up-full
 | `market.ticks` | `worker-market`, `market-gateway` (Go) | `worker-event`, `backend/api` (`monticker-api-broadcast` group, ADR-029 — STOMP push + ADR-032 conditional-order evaluation) |
 | `market.tick-processed` | `worker-event` | `worker-alert` |
 | `market.events` | `worker-event` | — |
-| `trading.order-filled` | `backend/api` (Modulith `@Externalized`, Outbox) | `quant-engine` (`QUANT_TRADING_EVENTS_ENABLED=true`) |
+| `trading.order-filled` | `backend/api` (Modulith `@Externalized`, Outbox) | (현재 없음 — quant live-tracking 도입 시. api 안에서는 `OrderFilledStrategyListener`가 같은 이벤트를 받는다) |
 | `trading.order-cancelled` | `backend/api` (Modulith `@Externalized`, Outbox) | — |
 | `search.index` | `backend/api`, `worker` (Modulith `@Externalized`, [ADR-042](decisions/042-outbox-based-es-indexing.md)) | `backend/api` `SearchIndexConsumer` |
 
 ### MSA Key Design Decisions
 
-- **Strangler-fig proxy**: `QuantEngineClient` in `backend/api` returns `null` when `QUANT_ENGINE_URL` is unset → local service handles the request. (`TradingServiceClient` existed but was never wired — [ADR-048](decisions/048-retire-trading-service.md).)
+- **Strangler-fig proxy — 폐기됨**: `QuantEngineClient`·`TradingServiceClient`는 만들어졌을 뿐 어느 컨트롤러도 부르지 않았고 nginx는 `/api/**` 전부를 api로 보낸다. 두 서비스 모두 트래픽 0으로 확인돼 제거했다([ADR-048](decisions/048-retire-trading-service.md), [ADR-049](decisions/049-retire-quant-engine.md)). 분석 경로 격리는 `backtestExecutor` bulkhead가 맡는다(L-06 실측).
 - **Distributed transaction safety**: order events are `@Externalized` Spring Modulith events ([ADR-008](decisions/008-outbox-pattern-spring-modulith.md)) — recorded in `event_publication` inside the matching transaction, published to Kafka after commit, resubmitted every 5 minutes if publishing failed. Verified under a broker outage in CH-05 ([resilience-plan §6.3](resilience-plan.md)).
 - **Worker role activation**: `@ConditionalOnExpression("'${worker.role:all}'.matches('market|all')")` activates components per role. The `all` default keeps the monolith worker behaviour.
 - **Tick ingestion dual-path**: `ingestion.source=internal` (default) → `MockPriceGenerator` → Kafka. `ingestion.source=kafka` → Go `market-gateway` → Kafka. Both paths converge at `market.ticks`.
@@ -1167,10 +1158,7 @@ NGINX (Gateway)
   ├─ /ws/**   → api:8080  (WebSocket/STOMP)
   └─ /**      → web:3000  (Next.js)
 
-api 내부:
-  ├─ QUANT_ENGINE_URL 설정됨    → quant-engine:8082   (MSA)
-  └─ 미설정                     → 로컬 서비스 직접 호출 (모놀리스)
-  (matching·paper·wallet은 항상 api 안 — ADR-048)
+api 내부: 모든 도메인 모듈이 프로세스 안에서 돈다 (ADR-048/049 — 위임 대상 서비스 없음)
 ```
 
 2-tier Rate Limiting: Gateway(Ingress, 60rps/IP) → 앱(RateLimitFilter, 300req/min/IP + @RateLimited userId)
@@ -1181,22 +1169,8 @@ api 내부:
 
 ### K8s 환경 (prod/staging)
 
-```
-api Pod → DNS 조회: quant-engine → K8s Service → quant-engine Pod(s)
-```
-
-| 서비스 | K8s DNS 이름 | 포트 | ConfigMap 키 |
-|-------|-------------|------|-------------|
-| quant-engine | `quant-engine.monticker.svc.cluster.local` | 8082 | `QUANT_ENGINE_URL` |
-
-ConfigMap에 축약형(`http://quant-engine:8082`)으로 설정된다. 네임스페이스 내부에서는 서비스 이름만으로 해석된다.
-
-### 환경별 모드
-
-| 환경 | `QUANT_ENGINE_URL` | 동작 |
-|------|--------------------|------|
-| dev overlay | `""` (비움) | 모놀리스 모드 — api가 로컬 서비스 직접 호출 |
-| base / prod | `http://quant-engine:8082` | MSA 모드 — K8s DNS로 서비스 탐색 |
+api가 HTTP로 호출하는 내부 서비스는 지금 없다(ADR-048/049). K8s DNS 서비스 탐색은 인프라 컴포넌트(postgres·redis·kafka·
+elasticsearch)와 worker→api 방향에 쓰인다 — 형식은 `http://{k8s-service-name}:{port}`, ConfigMap에 축약형으로.
 
 ### Readiness Probe = 서비스 헬스체크
 
@@ -1333,4 +1307,4 @@ portfolio_positions (
 | [ADR-046](decisions/046-detector-state-in-memory.md) | 감지기 EMA 상태 Redis → 메모리 — 틱당 Redis 왕복 제거 | Accepted |
 | [ADR-047](decisions/047-single-execution-path-for-paper-account.md) | 모의투자 계좌의 체결 경로를 매칭 엔진 하나로 통일 (paper는 계좌 기록 모듈) | Accepted |
 | [ADR-048](decisions/048-retire-trading-service.md) | trading-service 폐기 — api가 한 번도 위임한 적 없는 복사본 | Accepted |
-| [ADR-049](decisions/049-retire-quant-engine.md) | quant-engine 폐기 — 위임 미연결, L-04 실측으로 bulkhead 격리 충분 확인 | Accepted |
+| [ADR-049](decisions/049-retire-quant-engine.md) | quant-engine 폐기 — 위임 미연결, L-06 실측으로 bulkhead 격리 충분 확인 | Accepted |

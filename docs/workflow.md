@@ -369,7 +369,7 @@ Mocking the boundary you're supposed to be testing defeats the point — see
 | Integration (e2e, web) | `apps/web/e2e` | Real Next.js server + real API, driven by **Playwright** | `pnpm test:e2e` |
 
 Backend CI runs `./gradlew test` then `./gradlew integrationTest` per module (api,
-worker, quant-engine) — each module has an `integrationTest`
+worker) — each module has an `integrationTest`
 Gradle source set wired for Testcontainers, even before it has tests in it.
 Web CI runs `pnpm lint`, `pnpm test`, `pnpm build`. e2e-ci boots the real API
 (Postgres + Redis service containers) and the real Next.js server together and

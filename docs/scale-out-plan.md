@@ -109,8 +109,8 @@ MockPriceGenerator ┘                                   │     └ RedisTickWr
                                                              └ PriceBroadcaster → SimpleBroker → STOMP
                                                              └ ConditionalOrderEvaluator (@Async)
 
-backend/api (replicas 2, HPA 2~6)  ── strangler-fig proxy ──► quant-engine :8082
-       └ matching·paper·wallet은 api 안 (trading-service는 ADR-048로 폐기 — 위임이 연결된 적 없었다)
+backend/api (replicas 2, HPA 2~6)  — 모든 도메인 모듈이 프로세스 안 (quant-engine·trading-service는 ADR-048/049로 폐기 —
+                                     둘 다 위임이 연결된 적 없었다; 백테스트는 backtestExecutor bulkhead)
 공유 인프라: TimescaleDB(단일) · Redis(단일) · Elasticsearch(single-node) · MongoDB(룰셋)
 ```
 
@@ -254,7 +254,7 @@ T2 피크 5,000 TPS를 단일 JVM + 단일 Postgres 트랜잭션으로 처리해
 
 - 근거: `application.yml` `hikari.maximum-pool-size: 20`, `connection-timeout: 3000`
 
-pod당 20 커넥션. API(HPA max 6) + worker 3종 + quant-engine = 현재도
+pod당 20 커넥션. API(HPA max 6) + worker 3종 = 현재도
 최대 ~200 커넥션. T2에서 API를 40 pod로 늘리면 **800+ 커넥션** → 일반적인 Postgres
 `max_connections`(100~500)를 초과하고, 초과하지 않더라도 커넥션당 백엔드 프로세스 비용으로
 DB CPU가 잠식된다. `connection-timeout: 3000`이라 풀이 마르면 3초 뒤 대량 500이 터진다.
@@ -799,8 +799,9 @@ spring.kafka.listener.concurrency: 8   # pod당 8 스레드, pod 8개 → 64 컨
   `@DistributedLock`으로 단일 인스턴스를 강제할 이유가 사라진다.
 - **수집기 샤딩**: 종목 유니버스를 N개 샤드로 나눠 워커별 담당 범위를 준다
   (`WORKER_SHARD_INDEX` / `WORKER_SHARD_COUNT`). 락 기반 단일 실행보다 처리량이 N배.
-- **배치 잡 큐 분리**: 백테스트·리포트는 Kafka `jobs.*` 토픽 또는 전용 큐로 보내고,
-  `quant-engine`을 KEDA(Kafka lag 기반)로 오토스케일한다. HPA(CPU)보다 큐 길이가 정확하다.
+- **배치 잡 큐 분리**: 백테스트·리포트는 Kafka `jobs.*` 토픽 또는 전용 큐로 보내고, 그 소비 워커를 KEDA(Kafka lag
+  기반)로 오토스케일한다. HPA(CPU)보다 큐 길이가 정확하다. 그 워커는 api의 quant/analytics/backtest 모듈을 **Gradle
+  모듈로 뽑아** 만든다 — 폐기한 quant-engine 포크본이 아니다([ADR-049](decisions/049-retire-quant-engine.md)).
 
 ### 6.7 검색 (Elasticsearch)
 
@@ -873,7 +874,9 @@ order.commands (파티션 64, key=stockId)
   (10회/시간)는 접수 제한일 뿐 실행 자원 제한이 아니다.
 - **결과 캐시**: `(ruleSetFingerprint, universe, period, params)` 해시로 결과 캐싱.
   전략 마켓에서 같은 전략을 여러 사람이 조회하면 재계산이 필요 없다.
-- **워커 격리**: `quant-engine`은 전용 노드풀(고CPU 인스턴스, spot 가능 — 재실행 가능하므로).
+- **워커 격리**: 분석 워커(위 잡 큐 소비자)는 전용 노드풀(고CPU 인스턴스, spot 가능 — 재실행 가능하므로).
+  **지금은** api 안의 `backtestExecutor` bulkhead(max 4, queue 20 → 429)가 격리를 맡고, L-06 실측에서 조회 p95에
+  영향이 없었다([ADR-049](decisions/049-retire-quant-engine.md)). 분리는 실측이 SLO 위반을 보일 때.
 
 ### 6.10 알림
 
@@ -1007,7 +1010,7 @@ order.commands (파티션 64, key=stockId)
 | trading-db | 8vCPU/64GB + replica, PITR | $$$ |
 | Redis Cluster | 6 노드 × 16GB | $$ |
 | ES | 6 노드 × (8vCPU/32GB/1TB) | $$$ |
-| quant-engine (spot) | 가변 0~50 pod × 4vCPU | $$ |
+| 분석 워커 (spot, 잡 큐 소비자 — §6.6) | 가변 0~50 pod × 4vCPU | $$ |
 | 오브젝트 스토리지 | 누적 5~20TB + 조회 | $ |
 | **네트워크 아웃바운드** | WS 200k × 10 msg/s × 40B ≈ **80 MB/s = ~200 TB/월** | **$$$$** |
 

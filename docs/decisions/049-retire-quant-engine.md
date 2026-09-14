@@ -21,9 +21,9 @@ Accepted
    남겼다. jsonb 매핑 결함(2026-09-14)도 두 번 고쳤다.
 4. **분리의 명분 — "CPU-heavy 백테스트가 조회 경로를 방해한다" — 는 실측되지 않았다.** scale-out-plan §5는 분석 경로의
    격리를 요구하지만 "현재는 `backtestExecutor` bulkhead 하나만 이 원칙을 지킨다"고 적었다. 그 bulkhead가 충분한지를
-   재기 위해 L-04를 만들었다([`bench/scenarios/backtest-bulkhead.js`](../../bench/scenarios/backtest-bulkhead.js)).
+   재기 위해 L-06(`backtest-flood`)을 실행 가능한 형태로 만들었다([`bench/scenarios/backtest-bulkhead.js`](../../bench/scenarios/backtest-bulkhead.js)).
 
-### L-04 실측 (2026-09-14, 로컬 10코어, 일봉 259일치)
+### L-06 실측 (2026-09-14, 로컬 10코어, 일봉 259일치)
 
 조회 경로 4종(검색·스크리너·종목·캔들) 10 VU의 p95를, 백테스트 폭주 유무로 비교했다. 백테스트는
 `backtestExecutor`(core 2 / max 4 / queue 20, 초과 시 429) 안에서 돈다.
@@ -72,13 +72,13 @@ Accepted
 - **`trading.order-filled`에 컨슈머가 없다.** 발행은 계속되고(Outbox), retention 30일 안에 소비자가 붙으면 된다.
   quant live-tracking을 실제로 만들 때는 api 안의 `OrderFilledStrategyListener`가 출발점이다.
 - **bulkhead가 유일한 격리다.** `backtestExecutor` max 4는 pod CPU 요청(K8s `resources`)과 함께 봐야 한다 — 2 vCPU pod에서
-  4 CPU 스레드는 Tomcat을 밀어낼 수 있다. L-04는 10코어 로컬 결과라 이 조합은 검증되지 않았다. 부하 환경이 생기면
-  §5.1 시나리오에 L-04를 넣는다([ADR-045](045-performance-slo-and-verification-harness.md)).
+  4 CPU 스레드는 Tomcat을 밀어낼 수 있다. L-06은 10코어 로컬 결과라 이 조합은 검증되지 않았다. 부하 환경이 생기면
+  §5.1의 L-06을 그 환경에서 다시 돌린다([ADR-045](045-performance-slo-and-verification-harness.md)).
 - MongoDB(룰셋)는 api가 계속 쓴다 — quant-engine 전용 인프라가 아니었다.
 
 ## Revisit When
 
-- **L-04를 prod 유사 환경(pod 리소스 제한)에서 돌렸을 때 조회 p95가 SLO를 넘으면** — 그때 quant/analytics/backtest를
+- **L-06을 prod 유사 환경(pod 리소스 제한)에서 돌렸을 때 조회 p95가 SLO를 넘으면** — 그때 quant/analytics/backtest를
   Gradle 모듈로 추출해 별도 배포 단위(전용 노드풀)로 만든다. scale-out-plan §5 "분석 경로" 행.
 - **백테스트가 초 단위 이상 걸리는 데이터 규모(수년치 분봉)가 되면** — 동기 HTTP 응답이 아니라 작업 큐가 필요해지고,
   그 워커가 자연스러운 분리 단위다.

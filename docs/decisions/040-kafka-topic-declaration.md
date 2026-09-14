@@ -32,7 +32,7 @@ Accepted
 3. **숨은 결합이 있다.** 세 개의 `@RetryableTopic` 컨슈머
    ([`TickKafkaConsumer`](../../backend/worker/src/main/kotlin/com/monticker/worker/kafka/TickKafkaConsumer.kt#L69),
    [`AlertKafkaConsumer`](../../backend/worker/src/main/kotlin/com/monticker/worker/kafka/AlertKafkaConsumer.kt#L28),
-   [`OrderFilledKafkaConsumer`](../../backend/quant-engine/src/main/kotlin/com/monticker/api/quant/application/OrderFilledKafkaConsumer.kt#L28))가
+   `OrderFilledKafkaConsumer`(quant-engine — [ADR-049](049-retire-quant-engine.md)로 폐기, `trading.order-filled` 재시도 패밀리도 함께 제거))가
    전부 `autoCreateTopics = "false"`로 설정돼 있다. 즉 재시도·DLT 토픽 생성을
    Spring이 아니라 **브로커의 auto-create에 떠넘기고 있다.**
    auto-create를 그냥 끄면 [ADR-006](006-kafka-dlt-retry-strategy.md)의 재시도/DLT 전략이

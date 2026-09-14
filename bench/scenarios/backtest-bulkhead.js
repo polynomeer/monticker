@@ -1,5 +1,5 @@
 /**
- * L-04 backtest-bulkhead — ADR-049 실측
+ * L-06 backtest-flood(bulkhead) — resilience-plan §5.1 / ADR-049 실측
  *
  * 질문: CPU-heavy 백테스트가 api 프로세스 안에서 돌아도 조회 경로의 지연이 유지되는가?
  * (분석 경로를 별도 서비스로 격리해야 하는 "실측된 병목"이 있는지 — ADR-033 원칙)
