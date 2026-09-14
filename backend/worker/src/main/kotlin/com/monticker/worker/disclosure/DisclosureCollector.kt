@@ -2,9 +2,11 @@ package com.monticker.worker.disclosure
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.worker.common.DistributedLock
-import com.monticker.worker.detector.StockEventDocument
 import org.slf4j.LoggerFactory
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations
+import com.monticker.worker.detector.StockEventWriter
+import com.monticker.worker.search.SearchIndexEvent
+import org.springframework.transaction.support.TransactionTemplate
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
@@ -18,7 +20,8 @@ import java.time.format.DateTimeFormatter
 class DisclosureCollector(
     private val dartClient: DartClient,
     private val jdbc: JdbcTemplate,
-    private val esOps: ElasticsearchOperations,
+    private val events: ApplicationEventPublisher,
+    private val tx: TransactionTemplate,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val mapper = ObjectMapper()
@@ -81,40 +84,26 @@ class DisclosureCollector(
             mapOf("rceptNo" to d.rceptNo, "reportName" to d.reportName)
         )
 
-        jdbc.update(
-            """
-            INSERT INTO stock_events
-              (stock_id, event_type, title, description, event_time,
-               importance_score, source_type, metadata_json, created_at, updated_at)
-            VALUES (?, 'DISCLOSURE_PUBLISHED', ?, ?, ?, ?, 'DART', ?::jsonb, now(), now())
-            """,
-            stockId,
-            "[공시] ${d.reportName}",
-            "${d.corpName} — ${d.reportName}",
-            Timestamp.from(eventTime),
-            importance,
-            meta,
-        )
-
-        // ES dual-write — DB pk를 rceptNo 기반 dedup key로 조회
-        val insertedId = jdbc.queryForObject(
-            "SELECT id FROM stock_events WHERE stock_id = ? AND source_type = 'DART' AND metadata_json->>'rceptNo' = ?",
-            Long::class.java, stockId, d.rceptNo,
-        )
-        if (insertedId != null) {
-            try {
-                esOps.save(StockEventDocument(
-                    id              = insertedId.toString(),
-                    stockId         = stockId,
-                    eventType       = "DISCLOSURE_PUBLISHED",
-                    title           = "[공시] ${d.reportName}",
-                    description     = "${d.corpName} — ${d.reportName}",
-                    eventTime       = eventTime,
-                    importanceScore = importance,
-                    sourceType      = "DART",
-                ))
-            } catch (e: Exception) {
-                log.warn("ES indexing failed for disclosure rceptNo={}: {}", d.rceptNo, e.message)
+        // ADR-042: INSERT RETURNING id + 색인 이벤트를 한 트랜잭션에 (이전엔 rceptNo로 SELECT를 한 번 더 하고 ES를 직접 썼다)
+        val title = "[공시] ${d.reportName}"
+        val description = "${d.corpName} — ${d.reportName}"
+        tx.execute {
+            val id = jdbc.query(
+                """
+                INSERT INTO stock_events
+                  (stock_id, event_type, title, description, event_time,
+                   importance_score, source_type, metadata_json, created_at, updated_at)
+                VALUES (?, 'DISCLOSURE_PUBLISHED', ?, ?, ?, ?, 'DART', ?::jsonb, now(), now())
+                RETURNING id
+                """,
+                { rs, _ -> rs.getLong("id") },
+                stockId, title, description, Timestamp.from(eventTime), importance, meta,
+            ).firstOrNull()
+            if (id != null) {
+                events.publishEvent(SearchIndexEvent.index(StockEventWriter.SEARCH_INDEX, id.toString(), StockEventWriter.searchPayload(
+                    stockId = stockId, eventType = "DISCLOSURE_PUBLISHED", title = title, description = description,
+                    eventTime = eventTime, importanceScore = importance, sourceType = "DART",
+                )))
             }
         }
         return true

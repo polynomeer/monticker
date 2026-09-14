@@ -46,6 +46,8 @@ spring:
     # spring 네임스페이스)는 TickKafkaProducer/조건부 KafkaConfig에서만 읽는 별도 키라
     # 이것만으로는 커버되지 않는다 — 실제로 이 둘이 어긋나 있던 걸 라이브 테스트로 발견했다.
     bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    # producer 직렬화기는 기본(String)을 유지한다 — @RetryableTopic의 재시도/DLT 발행이 기본 KafkaTemplate으로
+    # String 레코드를 전달한다. Modulith 외부화(byte[] JSON)는 SearchOutboxKafkaConfig의 별도 템플릿을 쓴다.
     properties:
       mail:
         smtp:

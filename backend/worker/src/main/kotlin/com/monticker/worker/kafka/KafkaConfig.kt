@@ -3,7 +3,6 @@ package com.monticker.worker.kafka
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.kafka.annotation.EnableKafka
@@ -14,12 +13,17 @@ import org.springframework.kafka.core.DefaultKafkaConsumerFactory
 import org.springframework.kafka.core.MicrometerConsumerListener
 
 /**
- * 활성화 조건: ingestion.source=kafka (기본값 internal — 기존 MockPriceGenerator 경로 유지).
- * 자세한 배경은 ADR-005 참고.
+ * worker의 @KafkaListener 컨테이너 팩토리 — **항상** 활성. 배경은 ADR-005.
+ *
+ * 이전엔 ingestion.source=kafka 일 때만 켜졌지만 @KafkaListener(틱·알림·발송)는 조건 없이 늘 살아 있었고, internal
+ * 모드에서는 Boot 자동구성 팩토리를 썼다. ADR-042로 Modulith(spring-modulith-events-kafka)가 들어오자 그 자동구성
+ * 팩토리가 Modulith의 ByteArrayJsonMessageConverter 빈을 RecordMessageConverter로 주입받아 **String 레코드가
+ * byte[]로 바뀌어 모든 틱 컨슈머가 ClassCastException으로 죽었다**(라이브 검증, 로그 100만 줄). 우리 팩토리는
+ * 컨버터 없이 String 역직렬화기만 쓰므로 무조건 이걸 써야 한다 — 조건을 없앴다. 덤으로 internal 모드에서도
+ * 컨슈머 메트릭(MicrometerConsumerListener)과 동시성 설정이 적용된다.
  */
 @Configuration
 @EnableKafka
-@ConditionalOnProperty(name = ["ingestion.source"], havingValue = "kafka")
 class KafkaConfig(
     @Value("\${kafka.brokers:localhost:9092}") private val brokers: String,
     @Value("\${spring.kafka.listener.concurrency:1}") private val concurrency: Int,

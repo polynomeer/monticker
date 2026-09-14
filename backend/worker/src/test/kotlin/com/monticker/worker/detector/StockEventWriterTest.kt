@@ -6,7 +6,10 @@ import io.mockk.*
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.ObjectProvider
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations
+import org.springframework.context.ApplicationEventPublisher
+import org.springframework.transaction.support.TransactionCallback
+import org.springframework.transaction.support.TransactionTemplate
+import org.springframework.jdbc.core.RowMapper
 import org.springframework.jdbc.core.JdbcTemplate
 import java.time.Instant
 
@@ -20,8 +23,13 @@ class StockEventWriterTest {
     private val jdbcTemplate = mockk<JdbcTemplate>(relaxed = true)
     private val pushSender = mockk<ExpoPushSender>(relaxed = true)
     private val eventKafkaProducer = mockk<ObjectProvider<EventKafkaProducer>>(relaxed = true)
-    private val esOps = mockk<ElasticsearchOperations>(relaxed = true)
-    private val writer = StockEventWriter(jdbcTemplate, pushSender, eventKafkaProducer, esOps)
+
+    // ADR-042: INSERT와 색인 이벤트가 TransactionTemplate 안에서 실행된다 — 콜백을 그대로 통과시킨다
+    private val tx = mockk<TransactionTemplate>().apply {
+        every { execute(any<TransactionCallback<Any?>>()) } answers { firstArg<TransactionCallback<Any?>>().doInTransaction(mockk(relaxed = true)) }
+    }
+    private val events = mockk<ApplicationEventPublisher>(relaxed = true)
+    private val writer = StockEventWriter(jdbcTemplate, pushSender, eventKafkaProducer, events, tx)
 
     private fun makeEvent(eventTime: Instant = Instant.parse("2026-08-20T09:30:15Z")) = DetectedEvent(
         stockId = 1L,
@@ -36,18 +44,20 @@ class StockEventWriterTest {
     @Test
     fun `같은 종목-이벤트타입 중복이 없으면 INSERT하고 true를 반환한다`() {
         every { jdbcTemplate.queryForObject(match<String> { it.contains("COUNT") }, Int::class.java, *anyVararg()) } returns 0
-        every {
-            jdbcTemplate.queryForObject(match<String> { it.contains("SELECT id") }, Long::class.java, *anyVararg())
-        } returns 500L
-        val docSlot = slot<StockEventDocument>()
-        every { esOps.save(capture(docSlot)) } returns mockk(relaxed = true)
+        every { jdbcTemplate.query(match<String> { it.contains("INSERT INTO stock_events") }, any<RowMapper<Long>>(), *anyVararg()) } returns listOf(500L)
+        val published = slot<Any>()
+        every { events.publishEvent(capture(published)) } returns Unit
 
         val result = writer.write(makeEvent())
 
         assertThat(result).isTrue()
-        verify(exactly = 1) { jdbcTemplate.update(match<String> { it.contains("INSERT INTO stock_events") }, *anyVararg()) }
-        assertThat(docSlot.captured.id).isEqualTo("500")
-        assertThat(docSlot.captured.eventType).isEqualTo("VOLUME_SURGE")
+        verify(exactly = 1) { jdbcTemplate.query(match<String> { it.contains("INSERT INTO stock_events") }, any<RowMapper<Long>>(), *anyVararg()) }
+        // ADR-042: ES 직접 쓰기 대신 색인 이벤트 — id는 INSERT RETURNING, 날짜는 epoch millis
+        val ev = published.captured as com.monticker.worker.search.SearchIndexEvent
+        assertThat(ev.index).isEqualTo("stock_events")
+        assertThat(ev.docId).isEqualTo("500")
+        assertThat(ev.payload!!["eventType"]).isEqualTo("VOLUME_SURGE")
+        assertThat(ev.payload!!["eventTime"]).isEqualTo(Instant.parse("2026-08-20T09:30:15Z").toEpochMilli())
     }
 
     @Test
@@ -57,7 +67,8 @@ class StockEventWriterTest {
         val result = writer.write(makeEvent())
 
         assertThat(result).isFalse()
-        verify(exactly = 0) { jdbcTemplate.update(match<String> { it.contains("INSERT INTO stock_events") }, *anyVararg()) }
+        verify(exactly = 0) { jdbcTemplate.query(match<String> { it.contains("INSERT INTO stock_events") }, any<RowMapper<Long>>(), *anyVararg()) }
+        verify(exactly = 0) { events.publishEvent(any()) }
     }
 
     @Test
@@ -65,13 +76,11 @@ class StockEventWriterTest {
         // 중복 체크는 이벤트 시각을 분 단위로 버킷팅하므로, COUNT 쿼리 자체는 매번 실행된다.
         // 여기서는 "새 분 버킷 → 중복 없음"을 시뮬레이션한다.
         every { jdbcTemplate.queryForObject(match<String> { it.contains("COUNT") }, Int::class.java, *anyVararg()) } returns 0
-        every {
-            jdbcTemplate.queryForObject(match<String> { it.contains("SELECT id") }, Long::class.java, *anyVararg())
-        } returns 501L
+        every { jdbcTemplate.query(match<String> { it.contains("INSERT INTO stock_events") }, any<RowMapper<Long>>(), *anyVararg()) } returns listOf(501L)
 
         val result = writer.write(makeEvent(eventTime = Instant.parse("2026-08-20T09:31:05Z")))
 
         assertThat(result).isTrue()
-        verify(exactly = 1) { jdbcTemplate.update(match<String> { it.contains("INSERT INTO stock_events") }, *anyVararg()) }
+        verify(exactly = 1) { jdbcTemplate.query(match<String> { it.contains("INSERT INTO stock_events") }, any<RowMapper<Long>>(), *anyVararg()) }
     }
 }

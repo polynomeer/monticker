@@ -35,6 +35,25 @@ class AsyncConfig : AsyncConfigurer {
         initialize()
     }
 
+    /**
+     * 기본 @Async 실행기 (ADR-042). Modulith 외부화 리스너(SearchIndexEvent → Kafka)가 여기서 돈다. 이름 붙은
+     * 풀만 있으면 Spring이 SimpleAsyncTaskExecutor(스레드 상한 없음)로 폴백한다 — api에서 CH-05 브로커 정지 중
+     * 체결마다 스레드가 늘던 그 결함. 유계 풀 + AbortPolicy: 거절돼도 event_publication에 미완료로 남아 재전송된다.
+     */
+    @Bean("moduleEventExecutor")
+    fun moduleEventExecutor(): ThreadPoolTaskExecutor = ThreadPoolTaskExecutor().apply {
+        corePoolSize    = 2
+        maxPoolSize     = 8
+        queueCapacity   = 1000
+        setThreadNamePrefix("module-event-")
+        setRejectedExecutionHandler(java.util.concurrent.ThreadPoolExecutor.AbortPolicy())
+        setWaitForTasksToCompleteOnShutdown(true)
+        setAwaitTerminationSeconds(30)
+        initialize()
+    }
+
+    override fun getAsyncExecutor(): Executor = moduleEventExecutor()
+
     override fun getAsyncUncaughtExceptionHandler() =
         AsyncUncaughtExceptionHandler { ex, method, params ->
             log.error(

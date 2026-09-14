@@ -2,7 +2,9 @@ package com.monticker.worker.news
 
 import io.mockk.*
 import org.junit.jupiter.api.Test
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations
+import org.springframework.context.ApplicationEventPublisher
+import org.springframework.transaction.support.TransactionCallback
+import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.RowMapper
 
@@ -12,20 +14,31 @@ class NewsCollectorTest {
     private val naverClient = mockk<NaverNewsClient>()
     private val sentimentAnalyzer = mockk<NewsSentimentAnalyzer>(relaxed = true)
     private val bloomFilter = mockk<NewsBloomFilter>(relaxed = true)
-    private val esOps = mockk<ElasticsearchOperations>(relaxed = true)
-    private val collector = NewsCollector(naverClient, jdbc, sentimentAnalyzer, bloomFilter, esOps)
+
+    // ADR-042: INSERT와 색인 이벤트가 TransactionTemplate 안에서 실행된다 — 콜백을 그대로 통과시킨다
+    private val tx = mockk<TransactionTemplate>().apply {
+        every { execute(any<TransactionCallback<Any?>>()) } answers { firstArg<TransactionCallback<Any?>>().doInTransaction(mockk(relaxed = true)) }
+    }
+    private val events = mockk<ApplicationEventPublisher>(relaxed = true)
+    private val collector = NewsCollector(naverClient, jdbc, sentimentAnalyzer, bloomFilter, events, tx)
+
+    private fun stubInsertReturning(id: Long) {
+        every { jdbc.query(match<String> { it.contains("INSERT INTO news_articles") }, any<RowMapper<Long>>(), *anyVararg()) } returns listOf(id)
+    }
+    private fun verifyInserted(atLeast: Int = 1) =
+        verify(atLeast = atLeast) { jdbc.query(match<String> { it.contains("INSERT INTO news_articles") }, any<RowMapper<Long>>(), *anyVararg()) }
 
     @Test
     fun `uses mock generator when naver not configured`() {
         every { naverClient.isConfigured } returns false
         every { jdbc.query(any<String>(), any<RowMapper<Pair<Long, String>>>()) } returns
             listOf(1L to "삼성전자")
-        every { jdbc.update(any<String>(), *anyVararg()) } returns 1
+        stubInsertReturning(10L)
 
         collector.collect()
 
         verify(exactly = 0) { naverClient.search(any(), any()) }
-        verify(atLeast = 1) { jdbc.update(any<String>(), *anyVararg()) }
+        verifyInserted()
     }
 
     @Test
@@ -37,7 +50,7 @@ class NewsCollectorTest {
         every { naverClient.parsePubDate(any()) } returns java.time.Instant.now()
         every { jdbc.query(any<String>(), any<RowMapper<Pair<Long, String>>>()) } returns
             listOf(1L to "삼성전자")
-        every { jdbc.update(any<String>(), *anyVararg()) } returns 1
+        stubInsertReturning(11L)
 
         collector.collect()
 
@@ -66,7 +79,7 @@ class NewsCollectorTest {
 
         collector.collect()
 
-        verify(exactly = 0) { jdbc.update(match<String> { it.contains("INSERT INTO news_articles") }, *anyVararg()) }
+        verify(exactly = 0) { jdbc.query(match<String> { it.contains("INSERT INTO news_articles") }, any<RowMapper<Long>>(), *anyVararg()) }
         verify(exactly = 0) { sentimentAnalyzer.analyze(any(), any()) }
         verify(exactly = 0) { bloomFilter.put(any()) }
     }
@@ -74,7 +87,9 @@ class NewsCollectorTest {
     @Test
     fun `collectForStock persists a single item and registers it in the bloom filter`() {
         every { bloomFilter.mightContain("https://news.com/new") } returns false
-        every { jdbc.update(match<String> { it.contains("INSERT INTO news_articles") }, *anyVararg()) } returns 1
+        stubInsertReturning(77L)
+        val published = slot<Any>()
+        every { events.publishEvent(capture(published)) } returns Unit
 
         val saved = collector.collectForStock(
             stockId = 1L,
@@ -89,6 +104,24 @@ class NewsCollectorTest {
 
         assertThatSaved(saved)
         verify { bloomFilter.put("https://news.com/new") }
+        // ADR-042: ES를 직접 쓰지 않고 완성된 문서를 색인 이벤트로 발행한다 (RETURNING id가 문서 id)
+        val ev = published.captured as com.monticker.worker.search.SearchIndexEvent
+        org.assertj.core.api.Assertions.assertThat(ev.index).isEqualTo("news_articles")
+        org.assertj.core.api.Assertions.assertThat(ev.docId).isEqualTo("77")
+        org.assertj.core.api.Assertions.assertThat(ev.payload!!["title"]).isEqualTo("새 뉴스")
+        org.assertj.core.api.Assertions.assertThat(ev.payload!!["publishedAt"]).isInstanceOf(java.lang.Long::class.java)
+    }
+
+    @Test
+    fun `a URL already in the table (ON CONFLICT DO NOTHING) neither publishes nor touches the bloom filter`() {
+        every { bloomFilter.mightContain("https://news.com/dup") } returns false
+        every { jdbc.query(match<String> { it.contains("INSERT INTO news_articles") }, any<RowMapper<Long>>(), *anyVararg()) } returns emptyList()
+
+        val saved = collector.collectForStock(1L, NewsItem("중복", null, "https://news.com/dup", "src", java.time.Instant.now()))
+
+        org.assertj.core.api.Assertions.assertThat(saved).isFalse()
+        verify(exactly = 0) { events.publishEvent(any()) }
+        verify(exactly = 0) { bloomFilter.put(any()) }
     }
 
     private fun assertThatSaved(saved: Boolean) {

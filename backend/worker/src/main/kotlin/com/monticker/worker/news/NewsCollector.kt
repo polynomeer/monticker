@@ -2,7 +2,9 @@ package com.monticker.worker.news
 
 import com.monticker.worker.common.DistributedLock
 import org.slf4j.LoggerFactory
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations
+import com.monticker.worker.search.SearchIndexEvent
+import org.springframework.transaction.support.TransactionTemplate
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
@@ -15,7 +17,8 @@ class NewsCollector(
     private val jdbc: JdbcTemplate,
     private val sentimentAnalyzer: NewsSentimentAnalyzer,
     private val bloomFilter: NewsBloomFilter,
-    private val esOps: ElasticsearchOperations,
+    private val events: ApplicationEventPublisher,
+    private val tx: TransactionTemplate,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -75,63 +78,48 @@ class NewsCollector(
         val publishedAt = item.publishedAt ?: Instant.now()
         val sentiment   = sentimentAnalyzer.analyze(item.title, item.description)
 
-        // DB 저장 — ON CONFLICT DO NOTHING (url unique)
-        val rows = jdbc.update(
-            """
-            INSERT INTO news_articles (stock_id, title, description, url, source, published_at, sentiment)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (url) DO NOTHING
-            """.trimIndent(),
-            stockId,
-            item.title.take(500),
-            item.description?.take(1000),
-            item.link.take(1000),
-            item.source.take(100),
-            Timestamp.from(publishedAt),
-            sentiment,
-        )
-
-        if (rows > 0) {
-            bloomFilter.put(item.link)
-
-            // ES dual-write — DB pk는 RETURNING으로 가져올 수 없어서 url 기반 id 생성
-            val esId = fetchIdByUrl(item.link)
-            if (esId != null) {
-                indexToEs(esId, stockId, item, publishedAt, sentiment)
+        // ADR-042: DB INSERT와 색인 이벤트를 한 트랜잭션에 — 롤백되면 이벤트도 사라지고, 커밋되면 Modulith가
+        // 커밋 후 Kafka search.index로 외부화한다(실패 시 event_publication에 남아 5분 뒤 재전송).
+        // RETURNING id: 이전엔 ON CONFLICT DO NOTHING 뒤에 url로 SELECT를 한 번 더 했다.
+        val id: Long? = tx.execute {
+            val inserted = jdbc.query(
+                """
+                INSERT INTO news_articles (stock_id, title, description, url, source, published_at, sentiment)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (url) DO NOTHING
+                RETURNING id
+                """.trimIndent(),
+                { rs, _ -> rs.getLong("id") },
+                stockId,
+                item.title.take(500),
+                item.description?.take(1000),
+                item.link.take(1000),
+                item.source.take(100),
+                Timestamp.from(publishedAt),
+                sentiment,
+            ).firstOrNull()
+            if (inserted != null) {
+                events.publishEvent(SearchIndexEvent.index(INDEX, inserted.toString(), mapOf(
+                    "stockId"     to stockId,
+                    "title"       to item.title,
+                    "description" to item.description,
+                    "url"         to item.link,
+                    "source"      to item.source,
+                    "publishedAt" to publishedAt.toEpochMilli(),   // api NewsDocument: epoch_millis
+                    "sentiment"   to sentiment,
+                )))
             }
-
-            log.debug("Saved news stockId={} title={} sentiment={}", stockId, item.title.take(60), sentiment)
+            inserted
         }
-        return rows > 0
+
+        if (id != null) {
+            bloomFilter.put(item.link)
+            log.debug("Saved news id={} stockId={} title={} sentiment={}", id, stockId, item.title.take(60), sentiment)
+        }
+        return id != null
     }
 
-    private fun fetchIdByUrl(url: String): Long? =
-        runCatching {
-            jdbc.queryForObject(
-                "SELECT id FROM news_articles WHERE url = ?",
-                Long::class.java,
-                url,
-            )
-        }.getOrNull()
-
-    private fun indexToEs(id: Long, stockId: Long, item: NewsItem, publishedAt: Instant, sentiment: String?) {
-        try {
-            val doc = NewsDocument(
-                id          = id.toString(),
-                stockId     = stockId,
-                title       = item.title,
-                description = item.description,
-                url         = item.link,
-                source      = item.source,
-                publishedAt = publishedAt,
-                sentiment   = sentiment,
-            )
-            esOps.save(doc)
-        } catch (e: Exception) {
-            // ES 인덱싱 실패는 경고만 — DB 저장은 이미 완료
-            log.warn("ES indexing failed for news id={}: {}", id, e.message)
-        }
-    }
+    companion object { const val INDEX = "news_articles" }
 }
 
 data class NewsItem(

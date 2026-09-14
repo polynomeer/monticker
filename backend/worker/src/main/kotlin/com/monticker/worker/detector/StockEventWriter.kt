@@ -2,7 +2,9 @@ package com.monticker.worker.detector
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations
+import com.monticker.worker.search.SearchIndexEvent
+import org.springframework.transaction.support.TransactionTemplate
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
 import java.sql.Timestamp
@@ -29,7 +31,8 @@ class StockEventWriter(
     private val pushSender: com.monticker.worker.push.ExpoPushSender,
     // ingestion.source=internal일 때는 빈 ObjectProvider — 주입 없이도 동작 (ADR-005)
     private val eventKafkaProducer: org.springframework.beans.factory.ObjectProvider<com.monticker.worker.kafka.EventKafkaProducer>,
-    private val esOps: ElasticsearchOperations,
+    private val events: ApplicationEventPublisher,
+    private val tx: TransactionTemplate,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val objectMapper = ObjectMapper()
@@ -56,27 +59,34 @@ class StockEventWriter(
             return false
         }
 
-        jdbcTemplate.update(
-            """
-            INSERT INTO stock_events
-              (stock_id, event_type, title, description, event_time, importance_score, source_type, metadata_json, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 'SYSTEM', ?::jsonb, now(), now())
-            """,
-            event.stockId,
-            event.eventType.name,
-            event.title,
-            event.description,
-            Timestamp.from(event.eventTime),
-            event.importanceScore,
-            objectMapper.writeValueAsString(event.metadataJson),
-        )
-
-        val insertedId = jdbcTemplate.queryForObject(
-            "SELECT id FROM stock_events WHERE stock_id = ? AND event_type = ? AND event_time = ?",
-            Long::class.java,
-            event.stockId, event.eventType.name, Timestamp.from(event.eventTime),
-        )
-        if (insertedId != null) indexToEs(insertedId, event)
+        // ADR-042: INSERT(RETURNING id — 이전엔 SELECT를 한 번 더 했다)와 색인 이벤트를 한 트랜잭션에.
+        // 커밋 후 Modulith가 Kafka search.index로 외부화하고 api의 SearchIndexConsumer가 색인한다.
+        val insertedId: Long? = tx.execute {
+            val id = jdbcTemplate.query(
+                """
+                INSERT INTO stock_events
+                  (stock_id, event_type, title, description, event_time, importance_score, source_type, metadata_json, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'SYSTEM', ?::jsonb, now(), now())
+                RETURNING id
+                """,
+                { rs, _ -> rs.getLong("id") },
+                event.stockId,
+                event.eventType.name,
+                event.title,
+                event.description,
+                Timestamp.from(event.eventTime),
+                event.importanceScore,
+                objectMapper.writeValueAsString(event.metadataJson),
+            ).firstOrNull()
+            if (id != null) {
+                events.publishEvent(SearchIndexEvent.index(SEARCH_INDEX, id.toString(), searchPayload(
+                    stockId = event.stockId, eventType = event.eventType.name, title = event.title,
+                    description = event.description, eventTime = event.eventTime,
+                    importanceScore = event.importanceScore, sourceType = "SYSTEM",
+                )))
+            }
+            id
+        }
 
         log.info("Event created: {} {} score={}", event.eventType, event.stockId, event.importanceScore)
         eventKafkaProducer.ifAvailable { it.publish(event) }
@@ -84,22 +94,23 @@ class StockEventWriter(
         return true
     }
 
-    private fun indexToEs(id: Long, event: DetectedEvent) {
-        try {
-            val doc = StockEventDocument(
-                id              = id.toString(),
-                stockId         = event.stockId,
-                eventType       = event.eventType.name,
-                title           = event.title,
-                description     = event.description,
-                eventTime       = event.eventTime,
-                importanceScore = event.importanceScore,
-                sourceType      = "SYSTEM",
-            )
-            esOps.save(doc)
-        } catch (e: Exception) {
-            log.warn("ES indexing failed for event id={}: {}", id, e.message)
-        }
+    companion object {
+        const val SEARCH_INDEX = "stock_events"
+
+        /** api `StockEventDocument` 매핑과 같은 형태 — 날짜는 epoch_millis, sentimentScore는 감지 이벤트에 없다. */
+        fun searchPayload(
+            stockId: Long, eventType: String, title: String, description: String?, eventTime: Instant,
+            importanceScore: Int, sourceType: String,
+        ): Map<String, Any?> = mapOf(
+            "stockId"         to stockId,
+            "eventType"       to eventType,
+            "title"           to title,
+            "description"     to description,
+            "eventTime"       to eventTime.toEpochMilli(),
+            "importanceScore" to importanceScore,
+            "sentimentScore"  to null,
+            "sourceType"      to sourceType,
+        )
     }
 
     private fun sendEventPush(event: DetectedEvent) {

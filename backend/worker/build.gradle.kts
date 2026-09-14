@@ -8,6 +8,7 @@ plugins {
 
 dependencyManagement {
 	imports {
+		mavenBom("org.springframework.modulith:spring-modulith-bom:1.3.4")
 		mavenBom("org.testcontainers:testcontainers-bom:1.20.4")
 	}
 }
@@ -38,6 +39,10 @@ dependencies {
 	implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.2.0")
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 	implementation("org.springframework.boot:spring-boot-starter-data-elasticsearch")
+	// ADR-042 §2 — ES 인덱싱 이벤트를 Outbox(event_publication, api와 공유)로 기록하고 Kafka search.index로 외부화한다
+	implementation("org.springframework.modulith:spring-modulith-starter-jpa")
+	implementation("org.springframework.modulith:spring-modulith-events-api")
+	implementation("org.springframework.modulith:spring-modulith-events-kafka")
 	implementation("org.springframework.boot:spring-boot-starter-aop")
 	implementation("org.springframework.boot:spring-boot-starter-data-redis")
 	implementation("org.springframework.boot:spring-boot-starter-validation")

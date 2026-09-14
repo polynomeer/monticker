@@ -5,7 +5,7 @@ import org.springframework.data.elasticsearch.annotations.*
 import java.time.Instant
 
 // api 모듈의 AlertHistoryDocument와 동일한 인덱스를 공유한다.
-@Document(indexName = "alert_histories")
+@Document(indexName = "alert_histories", createIndex = false)   // ADR-042: 인덱스 소유는 api의 SearchIndexManager 하나다
 @Setting(settingPath = "elasticsearch/alert-index-settings.json")
 data class AlertHistoryDocument(
     @Id val id: String,
