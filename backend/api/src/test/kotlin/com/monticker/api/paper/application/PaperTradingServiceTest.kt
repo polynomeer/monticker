@@ -1,6 +1,9 @@
 package com.monticker.api.paper.application
 
+import com.monticker.api.matching.submit.MarketOrderResult
+import com.monticker.api.matching.submit.OrderSubmitter
 import com.monticker.api.paper.domain.PaperAccount
+import com.monticker.api.paper.domain.PaperTrade
 import com.monticker.api.paper.events.PaperAccountResetEvent
 import com.monticker.api.paper.infrastructure.PaperAccountRepository
 import com.monticker.api.paper.infrastructure.PaperTradeRepository
@@ -26,24 +29,44 @@ class PaperTradingServiceTest {
     private val tradeRepo = mockk<PaperTradeRepository>(relaxed = true)
     private val jdbc = mockk<JdbcTemplate>()
     private val eventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
-    private val portfolioQueryService = mockk<PaperPortfolioQueryService>(relaxed = true)
     private val projection = mockk<PortfolioPositionProjection>(relaxed = true)
-    private val settlementService = mockk<PaperSettlementService>(relaxed = true)
+    private val orderSubmitter = mockk<OrderSubmitter>()
 
     private val service = PaperTradingService(
-        accountRepo, tradeRepo, jdbc, eventPublisher, portfolioQueryService, projection, settlementService,
+        accountRepo, tradeRepo, jdbc, eventPublisher, projection, orderSubmitter,
     )
 
+    // ADR-047 — buy/sell은 파사드다: 매칭 엔진에 MARKET 주문을 내고, 리스너가 같은 트랜잭션에 만든 paper_trades 행을 돌려준다.
     @Test
-    fun `buy throws a business IllegalStateException (not a raw DB exception) when the stock has no recent candle`() {
-        every { accountRepo.findByUserId(1L) } returns Optional.of(PaperAccount(userId = 1L))
-        every {
-            jdbc.query(any<String>(), any<org.springframework.jdbc.core.RowMapper<java.math.BigDecimal>>(), 999L)
-        } returns emptyList()
+    fun `buy submits a MARKET order to the matching engine and returns the mirrored trade id`() {
+        val account = PaperAccount(userId = 1L, cash = com.monticker.api.common.domain.Money.of("9000000"))
+        every { accountRepo.findByUserId(1L) } returns Optional.of(account)
+        every { orderSubmitter.submitMarket(1L, 5L, "BUY", 3) } returns MarketOrderResult(
+            orderId = 10L, fillId = 77L, stockId = 5L, side = "BUY", quantity = 3,
+            fillPrice = java.math.BigDecimal("65000"), amount = java.math.BigDecimal("195000"), filledAt = java.time.Instant.now(),
+        )
+        every { tradeRepo.findByFillId(77L) } returns PaperTrade(id = 500L, userId = 1L, stockId = 5L, side = "BUY", quantity = 3,
+            price = java.math.BigDecimal("65000"), amount = java.math.BigDecimal("195000"), fillId = 77L)
+        // 잔고는 사가가 JDBC로 바꾼 값을 JDBC로 읽는다 — JPA 캐시의 엔티티(9,000,000)가 아니라
+        every { jdbc.query(match<String> { it.contains("SELECT cash") }, any<org.springframework.jdbc.core.RowMapper<java.math.BigDecimal>>(), 1L) } returns listOf(java.math.BigDecimal("8805000"))
 
-        assertThatThrownBy { service.buy(userId = 1L, stockId = 999L, quantity = 1) }
-            .isInstanceOf(IllegalStateException::class.java)
-            .hasMessageContaining("현재가")
+        val result = service.buy(userId = 1L, stockId = 5L, quantity = 3)
+
+        org.assertj.core.api.Assertions.assertThat(result.tradeId).isEqualTo(500L)
+        org.assertj.core.api.Assertions.assertThat(result.amount).isEqualByComparingTo("195000")
+        org.assertj.core.api.Assertions.assertThat(result.remainingCash).isEqualByComparingTo("8805000")
+        // 직접 잔고를 바꾸거나 거래를 저장하지 않는다 — 그건 사가와 리스너의 몫이다
+        io.mockk.verify(exactly = 0) { accountRepo.save(any()) }
+        io.mockk.verify(exactly = 0) { tradeRepo.save(any()) }
+    }
+
+    @Test
+    fun `a risk rejection from the matching engine propagates unchanged`() {
+        every { accountRepo.findByUserId(1L) } returns Optional.of(PaperAccount(userId = 1L))
+        every { orderSubmitter.submitMarket(1L, 5L, "SELL", 1) } throws com.monticker.api.common.aop.RiskLimitException("DailyLossRule")
+
+        assertThatThrownBy { service.sell(userId = 1L, stockId = 5L, quantity = 1) }
+            .isInstanceOf(com.monticker.api.common.aop.RiskLimitException::class.java)
     }
 
     // ADR-043 — 초기화는 현금 컬럼을 바꾸는 경로다. 이벤트가 없으면 원장에 구멍이 나고 대사가 영구히 어긋난다.

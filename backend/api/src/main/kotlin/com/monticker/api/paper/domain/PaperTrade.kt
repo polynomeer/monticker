@@ -12,4 +12,6 @@ class PaperTrade(
     @Column(nullable = false) val price: BigDecimal,
     @Column(nullable = false) val amount: BigDecimal,
     @Column(name = "traded_at", nullable = false) val tradedAt: Instant = Instant.now(),
+    /** ADR-047 — 매칭 엔진 체결 링크. 구 페이퍼 경로(ADR-047 이전)의 거래는 null. */
+    @Column(name = "fill_id") val fillId: Long? = null,
 )

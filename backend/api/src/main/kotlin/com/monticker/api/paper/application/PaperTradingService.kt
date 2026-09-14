@@ -1,8 +1,8 @@
 package com.monticker.api.paper.application
 
-import com.monticker.api.common.domain.Price
 import com.monticker.api.paper.domain.PaperAccount
 import com.monticker.api.paper.domain.PaperTrade
+import com.monticker.api.matching.submit.OrderSubmitter
 import com.monticker.api.paper.events.PaperAccountResetEvent
 import com.monticker.api.paper.events.PaperTradeExecutedEvent
 import com.monticker.api.paper.infrastructure.PaperAccountRepository
@@ -20,59 +20,33 @@ class PaperTradingService(
     private val tradeRepo: PaperTradeRepository,
     private val jdbc: JdbcTemplate,
     private val eventPublisher: ApplicationEventPublisher,
-    private val portfolioQueryService: PaperPortfolioQueryService,
     private val projection: PortfolioPositionProjection,
-    private val settlementService: PaperSettlementService,
+    private val orderSubmitter: OrderSubmitter,
 ) {
     private fun getOrCreateAccount(userId: Long): PaperAccount =
         accountRepo.findByUserId(userId).orElseGet {
             accountRepo.save(PaperAccount(userId = userId))
         }
 
-    // queryForObject는 결과가 0건이면 null을 주는 게 아니라 EmptyResultDataAccessException을
-    // 던진다 — 아래 "?: throw IllegalStateException"이 의도한 대로 동작하려면 애초에 그 예외가
-    // 발생하지 않아야 한다(실제로 부하 테스트에서 최근 캔들이 없는 종목에 주문을 넣었을 때
-    // GlobalExceptionHandler의 catch-all에 잡혀 안내 메시지 없는 500으로 새는 게 확인됐다).
-    // query+firstOrNull은 0건이어도 예외 없이 빈 리스트를 준다.
-    private fun getCurrentPrice(stockId: Long): Price =
-        jdbc.query(
-            "SELECT close FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1",
-            { rs, _ -> rs.getBigDecimal("close") },
-            stockId,
-        ).firstOrNull()?.let { Price.of(it) } ?: throw IllegalStateException("현재가 조회 불가: stockId=$stockId")
+    /**
+     * ADR-047 — 파사드. 현재가·잔고·수량 확인·기록을 직접 하지 않고 매칭 엔진에 MARKET 주문을 제출한다.
+     * 리스크 게이트(@RiskChecked)가 이 경로에도 걸린다. 계좌 기록(paper_trades·포지션·정산·원장)은
+     * PaperExecutionListener가 사가 트랜잭션 안에서 만든다 — 응답의 tradeId는 그 행이다.
+     */
+    fun buy(userId: Long, stockId: Long, quantity: Int): TradeResultResponse = execute(userId, stockId, "BUY", quantity)
 
-    fun buy(userId: Long, stockId: Long, quantity: Int): TradeResultResponse {
-        require(quantity > 0) { "수량은 1 이상이어야 합니다" }
-        val account = getOrCreateAccount(userId)
-        val price   = getCurrentPrice(stockId)
-        val amount  = price.toMoney(quantity)
-        account.debit(amount)
-        accountRepo.save(account)
-        val trade = tradeRepo.save(PaperTrade(userId = userId, stockId = stockId, side = "BUY",
-            quantity = quantity, price = price.amount, amount = amount.amount))
-        projection.onBuy(userId, stockId, quantity, amount.amount)
-        eventPublisher.publishEvent(PaperTradeExecutedEvent(userId, trade.id, stockId, "BUY", amount.amount, account.cash.amount))
-        settlementService.createPending(trade)
-        return TradeResultResponse("BUY", stockId, quantity, price.amount, amount.amount, account.cash.amount, trade.id)
-    }
+    fun sell(userId: Long, stockId: Long, quantity: Int): TradeResultResponse = execute(userId, stockId, "SELL", quantity)
 
-    fun sell(userId: Long, stockId: Long, quantity: Int): TradeResultResponse {
+    private fun execute(userId: Long, stockId: Long, side: String, quantity: Int): TradeResultResponse {
         require(quantity > 0) { "수량은 1 이상이어야 합니다" }
-        val holdings = portfolioQueryService.buildHoldings(userId)
-        val holding  = holdings.find { it.stockId == stockId }
-            ?: throw IllegalStateException("보유 종목 없음: stockId=$stockId")
-        require(holding.quantity >= quantity) { "보유 수량 부족: 보유 ${holding.quantity}, 요청 $quantity" }
-        val account = getOrCreateAccount(userId)
-        val price   = getCurrentPrice(stockId)
-        val amount  = price.toMoney(quantity)
-        account.credit(amount)
-        accountRepo.save(account)
-        val trade = tradeRepo.save(PaperTrade(userId = userId, stockId = stockId, side = "SELL",
-            quantity = quantity, price = price.amount, amount = amount.amount))
-        projection.onSell(userId, stockId, quantity)
-        eventPublisher.publishEvent(PaperTradeExecutedEvent(userId, trade.id, stockId, "SELL", amount.amount, account.cash.amount))
-        settlementService.createPending(trade)
-        return TradeResultResponse("SELL", stockId, quantity, price.amount, amount.amount, account.cash.amount, trade.id)
+        getOrCreateAccount(userId)
+        val result = orderSubmitter.submitMarket(userId, stockId, side, quantity)
+        val trade = tradeRepo.findByFillId(result.fillId)
+            ?: throw IllegalStateException("체결 기록이 없습니다: fillId=${result.fillId}")   // 리스너가 같은 트랜잭션에 만든다
+        // 사가가 cash를 JDBC로 바꿨다 — 같은 트랜잭션의 JPA 1차 캐시 엔티티는 갱신 전 값이라 JDBC로 읽는다
+        val cash = jdbc.query("SELECT cash FROM paper_accounts WHERE user_id = ?", { rs, _ -> rs.getBigDecimal("cash") }, userId)
+            .firstOrNull() ?: BigDecimal.ZERO
+        return TradeResultResponse(side, stockId, quantity, result.fillPrice, result.amount, cash, trade.id)
     }
 
     fun reset(userId: Long) {

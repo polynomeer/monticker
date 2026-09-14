@@ -156,6 +156,23 @@ class OrderSagaOrchestratorTest {
         verify(exactly = 0) { fillRepo.save(any()) }
     }
 
+    // ADR-047 — 매도는 보유 수량 안에서만. 이전엔 이 확인이 구 페이퍼 경로에만 있어 매칭 엔진으로는 공매도가 됐다.
+    @Test
+    fun `execute rejects a SELL order beyond the held quantity before touching orders or cash`() {
+        stubStockExistsAndPrice()
+        every {
+            jdbc.query(match<String> { it.contains("FROM portfolio_positions") }, any<org.springframework.jdbc.core.RowMapper<Int>>(), userId, stockId)
+        } returns listOf(2)
+
+        org.assertj.core.api.Assertions.assertThatThrownBy {
+            orchestrator.execute(userId, SubmitOrderRequest(stockId = stockId, side = "SELL", orderType = "MARKET", quantity = 5))
+        }.isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("보유 수량 부족")
+
+        verify(exactly = 0) { orderRepo.save(any()) }
+        verify(exactly = 0) { fillRepo.save(any()) }
+        verify(exactly = 0) { jdbc.update(match<String> { it.startsWith("UPDATE paper_accounts") }, *anyVararg()) }
+    }
+
     @Test
     fun `execute throws a business IllegalStateException, not a raw DB exception, when the stock has no recent candle`() {
         // 부하 테스트로 실제 재현된 버그: query()가 0건일 때 queryForObject처럼

@@ -15,6 +15,8 @@ import com.monticker.api.matching.statemachine.OrderStateMachineService
 import com.monticker.api.matching.statemachine.OrderStates
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.jdbc.core.JdbcTemplate
+import com.monticker.api.matching.submit.MarketOrderResult
+import com.monticker.api.matching.submit.OrderSubmitter
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -71,7 +73,21 @@ class MatchingService(
     private val stateMachineService: OrderStateMachineService,
     private val eventPublisher: ApplicationEventPublisher,
     private val sagaOrchestrator: OrderSagaOrchestrator,
-) {
+) : OrderSubmitter {
+    /**
+     * ADR-047 — paper 파사드(`/api/paper/buy|sell`)의 진입점. @RiskChecked 는 파라미터 이름(userId·stockId·side·
+     * quantity)으로 판정 입력을 뽑으므로 여기 직접 건다. MARKET 주문은 즉시 체결 아니면 예외다 — 이 경로에 미체결은 없다.
+     */
+    @RiskChecked
+    override fun submitMarket(userId: Long, stockId: Long, side: String, quantity: Int): MarketOrderResult {
+        val res = submitOrder(userId, SubmitOrderRequest(stockId = stockId, side = side, orderType = "MARKET", quantity = quantity))
+        val fill = res.fills.singleOrNull() ?: throw IllegalStateException("시장가 주문이 체결되지 않았습니다: orderId=${res.order.id}")
+        return MarketOrderResult(
+            orderId = res.order.id, fillId = fill.id, stockId = fill.stockId, side = fill.side,
+            quantity = fill.quantity, fillPrice = fill.fillPrice, amount = fill.amount, filledAt = fill.filledAt,
+        )
+    }
+
     @RiskChecked
     fun submitOrderChecked(
         userId: Long,

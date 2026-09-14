@@ -11,7 +11,8 @@ import java.time.Instant
 
 /**
  * CH-05에서 발견: DailyLossRule의 "일간 손익"이 `SUM(SELL − BUY)` 현금 흐름이라 매수가 손실로 잡혔다.
- * 실제 SQL을 실제 Postgres에서 검증한다 — 두 체결 경로(fills, paper_trades)의 합집합과 평단가 계산은 mock으로 못 본다.
+ * 실제 SQL을 실제 Postgres에서 검증한다 — 평단가 계산은 mock으로 못 본다. ADR-047 이후 실행 기록은 paper_trades 하나다
+ * (매칭 엔진 체결은 PaperExecutionListener가 미러링한다) — fills 는 더 이상 리스크 판정의 입력이 아니다.
  */
 class RiskRuleQueryServiceIntegrationTest : PostgresIntegrationTest() {
 
@@ -50,7 +51,7 @@ class RiskRuleQueryServiceIntegrationTest : PostgresIntegrationTest() {
     @Test
     fun `buying all day is not a loss — the old cash-flow formula blocked the sixth buy`() {
         val userId = newUser(); val s = stocks(1)[0]
-        repeat(6) { fill(userId, s, "BUY", 1, "65000") }   // 390,000 > 3% of 10,000,000
+        repeat(6) { paperTrade(userId, s, "BUY", 1, "65000") }   // 390,000 > 3% of 10,000,000
 
         val r = rule(userId, s, "DailyLossRule")
 
@@ -59,12 +60,12 @@ class RiskRuleQueryServiceIntegrationTest : PostgresIntegrationTest() {
     }
 
     @Test
-    fun `realized loss is sold quantity times sell price minus the moving-average cost across both trade paths`() {
+    fun `realized loss is sold quantity times sell price minus the moving-average cost`() {
         val userId = newUser(); val s = stocks(1)[0]
         val yesterday = Instant.now().minusSeconds(36 * 3600)
-        fill(userId, s, "BUY", 10, "100", yesterday)          // 매칭 엔진: 1,000
-        paperTrade(userId, s, "BUY", 10, "120", yesterday)    // 구 페이퍼 경로: 1,200  → 평단가 110
-        fill(userId, s, "SELL", 5, "90")                      // 오늘: 5 × (90 − 110) = −100
+        paperTrade(userId, s, "BUY", 10, "100", yesterday)    // 1,000
+        paperTrade(userId, s, "BUY", 10, "120", yesterday)    // 1,200  → 평단가 110
+        paperTrade(userId, s, "SELL", 5, "90")                // 오늘: 5 × (90 − 110) = −100
 
         val r = rule(userId, s, "DailyLossRule")
 
@@ -76,9 +77,9 @@ class RiskRuleQueryServiceIntegrationTest : PostgresIntegrationTest() {
     fun `a realized loss beyond the daily limit blocks, a sale before today does not count`() {
         val userId = newUser(); val s = stocks(1)[0]
         val yesterday = Instant.now().minusSeconds(36 * 3600)
-        fill(userId, s, "BUY", 100, "10000", yesterday)       // 평단가 10,000
-        fill(userId, s, "SELL", 50, "9000", yesterday)        // 어제의 손실 −50,000 — 오늘 판정과 무관
-        fill(userId, s, "SELL", 40, "2000")                   // 오늘: 40 × (2,000 − 10,000) = −320,000 > 3%
+        paperTrade(userId, s, "BUY", 100, "10000", yesterday)   // 평단가 10,000
+        paperTrade(userId, s, "SELL", 50, "9000", yesterday)    // 어제의 손실 −50,000 — 오늘 판정과 무관
+        paperTrade(userId, s, "SELL", 40, "2000")               // 오늘: 40 × (2,000 − 10,000) = −320,000 > 3%
 
         val r = rule(userId, s, "DailyLossRule")
 
@@ -87,14 +88,14 @@ class RiskRuleQueryServiceIntegrationTest : PostgresIntegrationTest() {
     }
 
     @Test
-    fun `holdings for concentration and position count include matching-engine fills`() {
+    fun `a matching-engine fill without its paper_trades mirror is not a holding — the mirror is the record`() {
         val userId = newUser(); val (a, b) = stocks(2)
-        fill(userId, a, "BUY", 10, "100")                     // 매칭 엔진 체결만 있는 종목
-        paperTrade(userId, b, "BUY", 5, "100"); paperTrade(userId, b, "SELL", 5, "100")   // 전량 매도 → 보유 아님
+        paperTrade(userId, a, "BUY", 10, "100")                // 계좌 실행 기록이 있는 종목
+        fill(userId, b, "BUY", 5, "100")                       // fills만 있고 미러가 없다(ADR-047 이전 데이터 형태) → 판정 밖
 
         val checks = service.evaluate(userId, b, "BUY", 1, BigDecimal("100"), limits)
 
-        // b는 신규 종목이므로 PositionCountRule이 평가되고, 현재 보유 종목 수는 a 하나다
+        // b는 (미러가 없어) 신규 종목이므로 PositionCountRule이 평가되고, 현재 보유 종목 수는 a 하나다
         assertThat(checks.first { it.rule == "PositionCountRule" }.current).isEqualTo(1.0)
     }
 }

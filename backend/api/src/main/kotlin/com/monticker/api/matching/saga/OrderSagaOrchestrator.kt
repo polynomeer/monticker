@@ -92,6 +92,16 @@ class OrderSagaOrchestrator(
         val currentPrice = getCurrentPrice(req.stockId)
         val estimatedPrice = limitPrice ?: currentPrice
 
+        // ADR-047: 매도는 보유 수량 안에서만. 이전엔 이 확인이 구 페이퍼 경로에만 있어 매칭 엔진으로는 공매도가 됐다.
+        // portfolio_positions는 paper 모듈의 프로젝션이지만 paper_accounts와 같은 수준의 JDBC 읽기다.
+        if (req.side == "SELL") {
+            val held = jdbc.query(
+                "SELECT net_qty FROM portfolio_positions WHERE user_id = ? AND stock_id = ?",
+                { rs, _ -> rs.getInt("net_qty") }, userId, req.stockId,
+            ).firstOrNull() ?: 0
+            require(held >= req.quantity) { "보유 수량 부족: 보유 $held, 요청 ${req.quantity}" }
+        }
+
         // STEP 2: RESERVE_CASH (BUY 전용)
         saga.currentStep = SagaStep.CASH_RESERVED
         val reserveAmount: BigDecimal? = if (req.side == "BUY") {

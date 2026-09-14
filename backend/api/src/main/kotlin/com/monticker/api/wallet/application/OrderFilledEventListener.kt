@@ -1,7 +1,6 @@
 package com.monticker.api.wallet.application
 
 import com.monticker.api.matching.events.OrderCancelledEvent
-import com.monticker.api.matching.events.OrderFilledEvent
 import com.monticker.api.wallet.domain.LedgerEvent
 import com.monticker.api.wallet.domain.LedgerEventType
 import com.monticker.api.wallet.infrastructure.LedgerEventRepository
@@ -12,7 +11,7 @@ import org.springframework.stereotype.Component
 import java.math.BigDecimal
 
 /**
- * matching 모듈 이벤트를 구독해 원장(ledger)을 기록하는 리스너.
+ * matching 모듈의 취소 이벤트를 구독해 원장(ledger)을 기록하는 리스너. (체결은 ADR-047 이후 paper 경유)
  *
  * @ApplicationModuleListener: Modulith 이벤트 스토어에서 실행 — 체결 트랜잭션 커밋 후에만
  * 호출되며, 실패 시 재시도가 보장된다. 기존 @TransactionalEventListener(AFTER_COMMIT)과
@@ -25,27 +24,9 @@ class OrderFilledEventListener(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    @ApplicationModuleListener
-    fun onOrderFilled(event: OrderFilledEvent) {
-        log.info("[Wallet] OrderFilledEvent received: orderId={} userId={} side={} amount={}",
-            event.orderId, event.userId, event.side, event.amount)
-
-        val balanceAfter = queryBalance(event.userId)
-        val eventType    = if (event.side == "BUY") LedgerEventType.FILL else LedgerEventType.SETTLEMENT
-        val ledgerAmount = if (event.side == "BUY") event.amount.negate() else event.amount
-
-        ledgerRepo.save(
-            LedgerEvent(
-                userId       = event.userId,
-                eventType    = eventType,
-                amount       = ledgerAmount,
-                balanceAfter = balanceAfter,
-                paperTradeId = event.fillId,
-                stockId      = event.stockId,
-                description  = if (event.side == "BUY") "매수 체결" else "매도 체결",
-            )
-        )
-    }
+    // ADR-047: 체결의 원장 기록은 paper.PaperExecutionListener → PaperTradeExecutedEvent → PaperTradeEventListener 경로다.
+    // 이전엔 여기서 OrderFilledEvent를 직접 받아 FILL을 썼고 paper_trade_id에 fills.id를 넣었다(이중 의미, ADR-043 V43).
+    // 두 경로가 함께 있으면 체결 하나에 원장 두 줄이 생긴다 — 그래서 제거했다.
 
     @ApplicationModuleListener
     fun onOrderCancelled(event: OrderCancelledEvent) {

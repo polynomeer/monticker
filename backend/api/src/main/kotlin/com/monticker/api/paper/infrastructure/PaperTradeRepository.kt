@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 interface PaperTradeRepository : JpaRepository<PaperTrade, Long> {
     fun findTop20ByUserIdOrderByTradedAtDesc(userId: Long): List<PaperTrade>
+    fun findByFillId(fillId: Long): PaperTrade?
 
     @Query("""
         SELECT t.stockId, SUM(CASE WHEN t.side='BUY' THEN t.quantity ELSE -t.quantity END) AS qty,

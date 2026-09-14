@@ -81,9 +81,12 @@ class RiskRuleQueryService(
             ))
         }
 
-        // 3. VaR Rule
+        // 3. VaR Rule (BUY only — ADR-047)
+        // 노출 한도는 위험을 늘리는 주문만 막아야 한다. 매도는 노출을 줄이는데, 이전엔 보유 종목의 VaR가 한도를 넘으면
+        // 매도까지 막혀 "위험한 포지션을 정리할 수 없는" 상태가 됐다(로컬 데이터의 −72% 일봉으로 재현). 파사드 전환으로
+        // 포트폴리오 화면의 매도에도 이 게이트가 걸리게 되면서 드러났다.
         val stockIds = snapshot.holdings.map { it.stockId }.distinct()
-        val varValue = if (stockIds.isNotEmpty()) {
+        val varValue = if (side == "BUY" && stockIds.isNotEmpty()) {
             val placeholders = stockIds.joinToString(",") { "?" }
             // candles_1d의 "오늘" 행은 장중 계속 바뀌는 미확정 값이라 VaR 수익률 계산에서 제외한다.
             val todayStartKst = Instant.now().atZone(ZoneId.of("Asia/Seoul")).toLocalDate().atStartOfDay(ZoneId.of("Asia/Seoul")).toInstant()
@@ -108,7 +111,7 @@ class RiskRuleQueryService(
             }
         } else 0.0
         val varLimit = limits.varLimitPct.toDouble()
-        checks.add(RuleResult(
+        if (side == "BUY") checks.add(RuleResult(
             rule    = "VaRRule",
             passed  = varValue <= varLimit,
             detail  = "VaR(95%) ${String.format("%.2f", varValue)}% / 한도 ${varLimit}%",
@@ -158,13 +161,11 @@ class RiskRuleQueryService(
 
     companion object {
         /**
-         * 모의투자 계좌의 체결은 두 경로로 쌓인다 — 매칭 엔진(`fills`)과 구 페이퍼 경로(`paper_trades`).
-         * 둘 다 같은 paper_accounts.cash를 움직이므로 리스크 판정은 합집합을 봐야 한다.
+         * 계좌의 실행 기록은 paper_trades 하나다 (ADR-047: 매칭 엔진 체결도 PaperExecutionListener가 여기 미러링한다).
+         * ADR-047 이전엔 fills와의 합집합을 봤다 — 이제 합집합이면 같은 체결을 두 번 센다.
          */
         private const val PAPER_TRADES_CTE = """
             WITH t AS (
-                SELECT stock_id, side, quantity, amount, filled_at AS at FROM fills        WHERE user_id = ?
-                UNION ALL
                 SELECT stock_id, side, quantity, amount, traded_at AS at FROM paper_trades WHERE user_id = ?
             )"""
 
@@ -183,7 +184,7 @@ class RiskRuleQueryService(
             FROM t JOIN cost c USING (stock_id)
             WHERE t.side = 'SELL' AND t.at >= ?"""
 
-        /** 보유 종목 — 두 경로의 순수량. 이전엔 paper_trades만 봐서 매칭 엔진 체결이 집중도·종목 수 판정에 빠졌다. */
+        /** 보유 종목 — 순수량. */
         const val HOLDINGS_SQL = PAPER_TRADES_CTE + """
             SELECT stock_id, SUM(CASE WHEN side = 'BUY' THEN quantity ELSE -quantity END) AS qty
             FROM t GROUP BY stock_id
@@ -202,10 +203,10 @@ class RiskRuleQueryService(
         val dailyPnl = jdbc.query(
             REALIZED_PNL_TODAY_SQL.trimIndent(),
             { rs, _ -> rs.getBigDecimal(1) },
-            userId, userId, java.sql.Timestamp.from(todayStartKst),
+            userId, java.sql.Timestamp.from(todayStartKst),
         ).firstOrNull() ?: BigDecimal.ZERO
 
-        val holdings = jdbc.queryForList(HOLDINGS_SQL.trimIndent(), userId, userId).map { row ->
+        val holdings = jdbc.queryForList(HOLDINGS_SQL.trimIndent(), userId).map { row ->
             HoldingPosition(
                 stockId = (row["stock_id"] as Number).toLong(),
                 qty     = (row["qty"] as Number).toInt(),
