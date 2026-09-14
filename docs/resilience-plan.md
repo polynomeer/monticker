@@ -269,7 +269,7 @@ RestClient.builder()
 | E3 | Saga 미완료 잔류 | **가능** | 5분 주기 `recoverIncomplete()`. CH-07: SIGKILL 후 미완료 0 — 사가 전체가 한 트랜잭션 |
 | E3′ | Outbox 이벤트 발행 | **불가 → 가능** | CH-05: **Kafka 외부화가 한 번도 성공한 적 없었다**(직렬화기 불일치, `6eca851`). 수정 후 브로커 정지 → 복구 280s에 재전송 완료 |
 | E4 | 캔들 유실 | **부분** | 인메모리 상태, 리밸런스·강제종료 시 유실 |
-| E5 | ES 드리프트 | **불가** | dual-write 실패를 `log.warn`으로 삼킴 ([ADR-042](decisions/042-outbox-based-es-indexing.md)) |
+| E5 | ES 드리프트 | **불가 → 가능** | ~~dual-write 실패를 `log.warn`으로 삼킴~~ ADR-042 구현 완료(2026-09-14): 아웃박스 → `search.index` → 벌크 컨슈머(재시도·DLT), 기동 시 매핑 대조(`search_index_mapping_mismatch`), `search_index_lag_seconds`. **구현 중 발견: 인덱스가 설계대로 만들어진 적이 없었다**(아무도 create를 안 불렀고 공식 이미지에 nori가 없다) |
 | E6 | 이중 체결 / 미체결 | **불가 → 수정됨** | ~~단일 인스턴스라 안전~~ **틀렸다** — `trading-service.yaml`이 `replicas: 2`였고 호가창은 pod 메모리에 있다. 두 pod에 나뉜 주문은 서로 체결되지 않는다. `6871c0d`에서 1 + Recreate로 고정 |
 | E7 | 조용한 계산 오류 | **불가** | `VOLUME_SURGE`가 무효 SQL로 **한 번도 발동한 적 없었던** 전례([ADR-044](decisions/044-alert-rule-in-memory-index.md)) |
 

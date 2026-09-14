@@ -241,10 +241,39 @@ CH-04가 남긴 "인덱스가 동적 매핑" 발견의 원인 두 가지:
 - 컨슈머 그룹은 `auto.offset.reset=earliest`여야 한다 — 앱 기본(`latest`, ADR-029 브로드캐스트용)이면 그룹 생성 전
   이벤트를 건너뛴다.
 
-### 남은 단계
+### 2·3단계 (2026-09-14, `1b4e860` `318f0af`) — 전환 완료
 
-- **2단계**: worker에 Modulith 이벤트 발행 추가(§2) → `news_articles`·`stock_events`를 이벤트로. worker의
-  `@Document`(`createIndex` 기본 true)를 false로 — 인덱스 소유는 api의 매니저 하나여야 한다.
-- **3단계**: `alert_histories`(api `AlertService` + worker `AlertDispatcher` 두 writer).
-- `stock_summaries`는 `StockSummaryService`가 직접 저장한다(캐시 성격) — 전환 대상인지 판단 필요.
+- **worker에 Modulith 이벤트 발행 추가**(§2): `spring-modulith-starter-jpa` + `events-kafka`, `event_publication`
+  공유, 5분 재전송(`OutboxResubmissionConfig`), 유계 기본 @Async 실행기. worker의 `SearchIndexEvent`는 api와
+  JSON 형태·토픽·키 규칙이 같다(테스트로 고정).
+- **`news_articles`·`stock_events`**: `NewsCollector`·`StockEventWriter`·`DisclosureCollector`가 `INSERT … RETURNING id`
+  + 같은 트랜잭션에 이벤트 발행(`TransactionTemplate` — Modulith는 커밋 후에만 외부화하므로 트랜잭션 밖 발행은
+  기록조차 안 된다). 후속 `SELECT id`(§Consequences의 `NewsCollector` 추가 SELECT) 제거. 라이브: 뉴스 5 + 이벤트
+  533 → 아웃박스 768건 완료 → api 컨슈머 768건 벌크 색인 → `/api/news/search` 적중.
+- **`alert_histories`**: `AlertDispatcher`가 최종 `delivery_status` UPDATE와 같은 트랜잭션에 이벤트 발행 —
+  이전엔 EMAIL_FALLBACK 경로는 색인조차 안 됐다. api `AlertService`는 읽기만 한다(§Context 표의 "api가 쓴다"는
+  ADR-044 이후 stale).
+- **§3 문서 클래스 단일화**: worker의 `NewsDocument`·`StockEventDocument`·`AlertHistoryDocument` 삭제(이미 드리프트
+  — worker 쪽에 `sentimentScore`가 없었다). worker는 ES 의존성 자체를 제거했다. 인덱스 소유자는 api의
+  `SearchIndexManager` 하나.
+- **`stock_summaries`**는 `StockSummaryService`가 요청 시 직접 저장하는 캐시라 전환하지 않았다 — 원본이 DB에 없어
+  "DB 커밋 후 색인"이라는 아웃박스 전제가 성립하지 않는다.
 
+### 2단계에서 겪은 함정 (테스트로 고정)
+
+- **기본 `KafkaTemplate`을 ByteArraySerializer로 바꾸면 `@RetryableTopic`이 죽는다.** 재시도 토픽·DLT 전달이 기본
+  템플릿으로 String 레코드를 보낸다. worker는 템플릿을 둘로 나눴다 — 기본(String)과 Modulith용(`KafkaOperations
+  <Object,Object>`, byte[] + JSON 컨버터). api는 `@RetryableTopic` 컨슈머가 없어 전역 ByteArraySerializer로 버텼지만
+  같은 지뢰다(`application.yml` 주석).
+- **Boot 자동구성 리스너 팩토리는 컨텍스트의 `RecordMessageConverter` 빈을 주입받는다** — Modulith의
+  `ByteArrayJsonMessageConverter`가 그 빈이라, internal 모드에서 Boot 팩토리를 쓰던 틱 컨슈머가 String 레코드를
+  byte[]로 받아 `ClassCastException`으로 전부 죽었다(1분에 로그 100만 줄). `KafkaConfig`의 자체 팩토리를
+  무조건 쓰도록 `@ConditionalOnProperty`를 없앴다 — 리스너는 원래 조건 없이 살아 있었다.
+
+### 관측·운영
+
+- 메트릭 `search_index_documents_total{op}` `search_index_failed_total{index}` `search_index_lag_seconds`
+  `search_index_mapping_mismatch{index}` `dlt_messages_total{topic="search.index"}`; 알람
+  `SearchIndexMappingMismatch` `SearchIndexDltGrowing`.
+- 재색인: `POST /api/admin/search/reindex/{index}` (설계 매핑으로 재생성 + DB 전량). 7일 내 재처리는 컨슈머 그룹
+  `monticker-search-indexer` 오프셋 되감기.
