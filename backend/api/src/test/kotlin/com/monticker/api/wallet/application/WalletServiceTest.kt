@@ -32,6 +32,14 @@ class WalletServiceTest {
         every {
             jdbc.queryForObject(match<String> { it.contains("FROM orders") }, BigDecimal::class.java, userId)
         } returns value
+        every {
+            jdbc.queryForObject(match<String> { it.contains("FROM paper_settlements") }, BigDecimal::class.java, userId)
+        } returns BigDecimal.ZERO
+    }
+    private fun stubSettlementPending(userId: Long, value: BigDecimal) {
+        every {
+            jdbc.queryForObject(match<String> { it.contains("FROM paper_settlements") }, BigDecimal::class.java, userId)
+        } returns value
     }
 
     @Test
@@ -60,6 +68,21 @@ class WalletServiceTest {
         assertThat(result.reservedCash).isEqualByComparingTo(BigDecimal("250000"))
         assertThat(result.totalAssets).isEqualByComparingTo(BigDecimal("1250000"))   // 예약금은 여전히 사용자 돈이다
         assertThat(result.settlementPending).isEqualByComparingTo(BigDecimal.ZERO)
+    }
+
+    // T+2 정산 대기 = PENDING 정산의 fee+tax 합. 이미 cash에 들어 있는 돈에서 빠질 금액이라 총자산에는 더하지 않는다.
+    @Test
+    fun `getWalletMap reports pending T+2 fees and taxes without inflating total assets`() {
+        every { accountQueryService.getCashBalance(1L) } returns Money.of("1000000")
+        stubHoldingsValue(1L, BigDecimal.ZERO)
+        stubReservedCash(1L, BigDecimal.ZERO)
+        stubSettlementPending(1L, BigDecimal("1234"))
+        every { ledgerService.getRecentLedger(1L, 10) } returns emptyList()
+
+        val result = service.getWalletMap(1L)
+
+        assertThat(result.settlementPending).isEqualByComparingTo(BigDecimal("1234"))
+        assertThat(result.totalAssets).isEqualByComparingTo(BigDecimal("1000000"))
     }
 
     @Test

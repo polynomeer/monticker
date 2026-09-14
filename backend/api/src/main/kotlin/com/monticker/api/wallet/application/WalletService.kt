@@ -36,6 +36,8 @@ class WalletService(
 
         val holdingsValue = calcHoldingsValue(userId)
         val reservedCash = calcReservedCash(userId)
+        val settlementPending = calcSettlementPending(userId)
+        // 정산 대기(T+2 수수료·세금)는 이미 cash에 들어 있는 돈에서 앞으로 빠질 금액이라 총자산에 더하지 않는다
         val totalAssets = cash.amount + reservedCash + holdingsValue
         val recentLedger = ledgerService.getRecentLedger(userId, 10)
 
@@ -43,7 +45,7 @@ class WalletService(
             availableCash = cash.amount,
             reservedCash = reservedCash,
             holdingsValue = holdingsValue,
-            settlementPending = BigDecimal.ZERO,
+            settlementPending = settlementPending,
             totalAssets = totalAssets,
             recentLedger = recentLedger,
         )
@@ -56,6 +58,16 @@ class WalletService(
      */
     private fun calcReservedCash(userId: Long): BigDecimal =
         jdbc.queryForObject(RESERVED_CASH_SQL, BigDecimal::class.java, userId) ?: BigDecimal.ZERO
+
+    /**
+     * T+2 정산 대기 금액(ADR-014) — 아직 확정되지 않은 수수료·세금의 합. 이전엔 하드코딩 0이었다(backlog §9).
+     * 모의투자는 매도 대금이 체결 즉시 cash에 들어오고 T+2에 fee+tax만 빠지므로, "대기 중인 돈"은 그 차감분이다.
+     */
+    private fun calcSettlementPending(userId: Long): BigDecimal =
+        jdbc.queryForObject(
+            "SELECT COALESCE(SUM(fee + tax), 0) FROM paper_settlements WHERE user_id = ? AND status = 'PENDING'",
+            BigDecimal::class.java, userId,
+        ) ?: BigDecimal.ZERO
 
     private fun calcHoldingsValue(userId: Long): BigDecimal {
         // CQRS 읽기모델: portfolio_positions와 최신 가격을 조인해 보유 평가액을 단일 쿼리로 계산한다.
