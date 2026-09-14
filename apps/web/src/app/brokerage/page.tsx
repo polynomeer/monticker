@@ -55,7 +55,7 @@ export default function BrokerageDashboardPage() {
   useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
 
   const { data: account, isLoading: accountLoading } = useBrokerageAccount();
-  const { data: balance, isLoading: balanceLoading } = useBrokerageBalance(!!account);
+  const { data: balance, isLoading: balanceLoading, isError: balanceError, error: balanceErr } = useBrokerageBalance(!!account);
   const { data: ordersData, isLoading: ordersLoading } = useBrokerageOrders(ordersPage, !!account && tab === "orders");
   const { data: conditionalData, isLoading: conditionalLoading } = useConditionalOrders(ordersPage, !!account && tab === "orders");
   const { data: settlementsData, isLoading: settlementsLoading } = useBrokerageSettlements(settlementsPage, !!account && tab === "settlements");
@@ -151,6 +151,14 @@ export default function BrokerageDashboardPage() {
       {/* 잔고 요약 */}
       {balanceLoading ? (
         <div className="h-24 rounded-xl bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15 bg-[length:200%_100%] animate-shimmer mb-6" />
+      ) : balanceError ? (
+        // 증권사 장애(503) 중엔 "0원"이 아니라 "조회 불가"를 보여 준다 — 이전엔 서버가 0원을 돌려줘 잔고가 사라진 것처럼 보였다
+        <Card className="p-4 mb-6 border-dracula-orange/40">
+          <p className="text-xs font-semibold text-dracula-orange">잔고를 확인할 수 없습니다</p>
+          <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">
+            {balanceErr instanceof Error ? balanceErr.message : "증권사 응답이 없습니다. 잠시 후 자동으로 다시 시도합니다."}
+          </p>
+        </Card>
       ) : balance && (
         <div className="grid grid-cols-2 gap-3 mb-6">
           <Card className="p-4">
