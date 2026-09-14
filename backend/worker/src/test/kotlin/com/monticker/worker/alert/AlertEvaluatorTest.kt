@@ -6,7 +6,9 @@ import io.mockk.*
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations
+import org.springframework.context.ApplicationEventPublisher
+import org.springframework.transaction.support.TransactionCallback
+import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.RowMapper
@@ -19,13 +21,17 @@ class AlertEvaluatorTest {
 
     private val jdbc = mockk<JdbcTemplate>()
     private val pushSender = mockk<ExpoPushSender>(relaxed = true)
-    private val esOps = mockk<ElasticsearchOperations>(relaxed = true)
+    // ADR-042: 최종 상태 UPDATE + 색인 이벤트가 TransactionTemplate 안에서 실행된다 — 콜백을 그대로 통과시킨다
+    private val tx = mockk<TransactionTemplate>().apply {
+        every { execute(any<TransactionCallback<Any?>>()) } answers { firstArg<TransactionCallback<Any?>>().doInTransaction(mockk(relaxed = true)) }
+    }
+    private val events = mockk<ApplicationEventPublisher>(relaxed = true)
     private val redis = mockk<StringRedisTemplate>(relaxed = true)
     private val mailSender = mockk<JavaMailSender>(relaxed = true)
     private val meterRegistry = SimpleMeterRegistry()
     // 인덱스는 loadAll() 전이라 DB 폴백 경로 — 기존 테스트의 jdbc 스텁이 그대로 유효하다.
     // 지표 캐시는 TTL 0 — 테스트마다 다른 스텁이 들어가므로 캐시가 끼면 안 된다.
-    private val dispatcher = AlertDispatcher(jdbc, pushSender, esOps, redis, mailSender)
+    private val dispatcher = AlertDispatcher(jdbc, pushSender, events, tx, redis, mailSender)
     private val evaluator = AlertEvaluator(AlertRuleIndex(jdbc, meterRegistry), IndicatorCache(jdbc, ttlMs = 0), InlineTriggerSink(dispatcher), meterRegistry)
 
     @BeforeEach
@@ -68,15 +74,19 @@ class AlertEvaluatorTest {
         every { jdbc.queryForList(any<String>(), String::class.java, rule.userId) } returns
             listOf("ExponentPushToken[abc123]")
         every { jdbc.update(any<String>(), any(), 42L) } returns 1
-        val docSlot = slot<AlertHistoryDocument>()
-        every { esOps.save(capture(docSlot)) } returns mockk(relaxed = true)
+        val published = slot<Any>()
+        every { events.publishEvent(capture(published)) } returns Unit
 
         evaluator.processAlert(stockId = 5L, price = BigDecimal("75000"))
 
         verify(exactly = 1) { pushSender.send(match { it.size == 1 && it[0].to == "ExponentPushToken[abc123]" }) }
         verify { jdbc.update(match<String> { it.contains("delivery_status") }, "SENT", 42L) }
-        assertThat(docSlot.captured.ruleId).isEqualTo(1L)
-        assertThat(docSlot.captured.deliveryStatus).isEqualTo("SENT")
+        // ADR-042: ES 직접 저장 대신 최종 상태와 함께 색인 이벤트를 발행한다
+        val ev = published.captured as com.monticker.worker.search.SearchIndexEvent
+        assertThat(ev.index).isEqualTo("alert_histories")
+        assertThat(ev.docId).isEqualTo("42")
+        assertThat(ev.payload!!["ruleId"]).isEqualTo(1L)
+        assertThat(ev.payload!!["deliveryStatus"]).isEqualTo("SENT")
     }
 
     @Test
@@ -116,7 +126,7 @@ class AlertEvaluatorTest {
         every {
             jdbc.queryForObject(match<String> { it.contains("SELECT email") }, String::class.java, rule.userId)
         } returns "user20@example.com"
-        every { jdbc.update(match<String> { it.contains("EMAIL_FALLBACK") }, 99L) } returns 1
+        every { jdbc.update(match<String> { it.contains("delivery_status") }, "EMAIL_FALLBACK", 99L) } returns 1
 
         evaluator.processAlert(stockId = 5L, price = BigDecimal("55000"))
 
@@ -124,7 +134,9 @@ class AlertEvaluatorTest {
         verify(exactly = 1) {
             mailSender.send(match<SimpleMailMessage> { it.to?.contains("user20@example.com") == true })
         }
-        verify { jdbc.update(match<String> { it.contains("EMAIL_FALLBACK") }, 99L) }
+        verify { jdbc.update(match<String> { it.contains("delivery_status") }, "EMAIL_FALLBACK", 99L) }
+        // ADR-042: 이전엔 이메일 폴백 경로는 ES에 색인되지 않았다 — 이제 최종 상태와 함께 이벤트가 나간다
+        verify { events.publishEvent(match<Any> { it is com.monticker.worker.search.SearchIndexEvent && it.payload!!["deliveryStatus"] == "EMAIL_FALLBACK" }) }
     }
 
     @Test

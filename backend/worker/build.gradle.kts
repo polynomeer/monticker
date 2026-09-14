@@ -38,7 +38,6 @@ dependencies {
 	implementation("io.github.resilience4j:resilience4j-kotlin:2.2.0")
 	implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.2.0")
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
-	implementation("org.springframework.boot:spring-boot-starter-data-elasticsearch")
 	// ADR-042 §2 — ES 인덱싱 이벤트를 Outbox(event_publication, api와 공유)로 기록하고 Kafka search.index로 외부화한다
 	implementation("org.springframework.modulith:spring-modulith-starter-jpa")
 	implementation("org.springframework.modulith:spring-modulith-events-api")

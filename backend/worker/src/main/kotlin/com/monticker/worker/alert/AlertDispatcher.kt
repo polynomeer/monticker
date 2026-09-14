@@ -1,7 +1,9 @@
 package com.monticker.worker.alert
 
 import org.slf4j.LoggerFactory
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations
+import com.monticker.worker.search.SearchIndexEvent
+import org.springframework.transaction.support.TransactionTemplate
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.mail.SimpleMailMessage
@@ -25,7 +27,8 @@ import java.time.Instant
 class AlertDispatcher(
     private val jdbc: JdbcTemplate,
     private val pushSender: ExpoPushSender,
-    private val esOps: ElasticsearchOperations,
+    private val events: ApplicationEventPublisher,
+    private val tx: TransactionTemplate,
     private val redis: StringRedisTemplate,
     private val mailSender: JavaMailSender,
 ) {
@@ -59,7 +62,7 @@ class AlertDispatcher(
         )
         if (tokens.isEmpty()) {
             sendEmailFallback(rule.userId, message)
-            jdbc.update("UPDATE alert_histories SET delivery_status = 'EMAIL_FALLBACK' WHERE id = ?", historyId)
+            finish(historyId, rule, message, "EMAIL_FALLBACK")
             return
         }
 
@@ -73,28 +76,30 @@ class AlertDispatcher(
         })
 
         val status = if (results.all { it.status == "ok" }) "SENT" else "FAILED"
-        jdbc.update("UPDATE alert_histories SET delivery_status = ? WHERE id = ?", status, historyId)
+        finish(historyId, rule, message, status)
         log.info("[AlertDispatcher] push sent: userId={} status={}", rule.userId, status)
-
-        indexToEs(historyId, rule, message, status, Instant.now())
     }
 
-    private fun indexToEs(id: Long, rule: AlertRuleRow, message: String, status: String, triggeredAt: Instant) {
-        try {
-            esOps.save(AlertHistoryDocument(
-                id             = id.toString(),
-                ruleId         = rule.id,
-                userId         = rule.userId,
-                stockId        = rule.stockId.takeIf { it != 0L },
-                ruleType       = rule.ruleType,
-                message        = message,
-                deliveryStatus = status,
-                triggeredAt    = triggeredAt,
-            ))
-        } catch (e: Exception) {
-            log.warn("[AlertDispatcher] ES indexing failed for historyId={}: {}", id, e.message)
+    /**
+     * ADR-042: 최종 상태 UPDATE와 색인 이벤트를 한 트랜잭션에. 이전엔 ES를 직접 쓰고 실패를 WARN으로 삼켰고,
+     * EMAIL_FALLBACK 경로는 아예 색인하지 않았다. 문서 형태는 api `AlertHistoryDocument`(triggeredAt: epoch_millis).
+     */
+    private fun finish(historyId: Long, rule: AlertRuleRow, message: String, status: String) {
+        tx.execute {
+            jdbc.update("UPDATE alert_histories SET delivery_status = ? WHERE id = ?", status, historyId)
+            events.publishEvent(SearchIndexEvent.index(SEARCH_INDEX, historyId.toString(), mapOf(
+                "ruleId"         to rule.id,
+                "userId"         to rule.userId,
+                "stockId"        to rule.stockId.takeIf { it != 0L },
+                "ruleType"       to rule.ruleType,
+                "message"        to message,
+                "deliveryStatus" to status,
+                "triggeredAt"    to Instant.now().toEpochMilli(),
+            )))
         }
     }
+
+    companion object { const val SEARCH_INDEX = "alert_histories" }
 
     private fun sendEmailFallback(userId: Long, message: String) {
         try {
