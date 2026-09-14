@@ -21,7 +21,7 @@ for arg in "$@"; do
       echo "  (없음)       기본 모드 — API + Worker (MockPriceGenerator) + Web"
       echo "  --kafka      Kafka 모드 — Kafka + market-gateway 추가"
       echo "               Worker가 실제 시세 파이프라인(Go→Kafka→Worker)으로 동작"
-      echo "  --msa        MSA 모드  — --kafka + quant-engine 컨테이너 추가"
+      echo "  --msa        MSA 모드  — --kafka + 역할 분리 워커 (quant-engine·trading-service는 ADR-048/049로 폐기)"
       echo "               API가 로컬 서비스 대신 MSA 서비스로 위임"
       echo "  --pinpoint   Pinpoint APM 포함 기동 (HBase 초기화 2~3분 소요)"
       exit 0 ;;
@@ -127,12 +127,9 @@ if [ "$WITH_KAFKA" = true ]; then
   resolve_port 29092; KAFKA_EXTERNAL_PORT=$RESOLVED_PORT
   resolve_port 9090;  BROADCAST_GW_PORT=$RESOLVED_PORT
 fi
-if [ "$WITH_MSA" = true ]; then
-  resolve_port 8082; QUANT_ENGINE_PORT=$RESOLVED_PORT
-fi
 export POSTGRES_PORT REDIS_PORT MONGODB_PORT ELASTICSEARCH_PORT JAEGER_UI_PORT OTLP_PORT \
        MAILHOG_SMTP_PORT MAILHOG_WEB_PORT \
-       KAFKA_PORT KAFKA_EXTERNAL_PORT BROADCAST_GW_PORT QUANT_ENGINE_PORT
+       KAFKA_PORT KAFKA_EXTERNAL_PORT BROADCAST_GW_PORT
 
 # ── 프로세스 대기 (타임아웃 + 실시간 로그) ─────────────────────
 # wait_for <이름> <로그파일> <성공조건함수> <PID> <타임아웃초>
@@ -186,7 +183,7 @@ mkdir -p "$ROOT/logs"
 echo ""
 
 if [ "$WITH_MSA" = true ]; then
-  echo "1/4  Starting infra (MSA 모드: postgres + redis + jaeger + mailhog + kafka + quant-engine)..."
+  echo "1/4  Starting infra (MSA 모드: postgres + redis + jaeger + mailhog + kafka)..."
   echo -e "  ${CYAN}Building MSA service images (변경 없으면 캐시 사용)...${NC}"
   docker compose --profile msa build --quiet 2>&1 || {
     echo -e "${YELLOW}[WARN] 일부 이미지 빌드 실패. 계속 진행합니다.${NC}"
@@ -240,18 +237,13 @@ if [ "$WITH_PINPOINT" = true ]; then
   wait_for "Pinpoint" "/dev/null" pinpoint_ready "" 180
 fi
 
-if [ "$WITH_MSA" = true ]; then
-  # MSA 서비스는 Kafka healthy 이후 Spring Boot 기동까지 포함해 최대 3분
-  quant_ready()   { /usr/bin/curl -sf "http://localhost:${QUANT_ENGINE_PORT}/actuator/health" > /dev/null 2>&1; }
-  wait_for "quant-engine"    "/dev/null" quant_ready   "" 180
-fi
 
 # ── 2. api ───────────────────────────────────────────────────
 echo ""
 echo "2/4  Starting API (port ${API_PORT})..."
 cd "$ROOT/backend/api"
 
-# MSA 모드: QUANT_ENGINE_URL 활성화 (trading-service는 ADR-048로 폐기)
+# MSA 모드: 역할 분리 워커만 (quant-engine·trading-service는 ADR-048/049로 폐기)
 # Kafka 모드: KAFKA_BROKERS 설정 (Outbox 발행 정상화)
 API_ENV="OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:${OTLP_PORT} PINPOINT_ENABLE=${WITH_PINPOINT}"
 API_ENV="$API_ENV DB_URL=jdbc:postgresql://localhost:${POSTGRES_PORT}/monticker REDIS_HOST=localhost REDIS_PORT=${REDIS_PORT}"
@@ -262,9 +254,7 @@ API_ENV="$API_ENV ALLOWED_ORIGINS=http://localhost:${WEB_PORT} APP_BASE_URL=http
 # 호스트에 노출된 포트로 접속한다. smtp.auth=true가 고정값이라 자격증명 문자열
 # 자체는 있어야 하지만 MailHog는 인증을 실제로 검사하지 않는다 — 아무 값이나 무방.
 API_ENV="$API_ENV MAIL_HOST=localhost MAIL_PORT=${MAILHOG_SMTP_PORT} MAIL_USERNAME=test MAIL_PASSWORD=test"
-if [ "$WITH_MSA" = true ]; then
-  API_ENV="$API_ENV QUANT_ENGINE_URL=http://localhost:${QUANT_ENGINE_PORT}"
-fi
+# MSA 모드(--msa)는 역할 분리 워커만 — api 환경변수 추가 없음 (quant-engine·trading-service는 ADR-048/049로 폐기)
 if [ "$WITH_KAFKA" = true ]; then
   API_ENV="$API_ENV KAFKA_BROKERS=localhost:${KAFKA_PORT}"
 fi
@@ -329,9 +319,6 @@ echo "  MailHog → http://localhost:${MAILHOG_WEB_PORT}  (이메일 인증 / �
 if [ "$WITH_KAFKA" = true ]; then
 echo "  Kafka  → localhost:${KAFKA_PORT}"
 echo "  Broadcast-GW → ws://localhost:${BROADCAST_GW_PORT}/ws"
-fi
-if [ "$WITH_MSA" = true ]; then
-echo "  quant-engine    → http://localhost:${QUANT_ENGINE_PORT}"
 fi
 if [ "$WITH_PINPOINT" = true ]; then
 echo "  Pinpoint → http://localhost:18080"

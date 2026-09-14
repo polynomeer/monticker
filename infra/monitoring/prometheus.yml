@@ -33,16 +33,6 @@ scrape_configs:
 
   # ── MSA services (profile=msa) ──────────────────────────────
 
-  # quant-engine
-  - job_name: monticker-quant-engine
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets: ['quant-engine:8082']
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: monticker-quant-engine
-
   # worker-market (WORKER_ROLE=market)
   - job_name: monticker-worker-market
     metrics_path: /actuator/prometheus

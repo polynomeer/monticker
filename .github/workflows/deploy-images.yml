@@ -32,9 +32,6 @@ jobs:
           - service: worker
             context: backend/worker
             dockerfile: backend/worker/Dockerfile
-          - service: quant-engine
-            context: backend/quant-engine
-            dockerfile: backend/quant-engine/Dockerfile
           - service: market-gateway
             context: services/market-gateway
             dockerfile: services/market-gateway/Dockerfile

@@ -245,7 +245,7 @@ groups:
         labels: { severity: warning }
         annotations:
           summary: "백테스트 큐 포화"
-          description: "bulkhead 큐(20)가 5분 이상 가득 찼습니다. 신규 요청은 429로 거절 중. quant-engine 확장 검토."
+          description: "bulkhead 큐(20)가 5분 이상 가득 찼습니다. 신규 요청은 429로 거절 중. 백테스트 워커 풀(backtestExecutor) 상향 또는 분석 경로 모듈 추출(ADR-049 Revisit) 검토."
 
       - alert: WsConnectionsSkewed
         # 한 pod에 연결이 몰리면 그 pod의 fan-out 비용이 편중된다 (ADR-038).
