@@ -46,7 +46,10 @@ class AlertRule(
 }
 
 enum class AlertRuleType {
-    PRICE_ABOVE, PRICE_BELOW, VOLUME_SURGE, NEWS_PUBLISHED, DISCLOSURE_PUBLISHED,
+    PRICE_ABOVE, PRICE_BELOW, VOLUME_SURGE,
+    // NEWS_PUBLISHED / DISCLOSURE_PUBLISHED: 평가기가 구현된 적이 없다 — API가 생성을 거부한다(AlertController).
+    // 기존 저장 행의 역직렬화를 위해 enum 값은 남긴다.
+    NEWS_PUBLISHED, DISCLOSURE_PUBLISHED,
     // RSI/이동평균은 candles_1d의 완결된 일봉 종가 기준으로 계산한다 — 장중에는 틱마다
     // 같은 값을 재사용하며, 일봉이 갱신되는 다음날부터 새 값을 반영한다(Quant Lab
     // 백테스팅과 동일한 일봉 기준 지표라 사용자 기대와 어긋나지 않음).

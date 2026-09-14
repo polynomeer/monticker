@@ -43,16 +43,17 @@ class AlertController(private val alertService: AlertService) {
     // 엄밀히 검증하진 않음 — 그건 워커 쪽에서 이미 각 지표 계산 가드로 처리된다.
     private fun isConditionValid(type: AlertRuleType, stockId: Long?, condition: Map<String, Any>): Boolean {
         fun num(key: String) = condition[key] as? Number
+        // 워커(AlertRuleIndex)는 stock_id 기준으로 룰을 색인한다 — stock_id 없는 룰은 어떤 틱에도 매칭되지 않아
+        // 평생 안 울린다(backlog §9). 종목 없는 룰을 받지 않는다. V45가 컬럼도 NOT NULL로 만들었다.
+        if (stockId == null) return false
         return when (type) {
-            AlertRuleType.PRICE_ABOVE, AlertRuleType.PRICE_BELOW ->
-                stockId != null && num("threshold") != null
-            AlertRuleType.RSI_BELOW, AlertRuleType.RSI_ABOVE ->
-                stockId != null && num("threshold") != null
-            AlertRuleType.PRICE_BELOW_MA, AlertRuleType.PRICE_ABOVE_MA ->
-                stockId != null
-            AlertRuleType.HOLDING_DROP ->
-                stockId != null && num("dropPct") != null
-            else -> true
+            AlertRuleType.PRICE_ABOVE, AlertRuleType.PRICE_BELOW -> num("threshold") != null
+            AlertRuleType.RSI_BELOW, AlertRuleType.RSI_ABOVE -> num("threshold") != null
+            AlertRuleType.PRICE_BELOW_MA, AlertRuleType.PRICE_ABOVE_MA -> true
+            AlertRuleType.HOLDING_DROP -> num("dropPct") != null
+            AlertRuleType.VOLUME_SURGE -> true
+            // 평가기가 없는 타입 — 저장은 되지만 어떤 워커도 보지 않는다. "저장됐는데 평생 안 울리는 룰"의 정확한 정의.
+            AlertRuleType.NEWS_PUBLISHED, AlertRuleType.DISCLOSURE_PUBLISHED -> false
         }
     }
 

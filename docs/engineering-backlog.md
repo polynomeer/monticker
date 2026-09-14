@@ -102,12 +102,10 @@
   (2026-09-14): api 4(`DetectedPattern`·`TaxHarvestingLog`는 실제 save() 경로 — 패턴 인식·절세 시뮬이 한 번도
   저장된 적 없었다, `SubscriptionPlan`, `StockEvent`는 `"JSONB"` 대문자라 grep이 놓쳤다), quant-engine 10.
   `JsonbColumnMappingTest`가 세 모듈의 모든 @Entity를 스캔해 재발을 막는다 — 이 테스트가 `StockEvent`를 잡았다.
-- [ ] **`alert_rules.stock_id`가 NULL인 룰은 절대 평가되지 않는다** —
-  컬럼은 nullable인데 `AlertEvaluator.fetchRulesForStock`은 `WHERE stock_id = ?`로만 읽는다.
-  NULL이 "전 종목 대상"을 의도한 건지, 그냥 쓰이지 않는 제약인지 확인이 필요하다.
-  전자라면 종목별 인덱스와 별개로 글로벌 룰 리스트가 필요하다
-  ([ADR-044](decisions/044-alert-rule-in-memory-index.md) Revisit 조건).
-  발견: ADR-044 작성 중.
+- [x] ~~**`alert_rules.stock_id`가 NULL인 룰은 절대 평가되지 않는다**~~ — 2026-09-14: 조사 결과 "전 종목 대상"을 의도한
+  곳은 없다(웹은 항상 stockId를 보내고 워커 인덱스는 stock_id 기준). API가 stockId 없는 룰과 **평가기가 없는 타입**
+  (`NEWS_PUBLISHED`·`DISCLOSURE_PUBLISHED` — 저장은 됐지만 어떤 워커도 보지 않았다)을 400으로 거부하고, V45가
+  NULL 룰을 비활성화한 뒤 컬럼을 NOT NULL로 만들었다.
 - [x] ~~**`DailyLossRule`이 매수를 손실로 계산한다**~~ — 모의투자 경로는 수정(2026-09-14): 두 체결 경로 합집합에서
   이동평균 평단가로 오늘 실현 손익을 계산, 보유 종목도 합집합, "오늘"은 KST. `RiskRuleQueryServiceIntegrationTest`.
 - [ ] **실거래 리스크 게이트의 `dailyPnl`도 현금 흐름이다** — `BrokerageService.buildPortfolioSnapshot`이

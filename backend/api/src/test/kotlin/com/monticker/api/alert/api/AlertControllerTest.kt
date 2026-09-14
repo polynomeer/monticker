@@ -6,6 +6,7 @@ import com.monticker.api.alert.domain.AlertRule
 import com.monticker.api.alert.domain.AlertRuleType
 import io.mockk.every
 import io.mockk.justRun
+import io.mockk.verify
 import io.mockk.mockk
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -78,6 +79,27 @@ class AlertControllerTest {
                 .content(objectMapper.writeValueAsString(body))
         )
             .andExpect(status().isBadRequest)
+    }
+
+    // backlog §9 — stock_id 없는 룰은 워커가 색인하지 않아 평생 안 울린다. 저장을 거부해야 한다.
+    @Test
+    fun `POST rules returns 400 when stockId is missing`() {
+        val body = mapOf("ruleType" to "VOLUME_SURGE", "condition" to emptyMap<String, Any>())
+
+        mockMvc.perform(post("/api/alerts/rules").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(body)))
+            .andExpect(status().isBadRequest)
+        verify(exactly = 0) { alertService.createRule(any(), any(), any(), any()) }
+    }
+
+    // 평가기가 구현된 적 없는 타입 — "저장은 되는데 평생 안 울리는 룰"을 만들지 않는다
+    @Test
+    fun `POST rules returns 400 for rule types that nothing evaluates`() {
+        for (type in listOf("NEWS_PUBLISHED", "DISCLOSURE_PUBLISHED")) {
+            val body = mapOf("stockId" to 1, "ruleType" to type, "condition" to emptyMap<String, Any>())
+            mockMvc.perform(post("/api/alerts/rules").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isBadRequest)
+        }
+        verify(exactly = 0) { alertService.createRule(any(), any(), any(), any()) }
     }
 
     @Test
