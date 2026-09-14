@@ -26,17 +26,25 @@ data class RiskCheckResult(val approved: Boolean, val blockedBy: String?, val se
 ### 2.1 일일 손실 한도 (DailyLossRule)
 
 ```kotlin
-val dailyPnl = jdbc.queryForObject(
-    """SELECT COALESCE(SUM(CASE WHEN side='SELL' THEN amount ELSE -amount END), 0)
-       FROM fills WHERE user_id = ? AND filled_at >= current_date""",
-    BigDecimal::class.java, userId,
-) ?: BigDecimal.ZERO
+// 두 체결 경로(fills = 매칭 엔진, paper_trades = 구 페이퍼)의 합집합 t 에서
+// 평단가 = 누적 매수금액 / 누적 매수수량 (이동평균법 — 매도해도 변하지 않는다)
+// 오늘 실현 손익 = Σ 오늘 매도 (매도금액 − 수량 × 평단가)
+val dailyPnl = jdbc.query(REALIZED_PNL_TODAY_SQL, …, userId, userId, todayStartKst)
 
 val lossLimitAmt = accountCash.multiply(limits.dailyLossLimitPct).divide(BigDecimal("100"))
 val passed = dailyPnl >= lossLimitAmt.negate()
 ```
 
-오늘 발생한 모든 체결(`fills`)을 매도는 +, 매수는 -로 합산해 실현 손익을 구한다. 보유 현금 대비 설정된 비율(기본 3%)을 초과하는 손실이면 차단한다.
+오늘 **실현한** 손익만 본다 — 보유 중인 종목의 평가손실은 포함하지 않는다. 현금 대비 설정 비율(기본 3%)을
+초과하는 실현 손실이면 차단한다.
+
+> **정정 (2026-09-14)**: 이전 구현은 `SUM(SELL amount − BUY amount)` — 손익이 아니라 **현금 흐름**이었다.
+> 매수가 그대로 "손실"로 잡혀 1,000만 계좌에서 하루 30만 원만 사면 그날의 모든 매수가 차단됐다.
+> CH-05 카오스 실험 중 5번째 주문이 422로 거절되며 발견([resilience-plan §6.3](../resilience-plan.md)).
+> 같은 함수의 보유 종목 조회도 `paper_trades`만 읽어 매칭 엔진 체결이 집중도·종목 수 판정에서 빠졌다 —
+> 이제 두 경로의 합집합이다. "오늘"의 기준도 DB 세션 타임존(`current_date`, UTC)에서 KST로 바꿨다.
+> 실거래 경로(`BrokerageService.buildPortfolioSnapshot`)에는 **같은 현금 흐름 공식이 남아 있다** —
+> [engineering-backlog §9](../engineering-backlog.md).
 
 ### 2.2 종목 집중도 (ConcentrationRule) — 매수 시에만 적용
 

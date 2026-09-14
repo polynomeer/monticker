@@ -116,13 +116,13 @@
   전자라면 종목별 인덱스와 별개로 글로벌 룰 리스트가 필요하다
   ([ADR-044](decisions/044-alert-rule-in-memory-index.md) Revisit 조건).
   발견: ADR-044 작성 중.
-- [ ] **`DailyLossRule`이 매수를 손실로 계산한다 — 하루 3% 이상 매수가 막힌다** —
-  `RiskRuleQueryService.paperSnapshot`의 `dailyPnl`은 오늘 `fills`의 `SUM(SELL amount − BUY amount)`,
-  즉 현금 흐름이지 손익이 아니다. 1,000만 계좌에서 매수 30만 원을 넘기면 모든 매수가 422
-  "리스크 한도 초과: DailyLossRule"이다. 같은 함수의 보유 종목은 `paper_trades`(구 페이퍼 경로)만 읽어
-  매칭 엔진 체결이 집중도 계산에 안 잡힌다. 일간 손익은 (현재 평가액 + 현금) − (당일 시작 평가액 + 현금),
-  또는 실현손익(매도가 − 평균단가)으로 다시 정의해야 한다. 발견: CH-05 실험 중 5번째 주문 422
-  ([resilience-plan §6.3](resilience-plan.md)).
+- [x] ~~**`DailyLossRule`이 매수를 손실로 계산한다**~~ — 모의투자 경로는 수정(2026-09-14): 두 체결 경로 합집합에서
+  이동평균 평단가로 오늘 실현 손익을 계산, 보유 종목도 합집합, "오늘"은 KST. `RiskRuleQueryServiceIntegrationTest`.
+- [ ] **실거래 리스크 게이트의 `dailyPnl`도 현금 흐름이다** — `BrokerageService.buildPortfolioSnapshot`이
+  `brokerage_orders`에서 `SUM(SELL − BUY) × avg_fill_price`를 "일간 손익"으로 넘긴다. 모의투자와 같은 결함이고
+  **실제 돈이 걸린 경로**다 — 하루 3% 이상 매수하면 모든 실거래 매수가 차단된다. 평단가는 증권사 잔고 API의
+  `avgPrice`(보유 종목 응답에 있다)를 써서 오늘 체결된 매도의 실현 손익으로 재정의해야 한다.
+  발견: CH-05 후속. 파일이 다른 세션의 미커밋 변경에 잠겨 있어 이번에 손대지 않았다.
 - [ ] **브로커 잔고 조회의 서킷브레이커 폴백이 "0원"** — `KisBrokerageClient.getBalance`의
   CB-open 경로가 `BrokerageBalance(ZERO, ZERO, [])`를 돌려준다. 증권사 장애 중 사용자에게 잔고가
   0원으로 보인다 — 우아한 실패가 아니라 오해를 부르는 실패. "조회 불가" 상태(nullable 또는
