@@ -93,10 +93,8 @@
 [scale-out-plan.md](scale-out-plan.md)의 Phase 0 ADR(038~045)을 쓰면서 확인했지만,
 해당 ADR의 범위가 아니라 따로 남긴 항목들.
 
-- [ ] **지갑 화면의 `settlementPending`이 하드코딩 0** — ~~`reservedCash`도~~ 예약금은 ADR-043 구현에서
-  미체결 BUY 주문의 `limit_price × 잔량`으로 채웠다(`ef5fd12`). 정산대기는 T+2 정산 스케줄러
-  ([ADR-014](decisions/014-t2-paper-settlement-scheduler.md))가 관리하는 미정산 건에서 계산해야 한다.
-  발견: [ADR-043](decisions/043-ledger-pagination-and-reconciliation.md) 작성 중.
+- [x] ~~**지갑 화면의 `settlementPending`이 하드코딩 0**~~ — 2026-09-14: PENDING T+2 정산의 `fee + tax` 합
+  (이미 cash에 들어 있는 돈에서 빠질 금액이라 총자산에는 더하지 않는다). 예약금은 ADR-043에서 채웠다.
 - [x] ~~**계좌 초기화가 미체결 주문의 예약금을 방치한다 — 돈이 생긴다**~~ — 수정(2026-09-14): 미체결 BUY 주문이
   있으면 초기화를 409로 거부한다(먼저 취소). 초기화 뒤 리스너로 취소하는 방식은 순서가 같아(초기화 → 환불) 답이
   아니었다. 부수: 웹의 초기화 버튼이 204 응답에 `json()`을 호출해 **성공을 실패로 처리**하고 있었다 — 함께 수정.
@@ -125,11 +123,9 @@
 - [x] ~~**quant-engine도 같은 상태다 — `QuantEngineClient`는 어디서도 호출되지 않는다**~~ — [ADR-049](decisions/049-retire-quant-engine.md)
   (2026-09-14): L-06(`bench/scenarios/backtest-bulkhead.js`)로 bulkhead 격리가 충분함을 실측하고 폐기했다.
   "MSA 모드"는 이제 역할 분리 워커만을 뜻한다.
-- [ ] **브로커 잔고 조회의 서킷브레이커 폴백이 "0원"** — `KisBrokerageClient.getBalance`의
-  CB-open 경로가 `BrokerageBalance(ZERO, ZERO, [])`를 돌려준다. 증권사 장애 중 사용자에게 잔고가
-  0원으로 보인다 — 우아한 실패가 아니라 오해를 부르는 실패. "조회 불가" 상태(nullable 또는
-  `available=false`)로 바꾸고 프론트가 그걸 표시해야 한다. 발견: CH-06 실험
-  ([resilience-plan §6.3](resilience-plan.md)).
+- [x] ~~**브로커 잔고 조회의 서킷브레이커 폴백이 "0원"**~~ — 2026-09-14 (`ce14fe9` `6991885`): KIS·Toss 클라이언트가
+  CB-open·전송 실패에 `ExternalServiceUnavailableException`(503)을 던진다 — 주문 경로와 같은 규칙. 리스크 스냅샷과
+  리밸런싱 미리보기가 빈 포트폴리오를 사실로 믿던 문제도 함께 사라진다. 웹은 "잔고를 확인할 수 없습니다" 카드.
 - [x] ~~**ES 인덱스가 동적 매핑으로 생성됨 — 검색 설계 미적용**~~ — ADR-042 1단계(2026-09-14, `ede7bf6`):
   `SearchIndexManager`가 기동 시 생성·대조, 관리자 재색인, nori 이미지. 원인은 둘 — 아무도 `indexOps.create()`를
   안 불렀고, 공식 이미지에 nori가 없었다. 남은 것: worker 인덱스의 이벤트 전환(ADR-042 2·3단계).
