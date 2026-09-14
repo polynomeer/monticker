@@ -76,6 +76,15 @@ class PaperTradingService(
     }
 
     fun reset(userId: Long) {
+        // ADR-043 라이브 검증에서 발견: 미체결 BUY 주문의 예약금은 cash에서 이미 빠져 있다. 그 상태로 잔고를
+        // 1,000만으로 되돌리면 나중에 취소될 때 환불이 1,000만 위에 얹혀 돈이 생긴다. 초기화 뒤 리스너로 취소해도
+        // 순서가 같으므로(초기화 → 환불) 답이 아니다 — 먼저 취소하게 한다.
+        val openOrders = jdbc.queryForObject(
+            "SELECT count(*) FROM orders WHERE user_id = ? AND status IN ('PENDING', 'PARTIALLY_FILLED')",
+            Long::class.java, userId,
+        ) ?: 0L
+        check(openOrders == 0L) { "미체결 주문 ${openOrders}건이 있어 초기화 불가 — 먼저 취소하세요" }
+
         val account = getOrCreateAccount(userId)
         val previousCash = account.cash.amount
         account.reset()

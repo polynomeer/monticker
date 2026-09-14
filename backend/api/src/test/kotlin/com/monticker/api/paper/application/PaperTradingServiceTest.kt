@@ -52,6 +52,7 @@ class PaperTradingServiceTest {
         val account = PaperAccount(userId = 7L, cash = com.monticker.api.common.domain.Money.of("4000000"))
         every { accountRepo.findByUserId(7L) } returns Optional.of(account)
         every { accountRepo.save(any()) } answers { firstArg() }
+        every { jdbc.queryForObject(match<String> { it.contains("FROM orders") }, Long::class.java, 7L) } returns 0L
         every { jdbc.update(any<String>(), 7L) } returns 0
         val published = mutableListOf<Any>()
         every { eventPublisher.publishEvent(capture(published)) } returns Unit
@@ -61,5 +62,18 @@ class PaperTradingServiceTest {
         val event = published.filterIsInstance<PaperAccountResetEvent>().single()
         org.assertj.core.api.Assertions.assertThat(event.previousCash).isEqualByComparingTo("4000000")
         org.assertj.core.api.Assertions.assertThat(event.newCash).isEqualByComparingTo("10000000")
+    }
+
+    // 예약금이 cash에서 빠진 채 초기화하면 나중의 취소 환불이 1,000만 위에 얹힌다 — 돈이 생긴다.
+    @Test
+    fun `reset refuses while the user has open orders, touching neither the account nor the trades`() {
+        every { jdbc.queryForObject(match<String> { it.contains("FROM orders") }, Long::class.java, 7L) } returns 2L
+
+        assertThatThrownBy { service.reset(7L) }
+            .isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("미체결 주문 2건")
+
+        io.mockk.verify(exactly = 0) { accountRepo.save(any()) }
+        io.mockk.verify(exactly = 0) { jdbc.update(any<String>(), 7L) }
     }
 }
