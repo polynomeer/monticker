@@ -48,7 +48,7 @@ jobs:
       # 버전은 package.json의 packageManager(pnpm@9.15.9)에서 읽는다 — 여기에 version을 같이
       # 적으면 action-setup@v4가 "Multiple versions of pnpm specified"로 실패한다.
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Set up Node
         uses: actions/setup-node@v4
