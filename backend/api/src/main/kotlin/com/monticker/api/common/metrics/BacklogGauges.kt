@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * 둘 다 "자동 복구 장치가 있다"(Outbox 5분 재전송, Saga 5분 recoverIncomplete)는 점이 같고,
  * 그 장치가 실패하고 있어도 아무 신호가 없다는 점도 같다. 30초마다 테이블을 세어 게이지로 올린다.
- * DB는 api·trading-service가 공유하므로 어느 서비스가 썼든 여기서 전부 보인다.
+ * DB는 api·worker가 공유하므로 어느 서비스가 썼든 여기서 전부 보인다.
  * 알람: OutboxBacklog, SagaIncomplete.
  */
 @Component

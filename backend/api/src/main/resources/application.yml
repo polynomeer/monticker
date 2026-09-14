@@ -247,7 +247,3 @@ quant:
   engine:
     url: ${QUANT_ENGINE_URL:}
 
-# ── Trading Service (MSA 분리 시 사용) ──────────────────────────────────────
-trading:
-  service:
-    url: ${TRADING_SERVICE_URL:}

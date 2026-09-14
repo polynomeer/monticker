@@ -27,20 +27,6 @@ class CircuitBreakerConfiguration {
     fun circuitBreakerRegistry(): CircuitBreakerRegistry {
         val registry = CircuitBreakerRegistry.ofDefaults()
 
-        // MSA 내부 프록시 — trading-service
-        // 다운 시 api 쓰레드 풀 고갈을 막는 것이 목적. 빠르게 OPEN 후 단일 프로세스(로컬) 폴백.
-        registry.circuitBreaker("tradingService",
-            CircuitBreakerConfig.custom()
-                .failureRateThreshold(50f)
-                .slowCallRateThreshold(50f)
-                .slowCallDurationThreshold(Duration.ofSeconds(5))
-                .slidingWindowSize(6)
-                .waitDurationInOpenState(Duration.ofSeconds(20))
-                .permittedNumberOfCallsInHalfOpenState(2)
-                .recordExceptions(Exception::class.java)
-                .build()
-        )
-
         // MSA 내부 프록시 — quant-engine
         // backtest는 30초 타임아웃을 허용하므로 창을 더 보수적으로 설정.
         registry.circuitBreaker("quantEngine",
@@ -96,7 +82,7 @@ class CircuitBreakerConfiguration {
         )
 
         // 상태 전이 이벤트 로깅
-        listOf("tradingService", "quantEngine", "yahooFinance", "kis", "toss").forEach { name ->
+        listOf("quantEngine", "yahooFinance", "kis", "toss").forEach { name ->
             registry.circuitBreaker(name).eventPublisher
                 .onStateTransition { e ->
                     log.warn("[CircuitBreaker:{}] {} → {}",

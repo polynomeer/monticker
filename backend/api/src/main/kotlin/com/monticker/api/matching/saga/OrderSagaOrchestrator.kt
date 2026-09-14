@@ -176,6 +176,9 @@ class OrderSagaOrchestrator(
                 amount    = fillAmount.amount,
             ))
         } else {
+            // ADR-048: 호가창은 pod 힙에 있고 api는 HPA로 여러 pod다. submit()의 매칭 결과를 버리므로 호가창은 미체결
+            // LIMIT을 보관만 하고 체결시키지 않는다 — 그래서 pod마다 갈라져 있어도 오늘은 정합성 문제가 없다.
+            // 호가창 체결을 실제로 구현하려면 scale-out-plan §6.8(종목 샤드별 단일 라이터)이 선행돼야 한다.
             orderBookService.submit(order)
             saga.currentStep = SagaStep.CASH_SETTLED  // 미체결은 정산 없음; 단계 진행
         }

@@ -26,8 +26,8 @@ class CircuitBreakerTest {
     }
 
     @Test
-    fun `tradingService CB — 실패율 초과 시 OPEN으로 전환된다`() {
-        val cb = registry("tradingService").circuitBreaker("tradingService")
+    fun `quantEngine CB — 실패율 초과 시 OPEN으로 전환된다`() {
+        val cb = registry("quantEngine").circuitBreaker("quantEngine")
 
         // 4회 중 3회 실패 → 75% > 50% threshold → OPEN
         repeat(3) { cb.onError(0, java.util.concurrent.TimeUnit.MILLISECONDS, RuntimeException("down")) }
@@ -64,7 +64,7 @@ class CircuitBreakerTest {
 
     @Test
     fun `CB OPEN 상태에서 executeCallable은 CallNotPermittedException을 던진다`() {
-        val cb = registry("tradingService").circuitBreaker("tradingService")
+        val cb = registry("quantEngine").circuitBreaker("quantEngine")
 
         repeat(3) { cb.onError(0, java.util.concurrent.TimeUnit.MILLISECONDS, RuntimeException("down")) }
         cb.onSuccess(0, java.util.concurrent.TimeUnit.MILLISECONDS)
@@ -83,7 +83,7 @@ class CircuitBreakerTest {
         val registry = config.circuitBreakerRegistry()
 
         assertThat(registry.allCircuitBreakers.map { it.name })
-            .containsAll(listOf("tradingService", "quantEngine", "yahooFinance"))
+            .containsAll(listOf("quantEngine", "yahooFinance"))   // ADR-048: tradingService 제거
     }
 
     // resilience-plan §B1 / P0-2 — 느린 호출에 반응하지 않는 브레이커는 스레드 고갈을 막지 못한다.
