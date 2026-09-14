@@ -122,8 +122,12 @@
   매칭 엔진의 공매도 허용도 함께 막았다.
 - [x] ~~**trading-service 복사본에 ADR-047이 없다**~~ — [ADR-048](decisions/048-retire-trading-service.md)(2026-09-14): 조사 결과
   api는 한 번도 위임하지 않았고(`TradingServiceClient` 미사용) 서비스는 4개월간 트래픽 0. 폐기했다.
-- [ ] **`QUANT_ENGINE_URL` 위임은 실제로 연결돼 있는가** — trading-service와 같은 의심. `QuantEngineClient`가 컨트롤러에서
-  실제로 호출되는지, 운영 ConfigMap의 `http://quant-engine:8082`가 실효가 있는지 확인할 것. 발견: ADR-048 조사 중.
+- [ ] **quant-engine도 같은 상태다 — `QuantEngineClient`는 어디서도 호출되지 않는다** — ADR-048 조사 직후 확인.
+  api의 `QuantEngineClient`는 만들어졌을 뿐 컨트롤러가 부르지 않고, nginx는 `/api/**` 전부를 api로 보낸다.
+  quant-engine이 하는 일은 `trading.order-filled`를 소비해 **로그만 남기는** `OrderFilledKafkaConsumer` 하나
+  ("향후 live tracking 추가 지점"). 즉 K8s의 quant-engine Deployment도 HTTP 트래픽 0, 실질 작업 0이다.
+  trading-service와 같은 결론(폐기)이 유력하지만, 백테스트·분석의 CPU 격리가 "실측된 병목"인지(ADR-033 원칙)
+  부하 기준선(L-01 REST에 백테스트 시나리오가 없다)을 재고 ADR로 결정할 것. 이번엔 조사만 했다.
 - [ ] **브로커 잔고 조회의 서킷브레이커 폴백이 "0원"** — `KisBrokerageClient.getBalance`의
   CB-open 경로가 `BrokerageBalance(ZERO, ZERO, [])`를 돌려준다. 증권사 장애 중 사용자에게 잔고가
   0원으로 보인다 — 우아한 실패가 아니라 오해를 부르는 실패. "조회 불가" 상태(nullable 또는
