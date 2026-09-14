@@ -939,7 +939,7 @@ order.commands (파티션 64, key=stockId)
 | 1.4 | 캔들 파이프라인 Redis화 + 배치 INSERT (ADR-021 대체) | 6.2.3 |
 | 1.5 | 스크리너 ZSET 사전 계산 | 6.4.3 |
 | 1.6 | Kafka 스키마 레지스트리 | 6.5.3 |
-| 1.7 | ES 3노드 + ILM 롤오버 + **Outbox 인덱싱 전환**([ADR-042](decisions/042-outbox-based-es-indexing.md)) | 6.7 |
+| 1.7 | ES 3노드 + ILM 롤오버 + **Outbox 인덱싱 전환**([ADR-042](decisions/042-outbox-based-es-indexing.md)) — 인덱싱 전환 ✅ (2026-09-14, `ede7bf6`~`318f0af`); 3노드·ILM은 운영 ES 프로비저닝 후 | 6.7 |
 | 1.8 | Redis Bloom 전환 + 수집기 샤딩 | 6.6 |
 | 1.9 | L2 Caffeine 캐시 | 6.4.2 |
 | 1.10 | 관측성: 컨슈머 랙·WS 커넥션 메트릭, 꼬리 샘플링 | 6.11 |
