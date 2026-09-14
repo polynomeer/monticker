@@ -27,20 +27,6 @@ class CircuitBreakerConfiguration {
     fun circuitBreakerRegistry(): CircuitBreakerRegistry {
         val registry = CircuitBreakerRegistry.ofDefaults()
 
-        // MSA 내부 프록시 — quant-engine
-        // backtest는 30초 타임아웃을 허용하므로 창을 더 보수적으로 설정.
-        registry.circuitBreaker("quantEngine",
-            CircuitBreakerConfig.custom()
-                .failureRateThreshold(50f)
-                .slowCallRateThreshold(50f)
-                .slowCallDurationThreshold(Duration.ofSeconds(20))
-                .slidingWindowSize(4)
-                .waitDurationInOpenState(Duration.ofSeconds(30))
-                .permittedNumberOfCallsInHalfOpenState(1)
-                .recordExceptions(Exception::class.java)
-                .build()
-        )
-
         // Yahoo Finance 호가/캔들 API — 비공식, rate-limit 빈번
         registry.circuitBreaker("yahooFinance",
             CircuitBreakerConfig.custom()
@@ -82,7 +68,7 @@ class CircuitBreakerConfiguration {
         )
 
         // 상태 전이 이벤트 로깅
-        listOf("quantEngine", "yahooFinance", "kis", "toss").forEach { name ->
+        listOf("yahooFinance", "kis", "toss").forEach { name ->
             registry.circuitBreaker(name).eventPublisher
                 .onStateTransition { e ->
                     log.warn("[CircuitBreaker:{}] {} → {}",

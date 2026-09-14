@@ -53,7 +53,7 @@ spring:
       # KafkaJacksonConfiguration이 ByteArrayJsonMessageConverter를 등록해 페이로드를 byte[] JSON으로 만드므로
       # 값 직렬화기는 ByteArraySerializer여야 한다. StringSerializer였을 때는 "Can't convert value of class [B"로
       # 외부화가 100% 실패했다 — trading.order-filled가 Kafka에 한 번도 도달한 적이 없었다 (CH-05에서 발견).
-      # 컨슈머(quant-engine StringDeserializer)는 UTF-8 JSON 바이트를 그대로 읽는다.
+      # 컨슈머는 UTF-8 JSON 바이트를 String으로 읽으면 된다 (예: SearchIndexConsumer).
       value-serializer: org.apache.kafka.common.serialization.ByteArraySerializer
       acks: all           # 모든 ISR 확인 후 ACK — 유실 방지
       retries: 3
@@ -242,8 +242,4 @@ otel:
 orderbook:
   provider: ${ORDERBOOK_PROVIDER:}
 
-# ── Quant Engine (MSA 분리 시 사용) ─────────────────────────────────────────
-quant:
-  engine:
-    url: ${QUANT_ENGINE_URL:}
 

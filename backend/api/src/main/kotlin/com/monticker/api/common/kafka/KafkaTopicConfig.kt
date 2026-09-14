@@ -35,14 +35,12 @@ class KafkaTopicConfig(private val props: KafkaTopicProperties) {
     object RetryFamilies {
         const val MARKET_TICKS_ATTEMPTS = 3          // worker TickKafkaConsumer
         const val TICK_PROCESSED_ATTEMPTS = 3        // worker AlertKafkaConsumer
-        const val ORDER_FILLED_ATTEMPTS = 4          // quant-engine OrderFilledKafkaConsumer
         const val NOTIFY_ATTEMPTS = 3                // worker NotifyKafkaConsumer (ADR-044)
         const val SEARCH_INDEX_ATTEMPTS = 1          // api SearchIndexConsumer (ADR-042) — 배치 리스너라 블로킹 재시도 + -dlt만
 
         val all: Map<String, Int> = mapOf(
             "market.ticks" to MARKET_TICKS_ATTEMPTS,
             "market.tick-processed" to TICK_PROCESSED_ATTEMPTS,
-            "trading.order-filled" to ORDER_FILLED_ATTEMPTS,
             "notify.commands" to NOTIFY_ATTEMPTS,
             "search.index" to SEARCH_INDEX_ATTEMPTS,
         )

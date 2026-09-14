@@ -26,8 +26,8 @@ class CircuitBreakerTest {
     }
 
     @Test
-    fun `quantEngine CB — 실패율 초과 시 OPEN으로 전환된다`() {
-        val cb = registry("quantEngine").circuitBreaker("quantEngine")
+    fun `yahooFinance CB — 실패율 초과 시 OPEN으로 전환된다`() {
+        val cb = registry("yahooFinance").circuitBreaker("yahooFinance")
 
         // 4회 중 3회 실패 → 75% > 50% threshold → OPEN
         repeat(3) { cb.onError(0, java.util.concurrent.TimeUnit.MILLISECONDS, RuntimeException("down")) }
@@ -37,8 +37,8 @@ class CircuitBreakerTest {
     }
 
     @Test
-    fun `quantEngine CB — 실패율 미달 시 CLOSED 유지`() {
-        val cb = registry("quantEngine").circuitBreaker("quantEngine")
+    fun `yahooFinance CB — 실패율 미달 시 CLOSED 유지`() {
+        val cb = registry("yahooFinance").circuitBreaker("yahooFinance")
 
         // 4회 중 1회 실패 → 25% < 50% → CLOSED 유지
         cb.onError(0, java.util.concurrent.TimeUnit.MILLISECONDS, RuntimeException("err"))
@@ -64,7 +64,7 @@ class CircuitBreakerTest {
 
     @Test
     fun `CB OPEN 상태에서 executeCallable은 CallNotPermittedException을 던진다`() {
-        val cb = registry("quantEngine").circuitBreaker("quantEngine")
+        val cb = registry("yahooFinance").circuitBreaker("yahooFinance")
 
         repeat(3) { cb.onError(0, java.util.concurrent.TimeUnit.MILLISECONDS, RuntimeException("down")) }
         cb.onSuccess(0, java.util.concurrent.TimeUnit.MILLISECONDS)
@@ -83,7 +83,7 @@ class CircuitBreakerTest {
         val registry = config.circuitBreakerRegistry()
 
         assertThat(registry.allCircuitBreakers.map { it.name })
-            .containsAll(listOf("quantEngine", "yahooFinance"))   // ADR-048: tradingService 제거
+            .containsAll(listOf("yahooFinance", "kis", "toss"))   // ADR-048/049: tradingService·quantEngine 제거
     }
 
     // resilience-plan §B1 / P0-2 — 느린 호출에 반응하지 않는 브레이커는 스레드 고갈을 막지 못한다.

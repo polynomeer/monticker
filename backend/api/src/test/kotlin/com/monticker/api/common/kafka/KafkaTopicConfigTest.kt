@@ -42,15 +42,14 @@ class KafkaTopicConfigTest {
     }
 
     @Test
-    fun `RetryableTopic 컨슈머 3곳의 재시도 패밀리가 전부 선언된다`() {
+    fun `RetryableTopic 컨슈머의 재시도 패밀리가 전부 선언된다`() {
         val declared = config.declaredRetryTopics().map { it.name() }
         assertThat(declared).contains(
             "market.ticks-retry-0", "market.ticks-retry-1", "market.ticks-dlt",
             "market.tick-processed-retry-0", "market.tick-processed-retry-1", "market.tick-processed-dlt",
-            "trading.order-filled-retry-0", "trading.order-filled-retry-1", "trading.order-filled-retry-2", "trading.order-filled-dlt",
             "notify.commands-retry-0", "notify.commands-retry-1", "notify.commands-dlt",
             "search.index-dlt",   // ADR-042 — 배치 컨슈머는 블로킹 재시도라 retry 토픽 없이 DLT만
         )
-        assertThat(declared).hasSize(14)
+        assertThat(declared).hasSize(10)   // ADR-049: order-filled 패밀리는 소비자(quant-engine)와 함께 제거
     }
 }
