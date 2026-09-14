@@ -1331,3 +1331,4 @@ portfolio_positions (
 | [ADR-044](decisions/044-alert-rule-in-memory-index.md) | 알림 룰 인메모리 인덱스 · 평가/발송 분리 | Accepted |
 | [ADR-045](decisions/045-performance-slo-and-verification-harness.md) | 워크로드별 SLO 정의 + 검증 하네스 범위 | Accepted |
 | [ADR-046](decisions/046-detector-state-in-memory.md) | 감지기 EMA 상태 Redis → 메모리 — 틱당 Redis 왕복 제거 | Accepted |
+| [ADR-047](decisions/047-single-execution-path-for-paper-account.md) | 모의투자 계좌의 체결 경로를 매칭 엔진 하나로 통일 (paper는 계좌 기록 모듈) | Accepted |
