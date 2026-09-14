@@ -1,5 +1,6 @@
 package com.monticker.worker.kis
 
+import com.monticker.worker.common.HttpTimeouts
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import org.slf4j.LoggerFactory
@@ -75,6 +76,7 @@ class KisClient(
                 .uri(URI.create("$BASE/oauth2/tokenP"))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
+                .timeout(HttpTimeouts.BROKER_READ)
                 .build()
             val res = http.send(req, HttpResponse.BodyHandlers.ofString())
             if (res.statusCode() != 200) {
@@ -110,6 +112,7 @@ class KisClient(
                 .header("appsecret", appSecret)
                 .header("tr_id", "FHKST01010100")
                 .GET()
+                .timeout(HttpTimeouts.BROKER_READ)
                 .build()
             val res = http.send(req, HttpResponse.BodyHandlers.ofString())
             if (res.statusCode() != 200) return null
@@ -156,6 +159,7 @@ class KisClient(
                 .header("appsecret", appSecret)
                 .header("tr_id", "FHKST01010900")
                 .GET()
+                .timeout(HttpTimeouts.BROKER_READ)
                 .build()
             val res = http.send(req, HttpResponse.BodyHandlers.ofString())
             if (res.statusCode() != 200) return null

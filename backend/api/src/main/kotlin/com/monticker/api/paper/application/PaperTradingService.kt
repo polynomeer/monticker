@@ -3,6 +3,7 @@ package com.monticker.api.paper.application
 import com.monticker.api.common.domain.Price
 import com.monticker.api.paper.domain.PaperAccount
 import com.monticker.api.paper.domain.PaperTrade
+import com.monticker.api.paper.events.PaperAccountResetEvent
 import com.monticker.api.paper.events.PaperTradeExecutedEvent
 import com.monticker.api.paper.infrastructure.PaperAccountRepository
 import com.monticker.api.paper.infrastructure.PaperTradeRepository
@@ -76,8 +77,11 @@ class PaperTradingService(
 
     fun reset(userId: Long) {
         val account = getOrCreateAccount(userId)
+        val previousCash = account.cash.amount
         account.reset()
         accountRepo.save(account)
+        // 원장은 append-only(ADR-013) — 거래 행은 지워도 초기화 자체는 원장에 남긴다 (ADR-043 대사 불변식)
+        eventPublisher.publishEvent(PaperAccountResetEvent(userId, previousCash, account.cash.amount))
         jdbc.update("DELETE FROM paper_trades WHERE user_id = ?", userId)
         projection.onReset(userId)
     }

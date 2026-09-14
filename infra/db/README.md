@@ -29,10 +29,34 @@ DB_HOST=localhost DB_PORT=5432 ./backup.sh
 ./restore.sh backups/monticker-20260905T142700Z.dump
 ```
 
-프로덕션에서는 `backup.sh`를 매일 크론(K8s CronJob)으로 실행하고, 백업 파일을 로컬
-디스크가 아니라 S3/GCS 등 별도 오브젝트 스토리지에 업로드하도록 확장해야 한다(현재는
-로컬 `backups/` 디렉터리에만 저장 — 단일 서버 장애 시 백업까지 함께 유실되는 상태이므로
-이 자체가 프로덕션 전환 전 반드시 고쳐야 할 부분이다).
+### 스케줄 연결 (2026-09-11, resilience-plan P0-5)
+
+위 문단이 "확장해야 한다"고 적어둔 뒤로 실제로는 어떤 스케줄에도 연결되지 않은 채였다 —
+`backup.sh`를 호출하는 곳이 저장소 전체에 0건이었다. 이제:
+
+| 어디서 | 무엇을 | 언제 |
+|--------|-------|------|
+| K8s [`db-backup.yaml`](../k8s/base/db-backup.yaml) `db-backup` CronJob | `backup.sh` → PVC + (설정 시) S3 업로드 | 매일 03:15 KST |
+| K8s 같은 파일 `db-restore-rehearsal` CronJob | `rehearse-restore.sh` | 매주 일요일 03:45 KST |
+| 로컬 `make db-backup` / `make db-restore-rehearsal` | 같은 스크립트를 컨테이너에서 | 수동 |
+
+- 이미지: [`infra/docker/db-backup/Dockerfile`](../docker/db-backup/Dockerfile) — 서버와 같은 pg16 도구 + aws-cli.
+  빌드 컨텍스트는 `infra/db`다(루트 `.dockerignore`가 `infra/`를 제외한다): `make db-backup-image`.
+- 오프박스 업로드: `BACKUP_S3_URL`(예: `s3://monticker-backups/db`)과 `AWS_*` 자격증명을
+  `monticker-backup-secrets` Secret으로 주면 `backup.sh`가 PVC에 남긴 뒤 S3 호환 스토리지에도 올린다.
+  **PVC만으로는 부족하다 — 클러스터가 죽으면 같이 죽는다. 운영에서는 이 변수가 필수다.**
+- `backup.sh`는 덤프 직후 `pg_restore --list`로 아카이브 무결성을 확인한다. 디스크 풀로 잘린
+  파일이 "성공"으로 남는 것을 막는다.
+
+### 복원 리허설 — `rehearse-restore.sh`
+
+"백업이 있다"와 "복구가 된다"는 다른 말이다. 이 스크립트는 원본을 읽기만 하고
+스크래치 DB(`monticker_restore_check`)에 복구한 뒤 핵심 테이블 행 수를 대조한다. 실패하면
+0이 아닌 코드로 끝나므로 CronJob/CI에 그대로 걸린다.
+
+**2026-09-11 리허설 결과 (로컬 dev DB, CronJob과 동일한 이미지 경로)**: PASS —
+`users=44 stocks=202 paper_accounts=2 paper_trades=5 ledger_events=0 orders=8 fills=0 alert_rules=10 candles_1m=217051`
+원본/복구 일치. 소요 ~20초(5.8MB 덤프).
 
 ## PITR (Point-In-Time Recovery)
 

@@ -2,20 +2,12 @@ package com.monticker.worker.alert
 
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.monticker.worker.push.ExpoPushSender
-import com.monticker.worker.push.PushMessage
+import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.context.event.EventListener
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations
-import org.springframework.data.redis.core.StringRedisTemplate
-import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.mail.SimpleMailMessage
-import org.springframework.mail.javamail.JavaMailSender
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Component
 import java.math.BigDecimal
-import java.time.Duration
-import java.time.Instant
 
 data class AlertRuleRow(
     val id: Long,
@@ -26,25 +18,23 @@ data class AlertRuleRow(
 )
 
 /**
- * 가격 알림 규칙 평가기.
+ * 가격 알림 규칙 평가기 (ADR-044).
  *
- * [Before] @Scheduled(fixedDelay=5000): 전체 alert_rules 폴링 → 각 종목 현재가 DB 재조회
- * [After]  @EventListener(TickProcessedEvent): 틱마다 해당 stockId 규칙만 평가,
- *          틱의 price를 그대로 사용하므로 DB 가격 재조회 불필요.
+ * 틱 1건당 하는 일: 인메모리 인덱스에서 그 종목의 룰을 꺼내(DB 조회 없음) 가격 룰은 이진 탐색으로,
+ * 나머지는 60초 캐시된 지표로 판정하고, 발동한 룰을 AlertTriggerSink에 넘긴다. 외부 I/O는 없다.
  *
- * 효과:
- *  - 5초 지연 → 실시간 (틱 단위)
- *  - 전체 룰 스캔 → stockId 필터 쿼리
- *  - DB price 재조회 제거 → 쿼리 수 감소
- *  - self-injection 해킹 제거
+ * 이전: 틱마다 alert_rules SELECT + 룰 타입별로 candles_1d 집계 — L-03 기준선에서 워커 처리 상한
+ * 600 tick/s의 주원인. 이제 DB 접근은 종목당 지표당 분당 1회로 상한이 걸린다.
+ *
+ * 룰 단위로 격리한다 — 한 룰의 예외가 같은 종목의 나머지 룰을 막지 않는다. 실패는 ruleType별 카운터
+ * (alert_rule_eval_failed_total, 알람 AlertRuleEvalFailing).
  */
 @Component
 class AlertEvaluator(
-    private val jdbc: JdbcTemplate,
-    private val pushSender: ExpoPushSender,
-    private val esOps: ElasticsearchOperations,
-    private val redis: StringRedisTemplate,
-    private val mailSender: JavaMailSender,
+    private val ruleIndex: AlertRuleIndex,
+    private val indicators: IndicatorCache,
+    private val sink: AlertTriggerSink,
+    private val meterRegistry: MeterRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val objectMapper = ObjectMapper()
@@ -54,166 +44,57 @@ class AlertEvaluator(
     fun onTickProcessed(event: TickProcessedEvent) = processAlert(event.stockId, event.price)
 
     // AlertKafkaConsumer(role=alert)에서도 직접 호출한다
-    fun processAlert(stockId: Long, price: java.math.BigDecimal) {
-        try {
-            val rules = fetchRulesForStock(stockId)
-            for (rule in rules) evaluateRule(rule, price)
+    fun processAlert(stockId: Long, price: BigDecimal) {
+        val rules = try {
+            ruleIndex.rulesFor(stockId)
         } catch (e: Exception) {
-            log.error("[AlertEvaluator] stockId={} 평가 오류: {}", stockId, e.message)
+            meterRegistry.counter("alert_rule_eval_failed_total", "ruleType", "_fetch").increment()
+            log.error("[AlertEvaluator] stockId={} 룰 조회 오류: {}", stockId, e.message)
+            return
+        }
+        // 가격 룰: 이진 탐색으로 발동 구간만 잘라낸다. 의미론은 레벨 기반 그대로(쿨다운이 반복을 막는다).
+        for (rule in rules.aboveTriggered(price)) safely(rule) { sink.triggered(rule, price) }
+        for (rule in rules.belowTriggered(price)) safely(rule) { sink.triggered(rule, price) }
+        // 지표 룰: 캐시된 지표로 판정
+        for (rule in rules.others) safely(rule) { if (evaluateOther(rule, price)) sink.triggered(rule, price) }
+    }
+
+    private inline fun safely(rule: AlertRuleRow, block: () -> Unit) {
+        try { block() } catch (e: Exception) {
+            meterRegistry.counter("alert_rule_eval_failed_total", "ruleType", rule.ruleType).increment()
+            log.error("[AlertEvaluator] ruleId={} type={} 평가 오류: {}", rule.id, rule.ruleType, e.message)
         }
     }
 
-    private fun fetchRulesForStock(stockId: Long): List<AlertRuleRow> =
-        jdbc.query(
-            "SELECT id, user_id, stock_id, rule_type, condition_json FROM alert_rules WHERE stock_id = ? AND is_active = true",
-            { rs, _ ->
-                AlertRuleRow(
-                    id            = rs.getLong("id"),
-                    userId        = rs.getLong("user_id"),
-                    stockId       = rs.getLong("stock_id"),
-                    ruleType      = rs.getString("rule_type"),
-                    conditionJson = rs.getString("condition_json"),
-                )
-            },
-            stockId,
-        )
-
-    private fun evaluateRule(rule: AlertRuleRow, currentPrice: BigDecimal) {
-        val condition: Map<String, Any> = objectMapper.readValue(
-            rule.conditionJson,
-            object : TypeReference<Map<String, Any>>() {},
-        )
-        val triggered = when (rule.ruleType) {
-            "PRICE_ABOVE" -> {
-                val threshold = (condition["threshold"] as? Number)?.toDouble() ?: return
-                currentPrice > BigDecimal.valueOf(threshold)
+    private fun evaluateOther(rule: AlertRuleRow, currentPrice: BigDecimal): Boolean {
+        val condition: Map<String, Any> = objectMapper.readValue(rule.conditionJson, object : TypeReference<Map<String, Any>>() {})
+        return when (rule.ruleType) {
+            // 임계 파싱에 실패해 인덱스의 정렬 배열에 못 들어간 가격 룰 — 이전과 같이 조용히 skip
+            "PRICE_ABOVE", "PRICE_BELOW" -> false
+            "RSI_BELOW", "RSI_ABOVE" -> {
+                val period    = (condition["period"] as? Number)?.toInt() ?: 14
+                val threshold = (condition["threshold"] as? Number)?.toDouble() ?: return false
+                val rsi = indicators.rsi(rule.stockId, period) ?: return false
+                if (rule.ruleType == "RSI_BELOW") rsi < threshold else rsi > threshold
             }
-            "PRICE_BELOW" -> {
-                val threshold = (condition["threshold"] as? Number)?.toDouble() ?: return
-                currentPrice < BigDecimal.valueOf(threshold)
+            "PRICE_BELOW_MA", "PRICE_ABOVE_MA" -> {
+                val period = (condition["period"] as? Number)?.toInt() ?: 20
+                val ma = indicators.movingAverage(rule.stockId, period) ?: return false
+                if (rule.ruleType == "PRICE_BELOW_MA") currentPrice < BigDecimal.valueOf(ma) else currentPrice > BigDecimal.valueOf(ma)
+            }
+            "HOLDING_DROP" -> {
+                val dropPct = (condition["dropPct"] as? Number)?.toDouble() ?: return false
+                val avgBuyPrice = indicators.avgBuyPrice(rule.userId, rule.stockId) ?: return false
+                if (avgBuyPrice <= BigDecimal.ZERO) return false
+                (avgBuyPrice - currentPrice).toDouble() / avgBuyPrice.toDouble() * 100 >= dropPct
             }
             "VOLUME_SURGE" -> {
                 val surgeRatio = (condition["surgeRatio"] as? Number)?.toDouble() ?: 2.0
                 val period     = (condition["period"] as? Number)?.toInt() ?: 20
-                // 이전 쿼리는 비집계 컬럼(c.volume)과 집계(AVG(c2.volume))를 GROUP BY 없이
-                // 섞은 무효 SQL이라 매번 예외를 던졌고 processAlert()의 바깥 try/catch가
-                // 조용히 삼켜 이 규칙이 한 번도 발동한 적이 없었다. 두 값을 독립된 스칼라
-                // 서브쿼리로 분리해 유효한 SQL로 고친다.
-                // 참고: today_vol은 장 초반일수록 avg_vol(확정된 전체 거래일 평균)보다
-                // 구조적으로 작게 나온다 — 시간대별 정규화는 하지 않았으므로 장 후반에
-                // 갈수록 더 신뢰할 수 있는 값이 된다.
-                val row = jdbc.queryForMap(
-                    """
-                    SELECT
-                        (SELECT volume FROM candles_1d
-                           WHERE stock_id = ? AND candle_time >= DATE_TRUNC('day', NOW() AT TIME ZONE 'Asia/Seoul')
-                        ) AS today_vol,
-                        (SELECT AVG(volume) FROM candles_1d
-                           WHERE stock_id = ?
-                             AND candle_time >= NOW() - INTERVAL '$period days'
-                             AND candle_time < DATE_TRUNC('day', NOW() AT TIME ZONE 'Asia/Seoul')
-                        ) AS avg_vol
-                    """,
-                    rule.stockId, rule.stockId,
-                )
-                val todayVol = (row["today_vol"] as? Number)?.toLong() ?: 0L
-                val avgVol   = (row["avg_vol"] as? Number)?.toDouble() ?: 1.0
+                val (todayVol, avgVol) = indicators.volumeStats(rule.stockId, period)
                 avgVol > 0 && todayVol > avgVol * surgeRatio
             }
             else -> false
         }
-        if (triggered) dispatchAlert(rule, currentPrice)
     }
-
-    private fun dispatchAlert(rule: AlertRuleRow, currentPrice: BigDecimal) {
-        val cooldownKey = "alert:cooldown:${rule.id}"
-        val acquired = redis.opsForValue().setIfAbsent(cooldownKey, "1", Duration.ofSeconds(600))
-        if (acquired != true) return
-
-        val message = buildMessage(rule, currentPrice)
-
-        val historyId = jdbc.queryForObject(
-            """
-            INSERT INTO alert_histories (rule_id, stock_id, triggered_at, message, delivery_status)
-            VALUES (?, ?, ?, ?, 'PENDING')
-            RETURNING id
-            """,
-            Long::class.java,
-            rule.id, rule.stockId,
-            java.sql.Timestamp.from(Instant.now()),
-            message,
-        ) ?: return
-
-        log.info("[AlertEvaluator] triggered: ruleId={} userId={} price={}", rule.id, rule.userId, currentPrice)
-
-        val tokens = jdbc.queryForList(
-            "SELECT token FROM device_tokens WHERE user_id = ? AND is_active = true",
-            String::class.java,
-            rule.userId,
-        )
-        if (tokens.isEmpty()) {
-            sendEmailFallback(rule.userId, message)
-            jdbc.update("UPDATE alert_histories SET delivery_status = 'EMAIL_FALLBACK' WHERE id = ?", historyId)
-            return
-        }
-
-        val results = pushSender.send(tokens.map { token ->
-            PushMessage(
-                to    = token,
-                title = "monticker 알림",
-                body  = message,
-                data  = mapOf("stockId" to rule.stockId, "ruleId" to rule.id),
-            )
-        })
-
-        val status = if (results.all { it.status == "ok" }) "SENT" else "FAILED"
-        jdbc.update("UPDATE alert_histories SET delivery_status = ? WHERE id = ?", status, historyId)
-        log.info("[AlertEvaluator] push sent: userId={} status={}", rule.userId, status)
-
-        indexToEs(historyId, rule, message, status, Instant.now())
-    }
-
-    private fun indexToEs(id: Long, rule: AlertRuleRow, message: String, status: String, triggeredAt: Instant) {
-        try {
-            esOps.save(AlertHistoryDocument(
-                id             = id.toString(),
-                ruleId         = rule.id,
-                userId         = rule.userId,
-                stockId        = rule.stockId.takeIf { it != 0L },
-                ruleType       = rule.ruleType,
-                message        = message,
-                deliveryStatus = status,
-                triggeredAt    = triggeredAt,
-            ))
-        } catch (e: Exception) {
-            log.warn("[AlertEvaluator] ES indexing failed for historyId={}: {}", id, e.message)
-        }
-    }
-
-    private fun sendEmailFallback(userId: Long, message: String) {
-        try {
-            val email = jdbc.queryForObject(
-                "SELECT email FROM users WHERE id = ? AND deleted_at IS NULL",
-                String::class.java, userId,
-            ) ?: return
-            val mail = SimpleMailMessage().apply {
-                setTo(email)
-                subject = "[monticker] 알림"
-                text    = "$message\n\n설정한 알림 조건이 충족되었습니다."
-            }
-            mailSender.send(mail)
-            log.info("[AlertEvaluator] email fallback sent: userId={}", userId)
-        } catch (e: Exception) {
-            log.warn("[AlertEvaluator] email fallback failed: userId={} {}", userId, e.message)
-        }
-    }
-
-    private fun buildMessage(rule: AlertRuleRow, price: BigDecimal) = when (rule.ruleType) {
-        "PRICE_ABOVE"  -> "가격이 ₩${price.toLong().formatKR()} 이상이 되었습니다"
-        "PRICE_BELOW"  -> "가격이 ₩${price.toLong().formatKR()} 이하가 되었습니다"
-        "VOLUME_SURGE" -> "거래량이 평균 대비 급증했습니다 (현재가 ₩${price.toLong().formatKR()})"
-        else           -> "알림 조건 충족: ${rule.ruleType}"
-    }
-
-    private fun Long.formatKR() = "%,d".format(this)
 }

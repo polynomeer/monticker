@@ -1,6 +1,8 @@
 package com.monticker.api.analytics.domain
 
 import jakarta.persistence.*
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import java.time.Instant
 
 @Entity
@@ -19,6 +21,7 @@ class DetectedPattern(
     @Column(name = "confidence_score", nullable = false)
     val confidenceScore: Int,
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "swing_points_json", nullable = false, columnDefinition = "jsonb")
     val swingPointsJson: String,
 

@@ -1,5 +1,9 @@
 package com.monticker.api.alert.application
 
+import com.monticker.api.common.redis.RedisGuard
+import org.springframework.data.redis.core.StringRedisTemplate
+import com.monticker.api.common.metrics.SearchMetrics
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import com.monticker.api.alert.domain.AlertRule
 import com.monticker.api.alert.domain.AlertRuleType
 import com.monticker.api.alert.infrastructure.AlertHistorySearchRepository
@@ -21,7 +25,8 @@ class AlertServiceTest {
     private val jdbc = mockk<JdbcTemplate>()
     private val alertHistorySearchRepository = mockk<AlertHistorySearchRepository>(relaxed = true)
     private val esOps = mockk<ElasticsearchOperations>(relaxed = true)
-    private val service = AlertService(repo, ObjectMapper(), jdbc, alertHistorySearchRepository, esOps)
+    private val redis = mockk<StringRedisTemplate>(relaxed = true)
+    private val service = AlertService(repo, ObjectMapper(), jdbc, alertHistorySearchRepository, esOps, SearchMetrics(SimpleMeterRegistry()), redis, RedisGuard(SimpleMeterRegistry()))
 
     @Test
     fun `createRule saves and returns rule`() {

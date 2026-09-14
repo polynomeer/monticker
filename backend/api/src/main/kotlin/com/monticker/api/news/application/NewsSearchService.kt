@@ -1,5 +1,6 @@
 package com.monticker.api.news.application
 
+import com.monticker.api.common.metrics.SearchMetrics
 import com.monticker.api.news.infrastructure.NewsDocument
 import com.monticker.api.news.infrastructure.NewsRepository
 import com.monticker.api.news.infrastructure.NewsSearchRepository
@@ -14,6 +15,7 @@ import java.time.Instant
 class NewsSearchService(
     private val esOps: ElasticsearchOperations,
     private val newsRepository: NewsRepository,
+    private val searchMetrics: SearchMetrics,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -34,6 +36,7 @@ class NewsSearchService(
         return try {
             searchFromEs(stockId = stockId, query = query, limit = limit, from = from, to = to)
         } catch (e: Exception) {
+            searchMetrics.fallback("news_articles")
             log.warn("ES news search failed, falling back to DB: {}", e.message)
             newsRepository.findByStockId(stockId, limit).map { NewsSearchResult.from(it) }
         }
@@ -60,6 +63,7 @@ class NewsSearchService(
                 sentiment = sentiment,
             )
         } catch (e: Exception) {
+            searchMetrics.fallback("news_articles")
             log.warn("ES global news search failed: {}", e.message)
             emptyList()
         }

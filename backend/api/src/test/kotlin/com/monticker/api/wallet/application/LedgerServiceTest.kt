@@ -9,6 +9,7 @@ import io.mockk.slot
 import io.mockk.verify
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.springframework.data.domain.Pageable
 import java.math.BigDecimal
 import java.time.Instant
 
@@ -57,30 +58,110 @@ class LedgerServiceTest {
         assertThat(slot.captured.stockId).isNull()
     }
 
+    // ADR-043 — 초기화는 (초기 잔고 − 직전 잔고)를 실현된 이동으로 남긴다. 부호에 따라 DEPOSIT/WITHDRAWAL.
     @Test
-    fun `getLedger maps repository entities to DTOs preserving field values`() {
-        val event = LedgerEvent(
-            id = 1L, userId = 1L, eventType = LedgerEventType.FILL,
-            amount = BigDecimal("-1000"), balanceAfter = BigDecimal("9000"),
-            paperTradeId = 5L, stockId = 10L, description = "매수 체결",
-        )
-        every { ledgerRepo.findAllByUserIdOrderByCreatedAtDesc(1L) } returns listOf(event)
+    fun `recordReset writes a DEPOSIT for the top-up back to the initial balance`() {
+        val slot = slot<LedgerEvent>()
+        every { ledgerRepo.save(capture(slot)) } answers { slot.captured }
 
-        val result = service.getLedger(1L)
+        service.recordReset(userId = 1L, previousCash = BigDecimal("4000000"), newCash = BigDecimal("10000000"))
 
-        assertThat(result).hasSize(1)
-        assertThat(result[0].eventType).isEqualTo("FILL")
-        assertThat(result[0].amount).isEqualByComparingTo(BigDecimal("-1000"))
-        assertThat(result[0].paperTradeId).isEqualTo(5L)
+        assertThat(slot.captured.eventType).isEqualTo(LedgerEventType.DEPOSIT)
+        assertThat(slot.captured.amount).isEqualByComparingTo(BigDecimal("6000000"))
+        assertThat(slot.captured.balanceAfter).isEqualByComparingTo(BigDecimal("10000000"))
     }
 
     @Test
-    fun `getLedger returns an empty list when the user has no events`() {
-        every { ledgerRepo.findAllByUserIdOrderByCreatedAtDesc(2L) } returns emptyList()
+    fun `recordReset writes a WITHDRAWAL when the account was above the initial balance`() {
+        val slot = slot<LedgerEvent>()
+        every { ledgerRepo.save(capture(slot)) } answers { slot.captured }
+
+        service.recordReset(userId = 1L, previousCash = BigDecimal("12000000"), newCash = BigDecimal("10000000"))
+
+        assertThat(slot.captured.eventType).isEqualTo(LedgerEventType.WITHDRAWAL)
+        assertThat(slot.captured.amount).isEqualByComparingTo(BigDecimal("-2000000"))
+    }
+
+    @Test
+    fun `recordReset writes nothing when the balance did not change`() {
+        service.recordReset(userId = 1L, previousCash = BigDecimal("10000000"), newCash = BigDecimal("10000000"))
+
+        verify(exactly = 0) { ledgerRepo.save(any()) }
+    }
+
+    private fun event(id: Long, userId: Long = 1L) = LedgerEvent(
+        id = id, userId = userId, eventType = LedgerEventType.FILL,
+        amount = BigDecimal("-1000"), balanceAfter = BigDecimal("9000"),
+        paperTradeId = 5L, stockId = 10L, description = "매수 체결",
+    )
+
+    @Test
+    fun `getLedger maps repository entities to DTOs preserving field values`() {
+        every { ledgerRepo.findPage(1L, Long.MAX_VALUE, any()) } returns listOf(event(1L))
+
+        val result = service.getLedger(1L)
+
+        assertThat(result.items).hasSize(1)
+        assertThat(result.items[0].eventType).isEqualTo("FILL")
+        assertThat(result.items[0].amount).isEqualByComparingTo(BigDecimal("-1000"))
+        assertThat(result.items[0].paperTradeId).isEqualTo(5L)
+        assertThat(result.nextCursor).isNull()
+    }
+
+    @Test
+    fun `getLedger returns an empty page when the user has no events`() {
+        every { ledgerRepo.findPage(2L, Long.MAX_VALUE, any()) } returns emptyList()
 
         val result = service.getLedger(2L)
 
-        assertThat(result).isEmpty()
+        assertThat(result.items).isEmpty()
+        assertThat(result.nextCursor).isNull()
+    }
+
+    // ADR-043 — 커서 페이징. limit+1건을 읽어 다음 페이지 유무를 정확히 판정한다.
+    @Test
+    fun `getLedger reads limit plus one rows and exposes the last returned id as the next cursor`() {
+        val pageableSlot = slot<Pageable>()
+        every { ledgerRepo.findPage(1L, Long.MAX_VALUE, capture(pageableSlot)) } returns
+            listOf(event(30L), event(29L), event(28L))   // limit=2 → 3건 반환 = 다음 페이지 있음
+
+        val result = service.getLedger(1L, cursor = null, limit = 2)
+
+        assertThat(pageableSlot.captured.pageSize).isEqualTo(3)
+        assertThat(result.items.map { it.id }).containsExactly(30L, 29L)
+        assertThat(result.nextCursor).isEqualTo(29L)
+    }
+
+    @Test
+    fun `getLedger with a cursor returns null nextCursor on the exactly-full last page`() {
+        every { ledgerRepo.findPage(1L, 29L, any()) } returns listOf(event(28L), event(27L))   // limit=2, 정확히 2건
+
+        val result = service.getLedger(1L, cursor = 29L, limit = 2)
+
+        assertThat(result.items.map { it.id }).containsExactly(28L, 27L)
+        assertThat(result.nextCursor).isNull()
+    }
+
+    @Test
+    fun `getLedger clamps limit into 1 to MAX_PAGE`() {
+        val sizes = mutableListOf<Pageable>()
+        every { ledgerRepo.findPage(1L, Long.MAX_VALUE, capture(sizes)) } returns emptyList()
+
+        service.getLedger(1L, limit = 0)
+        service.getLedger(1L, limit = 10_000)
+
+        assertThat(sizes.map { it.pageSize }).containsExactly(2, LedgerService.MAX_PAGE + 1)
+    }
+
+    @Test
+    fun `getRecentLedger asks the database for exactly n rows`() {
+        val pageableSlot = slot<Pageable>()
+        every { ledgerRepo.findPage(1L, Long.MAX_VALUE, capture(pageableSlot)) } returns listOf(event(1L))
+
+        val result = service.getRecentLedger(1L, 10)
+
+        assertThat(pageableSlot.captured.pageSize).isEqualTo(10)
+        assertThat(result).hasSize(1)
     }
 
     @Test

@@ -28,8 +28,12 @@ class WalletController(
     @GetMapping
     fun getWalletMap() = ResponseEntity.ok(walletService.getWalletMap(userId()))
 
+    /** ADR-043 — 커서 페이징. cursor 생략 = 첫 페이지, limit은 서버가 최대 50으로 clamp. */
     @GetMapping("/ledger")
-    fun getLedger() = ResponseEntity.ok(ledgerService.getLedger(userId()))
+    fun getLedger(
+        @RequestParam(required = false) cursor: Long?,
+        @RequestParam(required = false, defaultValue = "20") limit: Int,
+    ) = ResponseEntity.ok(ledgerService.getLedger(userId(), cursor, limit))
 
     @GetMapping("/replay")
     fun getDailyReplay(

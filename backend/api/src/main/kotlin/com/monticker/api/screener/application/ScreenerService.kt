@@ -1,5 +1,6 @@
 package com.monticker.api.screener.application
 
+import com.monticker.api.common.metrics.SearchMetrics
 import com.monticker.api.common.cache.CacheConfig
 import com.monticker.api.common.tracing.Tracing
 import com.monticker.api.screener.domain.ScreenerItem
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Service
 class ScreenerService(
     private val repo: ScreenerRepository,
     private val stockSearchService: StockSearchService,
+    private val searchMetrics: SearchMetrics,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -74,6 +76,7 @@ class ScreenerService(
                     .take(limit)
                     .map { it.id }
             } catch (e: Exception) {
+                searchMetrics.fallback("stocks")
                 log.warn("ES stock search failed in screener, falling back to DB: {}", e.message)
                 emptyList()
             }

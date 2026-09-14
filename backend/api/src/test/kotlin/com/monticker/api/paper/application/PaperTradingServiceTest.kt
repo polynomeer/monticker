@@ -1,6 +1,7 @@
 package com.monticker.api.paper.application
 
 import com.monticker.api.paper.domain.PaperAccount
+import com.monticker.api.paper.events.PaperAccountResetEvent
 import com.monticker.api.paper.infrastructure.PaperAccountRepository
 import com.monticker.api.paper.infrastructure.PaperTradeRepository
 import io.mockk.every
@@ -43,5 +44,22 @@ class PaperTradingServiceTest {
         assertThatThrownBy { service.buy(userId = 1L, stockId = 999L, quantity = 1) }
             .isInstanceOf(IllegalStateException::class.java)
             .hasMessageContaining("현재가")
+    }
+
+    // ADR-043 — 초기화는 현금 컬럼을 바꾸는 경로다. 이벤트가 없으면 원장에 구멍이 나고 대사가 영구히 어긋난다.
+    @Test
+    fun `reset publishes the cash change so the wallet can record it in the ledger`() {
+        val account = PaperAccount(userId = 7L, cash = com.monticker.api.common.domain.Money.of("4000000"))
+        every { accountRepo.findByUserId(7L) } returns Optional.of(account)
+        every { accountRepo.save(any()) } answers { firstArg() }
+        every { jdbc.update(any<String>(), 7L) } returns 0
+        val published = mutableListOf<Any>()
+        every { eventPublisher.publishEvent(capture(published)) } returns Unit
+
+        service.reset(7L)
+
+        val event = published.filterIsInstance<PaperAccountResetEvent>().single()
+        org.assertj.core.api.Assertions.assertThat(event.previousCash).isEqualByComparingTo("4000000")
+        org.assertj.core.api.Assertions.assertThat(event.newCash).isEqualByComparingTo("10000000")
     }
 }

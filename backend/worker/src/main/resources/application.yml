@@ -10,6 +10,9 @@ spring:
       maximum-pool-size: 20
       minimum-idle: 5
       connection-timeout: 3000
+      # resilience-plan §A4 / P1-3 — 느린 쿼리가 커넥션을 무한정 잡고 풀을 고갈시키는 것을 막는다.
+      # 물리 커넥션마다 1회 실행된다. 60s: 캔들 백필·수집 배치는 길 수 있으나 무제한은 아니다.
+      connection-init-sql: "SET statement_timeout = '60s'"
       idle-timeout: 600000
   jpa:
     hibernate:
@@ -17,18 +20,26 @@ spring:
     show-sql: false
   flyway:
     enabled: false
+  # Spring Boot 3의 ES 접속 키는 spring.elasticsearch.uris 다. 이전에는 spring.data.elasticsearch.uris
+  # (Boot 3에 존재하지 않는 키)에 두어 ELASTICSEARCH_URI가 조용히 무시되고 기본값 localhost:9200을 썼다 —
+  # 컨테이너 배포에서는 ES에 한 번도 연결된 적이 없었고 전부 DB 폴백으로 동작했다.
+  # CH-04 카오스 실험이 search_fallback_total로 잡아냈다 (resilience-plan §6.3).
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URI:http://localhost:9200}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-    elasticsearch:
-      uris: ${ELASTICSEARCH_URI:http://localhost:9200}
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}
     port: ${MAIL_PORT:587}
     username: ${MAIL_USERNAME:}
     password: ${MAIL_PASSWORD:}
   kafka:
+    listener:
+      # ADR-040 파티션 수까지 병렬 소비. 로컬 12 파티션 기준 4. 운영은 파티션 수에 맞춰 ConfigMap으로.
+      # L-03: 단일 스레드 ~2,000 tick/s → 스레드 수만큼 선형에 가깝게 늘어난다(같은 종목은 같은 스레드).
+      concurrency: ${KAFKA_CONSUMER_CONCURRENCY:4}
     # TickKafkaConsumer(@KafkaListener)는 ingestion.source=kafka가 아닌 한(기본값
     # internal) Spring Boot 자동구성 ConsumerFactory를 쓴다 — 이 값이 없으면 KAFKA_BROKERS를
     # 무시하고 Spring Boot 기본값(localhost:9092)에 그대로 접속한다. 아래 kafka.brokers(비
@@ -59,6 +70,17 @@ management:
         include: health,info,metrics,prometheus
   endpoint:
     health:
+      # resilience-plan §A3 / P0-6 — readiness가 실제 서빙 가능 여부를 본다.
+      # 설정이 없으면 Spring 기본값(readinessState만)이라 DB가 죽어도 pod는 Ready로 남아
+      # 트래픽을 계속 받는다. db는 readiness에만 넣는다 — liveness에 넣으면 DB 장애가
+      # pod 재시작 루프를 유발해 복구가 더 느려진다. liveness는 프로세스 생존만 본다.
+      probes:
+        enabled: true        # K8s 밖(docker-compose)에서도 /readiness, /liveness 노출
+      group:
+        readiness:
+          include: readinessState,db
+        liveness:
+          include: livenessState
       show-details: always
       show-components: always
   metrics:

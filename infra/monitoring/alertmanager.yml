@@ -14,8 +14,9 @@ route:
       repeat_interval: 1h
 
 receivers:
-  # 로컬 개발 기본값 — 아무 채널로도 보내지 않고 Alertmanager UI(http://localhost:9093)와
-  # API(/api/v2/alerts)에서만 확인한다. 프로덕션에서는 이 receiver를 실제 채널로 교체해야 한다.
+  # 무발송 기본값 — SLACK_WEBHOOK_URL이 비어 있을 때만 쓰인다. 설정돼 있으면 docker-compose의
+  # entrypoint가 alertmanager.slack.tpl.yml을 렌더링해 이 파일 대신 쓴다 (resilience-plan P0-3).
+  # 알람은 Alertmanager UI(http://localhost:9093)와 API(/api/v2/alerts)에서만 보인다.
   # 예시(Slack — Incoming Webhook을 먼저 만들어야 한다: https://api.slack.com/messaging/webhooks):
   #
   # - name: default

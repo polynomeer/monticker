@@ -61,10 +61,11 @@ class OrderFilledEventListener(
         ledgerRepo.save(
             LedgerEvent(
                 userId       = event.userId,
-                eventType    = LedgerEventType.DEPOSIT,
+                // ADR-043: 예약금 반환은 실현된 현금 이동이 아니다 — 대사 합계에서 제외되는 CASH_UNRESERVED로 남긴다.
+                eventType    = LedgerEventType.CASH_UNRESERVED,
                 amount       = event.refundAmount,
                 balanceAfter = balanceAfter,
-                description  = "주문 취소 환불 (orderId=${event.orderId})",
+                description  = "주문 취소 — 예약금 해제 (orderId=${event.orderId})",
             )
         )
     }

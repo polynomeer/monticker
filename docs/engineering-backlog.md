@@ -16,7 +16,7 @@
 - [x] **관심종목 그룹 고도화** — ✅ 완료(2026-09-09, `c8375c7`). 조사 중 실제 버그 발견: [app/watchlist/page.tsx](../apps/web/src/app/watchlist/page.tsx)가 인증이 필요한 엔드포인트를 `authFetch` 없이 맨 `fetch`로 호출하고 있어서 실제 로그인 세션에서 제대로 동작한 적이 없었음 — 같이 수정. 정렬(이름순/등락률순/현재가순)·거래세션 필터(전체/국내/해외)·표시 컬럼(기본/시세, `/api/screener/quotes` 실시간 시세 조인)·항목 삭제(기존에 백엔드 DELETE 엔드포인트는 있었으나 UI가 아예 없었음)·그룹 단위 알림 일괄 등록을 추가. 그룹 알림은 거래량 급증(VOLUME_SURGE)으로 범위를 좁힘 — 가격 이상/이하는 종목마다 기준가가 달라 그룹 공통값 자체가 성립하지 않기 때문. 신규 백엔드 도메인 없이 기존 단건 알림 등록 API를 그룹 내 종목마다 반복 호출(요청 한도 20건/시간을 고려해 부분 성공/실패를 요약해서 알려줌). 라이브 검증: mock-social 테스트 유저로 해외 2종목+국내 1종목 그룹 생성 후 세션 필터·정렬 양쪽 정상 동작, 시세 컬럼에서 원화/달러 표기 정상, 그룹 알림 일괄 등록 3/3 성공 후 버튼이 "전체 알림 설정됨"으로 비활성화, 항목 삭제 즉시 반영까지 확인.
 - [x] **종목 상세 내 크로스 내비게이션** — ✅ 완료(2026-09-09, `00f73be`). 차트 이벤트 마커에 원본 이벤트 `id`를 끝까지 흘려보내(`types.ts`→`useStockChart`→`EChartsAdapter` markPoint data) 마커 클릭 시 이벤트 탭으로 전환하고 해당 항목으로 스크롤+1.8초 하이라이트. `NEWS_PUBLISHED`/`DISCLOSURE_PUBLISHED` 이벤트 행에는 "관련 뉴스 보기" 버튼으로 뉴스 탭 이동(백엔드에 이벤트↔기사 상호 참조가 없어 정확한 기사 링크는 아니고 대략적인 탭 이동임을 과장하지 않음). `SummaryPanel`의 실제 사용 경로인 bare 모드에 "AI 생성" 배지 + 근거 방법론 안내 + 이벤트/뉴스 보기 바로가기 추가(비-bare 모드에만 있던 걸 발견). 부수 발견: 이번 검증 중 좌측 컬럼의 두 `Card`가 `flex-[1.35]`/`flex-1` 같은 flex 사이징 클래스를 `outerClassName`(실제 flex 아이템 래퍼)이 아니라 `className`(내부 패널)에 잘못 전달하고 있어서 차트 영역이 항상 ~20px로 찌그러지던 기존 버그 발견·수정(오늘 작업 이전, `d418a35`까지 거슬러 올라가는 기존 버그). 라이브 검증: webpack 청크 레지스트리로 ECharts 인스턴스를 직접 추출해 마커의 `eventId`가 정확한지 확인 후, 변환된 마커 픽셀 좌표에 실제 `MouseEvent`를 디스패치해 `componentType: "markPoint"` 클릭이 정확히 잡히는 것과 탭 전환·스크롤·하이라이트까지 전부 확인.
 - [ ] **주문 사전 검증 정보 보강** — 수수료가 체결 후에만 표시되고(사전 추정 없음), 환율/거래세션 상태 표시가 어떤 주문 폼에도 없음. 해외주식 주문 시 특히 중요.
-- [ ] **알림 조건 확장** — 지금은 가격(이상/이하)·거래량급증뿐. RSI/이동평균 교차 같은 기술적 조건, "보유종목이 -N% 하락" 같은 보유상태 기반 알림 없음.
+- [x] **알림 조건 확장** — ✅ 완료(2026-09-09, `5f8eed5`/`b0baa11`/`13eeadb`). RSI 과매도/과매수(`RSI_BELOW`/`RSI_ABOVE`), 이동평균 하향이탈/상향돌파(`PRICE_BELOW_MA`/`PRICE_ABOVE_MA`), 보유종목 하락(`HOLDING_DROP`, 모의투자 한정) 5종 추가. 조사 결과 RSI/MA 계산 로직은 `backend/api`의 `quant/IndicatorEngine`에 이미 있었지만 `backend/worker`가 `api` 모듈에 그레이들 의존성이 없어(백테스팅 엔진 전체를 워커까지 끌어오는 건 과함) 순수 계산 로직만 워커에 포팅(quant-engine 모듈에도 이미 같은 클래스가 중복 존재하는 것과 같은 이유). 실브로커리지 보유종목 알림은 명시적으로 범위 밖 — DB에 캐시가 없고(매 요청마다 브로커 API 실시간 호출) symbol↔stockId 매핑도 없어 워커가 틱마다 평가할 방법이 없음, 별도 동기화 인프라가 선행돼야 함. API 계층에 조건 필드 검증이 아예 없었던 것도 발견(필드 누락 룰은 저장은 되지만 워커가 조용히 무시해 평생 안 울림) — 신규 타입에 최소 검증 추가. 부수 발견: `AlertPanel.tsx`가 `if (!threshold) return` 하나로 전체 폼을 막고 있어서 VOLUME_SURGE는 threshold 입력창 자체가 없으니 저장 버튼을 눌러도 아무 일도 안 일어나던 기존 버그 — 타입별 조건 빌더로 교체해 같이 수정. 라이브 검증: RSI/MA/portfolio_positions SQL을 실DB에 직접 실행해 검증 후 Kotlin 산술을 그대로 재현해 실제 종목의 RSI(14)=23.69 확인, 실API로 5개 신규 타입 생성+검증 실패 케이스(400) 확인, 실제 UI에서 옵션 전환·RSI_BELOW 저장·VOLUME_SURGE 저장(수정 전엔 불가능했던 케이스) 확인. 워커 유닛테스트 8건 추가(18건 전체)+전체 워커 스위트 82건+API 스위트 477건 전부 통과.
 - [ ] **차트 고급 모드** — 드로잉 툴, 차트 위 주문선, 자유 지표 추가가 전혀 없음(RSI/MACD는 별도 서브탭일 뿐 메인 차트 오버레이 아님). 비용이 큰 항목이라 후순위 — 착수 시 [ui-benchmarks.md](ui-benchmarks.md)의 TradingView/Robinhood 항목(차트 위 매수/매도 퀵버튼) 참고.
 - [ ] **목표/전략 단위 자산 뷰** — Quant Lab의 "전략" 개념과 실제 브로커리지 보유종목을 연결하는 뷰가 없음. 데이터 모델 변경 필요, 장기 항목.
 - [ ] **정기매수(적립식) 기능** — 코드에 개념 자체가 없음. Trading 212 Pies/Trade Republic Savings Plan처럼 "주기 설정"이 아니라 "목표·배분" 관점으로 설계할 것([ui-benchmarks.md](ui-benchmarks.md) 참고). 신규 도메인 기능이라 장기 항목.
@@ -93,18 +93,50 @@
 [scale-out-plan.md](scale-out-plan.md)의 Phase 0 ADR(038~045)을 쓰면서 확인했지만,
 해당 ADR의 범위가 아니라 따로 남긴 항목들.
 
-- [ ] **지갑 화면의 `reservedCash`/`settlementPending`이 하드코딩 0** —
-  `WalletService.getWalletMap`이 두 값을 `BigDecimal.ZERO`로 반환한다. "돈의 이동 지도"가
-  절반만 실데이터라는 뜻이다. 예약금은 `paper_accounts`의 예약 상태에서,
-  정산대기는 T+2 정산 스케줄러([ADR-014](decisions/014-t2-paper-settlement-scheduler.md))가
-  관리하는 미정산 건에서 계산해야 한다.
+- [ ] **지갑 화면의 `settlementPending`이 하드코딩 0** — ~~`reservedCash`도~~ 예약금은 ADR-043 구현에서
+  미체결 BUY 주문의 `limit_price × 잔량`으로 채웠다(`ef5fd12`). 정산대기는 T+2 정산 스케줄러
+  ([ADR-014](decisions/014-t2-paper-settlement-scheduler.md))가 관리하는 미정산 건에서 계산해야 한다.
   발견: [ADR-043](decisions/043-ledger-pagination-and-reconciliation.md) 작성 중.
+- [ ] **계좌 초기화가 미체결 주문의 예약금을 방치한다 — 돈이 생긴다** — `PaperTradingService.reset`은
+  cash를 1,000만으로 돌리지만 `orders`는 건드리지 않는다. 예약금 12만 원을 둔 채 초기화하고 그 주문을
+  취소하면 유저는 1,012만 원을 갖는다. 대사(ADR-043)는 이걸 잡지 못한다 — 원장이 정직하게 기록하므로
+  불변식은 성립한다. `reset`이 미체결 주문을 먼저 취소하거나(matching 모듈 호출) 초기화 금액에서
+  예약금을 빼야 한다. 발견: ADR-043 라이브 검증 (`adr043-live.sh` 7단계).
+- [x] **`columnDefinition = "jsonb"`만 있고 `@JdbcTypeCode(SqlTypes.JSON)`이 없는 String 컬럼 — INSERT가
+  전부 실패한다(null 포함)** — ✅ 완료(2026-09-13, api `7df79a0`, quant-engine `3e3aed0`).
+  원장·행동점수는 ADR-043에서 고쳤고(`5e113bb`), 나머지를 전수 수정했다. 실제 INSERT 경로 확인 결과:
+  api `DetectedPattern.swingPointsJson`(PatternRecognizerService.save — 패턴 감지가 전부 실패하고
+  있었음), `TaxHarvestingLog.candidatesJson`(TaxOptimizerService.save — 절세 시뮬레이션 전부 실패),
+  `SubscriptionPlan.features`(V27 시드 SQL로만 쓰임, 일관성 목적으로만 수정); quant-engine
+  `QuantBacktestResult`(×3, RuleSetService.runBacktest — 거래 없는 백테스트도 null 바인딩으로 실패),
+  `PortfolioOptimization`(×3 — api 쪽만 `b105ce7`에서 고쳐졌고 quant-engine 사본은 그대로였음),
+  `DetectedPattern`, `TaxHarvestingLog`, `RuleSet`(×2 — rule_sets는 V22에서 DROP, 쓰기 경로 없음,
+  일관성 목적). 모듈별 `JsonbColumnPersistenceIntegrationTest`가 실제 Hibernate 매핑으로 실제 스키마에
+  써 본다(주석 제거 시 정확히 그 Postgres 오류로 실패함을 확인). `grep -rn 'columnDefinition = "jsonb"'
+  backend/` 기준 `@JdbcTypeCode` 없는 곳 0건.
+  **같은 결함이 `RebalanceTarget`에서 이미 한 번 발견·수정됐는데 나머지는 점검되지 않았다** —
+  발견 시 같은 패턴을 전수 검색하는 습관이 필요하다.
+- [x] **quant-engine `RuleSet` @Entity가 DROP된 `rule_sets` 테이블을 가리킨다** — ✅ 완료(2026-09-13,
+  `c46133c`). V22에서 MongoDB로 이전하며 테이블을 지웠는데 quant-engine 사본만 `@Entity @Table("rule_sets")`로
+  남아 `@EntityScan` 패키지 안에 있었다 — `ddl-auto: validate` 기준 기동 실패("missing table [rule_sets]",
+  통합 테스트로 재현). api 사본과 같은 plain class로 교체. `EntitySchemaValidationIntegrationTest`가
+  `@EntityScan` 3개 패키지의 모든 @Entity를 api 마이그레이션 스키마에 대고 validate하므로 다음 드리프트는
+  CI에서 잡힌다. 발견: 위 jsonb 전수 수정 중.
 - [ ] **`alert_rules.stock_id`가 NULL인 룰은 절대 평가되지 않는다** —
   컬럼은 nullable인데 `AlertEvaluator.fetchRulesForStock`은 `WHERE stock_id = ?`로만 읽는다.
   NULL이 "전 종목 대상"을 의도한 건지, 그냥 쓰이지 않는 제약인지 확인이 필요하다.
   전자라면 종목별 인덱스와 별개로 글로벌 룰 리스트가 필요하다
   ([ADR-044](decisions/044-alert-rule-in-memory-index.md) Revisit 조건).
   발견: ADR-044 작성 중.
+- [ ] **브로커 잔고 조회의 서킷브레이커 폴백이 "0원"** — `KisBrokerageClient.getBalance`의
+  CB-open 경로가 `BrokerageBalance(ZERO, ZERO, [])`를 돌려준다. 증권사 장애 중 사용자에게 잔고가
+  0원으로 보인다 — 우아한 실패가 아니라 오해를 부르는 실패. "조회 불가" 상태(nullable 또는
+  `available=false`)로 바꾸고 프론트가 그걸 표시해야 한다. 발견: CH-06 실험
+  ([resilience-plan §6.3](resilience-plan.md)).
+- [ ] **ES 인덱스가 동적 매핑으로 생성됨 — 검색 설계 미적용** — `stock_events.eventTime: text`,
+  `stocks.symbol: text` 등. `@Setting`/`@Field`가 적용된 적이 없어 날짜 정렬이 실패하고
+  nori/edge_ngram이 안 붙는다. [ADR-042](decisions/042-outbox-based-es-indexing.md) 구현의 필수
+  항목(단일 인덱서가 명시적 매핑으로 생성 + 기동 시 매핑 대조). 발견: CH-04 실험.
 - [ ] **전용 부하 테스트 환경 구축** — 지금 `bench/`는 로컬 docker-compose를 때린다.
   절대 처리량·SLO 판정에는 prod 유사 환경이 필요하다
   ([ADR-045](decisions/045-performance-slo-and-verification-harness.md) §5).

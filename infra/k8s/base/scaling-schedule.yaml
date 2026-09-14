@@ -1,0 +1,120 @@
+# resilience-plan §C1s / P1-4 — 개장 스파이크에 대한 예약 스케일업.
+#
+# HPA(CPU 70%)는 반응형이라 이미 늦다: 스케일아웃 판단(15~30s) + Spring Boot 기동(~30s) +
+# readiness(30s) = 1분 이상. 09:00 KST 개장은 예측 가능한 부하다 — 예측 가능한 부하에
+# 반응형 오토스케일링만 쓰는 건 설계 실수다. 개장 15분 전에 HPA minReplicas를 올리고,
+# 장 마감 후 되돌린다. HPA의 maxReplicas는 그대로라 스파이크가 더 크면 HPA가 이어받는다.
+#
+# 시각은 UTC 크론(K8s CronJob timeZone 지원 시 Asia/Seoul로 바꿔도 된다):
+#   pre-open  08:45 KST = 23:45 UTC 전날  (일~목 UTC = 월~금 KST)
+#   post-close 15:45 KST = 06:45 UTC       (월~금)
+# 미국 장(23:30 KST)은 아직 다루지 않는다 — 트래픽 비중이 확인되면 같은 패턴으로 추가한다.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scaling-schedule
+  namespace: monticker
+data:
+  HPA_NAME: api-hpa
+  PREOPEN_MIN_REPLICAS: "4"    # prod overlay에서 덮어쓴다
+  BASE_MIN_REPLICAS: "2"       # base의 api-hpa.minReplicas와 같아야 한다 — prod overlay는 3
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hpa-scheduler
+  namespace: monticker
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: hpa-scheduler
+  namespace: monticker
+rules:
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: hpa-scheduler
+  namespace: monticker
+subjects:
+  - kind: ServiceAccount
+    name: hpa-scheduler
+    namespace: monticker
+roleRef:
+  kind: Role
+  name: hpa-scheduler
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: hpa-preopen-scaleup
+  namespace: monticker
+spec:
+  schedule: "45 23 * * 0-4"
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      activeDeadlineSeconds: 120
+      template:
+        spec:
+          serviceAccountName: hpa-scheduler
+          restartPolicy: Never
+          containers:
+            - name: kubectl
+              image: bitnami/kubectl:1.30
+              envFrom:
+                - configMapRef:
+                    name: scaling-schedule
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  echo "[preopen] $HPA_NAME minReplicas -> $PREOPEN_MIN_REPLICAS"
+                  kubectl patch hpa "$HPA_NAME" -n monticker --type merge \
+                    -p "{\"spec\":{\"minReplicas\":$PREOPEN_MIN_REPLICAS}}"
+                  kubectl get hpa "$HPA_NAME" -n monticker
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: hpa-postclose-scaledown
+  namespace: monticker
+spec:
+  schedule: "45 6 * * 1-5"
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      activeDeadlineSeconds: 120
+      template:
+        spec:
+          serviceAccountName: hpa-scheduler
+          restartPolicy: Never
+          containers:
+            - name: kubectl
+              image: bitnami/kubectl:1.30
+              envFrom:
+                - configMapRef:
+                    name: scaling-schedule
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  echo "[postclose] $HPA_NAME minReplicas -> $BASE_MIN_REPLICAS"
+                  kubectl patch hpa "$HPA_NAME" -n monticker --type merge \
+                    -p "{\"spec\":{\"minReplicas\":$BASE_MIN_REPLICAS}}"
+                  kubectl get hpa "$HPA_NAME" -n monticker

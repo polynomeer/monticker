@@ -1,6 +1,8 @@
 package com.monticker.api.brokerage.infrastructure
 
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.monticker.api.common.exception.ExternalServiceUnavailableException
+import com.monticker.api.common.http.HttpTimeouts
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import org.slf4j.LoggerFactory
@@ -44,7 +46,9 @@ import java.time.format.DateTimeFormatter
 @Component
 @ConditionalOnProperty("app.brokerage.mock.enabled", havingValue = "false")
 class KisBrokerageClient(
-    @Value("\${app.kis.base-url}") private val baseUrl: String,
+    // application.yml의 실제 키는 app.brokerage.kis.base-url 이다. app.kis.base-url 로 잘못 참조돼 있어
+    // BROKERAGE_MOCK_ENABLED=false(운영)에서 부팅이 실패했다 — CH-06 실험 1단계에서 발견 (resilience-plan §6.3).
+    @Value("\${app.brokerage.kis.base-url}") private val baseUrl: String,
     cbRegistry: CircuitBreakerRegistry,
 ) : BrokerageClient {
 
@@ -55,8 +59,10 @@ class KisBrokerageClient(
     // 모의투자 서버(openapivts)인지에 따라 TR_ID 접두사(실전 T/C, 모의 V)가 달라진다.
     private val isVirtual = baseUrl.contains("vts")
 
+    // requestFactory 없이 build()하면 read 타임아웃이 무제한이다 — KIS가 느려지면 스레드가 매달린다 (P0-2).
     private val restClient = RestClient.builder()
         .baseUrl(baseUrl)
+        .requestFactory(HttpTimeouts.requestFactory(HttpTimeouts.BROKER_READ))
         .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
         .build()
 
@@ -82,7 +88,7 @@ class KisBrokerageClient(
             }
         } catch (e: CallNotPermittedException) {
             log.warn("[CircuitBreaker:kis] 요청 차단됨 — 토큰 발급 건너뜀")
-            throw IllegalStateException("KIS API 장애로 서킷브레이커가 열려 있습니다. 잠시 후 다시 시도하세요.", e)
+            throw ExternalServiceUnavailableException("kis", "KIS API 장애로 서킷브레이커가 열려 있습니다. 잠시 후 다시 시도하세요.", e)
         } catch (e: RestClientException) {
             log.error("[KIS] 토큰 발급 실패: {}", e.message)
             throw IllegalStateException("KIS 토큰 발급 실패: ${e.message}", e)

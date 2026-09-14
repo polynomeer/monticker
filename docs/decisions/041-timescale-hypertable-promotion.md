@@ -3,6 +3,8 @@
 ## Status
 Accepted
 
+**구현 (2026-09-11):** V42 + `PriceTickDbWriter`/`recordDbWrite` 삭제. 로컬 dev DB(candles_1m 224,121행 · candles_1d 47,525행)에서 `migrate_data`로 54+14 chunk 승격 3.3초, 행 손실 0, `price_ticks` 드롭. 압축 정책 14d/90d. Testcontainers Timescale 통합 테스트 4건(`CandleHypertableIntegrationTest`)이 hypertable·압축 설정·`price_ticks` 부재·승격 후 upsert 동작을 고정한다.
+
 ## Context
 
 [ADR-002](002-timescaledb.md)는 시계열 데이터를 TimescaleDB로 다루기로 결정하면서

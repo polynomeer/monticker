@@ -3,7 +3,12 @@ package com.monticker.api.common.cache
 import com.fasterxml.jackson.annotation.JsonTypeInfo
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator
+import io.micrometer.core.instrument.MeterRegistry
+import org.slf4j.LoggerFactory
+import org.springframework.cache.Cache
+import org.springframework.cache.annotation.CachingConfigurer
 import org.springframework.cache.annotation.EnableCaching
+import org.springframework.cache.interceptor.CacheErrorHandler
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.data.redis.cache.RedisCacheConfiguration
@@ -41,7 +46,26 @@ import java.time.Duration
 @EnableCaching
 class CacheConfig(
     private val objectMapper: ObjectMapper,
-) {
+    private val meterRegistry: MeterRegistry,
+) : CachingConfigurer {
+
+    private val log = LoggerFactory.getLogger(javaClass)
+
+    /**
+     * Redis 장애 시 @Cacheable이 예외를 던지지 않고 캐시 미스처럼 동작하게 한다 (P0-1).
+     * 이게 없으면 Redis가 죽는 순간 스크리너·종목 스코어·패턴 조회가 전부 500이 된다 —
+     * 캐시가 원본(DB)보다 먼저 죽으면 안 된다. 실패는 카운터로 남겨 추이를 본다.
+     */
+    override fun errorHandler(): CacheErrorHandler = object : CacheErrorHandler {
+        private fun record(op: String, cache: Cache, e: RuntimeException) {
+            meterRegistry.counter("redis_command_failed_total", "op", "cache_$op", "policy", "open").increment()
+            log.warn("[CacheErrorHandler] {} 실패 cache={} — {}", op, cache.name, e.message)
+        }
+        override fun handleCacheGetError(e: RuntimeException, cache: Cache, key: Any) = record("get", cache, e)
+        override fun handleCachePutError(e: RuntimeException, cache: Cache, key: Any, value: Any?) = record("put", cache, e)
+        override fun handleCacheEvictError(e: RuntimeException, cache: Cache, key: Any) = record("evict", cache, e)
+        override fun handleCacheClearError(e: RuntimeException, cache: Cache) = record("clear", cache, e)
+    }
 
     companion object {
         const val SCREENER            = "screener"

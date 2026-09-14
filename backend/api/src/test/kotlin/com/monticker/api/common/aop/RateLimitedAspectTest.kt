@@ -1,6 +1,9 @@
 package com.monticker.api.common.aop
 
+import com.monticker.api.common.redis.RedisGuard
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.*
+import org.springframework.data.redis.RedisConnectionFailureException
 import org.aspectj.lang.ProceedingJoinPoint
 import org.aspectj.lang.reflect.MethodSignature
 import org.assertj.core.api.Assertions.assertThat
@@ -20,7 +23,8 @@ class RateLimitedAspectTest {
 
     private val redis = mockk<StringRedisTemplate>()
     private val valueOps = mockk<ValueOperations<String, String>>()
-    private val aspect = RateLimitedAspect(redis)
+    private val registry = SimpleMeterRegistry()
+    private val aspect = RateLimitedAspect(redis, RedisGuard(registry))
 
     @BeforeEach
     fun setup() {
@@ -126,5 +130,17 @@ class RateLimitedAspectTest {
         aspect.limit(makePjp(), makeAnnotation(10, 60, ""))
 
         assertThat(capturedKey.first()).startsWith("ratelimit:RateLimitedAspectTest.testMethod:")
+    }
+
+    // resilience-plan P0-1 — Redis 장애 시 레이트리밋은 fail-open
+    @Test
+    fun `Redis 연결 실패 시 요청을 통과시키고 실패 카운터를 올린다`() {
+        every { valueOps.increment(any<String>()) } throws RedisConnectionFailureException("down")
+
+        val result = aspect.limit(makePjp(), makeAnnotation(10, 60, "test"))
+
+        assertThat(result).isEqualTo("result")
+        assertThat(registry.counter("redis_command_failed_total", "op", "rate_limited_aspect", "policy", "open").count())
+            .isEqualTo(1.0)
     }
 }

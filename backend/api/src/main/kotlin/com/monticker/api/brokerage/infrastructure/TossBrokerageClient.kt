@@ -1,5 +1,7 @@
 package com.monticker.api.brokerage.infrastructure
 
+import com.monticker.api.common.exception.ExternalServiceUnavailableException
+import com.monticker.api.common.http.HttpTimeouts
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import org.slf4j.LoggerFactory
@@ -35,15 +37,18 @@ import java.util.UUID
 @Component
 @ConditionalOnProperty("app.brokerage.mock.enabled", havingValue = "false")
 class TossBrokerageClient(
-    @Value("\${app.toss.base-url}") private val baseUrl: String,
+    // KisBrokerageClient와 같은 오류 — 실제 키는 app.brokerage.toss.base-url (CH-06 실험에서 발견).
+    @Value("\${app.brokerage.toss.base-url}") private val baseUrl: String,
     cbRegistry: CircuitBreakerRegistry,
 ) : BrokerageClient {
 
     private val log = LoggerFactory.getLogger(javaClass)
     private val cb = cbRegistry.circuitBreaker("toss")
 
+    // requestFactory 없이 build()하면 read 타임아웃이 무제한이다 (P0-2).
     private val restClient = RestClient.builder()
         .baseUrl(baseUrl)
+        .requestFactory(HttpTimeouts.requestFactory(HttpTimeouts.BROKER_READ))
         .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
         .build()
 
@@ -71,7 +76,7 @@ class TossBrokerageClient(
             }
         } catch (e: CallNotPermittedException) {
             log.warn("[CircuitBreaker:toss] 요청 차단됨 — 토큰 발급 건너뜀")
-            throw IllegalStateException("Toss API 장애로 서킷브레이커가 열려 있습니다. 잠시 후 다시 시도하세요.", e)
+            throw ExternalServiceUnavailableException("toss", "Toss API 장애로 서킷브레이커가 열려 있습니다. 잠시 후 다시 시도하세요.", e)
         } catch (e: RestClientException) {
             log.error("[Toss] 토큰 발급 실패: {}", e.message)
             throw IllegalStateException("Toss 토큰 발급 실패: ${e.message}", e)
@@ -103,7 +108,7 @@ class TossBrokerageClient(
             }
         } catch (e: CallNotPermittedException) {
             log.warn("[CircuitBreaker:toss] 요청 차단됨 — 계좌 조회 건너뜀")
-            throw IllegalStateException("Toss API 장애로 서킷브레이커가 열려 있습니다. 잠시 후 다시 시도하세요.", e)
+            throw ExternalServiceUnavailableException("toss", "Toss API 장애로 서킷브레이커가 열려 있습니다. 잠시 후 다시 시도하세요.", e)
         } catch (e: RestClientException) {
             log.error("[Toss] 계좌 조회 실패: {}", e.message)
             throw IllegalStateException("Toss 계좌 조회 실패: ${e.message}", e)

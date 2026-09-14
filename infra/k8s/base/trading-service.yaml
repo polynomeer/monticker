@@ -9,8 +9,13 @@ metadata:
   labels:
     app: trading-service
 spec:
-  # 매칭 엔진은 동시성 제어(낙관적 락)가 있으므로 수평 확장 가능
-  replicas: 2
+  # replica는 반드시 1이어야 한다. OrderBookService가 종목별 호가창(TreeMap)을 pod 메모리에
+  # 들고 있어, replica가 2면 지정가 주문이 받은 pod에만 남고 다른 pod로 라우팅된 반대 주문과
+  # 절대 체결되지 않는다. 낙관적 락은 DB 행을 보호할 뿐 인메모리 호가창을 합쳐주지 않는다.
+  # 수평 확장은 stockId 샤딩(scale-out-plan §6.8, ADR 예정) 이후에만 가능하다.
+  replicas: 1
+  strategy:
+    type: Recreate   # 롤링 배포 중 두 pod가 잠시 공존하는 것도 같은 이유로 막는다
   selector:
     matchLabels:
       app: trading-service

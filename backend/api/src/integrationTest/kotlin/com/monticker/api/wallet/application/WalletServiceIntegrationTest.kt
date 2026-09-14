@@ -65,7 +65,7 @@ class WalletServiceIntegrationTest : PostgresIntegrationTest() {
         // stockWithoutPrice deliberately has no candles_1m row.
 
         every { accountQueryService.getCashBalance(userId) } returns Money.of("1000000")
-        every { ledgerService.getLedger(userId) } returns emptyList()
+        every { ledgerService.getRecentLedger(userId, 10) } returns emptyList()
 
         val service = WalletService(accountQueryService, ledgerService, jdbcTemplate)
         val result = service.getWalletMap(userId)

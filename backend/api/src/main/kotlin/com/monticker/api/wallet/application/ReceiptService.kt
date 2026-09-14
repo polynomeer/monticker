@@ -49,9 +49,7 @@ class ReceiptService(
             trade.amount - fee
         }
 
-        val ledgerEntry = ledgerRepo.findAll()
-            .filter { it.paperTradeId == tradeId }
-            .maxByOrNull { it.createdAt }
+        val ledgerEntry = ledgerRepo.findTopByPaperTradeIdOrderByIdDesc(tradeId)
 
         val balanceAfter = ledgerEntry?.balanceAfter
         val balanceBefore = if (balanceAfter != null) {

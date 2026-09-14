@@ -1,5 +1,6 @@
 package com.monticker.api.stock.application
 
+import com.monticker.api.common.metrics.SearchMetrics
 import com.monticker.api.stock.infrastructure.StockDocument
 import com.monticker.api.stock.infrastructure.StockRepository
 import org.slf4j.LoggerFactory
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Service
 class StockSearchService(
     private val esOps: ElasticsearchOperations,
     private val stockRepository: StockRepository,
+    private val searchMetrics: SearchMetrics,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -27,6 +29,7 @@ class StockSearchService(
         return try {
             searchFromEs(query)
         } catch (e: Exception) {
+            searchMetrics.fallback("stocks")
             log.warn("ES search failed, falling back to DB: {}", e.message)
             searchFromDb(query)
         }

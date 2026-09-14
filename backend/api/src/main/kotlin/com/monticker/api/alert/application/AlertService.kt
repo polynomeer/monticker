@@ -1,5 +1,10 @@
 package com.monticker.api.alert.application
 
+import com.monticker.api.common.redis.RedisGuard
+import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
+import com.monticker.api.common.metrics.SearchMetrics
 import com.monticker.api.alert.domain.AlertRule
 import com.monticker.api.alert.domain.AlertRuleType
 import com.monticker.api.alert.infrastructure.AlertHistoryDocument
@@ -22,7 +27,11 @@ class AlertService(
     private val jdbc: JdbcTemplate,
     private val alertHistorySearchRepository: AlertHistorySearchRepository,
     private val esOps: ElasticsearchOperations,
+    private val searchMetrics: SearchMetrics,
+    private val redis: StringRedisTemplate,
+    private val guard: RedisGuard,
 ) {
+    companion object { const val ALERT_RULES_CHANGED_CHANNEL = "alert:rules:changed" }   // worker와 관례로 동기화
     private val log = LoggerFactory.getLogger(javaClass)
     @Transactional(readOnly = true)
     fun getRules(userId: Long): List<AlertRule> =
@@ -40,7 +49,9 @@ class AlertService(
             ruleType = ruleType,
             conditionJson = objectMapper.writeValueAsString(condition),
         )
-        return alertRuleRepository.save(rule)
+        val saved = alertRuleRepository.save(rule)
+        publishChangedAfterCommit(stockId)
+        return saved
     }
 
     fun deactivateRule(userId: Long, ruleId: Long) {
@@ -50,6 +61,26 @@ class AlertService(
         require(rule.userId == userId) { "Access denied" }
         rule.deactivate()
         alertRuleRepository.save(rule)
+        publishChangedAfterCommit(rule.stockId)
+    }
+
+    /**
+     * ADR-044 — 워커의 인메모리 룰 인덱스에 변경을 알린다. 커밋 후에만 발행한다(롤백된 변경이 전파되면 안 된다).
+     * Redis pub/sub은 at-most-once라 워커가 5분 주기로 updated_at 기준 보정 재로드를 한다 — 여기서 실패해도
+     * 최대 5분 지연일 뿐이므로 fail-open. 이 서비스가 룰의 유일한 쓰기 경로라 발행 지점도 여기 한 곳이다.
+     */
+    private fun publishChangedAfterCommit(stockId: Long?) {
+        if (stockId == null) return
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) { publishChanged(stockId); return }
+        TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
+            override fun afterCommit() = publishChanged(stockId)
+        })
+    }
+
+    private fun publishChanged(stockId: Long) {
+        guard.failOpen(op = "alert_rules_changed_publish", fallback = Unit) {
+            redis.convertAndSend(ALERT_RULES_CHANGED_CHANNEL, stockId.toString()); Unit
+        }
     }
 
     @Transactional(readOnly = true)
@@ -143,6 +174,7 @@ class AlertService(
                 .map { hit -> AlertHistoryResult.from(hit.content, hit.score) }
                 .toList()
         } catch (e: Exception) {
+            searchMetrics.fallback("alert_histories")
             log.warn("ES alert history search failed for userId={}: {}", userId, e.message)
             emptyList()
         }

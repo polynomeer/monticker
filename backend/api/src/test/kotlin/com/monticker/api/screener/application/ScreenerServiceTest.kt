@@ -1,5 +1,7 @@
 package com.monticker.api.screener.application
 
+import com.monticker.api.common.metrics.SearchMetrics
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import com.monticker.api.screener.domain.ScreenerItem
 import com.monticker.api.screener.infrastructure.ScreenerRepository
 import com.monticker.api.stock.application.StockSearchService
@@ -14,7 +16,7 @@ class ScreenerServiceTest {
 
     private val repo = mockk<ScreenerRepository>()
     private val stockSearchService = mockk<StockSearchService>(relaxed = true)
-    private val service = ScreenerService(repo, stockSearchService)
+    private val service = ScreenerService(repo, stockSearchService, SearchMetrics(SimpleMeterRegistry()))
 
     private fun item(rank: Int, stockId: Long, market: String = "KOSPI", marketCap: Long? = null) = ScreenerItem(
         rank = rank, stockId = stockId, symbol = "00$stockId", name = "종목$stockId",

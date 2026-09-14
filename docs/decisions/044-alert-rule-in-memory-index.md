@@ -3,6 +3,8 @@
 ## Status
 Accepted
 
+**구현 (2026-09-11):** worker `67ef564`, api `53f5902`. 기존 19개 평가 의미론 테스트가 DB 폴백 경로로 그대로 통과했다. **정직한 기록**: 이 ADR의 Context가 "틱당 DB 조회가 처리 상한의 주원인"이라고 한 것은 룰 10개 규모의 L-03에서는 **틀렸다** — 적용 후 처리량이 그대로(~600 tick/s)였다. 실제 병목은 감지기의 틱당 Redis 왕복 7회였고 [ADR-046](046-detector-state-in-memory.md)이 다룬다. 이 ADR의 결정 자체는 유효하다(T2 룰 규모에서 틱당 30,000 SELECT는 성립하지 않는다) — 다만 "L-03 상한의 원인"이라는 주장은 철회한다. 결과: [resilience-plan §5.5](../resilience-plan.md).
+
 ## Context
 
 [`AlertEvaluator`](../../backend/worker/src/main/kotlin/com/monticker/worker/alert/AlertEvaluator.kt)의

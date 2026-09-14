@@ -63,8 +63,11 @@ class PaperTradingService(
 
     fun reset(userId: Long) {
         val account = getOrCreateAccount(userId)
+        val previousCash = account.cash.amount
         account.reset()
         accountRepo.save(account)
+        // ADR-043 — 초기화도 현금 변경 경로다. 원장에 남겨야 "잔고 + 예약금 = 초기 + 원장 합" 대사가 맞는다.
+        ledgerService.recordReset(userId, previousCash, account.cash.amount)
         jdbc.update("DELETE FROM paper_trades WHERE user_id = ?", userId)
     }
 }

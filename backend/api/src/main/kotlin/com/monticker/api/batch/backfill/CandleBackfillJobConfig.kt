@@ -15,6 +15,7 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.core.task.SimpleAsyncTaskExecutor
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.PlatformTransactionManager
+import com.monticker.api.common.http.HttpTimeouts
 import org.springframework.web.client.RestTemplate
 import java.time.LocalDate
 import javax.sql.DataSource
@@ -31,7 +32,9 @@ class CandleBackfillJobConfig(
     private val log = LoggerFactory.getLogger(javaClass)
 
     @Bean
-    fun candleBackfillRestTemplate(): RestTemplate = RestTemplate()
+    // RestTemplate()은 read 타임아웃이 무제한이다 — 배치라도 상한은 둔다 (P0-2).
+    fun candleBackfillRestTemplate(): RestTemplate =
+        RestTemplate(HttpTimeouts.requestFactory(HttpTimeouts.BATCH_READ))
 
     /**
      * 백필 Job. JobParameters:

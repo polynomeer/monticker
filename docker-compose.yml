@@ -170,7 +170,9 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # ADR-040 — 토픽은 backend/api의 KafkaTopicConfig가 선언한다. auto-create는 파티션 1개짜리 토픽을 아무도
+      # 소유하지 않은 채 만들어 낸다. api가 먼저 떠서 토픽을 만들기 전까지 worker 프로듀서는 재시도한다.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
       CLUSTER_ID: "monticker-kafka-cluster-001"
     healthcheck:
       test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
@@ -360,12 +362,26 @@ services:
     container_name: monticker-alertmanager
     ports:
       - "${ALERTMANAGER_PORT:-9093}:9093"
+    environment:
+      # 비어 있으면 무발송 설정(alertmanager.yml)으로 뜬다. 실제 채널 연결은 .env에 설정 — P0-3.
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
     volumes:
       - ./infra/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./infra/monitoring/alertmanager.slack.tpl.yml:/etc/alertmanager/alertmanager.slack.tpl.yml:ro
       - alertmanager_data:/alertmanager
-    command:
-      - '--config.file=/etc/alertmanager/alertmanager.yml'
-      - '--storage.path=/alertmanager'
+    # Alertmanager는 환경변수 확장을 지원하지 않는다 — 웹훅이 설정돼 있으면 템플릿을 sed로 렌더링해 쓴다.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        if [ -n "$$SLACK_WEBHOOK_URL" ]; then
+          sed "s|__SLACK_WEBHOOK_URL__|$$SLACK_WEBHOOK_URL|g" /etc/alertmanager/alertmanager.slack.tpl.yml > /tmp/alertmanager.yml
+          echo "[alertmanager] Slack receiver 활성화"
+        else
+          cp /etc/alertmanager/alertmanager.yml /tmp/alertmanager.yml
+          echo "[alertmanager] SLACK_WEBHOOK_URL 미설정 — 무발송 모드 (알람은 UI에서만 보인다)"
+        fi
+        exec /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:9093/-/healthy || exit 1"]
       interval: 10s

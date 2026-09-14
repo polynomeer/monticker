@@ -9,6 +9,15 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import java.time.Duration
 
+/**
+ * resilience-plan §B1 / P0-2 — 모든 서킷브레이커에 slowCallRateThreshold를 건다.
+ *
+ * failureRateThreshold만 있으면 외부가 "죽었을 때"만 열린다. 외부가 죽지 않고 느려지면
+ * 호출은 (HttpTimeouts의 타임아웃까지) 정상 반환되므로 실패로 집계되지 않고, 브레이커는
+ * 영원히 CLOSED다. 그 사이 Tomcat 스레드는 하나씩 응답을 기다리며 쌓인다.
+ * slowCallDurationThreshold는 HttpTimeouts의 read 타임아웃보다 짧게 둔다 —
+ * 타임아웃에 걸리기 전에 "느리다"로 먼저 집계돼야 브레이커가 스레드 고갈보다 먼저 열린다.
+ */
 @Configuration
 class CircuitBreakerConfiguration {
 
@@ -23,6 +32,8 @@ class CircuitBreakerConfiguration {
         registry.circuitBreaker("tradingService",
             CircuitBreakerConfig.custom()
                 .failureRateThreshold(50f)
+                .slowCallRateThreshold(50f)
+                .slowCallDurationThreshold(Duration.ofSeconds(5))
                 .slidingWindowSize(6)
                 .waitDurationInOpenState(Duration.ofSeconds(20))
                 .permittedNumberOfCallsInHalfOpenState(2)
@@ -35,6 +46,8 @@ class CircuitBreakerConfiguration {
         registry.circuitBreaker("quantEngine",
             CircuitBreakerConfig.custom()
                 .failureRateThreshold(50f)
+                .slowCallRateThreshold(50f)
+                .slowCallDurationThreshold(Duration.ofSeconds(20))
                 .slidingWindowSize(4)
                 .waitDurationInOpenState(Duration.ofSeconds(30))
                 .permittedNumberOfCallsInHalfOpenState(1)
@@ -46,6 +59,8 @@ class CircuitBreakerConfiguration {
         registry.circuitBreaker("yahooFinance",
             CircuitBreakerConfig.custom()
                 .failureRateThreshold(60f)
+                .slowCallRateThreshold(50f)
+                .slowCallDurationThreshold(Duration.ofSeconds(3))
                 .slidingWindowSize(5)
                 .waitDurationInOpenState(Duration.ofMinutes(2))
                 .permittedNumberOfCallsInHalfOpenState(1)
@@ -58,6 +73,8 @@ class CircuitBreakerConfiguration {
         registry.circuitBreaker("kis",
             CircuitBreakerConfig.custom()
                 .failureRateThreshold(50f)
+                .slowCallRateThreshold(50f)
+                .slowCallDurationThreshold(Duration.ofSeconds(3))
                 .slidingWindowSize(6)
                 .waitDurationInOpenState(Duration.ofSeconds(30))
                 .permittedNumberOfCallsInHalfOpenState(2)
@@ -69,6 +86,8 @@ class CircuitBreakerConfiguration {
         registry.circuitBreaker("toss",
             CircuitBreakerConfig.custom()
                 .failureRateThreshold(50f)
+                .slowCallRateThreshold(50f)
+                .slowCallDurationThreshold(Duration.ofSeconds(3))
                 .slidingWindowSize(6)
                 .waitDurationInOpenState(Duration.ofSeconds(30))
                 .permittedNumberOfCallsInHalfOpenState(2)

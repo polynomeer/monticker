@@ -57,6 +57,7 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.GET, "/api/stocks/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/events/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/screener/**").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/market/summary").permitAll()   // ADR-039 — 홈 위젯 초기값, 비로그인 공개
                     .requestMatchers("/api/backtest/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/latency/**").permitAll()
                     .requestMatchers("/actuator/health", "/actuator/info").permitAll()

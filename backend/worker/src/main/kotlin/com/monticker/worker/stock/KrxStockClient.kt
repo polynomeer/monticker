@@ -1,5 +1,6 @@
 package com.monticker.worker.stock
 
+import com.monticker.worker.common.HttpTimeouts
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -40,6 +41,7 @@ class KrxStockClient {
                 .header("User-Agent", "Mozilla/5.0 (compatible; monticker/1.0)")
                 .header("Referer", "http://data.krx.co.kr")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
+                .timeout(HttpTimeouts.COLLECTOR_READ)
                 .build()
 
             val response = http.send(request, HttpResponse.BodyHandlers.ofString())

@@ -4,6 +4,7 @@ import com.monticker.api.common.domain.Money
 import com.monticker.api.paper.application.PaperAccountQueryService
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.jdbc.core.JdbcTemplate
@@ -26,11 +27,19 @@ class WalletServiceTest {
         } returns value
     }
 
+    // ADR-043 — 예약금은 미체결 BUY 주문의 limit_price × 잔량 (RESERVED_CASH_SQL)
+    private fun stubReservedCash(userId: Long, value: BigDecimal) {
+        every {
+            jdbc.queryForObject(match<String> { it.contains("FROM orders") }, BigDecimal::class.java, userId)
+        } returns value
+    }
+
     @Test
     fun `getWalletMap sums available cash and holdings value into total assets`() {
         every { accountQueryService.getCashBalance(1L) } returns Money.of("5000000")
         stubHoldingsValue(1L, BigDecimal("600000"))
-        every { ledgerService.getLedger(1L) } returns emptyList()
+        stubReservedCash(1L, BigDecimal.ZERO)
+        every { ledgerService.getRecentLedger(1L, 10) } returns emptyList()
 
         val result = service.getWalletMap(1L)
 
@@ -40,14 +49,16 @@ class WalletServiceTest {
     }
 
     @Test
-    fun `getWalletMap reports zero reserved cash and zero settlement pending in the mock environment`() {
+    fun `getWalletMap reports reserved cash from open BUY orders and counts it in total assets`() {
         every { accountQueryService.getCashBalance(1L) } returns Money.of("1000000")
         stubHoldingsValue(1L, BigDecimal.ZERO)
-        every { ledgerService.getLedger(1L) } returns emptyList()
+        stubReservedCash(1L, BigDecimal("250000"))
+        every { ledgerService.getRecentLedger(1L, 10) } returns emptyList()
 
         val result = service.getWalletMap(1L)
 
-        assertThat(result.reservedCash).isEqualByComparingTo(BigDecimal.ZERO)
+        assertThat(result.reservedCash).isEqualByComparingTo(BigDecimal("250000"))
+        assertThat(result.totalAssets).isEqualByComparingTo(BigDecimal("1250000"))   // 예약금은 여전히 사용자 돈이다
         assertThat(result.settlementPending).isEqualByComparingTo(BigDecimal.ZERO)
     }
 
@@ -55,7 +66,8 @@ class WalletServiceTest {
     fun `getWalletMap creates a default account when the user has none yet`() {
         every { accountQueryService.getCashBalance(2L) } returns Money.INITIAL_BALANCE
         stubHoldingsValue(2L, BigDecimal.ZERO)
-        every { ledgerService.getLedger(2L) } returns emptyList()
+        stubReservedCash(2L, BigDecimal.ZERO)
+        every { ledgerService.getRecentLedger(2L, 10) } returns emptyList()
 
         val result = service.getWalletMap(2L)
 
@@ -64,19 +76,21 @@ class WalletServiceTest {
     }
 
     @Test
-    fun `getWalletMap returns only the most recent 10 ledger events`() {
+    fun `getWalletMap asks the ledger for the 10 most recent events instead of slicing the whole ledger`() {
         every { accountQueryService.getCashBalance(1L) } returns Money.of("1000000")
         stubHoldingsValue(1L, BigDecimal.ZERO)
-        val manyEvents = (1..15).map {
+        stubReservedCash(1L, BigDecimal.ZERO)
+        val ten = (1..10).map {
             LedgerEventDto(
                 id = it.toLong(), eventType = "FILL", amount = BigDecimal.ONE, balanceAfter = null,
                 paperTradeId = null, stockId = null, description = null, createdAt = java.time.Instant.now(),
             )
         }
-        every { ledgerService.getLedger(1L) } returns manyEvents
+        every { ledgerService.getRecentLedger(1L, 10) } returns ten
 
         val result = service.getWalletMap(1L)
 
         assertThat(result.recentLedger).hasSize(10)
+        verify(exactly = 1) { ledgerService.getRecentLedger(1L, 10) }
     }
 }

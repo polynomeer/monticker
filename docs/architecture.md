@@ -1330,3 +1330,4 @@ portfolio_positions (
 | [ADR-043](decisions/043-ledger-pagination-and-reconciliation.md) | 원장 커서 페이징 + 대사 스냅샷 (ADR-013 서술 정정) | Accepted |
 | [ADR-044](decisions/044-alert-rule-in-memory-index.md) | 알림 룰 인메모리 인덱스 · 평가/발송 분리 | Accepted |
 | [ADR-045](decisions/045-performance-slo-and-verification-harness.md) | 워크로드별 SLO 정의 + 검증 하네스 범위 | Accepted |
+| [ADR-046](decisions/046-detector-state-in-memory.md) | 감지기 EMA 상태 Redis → 메모리 — 틱당 Redis 왕복 제거 | Accepted |

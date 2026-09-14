@@ -1,20 +1,13 @@
 package com.monticker.worker.alert
 
-import com.monticker.worker.push.ExpoPushSender
-import io.mockk.every
-import io.mockk.mockk
-import io.mockk.verify
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.flywaydb.core.Flyway
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations
-import org.springframework.data.redis.core.StringRedisTemplate
-import org.springframework.data.redis.core.ValueOperations
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
-import org.springframework.mail.javamail.JavaMailSender
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
@@ -29,6 +22,10 @@ import java.time.Instant
  * 적이 없었다 — 기존 AlertEvaluatorTest는 jdbc.queryForMap을 직접 mock해서 이 문제를
  * 잡지 못했다. 이 테스트는 실제 Postgres에 candles_1d를 채워 넣고 실제 SQL을 실행해
  * (a) 더 이상 예외가 나지 않고 (b) 거래량 배율에 따라 실제로 트리거/미트리거되는지 검증한다.
+ *
+ * ADR-044 이후 그 SQL은 IndicatorCache.volumeStats에 있고, 룰은 AlertRuleIndex(실제 DB에서 로드)에서
+ * 오며, 발동은 AlertTriggerSink로 나간다 — 디스패치(푸시/메일/alert_histories)는 이 평가기 밖이다.
+ * 그래서 여기서는 sink에 도달한 룰을 기록해 발동 여부를 판정한다.
  */
 @Testcontainers
 class AlertEvaluatorIntegrationTest {
@@ -58,10 +55,9 @@ class AlertEvaluatorIntegrationTest {
         }
     }
 
-    private lateinit var pushSender: ExpoPushSender
-    private lateinit var mailSender: JavaMailSender
-    private lateinit var redis: StringRedisTemplate
+    private lateinit var ruleIndex: AlertRuleIndex
     private lateinit var evaluator: AlertEvaluator
+    private val triggered = mutableListOf<AlertRuleRow>()
     private var userId: Long = 0
     private var stockId: Long = 0
 
@@ -69,14 +65,11 @@ class AlertEvaluatorIntegrationTest {
     fun setUp() {
         jdbc.update("TRUNCATE alert_histories, alert_rules, candles_1d, stocks, users CASCADE")
 
-        pushSender = mockk(relaxed = true)
-        mailSender = mockk(relaxed = true)
-        redis = mockk()
-        val valueOps = mockk<ValueOperations<String, String>>()
-        every { redis.opsForValue() } returns valueOps
-        every { valueOps.setIfAbsent(any(), any(), any()) } returns true
-
-        evaluator = AlertEvaluator(jdbc, pushSender, mockk(relaxed = true), redis, mailSender)
+        triggered.clear()
+        val meterRegistry = SimpleMeterRegistry()
+        ruleIndex = AlertRuleIndex(jdbc, meterRegistry)
+        // ttlMs = 0: 테스트마다 candles_1d를 새로 채우므로 지표 캐시가 이전 값을 돌려주면 안 된다
+        evaluator = AlertEvaluator(ruleIndex, IndicatorCache(jdbc, ttlMs = 0), { rule, _ -> triggered += rule }, meterRegistry)
 
         userId = jdbc.queryForObject(
             "INSERT INTO users (email, nickname) VALUES (?, ?) RETURNING id",
@@ -89,12 +82,16 @@ class AlertEvaluatorIntegrationTest {
         )!!
     }
 
-    private fun insertRule(surgeRatio: Double = 2.0, period: Int = 20): Long = jdbc.queryForObject(
-        """INSERT INTO alert_rules (user_id, stock_id, rule_type, condition_json)
-           VALUES (?, ?, 'VOLUME_SURGE', ?::jsonb) RETURNING id""",
-        Long::class.java,
-        userId, stockId, """{"surgeRatio": $surgeRatio, "period": $period}""",
-    )!!
+    private fun insertRule(surgeRatio: Double = 2.0, period: Int = 20): Long {
+        val id = jdbc.queryForObject(
+            """INSERT INTO alert_rules (user_id, stock_id, rule_type, condition_json)
+               VALUES (?, ?, 'VOLUME_SURGE', ?::jsonb) RETURNING id""",
+            Long::class.java,
+            userId, stockId, """{"surgeRatio": $surgeRatio, "period": $period}""",
+        )!!
+        ruleIndex.loadAll()   // 기동 시 로드와 같은 경로로 인덱스에 올린다 — DB 폴백이 아니라 인덱스 경로를 검증
+        return id
+    }
 
     private fun insertDailyCandle(daysAgo: Long, volume: Long) {
         jdbc.update(
@@ -116,13 +113,8 @@ class AlertEvaluatorIntegrationTest {
 
         evaluator.processAlert(stockId, BigDecimal("105"))
 
-        // 디바이스 토큰이 없으므로 이메일 폴백 경로로 빠진다 — 여기까지 도달했다는 것 자체가
-        // VOLUME_SURGE SQL이 예외 없이 실행되고 조건이 true로 평가됐다는 뜻이다.
-        verify(exactly = 1) { mailSender.send(any<org.springframework.mail.SimpleMailMessage>()) }
-        val historyCount = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM alert_histories WHERE stock_id = ?", Int::class.java, stockId,
-        )
-        assertThat(historyCount).isEqualTo(1)
+        // sink까지 도달했다는 것 자체가 VOLUME_SURGE SQL이 예외 없이 실행되고 조건이 true로 평가됐다는 뜻이다.
+        assertThat(triggered).singleElement().satisfies({ assertThat(it.ruleType).isEqualTo("VOLUME_SURGE") })
     }
 
     @Test
@@ -134,10 +126,6 @@ class AlertEvaluatorIntegrationTest {
 
         evaluator.processAlert(stockId, BigDecimal("105"))
 
-        verify(exactly = 0) { mailSender.send(any<org.springframework.mail.SimpleMailMessage>()) }
-        val historyCount = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM alert_histories WHERE stock_id = ?", Int::class.java, stockId,
-        )
-        assertThat(historyCount).isEqualTo(0)
+        assertThat(triggered).isEmpty()
     }
 }

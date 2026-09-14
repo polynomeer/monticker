@@ -1,5 +1,6 @@
 package com.monticker.api.subscription.infrastructure.pg
 
+import com.monticker.api.common.http.HttpTimeouts
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -44,8 +45,10 @@ class TossPgClient(
 
     private val log = LoggerFactory.getLogger(javaClass)
 
+    // 결제 승인은 카드사 경유로 브로커보다 느릴 수 있지만 무제한은 아니다 (P0-2).
     private val restClient = RestClient.builder()
         .baseUrl("https://api.tosspayments.com")
+        .requestFactory(HttpTimeouts.requestFactory(HttpTimeouts.PAYMENT_READ))
         .defaultHeader("Authorization", "Basic " + Base64.getEncoder().encodeToString("$secretKey:".toByteArray()))
         .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
         .build()

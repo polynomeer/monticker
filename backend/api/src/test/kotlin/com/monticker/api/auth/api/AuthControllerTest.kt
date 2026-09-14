@@ -14,6 +14,8 @@ import org.mockito.Answers
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest
 import org.springframework.boot.test.mock.mockito.MockBean
+import com.monticker.api.common.redis.RedisGuard
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.springframework.context.annotation.Import
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.http.MediaType
@@ -28,7 +30,10 @@ import org.springframework.test.web.servlet.post
 // Filter 빈(RateLimitFilter, IdempotencyFilter)은 둘 다 StringRedisTemplate을 생성자로 받으므로
 // 이 빈이 없으면 컨텍스트 로딩 자체가 실패한다.
 @WebMvcTest(AuthController::class)
-@Import(SecurityConfig::class)
+// RedisGuard: RateLimitFilter/IdempotencyFilter(슬라이스에 포함되는 Filter 빈)가 요구한다.
+// 목으로 대체하면 failOpen()이 null을 돌려줘 Kotlin 언박싱 NPE가 나므로 실제 빈을 쓴다 —
+// 의존인 MeterRegistry는 슬라이스에 없어 SimpleMeterRegistry를 함께 올린다.
+@Import(SecurityConfig::class, RedisGuard::class, SimpleMeterRegistry::class)
 class AuthControllerTest {
 
     @Autowired lateinit var mvc: MockMvc

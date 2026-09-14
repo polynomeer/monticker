@@ -1,5 +1,6 @@
 package com.monticker.api.event.application
 
+import com.monticker.api.common.metrics.SearchMetrics
 import com.monticker.api.event.domain.StockEvent
 import com.monticker.api.event.infrastructure.StockEventDocument
 import com.monticker.api.event.infrastructure.StockEventSearchRepository
@@ -14,6 +15,7 @@ import java.time.Instant
 class EventSearchService(
     private val esOps: ElasticsearchOperations,
     private val eventRepository: com.monticker.api.event.infrastructure.StockEventRepository,
+    private val searchMetrics: SearchMetrics,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -36,6 +38,7 @@ class EventSearchService(
         return try {
             searchFromEs(stockId = stockId, query = query, eventTypes = eventTypes, minScore = minScore, from = from, to = to, limit = limit)
         } catch (e: Exception) {
+            searchMetrics.fallback("stock_events")
             log.warn("ES event search failed, falling back to DB: {}", e.message)
             eventRepository.findByStockIdAndTimeRange(stockId, from, to)
                 .take(limit).map { EventSearchResult.from(it) }
@@ -56,6 +59,7 @@ class EventSearchService(
         return try {
             searchFromEs(stockId = null, query = query, eventTypes = eventTypes, minScore = minScore, from = from, to = to, limit = limit)
         } catch (e: Exception) {
+            searchMetrics.fallback("stock_events")
             log.warn("ES global event search failed: {}", e.message)
             emptyList()
         }

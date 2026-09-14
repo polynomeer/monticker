@@ -85,4 +85,38 @@ class CircuitBreakerTest {
         assertThat(registry.allCircuitBreakers.map { it.name })
             .containsAll(listOf("tradingService", "quantEngine", "yahooFinance"))
     }
+
+    // resilience-plan §B1 / P0-2 — 느린 호출에 반응하지 않는 브레이커는 스레드 고갈을 막지 못한다.
+    // resilience4j 기본값은 slowCallRateThreshold=100(사실상 비활성)이라, 누가 새 CB를 추가하면서
+    // 빠뜨리면 조용히 원래 문제로 돌아간다. 전수 검사로 고정한다.
+    @Test
+    fun `등록된 모든 CB는 slow-call 감지가 켜져 있다`() {
+        val registry = CircuitBreakerConfiguration().circuitBreakerRegistry()
+
+        assertThat(registry.allCircuitBreakers).isNotEmpty
+        registry.allCircuitBreakers.forEach { cb ->
+            assertThat(cb.circuitBreakerConfig.slowCallRateThreshold)
+                .describedAs("%s slowCallRateThreshold", cb.name)
+                .isLessThan(100f)
+            assertThat(cb.circuitBreakerConfig.slowCallDurationThreshold)
+                .describedAs("%s slowCallDurationThreshold", cb.name)
+                .isLessThanOrEqualTo(Duration.ofSeconds(20))
+        }
+    }
+
+    @Test
+    fun `느린 호출이 임계 비율을 넘으면 실패 없이도 OPEN이 된다`() {
+        val cb = CircuitBreaker.of("slow",
+            CircuitBreakerConfig.custom()
+                .slidingWindowSize(4)
+                .minimumNumberOfCalls(4)
+                .slowCallRateThreshold(50f)
+                .slowCallDurationThreshold(Duration.ofMillis(10))
+                .build())
+
+        // 4번 모두 "성공"하지만 느리다 — 실패율은 0%인데 slow-call 비율이 100%
+        repeat(4) { cb.onSuccess(50, java.util.concurrent.TimeUnit.MILLISECONDS) }
+
+        assertThat(cb.state).isEqualTo(CircuitBreaker.State.OPEN)
+    }
 }

@@ -10,6 +10,9 @@ spring:
       maximum-pool-size: 20
       minimum-idle: 5
       connection-timeout: 3000
+      # resilience-plan §A4 / P1-3 — 느린 쿼리가 커넥션을 무한정 잡고 풀을 고갈시키는 것을 막는다.
+      # 물리 커넥션마다 1회 실행된다. 30s: OLTP + 모놀리스 모드의 백테스트/분석 조회. 원장 전체 조회(ADR-043 전) 같은 폭주는 여기서 잘린다.
+      connection-init-sql: "SET statement_timeout = '30s'"
       idle-timeout: 600000
   jpa:
     hibernate:
@@ -26,14 +29,22 @@ spring:
       initialize-schema: never   # V17 Flyway 마이그레이션으로 관리
     job:
       enabled: false             # 기동 시 자동 실행 방지 — BatchJobScheduler가 직접 실행
+  # Spring Boot 3의 ES 접속 키는 spring.elasticsearch.uris 다. 이전에는 spring.data.elasticsearch.uris
+  # (Boot 3에 존재하지 않는 키)에 두어 ELASTICSEARCH_URI가 조용히 무시되고 기본값 localhost:9200을 썼다 —
+  # 컨테이너 배포에서는 ES에 한 번도 연결된 적이 없었고 전부 DB 폴백으로 동작했다.
+  # CH-04 카오스 실험이 search_fallback_total로 잡아냈다 (resilience-plan §6.3).
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URI:http://localhost:9200}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      # 명시하지 않으면 Lettuce 기본 60초 — Redis가 느려지면 요청이 60초씩 매달려 Tomcat 스레드가
+      # 고갈된다(resilience-plan §A2). 시세 조회에 200ms 넘게 걸리면 그건 이미 장애다.
+      timeout: 200ms
+      connect-timeout: 500ms
     mongodb:
       uri: ${MONGODB_URI:mongodb://monticker:monticker@localhost:27017/monticker?authSource=admin}
-    elasticsearch:
-      uris: ${ELASTICSEARCH_URI:http://localhost:9200}
   kafka:
     bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
     producer:
@@ -119,6 +130,17 @@ management:
       base-path: /actuator
   endpoint:
     health:
+      # resilience-plan §A3 / P0-6 — readiness가 실제 서빙 가능 여부를 본다.
+      # 설정이 없으면 Spring 기본값(readinessState만)이라 DB가 죽어도 pod는 Ready로 남아
+      # 트래픽을 계속 받는다. db는 readiness에만 넣는다 — liveness에 넣으면 DB 장애가
+      # pod 재시작 루프를 유발해 복구가 더 느려진다. liveness는 프로세스 생존만 본다.
+      probes:
+        enabled: true        # K8s 밖(docker-compose)에서도 /readiness, /liveness 노출
+      group:
+        readiness:
+          include: readinessState,db
+        liveness:
+          include: livenessState
       show-details: when-authorized
       show-components: when-authorized
     prometheus:
@@ -129,6 +151,13 @@ management:
         enabled: true
     tags:
       application: monticker-api
+    distribution:
+      # ApiLatencyHigh 알람(alert-rules.yml)이 histogram_quantile로 p95를 계산하려면 버킷이 필요하다.
+      # slo 경계는 resilience-plan §4.3의 조회 SLO(p95 200ms, p99 500ms) 기준.
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 50ms,100ms,200ms,500ms,1s,2s
   tracing:
     sampling:
       probability: 1.0
@@ -137,6 +166,21 @@ management:
       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
 
 app:
+  wallet:
+    # ADR-043 — 일일 원장 대사의 불일치 처리. alert: ERROR + LedgerMismatch 페이지 알람.
+    # report: WARN + mode="report" 카운터만 — 최초 실행에서 기존 드리프트를 조사·정리할 때까지 (운영 ConfigMap이 결정).
+    reconciliation:
+      mode: ${LEDGER_RECON_MODE:alert}
+  # ADR-040 — Kafka 토픽 파티션/복제. 로컬 기본값. 운영 값(prod: ticks 64, T2 목표 256)은 K8s ConfigMap.
+  # 파티션은 늘리기만 가능하고 늘리면 키→파티션 매핑이 바뀐다 — 장 마감 후, ADR-038 배포 이후에만.
+  kafka:
+    replication-factor: ${KAFKA_REPLICATION_FACTOR:1}
+    partitions:
+      market-ticks: ${KAFKA_PARTITIONS_MARKET_TICKS:12}
+      tick-processed: ${KAFKA_PARTITIONS_TICK_PROCESSED:6}
+      market-events: ${KAFKA_PARTITIONS_MARKET_EVENTS:3}
+      trading: ${KAFKA_PARTITIONS_TRADING:3}
+      retry: ${KAFKA_PARTITIONS_RETRY:1}
   mail:
     from: ${MAIL_FROM:noreply@monticker.io}
   base-url: ${APP_BASE_URL:http://localhost:3000}

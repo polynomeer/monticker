@@ -1,5 +1,6 @@
 package com.monticker.api.quant.application
 
+import io.micrometer.core.instrument.MeterRegistry
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.api.matching.events.OrderFilledEvent
@@ -21,7 +22,9 @@ import org.springframework.stereotype.Component
  */
 @Component
 @ConditionalOnProperty(name = ["quant.trading-events.enabled"], havingValue = "true")
-class OrderFilledKafkaConsumer {
+class OrderFilledKafkaConsumer(
+    private val meterRegistry: MeterRegistry,
+) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val objectMapper = ObjectMapper().findAndRegisterModules()
 
@@ -52,6 +55,7 @@ class OrderFilledKafkaConsumer {
 
     @DltHandler
     fun onOrderFilledDlt(record: ConsumerRecord<String, String>) {
+        meterRegistry.counter("dlt_messages_total", "topic", "trading.order-filled").increment()   // 알람: DltMessagesGrowing (P1-2)
         log.error(
             "[DLT] trading.order-filled 최종 실패 — 포트폴리오 추적 누락, 수동 검토 필요. " +
             "topic={} partition={} offset={} key={}",

@@ -3,6 +3,8 @@
 ## Status
 Accepted
 
+**구현 (2026-09-11):** `d614339` + `AllPartitionsListener`(`3180a45`). api 인스턴스 2개·파티션 4개로 라이브 검증 — 각 인스턴스가 200종목 중 196개의 틱을 받았다(그룹 분할이면 ~50). conflation 후 L-02 500 연결 e2e p99 159ms, max 846→179ms. 결과: [resilience-plan §5.5](../resilience-plan.md).
+
 ## Context
 
 [scale-out-plan.md](../scale-out-plan.md) §3.1에서 발견한, **현재 prod 설정에서 이미 발현

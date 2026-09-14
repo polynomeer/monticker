@@ -72,6 +72,13 @@ class GlobalExceptionHandler {
     fun handleReconnectRequired(e: ReconnectRequiredException) =
         error(HttpStatus.UNAUTHORIZED, e.message ?: "재연동이 필요합니다.")
 
+    // 외부 서비스 서킷브레이커 OPEN — 우리 장애가 아니라 의존 서비스 장애. 503 + Retry-After.
+    @ExceptionHandler(ExternalServiceUnavailableException::class)
+    fun handleExternalUnavailable(e: ExternalServiceUnavailableException): ResponseEntity<ErrorResponse> =
+        ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+            .header("Retry-After", e.retryAfterSeconds.toString())
+            .body(ErrorResponse(HttpStatus.SERVICE_UNAVAILABLE.value(), e.message ?: "외부 서비스 일시 장애", "service=${e.service}"))
+
     // 백테스트 실행기(backtestExecutor) 큐가 가득 찼을 때 — 스레드 풀 고갈 대신 클라이언트에게
     // 429로 알려 재시도를 유도한다(BacktestController).
     @ExceptionHandler(RejectedExecutionException::class)

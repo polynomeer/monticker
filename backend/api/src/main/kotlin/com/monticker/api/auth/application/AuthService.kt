@@ -4,6 +4,7 @@ import com.monticker.api.auth.domain.User
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
 import com.monticker.api.auth.infrastructure.UserRepository
 import org.slf4j.LoggerFactory
+import com.monticker.api.common.redis.RedisGuard
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.crypto.password.PasswordEncoder
@@ -36,6 +37,7 @@ class AuthService(
     private val jdbc: JdbcTemplate,
     private val redis: StringRedisTemplate,
     private val emailService: EmailService,
+    private val guard: RedisGuard,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -48,7 +50,10 @@ class AuthService(
                 nickname     = nickname,
             )
         )
-        sendVerificationEmail(user)
+        // 인증 메일은 가입의 부수 효과다. Redis(토큰 저장소)가 없다고 가입 자체를 500으로 실패시키지
+        // 않는다 — 계정과 토큰은 발급하고, 메일은 /resend-verification으로 나중에 받을 수 있다.
+        // CH-01 실험에서 Redis 정지 중 가입이 500으로 떨어지는 것을 확인해 fail-open으로 바꿨다 (P0-1).
+        guard.failOpen(op = "signup_verify_token", fallback = Unit) { sendVerificationEmail(user) }
         return issueTokens(user)
     }
 
@@ -71,7 +76,11 @@ class AuthService(
 
     fun login(email: String, password: String): TokenPair {
         val failKey = LOGIN_FAIL_PREFIX + email
-        val fails = redis.opsForValue().get(failKey)?.toIntOrNull() ?: 0
+        // 실패 카운터는 브루트포스 방어다 — Redis가 없다고 로그인 자체를 막지 않는다 (fail-open, P0-1).
+        // IP 기반 1차 방어(RateLimitFilter)가 따로 있다.
+        val fails = guard.failOpen(op = "login_fail_get", fallback = 0) {
+            redis.opsForValue().get(failKey)?.toIntOrNull() ?: 0
+        }
         require(fails < LOGIN_FAIL_LIMIT) { "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요." }
 
         try {
@@ -81,11 +90,14 @@ class AuthService(
             require(passwordEncoder.matches(password, user.passwordHash)) {
                 "이메일 또는 비밀번호가 올바르지 않습니다."
             }
-            redis.delete(failKey)
+            guard.failOpen(op = "login_fail_reset", fallback = Unit) { redis.delete(failKey); Unit }
             return issueTokens(user)
         } catch (e: IllegalArgumentException) {
-            redis.opsForValue().increment(failKey)
-            redis.expire(failKey, LOGIN_FAIL_WINDOW)
+            guard.failOpen(op = "login_fail_incr", fallback = Unit) {
+                redis.opsForValue().increment(failKey)
+                redis.expire(failKey, LOGIN_FAIL_WINDOW)
+                Unit
+            }
             throw e
         }
     }

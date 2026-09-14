@@ -18,3 +18,8 @@ resources:
   - worker-alert.yaml
   - jaeger.yaml
   - ingress.yaml
+  - pdb.yaml
+  - db-backup.yaml
+  - scaling-schedule.yaml
+  # 관측 스택 — 규칙·대시보드가 docker-compose와 단일 소스라 infra/monitoring/ 을 루트로 둔다
+  - ../../monitoring

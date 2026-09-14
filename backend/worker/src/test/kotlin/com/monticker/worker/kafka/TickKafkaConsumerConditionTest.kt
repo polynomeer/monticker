@@ -1,5 +1,7 @@
 package com.monticker.worker.kafka
 
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import com.monticker.worker.detector.EventDetector
 import com.monticker.worker.marketdata.CandleAggregator
 import com.monticker.worker.marketdata.LatencyTracker
@@ -32,6 +34,7 @@ class TickKafkaConsumerConditionTest {
         @Bean fun candleAggregator(): CandleAggregator = mockk(relaxed = true)
         @Bean fun eventDetector(): EventDetector = mockk(relaxed = true)
         @Bean fun latencyTracker(): LatencyTracker = mockk(relaxed = true)
+        @Bean fun meterRegistry(): MeterRegistry = SimpleMeterRegistry()
     }
 
     private val runner = ApplicationContextRunner()

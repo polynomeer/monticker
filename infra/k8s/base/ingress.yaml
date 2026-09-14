@@ -77,6 +77,15 @@ spec:
                 name: api
                 port:
                   number: 8080
+          # 관측 스택 — Grafana만 노출한다(자체 로그인 있음). Prometheus/Alertmanager는 인증이
+          # 없으므로 Ingress에 두지 않는다: kubectl port-forward svc/prometheus 9090 으로 본다.
+          - path: /grafana
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana
+                port:
+                  number: 3000
           - path: /
             pathType: Prefix
             backend:

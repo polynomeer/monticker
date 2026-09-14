@@ -1,0 +1,55 @@
+# resilience-plan §4.5 / P0-3 — 알람을 실제 채널로 보내는 설정 템플릿.
+#
+# 이 파일이 생기기 전 alertmanager.yml의 receiver는 빈 껍데기였다 — Prometheus 알람 5개가
+# 전부 Alertmanager UI에서만 보이고 아무 데도 전달되지 않았다. 장애를 사람이 우연히 발견하는 구조다.
+#
+# __SLACK_WEBHOOK_URL__ 은 docker-compose의 entrypoint가 SLACK_WEBHOOK_URL 환경변수로 치환한다.
+# Alertmanager는 환경변수 확장을 지원하지 않아서 sed로 렌더링한다. 변수가 비어 있으면
+# entrypoint가 이 파일 대신 alertmanager.yml(무발송)을 쓴다 — 로컬 개발에서 웹훅 없이도 뜬다.
+#
+# K8s: 운영 관측 스택(P1-1)이 들어오면 이 템플릿을 ConfigMap으로, 웹훅 URL은 Secret으로 마운트하고
+#      같은 방식으로 initContainer에서 렌더링한다. 키 이름: monticker-secrets/SLACK_WEBHOOK_URL.
+#
+# 심각도 라우팅:
+#   critical → #monticker-alerts-page  (사람을 깨운다. resilience-plan §4.5 "Page" 계층)
+#   warning  → #monticker-alerts       (업무시간 대응. "Ticket" 계층)
+# 채널을 두 개로 나누는 이유: 같은 채널에 섞이면 warning의 소음이 critical을 묻어버린다.
+# PagerDuty/전화 연동이 필요해지면 page receiver에 pagerduty_configs를 추가한다.
+
+global:
+  resolve_timeout: 5m
+  slack_api_url: '__SLACK_WEBHOOK_URL__'
+
+route:
+  receiver: ticket
+  group_by: ['alertname', 'application']
+  group_wait: 10s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - match:
+        severity: critical
+      receiver: page
+      group_wait: 0s          # critical은 묶어서 기다리지 않는다
+      repeat_interval: 1h
+
+receivers:
+  - name: page
+    slack_configs:
+      - channel: '#monticker-alerts-page'
+        send_resolved: true
+        title: ':rotating_light: [{{ .Status | toUpper }}] {{ .CommonAnnotations.summary }}'
+        text: >-
+          {{ range .Alerts }}*{{ .Labels.alertname }}* ({{ .Labels.application }})
+          {{ .Annotations.description }}
+          {{ end }}
+
+  - name: ticket
+    slack_configs:
+      - channel: '#monticker-alerts'
+        send_resolved: true
+        title: '[{{ .Status | toUpper }}] {{ .CommonAnnotations.summary }}'
+        text: >-
+          {{ range .Alerts }}*{{ .Labels.alertname }}* ({{ .Labels.application }})
+          {{ .Annotations.description }}
+          {{ end }}

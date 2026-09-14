@@ -1,0 +1,65 @@
+# K8s용 Prometheus 설정 (resilience-plan §4.1 / P1-1).
+# docker-compose용 ../prometheus.yml은 static_configs로 compose 호스트명을 가리켜 K8s에서 동작하지 않는다.
+# 여기서는 pod 어노테이션(prometheus.io/scrape|path|port) 기반 서비스 디스커버리를 쓴다 —
+# 배포를 추가할 때 어노테이션만 붙이면 자동으로 수집된다. 알람 규칙은 ../alert-rules.yml을
+# configMapGenerator로 그대로 실어 compose와 K8s가 같은 규칙을 쓴다.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monticker
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: monticker
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets: ['alertmanager:9093']
+
+    rule_files:
+      - /etc/prometheus/rules/alert-rules.yml
+
+    scrape_configs:
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              own_namespace: true
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          # job 라벨을 app 라벨로 — alert-rules.yml의 up{job=~"monticker-.*"}와 맞춘다
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: replace
+            target_label: job
+            regex: (.+)
+            replacement: monticker-$1
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            action: replace
+            target_label: node
+          # 종료 중인 pod는 스크레이프에서 제외 — 롤링 배포마다 ServiceDown이 깜빡이는 것을 막는다
+          - source_labels: [__meta_kubernetes_pod_phase]
+            action: drop
+            regex: Pending|Succeeded|Failed
+
+      - job_name: prometheus
+        static_configs:
+          - targets: ['localhost:9090']

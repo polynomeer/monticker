@@ -1,5 +1,6 @@
 package com.monticker.worker.news
 
+import com.monticker.worker.common.HttpTimeouts
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import org.slf4j.LoggerFactory
@@ -29,7 +30,7 @@ class NaverNewsClient(
     private val cbRegistry: CircuitBreakerRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val http = HttpClient.newHttpClient()
+    private val http = HttpClient.newBuilder().connectTimeout(HttpTimeouts.CONNECT).build()
     private val mapper = ObjectMapper()
     private val pubDateFormatter = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH)
 
@@ -52,6 +53,7 @@ class NaverNewsClient(
             .header("X-Naver-Client-Id", clientId)
             .header("X-Naver-Client-Secret", clientSecret)
             .GET()
+            .timeout(HttpTimeouts.COLLECTOR_READ)
             .build()
 
         val response = http.send(request, HttpResponse.BodyHandlers.ofString())

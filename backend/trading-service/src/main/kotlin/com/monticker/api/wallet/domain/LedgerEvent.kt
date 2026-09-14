@@ -1,6 +1,8 @@
 package com.monticker.api.wallet.domain
 
 import jakarta.persistence.*
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import java.math.BigDecimal
 import java.time.Instant
 
@@ -34,6 +36,8 @@ class LedgerEvent(
     val stockId: Long? = null,
 
     val description: String? = null,
+
+    @JdbcTypeCode(SqlTypes.JSON)
 
     @Column(name = "metadata_json", columnDefinition = "jsonb")
     val metadataJson: String? = null,

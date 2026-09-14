@@ -1,5 +1,6 @@
 package com.monticker.worker.alert
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import com.monticker.worker.push.ExpoPushSender
 import io.mockk.*
 import org.assertj.core.api.Assertions.assertThat
@@ -21,7 +22,11 @@ class AlertEvaluatorTest {
     private val esOps = mockk<ElasticsearchOperations>(relaxed = true)
     private val redis = mockk<StringRedisTemplate>(relaxed = true)
     private val mailSender = mockk<JavaMailSender>(relaxed = true)
-    private val evaluator = AlertEvaluator(jdbc, pushSender, esOps, redis, mailSender)
+    private val meterRegistry = SimpleMeterRegistry()
+    // 인덱스는 loadAll() 전이라 DB 폴백 경로 — 기존 테스트의 jdbc 스텁이 그대로 유효하다.
+    // 지표 캐시는 TTL 0 — 테스트마다 다른 스텁이 들어가므로 캐시가 끼면 안 된다.
+    private val dispatcher = AlertDispatcher(jdbc, pushSender, esOps, redis, mailSender)
+    private val evaluator = AlertEvaluator(AlertRuleIndex(jdbc, meterRegistry), IndicatorCache(jdbc, ttlMs = 0), InlineTriggerSink(dispatcher), meterRegistry)
 
     @BeforeEach
     fun setup() {
@@ -224,5 +229,207 @@ class AlertEvaluatorTest {
 
         verify(exactly = 0) { pushSender.send(any()) }
         verify(exactly = 0) { redis.opsForValue().setIfAbsent(any(), any(), any<Duration>()) }
+    }
+
+    /** 계속 하락하는 종가 시퀀스 — RSI가 낮게(과매도) 나온다. */
+    private val decliningCloses = listOf(100.0, 98.0, 96.0, 94.0, 92.0, 90.0, 88.0, 86.0, 84.0, 82.0, 80.0, 78.0, 76.0, 74.0, 72.0)
+    /** 계속 상승하는 종가 시퀀스 — RSI가 높게(과매수) 나온다. */
+    private val risingCloses = decliningCloses.reversed()
+
+    @Test
+    fun `RSI_BELOW 과매도 조건 충족이면 push를 보낸다`() {
+        val rule = AlertRuleRow(
+            id            = 9L,
+            userId        = 90L,
+            stockId       = 5L,
+            ruleType      = "RSI_BELOW",
+            conditionJson = """{"period": 14, "threshold": 30}""",
+        )
+        every { jdbc.query(any<String>(), any<RowMapper<AlertRuleRow>>(), 5L) } returns listOf(rule)
+        // fetchRsi는 DESC로 가져와 뒤집으므로 DB가 최신순으로 내려주는 그대로 반환
+        every { jdbc.query(any<String>(), any<RowMapper<Double>>(), 5L, 42) } returns decliningCloses.reversed()
+        stubCooldownAcquired(true)
+        stubHistoryInsert(91L)
+        every { jdbc.queryForList(any<String>(), String::class.java, rule.userId) } returns listOf("ExponentPushToken[rsi]")
+        every { jdbc.update(any<String>(), any(), 91L) } returns 1
+
+        evaluator.processAlert(stockId = 5L, price = BigDecimal("72"))
+
+        verify(exactly = 1) { pushSender.send(match { it.size == 1 && it[0].to == "ExponentPushToken[rsi]" }) }
+    }
+
+    @Test
+    fun `RSI_ABOVE 과매수 조건 미충족(하락장이라 RSI가 낮음)이면 push를 보내지 않는다`() {
+        val rule = AlertRuleRow(
+            id            = 10L,
+            userId        = 100L,
+            stockId       = 5L,
+            ruleType      = "RSI_ABOVE",
+            conditionJson = """{"period": 14, "threshold": 70}""",
+        )
+        every { jdbc.query(any<String>(), any<RowMapper<AlertRuleRow>>(), 5L) } returns listOf(rule)
+        every { jdbc.query(any<String>(), any<RowMapper<Double>>(), 5L, 42) } returns decliningCloses.reversed()
+
+        evaluator.processAlert(stockId = 5L, price = BigDecimal("72"))
+
+        verify(exactly = 0) { pushSender.send(any()) }
+    }
+
+    @Test
+    fun `RSI_ABOVE 과매수 조건 충족(상승장)이면 push를 보낸다`() {
+        val rule = AlertRuleRow(
+            id            = 11L,
+            userId        = 110L,
+            stockId       = 5L,
+            ruleType      = "RSI_ABOVE",
+            conditionJson = """{"period": 14, "threshold": 70}""",
+        )
+        every { jdbc.query(any<String>(), any<RowMapper<AlertRuleRow>>(), 5L) } returns listOf(rule)
+        every { jdbc.query(any<String>(), any<RowMapper<Double>>(), 5L, 42) } returns risingCloses.reversed()
+        stubCooldownAcquired(true)
+        stubHistoryInsert(111L)
+        every { jdbc.queryForList(any<String>(), String::class.java, rule.userId) } returns listOf("ExponentPushToken[rsi2]")
+        every { jdbc.update(any<String>(), any(), 111L) } returns 1
+
+        evaluator.processAlert(stockId = 5L, price = BigDecimal("102"))
+
+        verify(exactly = 1) { pushSender.send(match { it.size == 1 && it[0].to == "ExponentPushToken[rsi2]" }) }
+    }
+
+    @Test
+    fun `RSI 계산에 필요한 캔들 수가 부족하면 발동하지 않는다`() {
+        val rule = AlertRuleRow(
+            id            = 12L,
+            userId        = 120L,
+            stockId       = 5L,
+            ruleType      = "RSI_BELOW",
+            conditionJson = """{"period": 14, "threshold": 30}""",
+        )
+        every { jdbc.query(any<String>(), any<RowMapper<AlertRuleRow>>(), 5L) } returns listOf(rule)
+        every { jdbc.query(any<String>(), any<RowMapper<Double>>(), 5L, 42) } returns listOf(100.0, 99.0)
+
+        evaluator.processAlert(stockId = 5L, price = BigDecimal("72"))
+
+        verify(exactly = 0) { pushSender.send(any()) }
+    }
+
+    @Test
+    fun `PRICE_BELOW_MA 조건 충족(현재가가 이동평균 아래)이면 push를 보낸다`() {
+        val rule = AlertRuleRow(
+            id            = 13L,
+            userId        = 130L,
+            stockId       = 5L,
+            ruleType      = "PRICE_BELOW_MA",
+            conditionJson = """{"period": 20}""",
+        )
+        every { jdbc.query(any<String>(), any<RowMapper<AlertRuleRow>>(), 5L) } returns listOf(rule)
+        every { jdbc.queryForObject(any<String>(), Double::class.java, 5L, 20) } returns 80000.0
+        stubCooldownAcquired(true)
+        stubHistoryInsert(131L)
+        every { jdbc.queryForList(any<String>(), String::class.java, rule.userId) } returns listOf("ExponentPushToken[ma]")
+        every { jdbc.update(any<String>(), any(), 131L) } returns 1
+
+        evaluator.processAlert(stockId = 5L, price = BigDecimal("70000"))
+
+        verify(exactly = 1) { pushSender.send(match { it.size == 1 && it[0].to == "ExponentPushToken[ma]" }) }
+    }
+
+    @Test
+    fun `PRICE_ABOVE_MA 조건 미충족(현재가가 이동평균 아래)이면 push를 보내지 않는다`() {
+        val rule = AlertRuleRow(
+            id            = 14L,
+            userId        = 140L,
+            stockId       = 5L,
+            ruleType      = "PRICE_ABOVE_MA",
+            conditionJson = """{"period": 20}""",
+        )
+        every { jdbc.query(any<String>(), any<RowMapper<AlertRuleRow>>(), 5L) } returns listOf(rule)
+        every { jdbc.queryForObject(any<String>(), Double::class.java, 5L, 20) } returns 80000.0
+
+        evaluator.processAlert(stockId = 5L, price = BigDecimal("70000"))
+
+        verify(exactly = 0) { pushSender.send(any()) }
+    }
+
+    @Test
+    fun `HOLDING_DROP 보유 포지션이 기준 하락률을 넘으면 push를 보낸다`() {
+        val rule = AlertRuleRow(
+            id            = 15L,
+            userId        = 150L,
+            stockId       = 5L,
+            ruleType      = "HOLDING_DROP",
+            conditionJson = """{"dropPct": 10}""",
+        )
+        every { jdbc.query(any<String>(), any<RowMapper<AlertRuleRow>>(), 5L) } returns listOf(rule)
+        // 평단 100,000원, 현재가 85,000원 → -15% 하락(기준 10% 초과)
+        every { jdbc.query(any<String>(), any<RowMapper<BigDecimal>>(), 150L, 5L) } returns listOf(BigDecimal("100000"))
+        stubCooldownAcquired(true)
+        stubHistoryInsert(151L)
+        every { jdbc.queryForList(any<String>(), String::class.java, rule.userId) } returns listOf("ExponentPushToken[hold]")
+        every { jdbc.update(any<String>(), any(), 151L) } returns 1
+
+        evaluator.processAlert(stockId = 5L, price = BigDecimal("85000"))
+
+        verify(exactly = 1) { pushSender.send(match { it.size == 1 && it[0].to == "ExponentPushToken[hold]" }) }
+    }
+
+    @Test
+    fun `HOLDING_DROP 보유 포지션이 없으면 push를 보내지 않는다`() {
+        val rule = AlertRuleRow(
+            id            = 16L,
+            userId        = 160L,
+            stockId       = 5L,
+            ruleType      = "HOLDING_DROP",
+            conditionJson = """{"dropPct": 10}""",
+        )
+        every { jdbc.query(any<String>(), any<RowMapper<AlertRuleRow>>(), 5L) } returns listOf(rule)
+        every { jdbc.query(any<String>(), any<RowMapper<BigDecimal>>(), 160L, 5L) } returns emptyList()
+
+        evaluator.processAlert(stockId = 5L, price = BigDecimal("85000"))
+
+        verify(exactly = 0) { pushSender.send(any()) }
+    }
+
+    @Test
+    fun `HOLDING_DROP 하락폭이 기준 미만이면 push를 보내지 않는다`() {
+        val rule = AlertRuleRow(
+            id            = 17L,
+            userId        = 170L,
+            stockId       = 5L,
+            ruleType      = "HOLDING_DROP",
+            conditionJson = """{"dropPct": 10}""",
+        )
+        every { jdbc.query(any<String>(), any<RowMapper<AlertRuleRow>>(), 5L) } returns listOf(rule)
+        // 평단 100,000원, 현재가 95,000원 → -5% 하락(기준 10% 미달)
+        every { jdbc.query(any<String>(), any<RowMapper<BigDecimal>>(), 170L, 5L) } returns listOf(BigDecimal("100000"))
+
+        evaluator.processAlert(stockId = 5L, price = BigDecimal("95000"))
+
+        verify(exactly = 0) { pushSender.send(any()) }
+    }
+
+    // resilience-plan §E7 / P1-2 — 한 룰의 실패가 같은 종목의 다른 룰을 막지 않고, 실패는 카운터로 남는다.
+    @Test
+    fun `한 룰의 평가 예외가 다른 룰의 평가를 막지 않고 ruleType별 실패 카운터를 올린다`() {
+        val broken = AlertRuleRow(id = 1L, userId = 10L, stockId = 5L,
+            ruleType = "VOLUME_SURGE", conditionJson = """{"surgeRatio": 2.0}""")
+        val healthy = AlertRuleRow(id = 2L, userId = 10L, stockId = 5L,
+            ruleType = "PRICE_ABOVE", conditionJson = """{"threshold": 70000}""")
+        every { jdbc.query(any<String>(), any<RowMapper<AlertRuleRow>>(), 5L) } returns listOf(broken, healthy)
+        // VOLUME_SURGE의 집계 쿼리가 실패한다 (예: 무효 SQL — ADR-044가 기록한 실제 사고)
+        every { jdbc.queryForMap(any<String>(), *anyVararg()) } throws RuntimeException("bad SQL")
+        stubCooldownAcquired(true)
+        stubHistoryInsert(7L)
+        every { jdbc.queryForList(any<String>(), String::class.java, *anyVararg()) } returns listOf("ExponentPushToken[x]")
+        every { jdbc.update(any<String>(), *anyVararg()) } returns 1
+
+        evaluator.processAlert(stockId = 5L, price = BigDecimal("75000"))
+
+        // 두 번째(정상) 룰은 그대로 발동했다
+        verify(exactly = 1) { pushSender.send(any()) }
+        assertThat(meterRegistry.counter("alert_rule_eval_failed_total", "ruleType", "VOLUME_SURGE").count())
+            .isEqualTo(1.0)
+        assertThat(meterRegistry.counter("alert_rule_eval_failed_total", "ruleType", "PRICE_ABOVE").count())
+            .isEqualTo(0.0)
     }
 }

@@ -27,6 +27,10 @@ repositories {
 
 dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
+	// actuator는 HTTP 서버가 있어야 /actuator/*를 노출한다. 이 의존이 없어서 server.port=8081은 죽은 설정이었고,
+	// K8s의 readiness/liveness 프로브(worker:8081)가 영원히 실패하며 Prometheus도 워커를 못 긁었다 —
+	// 운영 배포 시 liveness가 워커 pod를 주기적으로 죽였을 상황. L-03 부하 기준선 준비 중 발견 (resilience-plan §5.6).
+	implementation("org.springframework.boot:spring-boot-starter-web")
 	implementation("io.micrometer:micrometer-tracing-bridge-otel")
 	implementation("io.micrometer:micrometer-registry-prometheus")
 	implementation("io.opentelemetry:opentelemetry-api")
