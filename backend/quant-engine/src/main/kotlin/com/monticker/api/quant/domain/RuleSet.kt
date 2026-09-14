@@ -1,6 +1,8 @@
 package com.monticker.api.quant.domain
 
 import jakarta.persistence.*
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import java.time.Instant
 
 @Entity
@@ -26,12 +28,14 @@ class RuleSet(
     @Enumerated(EnumType.STRING)
     var status: RuleSetStatus = RuleSetStatus.DRAFT,
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "rule_definition", nullable = false, columnDefinition = "jsonb")
     var ruleDefinition: String,
 
     @Column(name = "rule_set_fingerprint", nullable = false, length = 64)
     var ruleSetFingerprint: String,
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "universe_json", nullable = false, columnDefinition = "jsonb")
     var universeJson: String = "{}",
 
