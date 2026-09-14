@@ -14,8 +14,10 @@ monticker 백엔드에 적용된 ES 인덱스·API·파이프라인 레퍼런스
 | 원칙 | 내용 |
 |---|---|
 | **DB 우선** | DB가 항상 authoritative. ES는 검색 레이어이며 장애 시 DB로 fallback한다. |
-| **Dual-write** ⚠️ | DB 저장 성공 후 ES 인덱싱. ES 실패는 `WARN` 로그만 남기고 트랜잭션에 영향 없음. **[ADR-042](decisions/042-outbox-based-es-indexing.md)가 이 방식을 Outbox 기반 단일 인덱싱 파이프라인으로 대체하기로 결정했다** — 아래 내용은 전환 전 현행 구조다. |
-| **@PostConstruct 동기화** | 앱 기동 시 최근 N건을 DB→ES 배치 동기화. ES가 비어 있어도 서비스 정상 동작. |
+| **Outbox 인덱싱** ([ADR-042](decisions/042-outbox-based-es-indexing.md)) | 도메인 모듈은 완성된 문서를 `SearchIndexEvent`로 **DB 트랜잭션 안에** 발행한다. 커밋 후 Kafka `search.index`(키 `{index}:{docId}`) → `SearchIndexConsumer`가 벌크 색인. 실패는 재시도 → `search.index-dlt`, 외부화 실패는 Outbox 5분 재전송. **전환 현황(2026-09-14)**: `watchlist_items` 완료. `news_articles`·`stock_events`·`alert_histories`는 아직 worker/api의 dual-write(WARN 삼킴) — 2·3단계. |
+| **인덱스 소유** | `SearchIndexManager`가 기동 시 `@Document` 전부를 찾아 없으면 `@Setting/@Field`로 만들고, 있으면 매핑을 대조해 `search_index_mapping_mismatch{index}`로 드리프트를 알린다. 자동 수정 없음 — `POST /api/admin/search/reindex/{index}`. **이전엔 아무도 인덱스를 만들지 않아 전부 첫 save()의 동적 매핑이었다**(CH-04, `ede7bf6`에서 정정). |
+| **재색인** | 기동 시 전량 동기화는 `app.search.reindex-on-startup`(local/dev만 true). 운영은 관리자 엔드포인트. `stocks`는 실시간 경로가 없어 **새 환경에서 한 번 실행해야 한다.** |
+| **nori 이미지** | 공식 이미지에 nori가 없다 — `infra/docker/elasticsearch`(`analysis-nori`)를 쓴다. 없으면 인덱스 생성이 "Unknown tokenizer" 로 실패한다. |
 | **nori_analyzer** | 한국어 형태소 분석. `nori_readingform` + `lowercase` 필터 조합. |
 | **userId 격리** | 사용자 범위 검색(관심종목·알림)은 `userId` filter 필수 적용. |
 
@@ -23,14 +25,14 @@ monticker 백엔드에 적용된 ES 인덱스·API·파이프라인 레퍼런스
 
 ## 인덱스 목록
 
-| 인덱스 | 도메인 | 분석기 | 초기 동기화 |
-|---|---|---|---|
-| `stocks` | 주식·스크리너 | nori + edge_ngram autocomplete | `StockIndexer` (전체) |
-| `news_articles` | 뉴스 | nori + nori_readingform | `NewsIndexer` (최근 10,000건) |
-| `stock_events` | 이벤트·공시 | nori + nori_readingform | `EventIndexer` (최근 10,000건) |
-| `stock_summaries` | AI 요약 | nori + nori_readingform | 없음 (요청 시 생성·저장) |
-| `watchlist_items` | 관심종목 | nori + nori_readingform | `WatchlistIndexer` (전체) |
-| `alert_histories` | 알림 이력 | nori + nori_readingform | `AlertHistoryIndexer` (최근 50,000건) |
+| 인덱스 | 도메인 | 분석기 | 실시간 반영 | 재색인(관리자·dev) |
+|---|---|---|---|---|
+| `stocks` | 주식·스크리너 | nori + edge_ngram autocomplete | 없음 (종목은 거의 불변) | `StockIndexer` (전체) |
+| `news_articles` | 뉴스 | nori + nori_readingform | worker dual-write ⚠️ (ADR-042 2단계) | `NewsIndexer` (최근 10,000건) |
+| `stock_events` | 이벤트·공시 | nori + nori_readingform | worker dual-write ⚠️ (2단계) | `EventIndexer` (최근 10,000건) |
+| `stock_summaries` | AI 요약 | nori + nori_readingform | 요청 시 직접 저장 | 없음 |
+| `watchlist_items` | 관심종목 | nori + nori_readingform | **Outbox → `search.index`** ✅ | `WatchlistIndexer` (전체) |
+| `alert_histories` | 알림 이력 | nori + nori_readingform | api·worker dual-write ⚠️ (3단계) | `AlertHistoryIndexer` (최근 50,000건) |
 
 ---
 

@@ -55,6 +55,7 @@
 - [ ] **Secret Manager/Vault 실제 전환** — 템플릿은 준비됨([infra/k8s/base/external-secrets-example/](../infra/k8s/base/external-secrets-example/README.md)), 실제 클라우드 시크릿 백엔드 프로비저닝만 사람이 할 일
 - [ ] **Slack Incoming Webhook 발급 + 알람 채널 2개 생성** (`#monticker-alerts-page`, `#monticker-alerts`) — 코드 쪽은 완료([resilience-plan P0-3](resilience-plan.md), `SLACK_WEBHOOK_URL`을 `.env`/Secret에 넣으면 즉시 동작). 웹훅이 없으면 Alertmanager는 무발송 모드로 떠서 **장애를 사람이 우연히 발견하는 상태**가 계속된다. 온콜을 받을 사람도 정해야 한다 — 채널만 만들고 아무도 안 보면 웹훅이 없는 것과 같다.
 - [ ] **원장 대사 첫 실행 검토 후 `LEDGER_RECON_MODE`를 `report` → `alert`로** — [ADR-043](decisions/043-ledger-pagination-and-reconciliation.md)의 일일 대사(17:30 KST)는 운영 ConfigMap에서 리포트 모드로 출발한다. 첫 실행 뒤 `SELECT * FROM ledger_snapshots WHERE mismatch`로 기존 드리프트를 조사·정리하고, 0이 되면 값을 바꿔 `LedgerMismatch` 페이지 알람을 켠다. **실제 자금이 들어오기 전에 반드시 `alert`여야 한다.** 리포트 모드에서도 `LedgerMismatchReported` 티켓은 올라온다.
+- [ ] **운영 Elasticsearch 프로비저닝** — `infra/k8s/base`에 ES 매니페스트도 `ELASTICSEARCH_URI`도 없다. 지금 K8s 배포의 검색은 100% DB 폴백이다(nori·edge_ngram·날짜 정렬 전부 없음). 매니지드 ES(Elastic Cloud/OpenSearch) 또는 StatefulSet 중 결정하고, **nori 플러그인이 있는 이미지**(`infra/docker/elasticsearch`)를 써야 한다 — 공식 이미지로는 인덱스 생성이 실패한다. 첫 배포 후 `POST /api/admin/search/reindex/{index}`를 인덱스마다 한 번 실행([ADR-042](decisions/042-outbox-based-es-indexing.md) §5).
 - [ ] **백업 오브젝트 스토리지 버킷** (`BACKUP_S3_URL` + `AWS_*` → `monticker-backup-secrets` Secret) — CronJob은 준비됨([infra/db/README.md](../infra/db/README.md)). 버킷 없이는 백업이 PVC에만 남아 클러스터와 함께 죽는다. 버킷 라이프사이클(예: 90일 보관)도 함께 설정할 것.
 
 ---

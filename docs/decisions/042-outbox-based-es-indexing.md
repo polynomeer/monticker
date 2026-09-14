@@ -201,3 +201,50 @@ Revisit When에 조건을 명시한다.
   서비스로 분리한다(Decision 4).
 - **비검색 목적의 파생 데이터가 늘어날 때** — 지금은 ES 하나지만, 분석계 적재·데이터
   웨어하우스·실시간 집계가 추가되면 소비자 수가 CDC의 고정비를 정당화할 수 있다.
+
+## 구현 노트 — 1단계 (2026-09-14)
+
+커밋 `ede7bf6`(api) `d8ded44`(infra nori 이미지). api 535/535. 로컬 라이브 검증.
+
+### 먼저 확인된 것 — 설계가 적용된 적이 없었다
+
+CH-04가 남긴 "인덱스가 동적 매핑" 발견의 원인 두 가지:
+1. 모든 `@Document`가 `createIndex = false`였고 아무도 `indexOps.create()`를 부르지 않았다. 인덱스는 첫 `save()`가
+   동적 매핑으로 만들었다 — `createdAt: text`, `symbol: text`, 분석기 없음. `stock_summaries`는 **아예 존재한 적이 없었다.**
+2. 공식 ES 이미지에 **nori 플러그인이 없다.** 누군가 명시적 생성을 시도했더라도 "Unknown tokenizer type
+   [nori_tokenizer]"로 실패했을 것이다. `infra/docker/elasticsearch`(analysis-nori) 이미지를 추가했다.
+   **K8s에는 ES 매니페스트·`ELASTICSEARCH_URI` 자체가 없다** — 운영에서 검색은 전부 DB 폴백이다
+   ([human-action-items §3](../human-action-items.md)).
+
+### 구현한 것
+
+- **인덱스 소유(`SearchIndexManager`)** — 기동 시 `@Document` 전부 스캔. 없으면 설계 매핑으로 생성, 있으면 필드별
+  type·analyzer 대조 → `search_index_mapping_mismatch{index}` + ERROR. 자동 수정 없음(ES는 기존 필드 타입을 못 바꾼다).
+  `POST /api/admin/search/reindex/{index}`가 지우고 다시 만들어 채운다. 라이브: 5개 인덱스 불일치 검출 → 재색인 →
+  `stockName: text/nori_analyzer`, `createdAt: date`, `symbol: keyword` 확인, 불일치 0.
+- **§5 재색인** — `@PostConstruct` 전량 동기화 5곳 제거. `SearchReindexer` 인터페이스 + `app.search.reindex-on-startup`
+  (local/dev만 true) + 관리자 엔드포인트.
+- **파이프라인** — `SearchIndexEvent`(`@Externalized("search.index::{index}:{docId}")`, 완성된 문서를 페이로드로),
+  `search.index` 토픽(파티션 3, 7일, `-dlt`), `SearchIndexConsumer`(배치 → Bulk 1회, 2s·6s·18s 블로킹 재시도 → DLT).
+  **`@RetryableTopic`은 배치 리스너를 지원하지 않는다** — ADR의 그림과 달리 논블로킹 재시도 토픽 대신
+  `DefaultErrorHandler`로 구현했다. 메트릭 `search_index_documents_total{op}`·`search_index_failed_total{index}`·
+  `search_index_lag_seconds`, 알람 `SearchIndexMappingMismatch`·`SearchIndexDltGrowing`.
+- **`watchlist_items` 완전 전환** — `WatchlistService`는 더 이상 ES writer가 아니다. 문서는 Spring Data ES 컨버터로
+  직렬화해(`@Field(format = epoch_millis)` 유지, `_id` 제외) 같은 트랜잭션에 이벤트로 기록. 라이브: 추가 → ES 반영
+  ~1초, nori 검색 적중, 삭제 반영, 수정 전 실패했던 이벤트가 재기동 후 Outbox 재전송으로 색인됨.
+
+### 구현하며 겪은 함정 (테스트로 고정)
+
+- **`KafkaTemplate` 빈을 하나 더 만들면 Boot 자동구성 템플릿이 물러난다** — DLT 발행용 템플릿을 빈으로 뒀더니
+  Modulith 외부화가 그 템플릿(컨버터 없음)을 잡아 전부 실패했다. 로컬 객체로 바꾸고 `SearchIndexKafkaConfigTest`가 막는다.
+- **`IndexOperation.Builder.withJson()`은 문서가 아니라 오퍼레이션 전체를 읽는다** — `.document(map)`이 맞다.
+- 컨슈머 그룹은 `auto.offset.reset=earliest`여야 한다 — 앱 기본(`latest`, ADR-029 브로드캐스트용)이면 그룹 생성 전
+  이벤트를 건너뛴다.
+
+### 남은 단계
+
+- **2단계**: worker에 Modulith 이벤트 발행 추가(§2) → `news_articles`·`stock_events`를 이벤트로. worker의
+  `@Document`(`createIndex` 기본 true)를 false로 — 인덱스 소유는 api의 매니저 하나여야 한다.
+- **3단계**: `alert_histories`(api `AlertService` + worker `AlertDispatcher` 두 writer).
+- `stock_summaries`는 `StockSummaryService`가 직접 저장한다(캐시 성격) — 전환 대상인지 판단 필요.
+
