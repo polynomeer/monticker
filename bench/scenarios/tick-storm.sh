@@ -15,7 +15,7 @@ STAGES="${STAGES:-1000 100 20}"      # TICK_INTERVAL_MS 단계: 202종목 기준
 HOLD="${HOLD:-60}"; SAMPLE="${SAMPLE:-10}"
 metric() { curl -s "$WORKER/actuator/prometheus" | awk -v k="$1" '$0 ~ "^"k {print $NF; exit}'; }
 # 컨슈머가 여럿(worker, notify, retry…)이라 첫 줄이 아니라 market.ticks 파티션들의 최대 랙을 쓴다
-lag()    { curl -s "$WORKER/actuator/prometheus" | grep '^kafka_consumer_fetch_manager_records_lag_max' | grep 'topic="market.ticks"' | awk '{if($NF+0>m)m=$NF+0} END{print m+0}'; }
+lag()    { curl -s "$WORKER/actuator/prometheus" | grep '^kafka_consumer_fetch_manager_records_lag_max' | grep 'topic="market_ticks"' | awk '{if($NF+0>m)m=$NF+0} END{print m+0}'; }
 q99()    { curl -s "$WORKER/actuator/prometheus" | grep '^tick_latency_total_pipeline_seconds{' | grep 'quantile="0.99"' | awk '{print $NF}'; }
 printf "%-8s %-8s %-10s %-12s %-10s %-8s\n" stage sec lag_max p99_pipe_ms ticks_s flushFail
 for ms in $STAGES; do

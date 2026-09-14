@@ -10,9 +10,11 @@
 #
 # 메트릭 출처: Spring Boot Actuator(Micrometer) + resilience4j-micrometer + 이 저장소가 직접 등록한
 # 카운터(redis_command_failed_total, search_fallback_total, candle_flush_failed_total,
-# alert_rule_eval_failed_total, dlt_messages_total, ws_active_connections, outbox_pending_total,
-# saga_incomplete_total). 규칙을 추가할 때는 그 메트릭이 실제로 노출되는지 먼저 확인할 것 —
-# 존재하지 않는 메트릭에 건 알람은 영원히 조용하다.
+# alert_rule_eval_failed_total, dlt_messages_total, ws_active_connections, outbox_pending,
+# saga_incomplete). 규칙을 추가할 때는 그 메트릭이 실제로 노출되는지 먼저 확인할 것 —
+# 존재하지 않는 메트릭에 건 알람은 영원히 조용하다. 실제로 그랬다: 게이지를 `_total`로 등록하면 Micrometer가
+# 접미사를 떼고 노출해 OutboxBacklog·SagaIncomplete가 빈 시계열을 보고 있었다(2026-09-14, 대시보드 작업 중 발견).
+# 검증: infra/monitoring/check-metrics.py 가 규칙·대시보드의 메트릭 이름을 실제 /actuator/prometheus 출력과 대조한다.
 
 groups:
   # ───────────────────────────── Page ─────────────────────────────
@@ -77,11 +79,13 @@ groups:
 
       - alert: TickPipelineStalled
         # 장중인데 틱이 흐르지 않는다. 시간대 조건은 KST 09:00~15:30 (UTC 00:00~06:30) 평일.
+        # topic 라벨은 Kafka 클라이언트가 '.'을 '_'로 바꿔 노출한다(market.ticks → market_ticks). "market.ticks"로 쓰면
+        # 영원히 매칭되지 않는다 — 실제로 그랬다(2026-09-14 check-metrics.py로 발견).
         expr: |
           (
             sum(rate(tick_latency_total_pipeline_seconds_count[3m])) == 0
             or
-            max(kafka_consumer_fetch_manager_records_lag_max{topic="market.ticks"}) > 60000
+            max(kafka_consumer_fetch_manager_records_lag_max{topic="market_ticks"}) > 60000
           )
           and on() (hour() >= 0 and hour() < 7 and day_of_week() >= 1 and day_of_week() <= 5)
         for: 3m
@@ -182,7 +186,7 @@ groups:
           description: "지난 15분간 {{ $value }}건이 재시도 후 DLT로 갔습니다. 수동 재처리 대상 — 원인을 보고 재발행할 것."
 
       - alert: OutboxBacklog
-        expr: outbox_pending_total > 100 or outbox_oldest_age_seconds > 600
+        expr: outbox_pending > 100 or outbox_oldest_age_seconds > 600   # 게이지엔 _total이 붙지 않는다 (BacklogGauges 주석)
         for: 5m
         labels: { severity: warning }
         annotations:
@@ -190,7 +194,7 @@ groups:
           description: "event_publication에 미완료 이벤트 {{ $value }}건 또는 10분 이상 된 이벤트가 있습니다. Kafka 발행이 막혀 있을 수 있습니다."
 
       - alert: SagaIncomplete
-        expr: saga_incomplete_total > 0
+        expr: saga_incomplete > 0
         for: 15m
         labels: { severity: warning }
         annotations:

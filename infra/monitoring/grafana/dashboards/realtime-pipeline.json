@@ -1,0 +1,708 @@
+{
+  "uid": "monticker-realtime-pipeline",
+  "title": "monticker — Realtime Pipeline",
+  "tags": [
+    "monticker",
+    "realtime"
+  ],
+  "schemaVersion": 38,
+  "refresh": "15s",
+  "editable": true,
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "panels": [
+    {
+      "type": "row",
+      "title": "유입 — Kafka market.ticks",
+      "collapsed": false,
+      "gridPos": {
+        "w": 24,
+        "h": 1,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1
+    },
+    {
+      "type": "timeseries",
+      "title": "틱 처리량 (ticks/s, worker)",
+      "targets": [
+        {
+          "expr": "sum(rate(tick_latency_total_pipeline_seconds_count{job=\"monticker-worker\"}[1m]))",
+          "legendFormat": "processed/s",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "description": "L-03: 단일 파티션 600/s → 동시성 4에서 5,000/s (ADR-044/046)",
+      "id": 2
+    },
+    {
+      "type": "timeseries",
+      "title": "컨슈머 랙 (market.ticks, 파티션 최대)",
+      "targets": [
+        {
+          "expr": "max by (job) (kafka_consumer_fetch_manager_records_lag_max{topic=\"market_ticks\"})",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 12,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "stacking": {
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 60000
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "description": "TickPipelineStalled: 장중 3분간 처리 0 또는 랙 > 60,000 — runbook tick-stalled",
+      "id": 3
+    },
+    {
+      "type": "timeseries",
+      "title": "단계별 지연 p99 (ms)",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(tick_latency_redis_write_seconds_bucket{job=\"monticker-worker\"}[1m]))) * 1000",
+          "legendFormat": "redis write",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(tick_latency_broadcast_seconds_bucket{job=\"monticker-worker\"}[1m]))) * 1000",
+          "legendFormat": "broadcast",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(tick_latency_total_pipeline_seconds_bucket{job=\"monticker-worker\"}[1m]))) * 1000",
+          "legendFormat": "total pipeline",
+          "refId": "C"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 0,
+        "y": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "stacking": {
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "unit": "ms",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 300
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "description": "§4.3 실시간 SLO p99 < 300ms",
+      "id": 4
+    },
+    {
+      "type": "timeseries",
+      "title": "느린 틱 (> 임계, 건/min)",
+      "targets": [
+        {
+          "expr": "sum(rate(tick_pipeline_slow_total{job=\"monticker-worker\"}[1m])) * 60",
+          "legendFormat": "slow/min",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 12,
+        "y": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "description": "ADR-046: 틱마다 WARN 찍던 것을 카운터로. 백로그를 소화 중이면 정상적으로 튄다",
+      "id": 5
+    },
+    {
+      "type": "row",
+      "title": "fan-out — api STOMP (ADR-038/039)",
+      "collapsed": false,
+      "gridPos": {
+        "w": 24,
+        "h": 1,
+        "x": 0,
+        "y": 17
+      },
+      "id": 6
+    },
+    {
+      "type": "timeseries",
+      "title": "WS 동접 (pod별)",
+      "targets": [
+        {
+          "expr": "ws_active_connections{job=\"monticker-api\"}",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 0,
+        "y": 18
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "description": "WsConnectionsSkewed: pod 간 편차 — 세션 어피니티/LB 확인",
+      "id": 7
+    },
+    {
+      "type": "timeseries",
+      "title": "브로드캐스트 in → out (msg/s)",
+      "targets": [
+        {
+          "expr": "sum(rate(ws_broadcast_ticks_in_total{job=\"monticker-api\"}[1m]))",
+          "legendFormat": "ticks in",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(ws_broadcast_messages_out_total{job=\"monticker-api\"}[1m]))",
+          "legendFormat": "messages out",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(ws_market_summary_relayed_total{job=\"monticker-api\"}[1m]))",
+          "legendFormat": "summary relayed",
+          "refId": "C"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 12,
+        "y": 18
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "description": "conflation(100ms) 효과 = in 대비 out. L-02: 500연결에서 50,000 → p99 159ms",
+      "id": 8
+    },
+    {
+      "type": "stat",
+      "title": "conflation 비율 (out/in)",
+      "targets": [
+        {
+          "expr": "sum(rate(ws_broadcast_messages_out_total{job=\"monticker-api\"}[5m])) / sum(rate(ws_broadcast_ticks_in_total{job=\"monticker-api\"}[5m]))",
+          "refId": "A",
+          "legendFormat": "",
+          "instant": true
+        }
+      ],
+      "gridPos": {
+        "w": 4,
+        "h": 4,
+        "x": 0,
+        "y": 26
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "1보다 작을수록 합쳐진다. 구독자가 많으면 1을 넘는 게 정상(구독자 수 × 종목)",
+      "id": 9
+    },
+    {
+      "type": "timeseries",
+      "title": "브로드캐스트 실패 (건/min)",
+      "targets": [
+        {
+          "expr": "sum(rate(tick_broadcast_failed_total{job=\"monticker-api\"}[1m])) * 60",
+          "legendFormat": "failed/min",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 4,
+        "y": 26
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "stacking": {
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "id": 10
+    },
+    {
+      "type": "row",
+      "title": "이벤트 · 알림 · 캔들",
+      "collapsed": false,
+      "gridPos": {
+        "w": 24,
+        "h": 1,
+        "x": 0,
+        "y": 34
+      },
+      "id": 11
+    },
+    {
+      "type": "timeseries",
+      "title": "이벤트 탐지 (건/min)",
+      "targets": [
+        {
+          "expr": "sum by (source, type) (rate(stock_events_written_total{job=\"monticker-worker\"}[5m])) * 60",
+          "legendFormat": "{{source}} {{type}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 0,
+        "y": 35
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "id": 12
+    },
+    {
+      "type": "timeseries",
+      "title": "알림 룰 인덱스",
+      "targets": [
+        {
+          "expr": "max(alert_rule_index_size{job=\"monticker-worker\"})",
+          "legendFormat": "rules",
+          "refId": "A"
+        },
+        {
+          "expr": "max(alert_rule_index_ready{job=\"monticker-worker\"})",
+          "legendFormat": "ready (1)",
+          "refId": "B"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 12,
+        "y": 35
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "description": "ADR-044: 0이면 DB 폴백 경로. 5분 보정 + Redis pub/sub",
+      "id": 13
+    },
+    {
+      "type": "timeseries",
+      "title": "알림 평가 실패 / 발송 발행 실패 (건/min)",
+      "targets": [
+        {
+          "expr": "sum by (ruleType) (rate(alert_rule_eval_failed_total{job=\"monticker-worker\"}[5m])) * 60",
+          "legendFormat": "eval {{ruleType}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(alert_notify_publish_failed_total{job=\"monticker-worker\"}[5m])) * 60",
+          "legendFormat": "notify publish",
+          "refId": "B"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 0,
+        "y": 43
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "description": "AlertRuleEvalFailing — E7(VOLUME_SURGE가 무효 SQL로 조용히 죽어 있던) 재발 감지",
+      "id": 14
+    },
+    {
+      "type": "timeseries",
+      "title": "캔들 flush 실패 (건/min)",
+      "targets": [
+        {
+          "expr": "sum(rate(candle_flush_failed_total{job=\"monticker-worker\"}[5m])) * 60",
+          "legendFormat": "failed/min",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 12,
+        "y": 43
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "stacking": {
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "description": "CandleFlushFailing — 실패는 유실이다",
+      "id": 15
+    },
+    {
+      "type": "row",
+      "title": "DLT",
+      "collapsed": false,
+      "gridPos": {
+        "w": 24,
+        "h": 1,
+        "x": 0,
+        "y": 51
+      },
+      "id": 16
+    },
+    {
+      "type": "timeseries",
+      "title": "DLT 유입 (건/min, 토픽별)",
+      "targets": [
+        {
+          "expr": "sum by (topic) (rate(dlt_messages_total[5m])) * 60",
+          "legendFormat": "{{topic}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 0,
+        "y": 52
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "stacking": {
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "description": "DltMessagesGrowing · SearchIndexDltGrowing. 0이어야 한다",
+      "id": 17
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  }
+}

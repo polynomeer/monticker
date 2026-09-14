@@ -1,0 +1,840 @@
+{
+  "uid": "monticker-trading",
+  "title": "monticker — Trading",
+  "tags": [
+    "monticker",
+    "trading"
+  ],
+  "schemaVersion": 38,
+  "refresh": "15s",
+  "editable": true,
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "panels": [
+    {
+      "type": "row",
+      "title": "주문 — 사가 (모의투자) · 실거래",
+      "collapsed": false,
+      "gridPos": {
+        "w": 24,
+        "h": 1,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1
+    },
+    {
+      "type": "timeseries",
+      "title": "주문 TPS (사가)",
+      "targets": [
+        {
+          "expr": "sum(rate(matching_saga_submit_seconds_count{job=\"monticker-api\"}[1m]))",
+          "legendFormat": "orders/s",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "id": 2
+    },
+    {
+      "type": "timeseries",
+      "title": "주문 지연 p50 / p99 (ms)",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(matching_saga_submit_seconds_bucket{job=\"monticker-api\"}[5m]))) * 1000",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(matching_saga_submit_seconds_bucket{job=\"monticker-api\"}[5m]))) * 1000",
+          "legendFormat": "p99",
+          "refId": "B"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 12,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "stacking": {
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "unit": "ms",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 500
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "id": 3
+    },
+    {
+      "type": "timeseries",
+      "title": "주문 상태 전이 (건/min)",
+      "targets": [
+        {
+          "expr": "sum by (to) (rate(order_state_transition_total{job=\"monticker-api\"}[1m])) * 60",
+          "legendFormat": "→ {{to}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 0,
+        "y": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "id": 4
+    },
+    {
+      "type": "timeseries",
+      "title": "주문 경로 5xx (OrderPathDown)",
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{job=\"monticker-api\", uri=~\"/api/(matching|paper|brokerage)/.*\", status=~\"5..\"}[1m])) or vector(0)",
+          "legendFormat": "5xx/s",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 12,
+        "y": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "stacking": {
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "unit": "reqps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.01
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "description": "OrderPathDown 알람: 주문 경로 5xx가 2분간 지속되면 page",
+      "id": 5
+    },
+    {
+      "type": "row",
+      "title": "리스크 게이트 (ADR-025) — 거부율이 갑자기 오르면 룰이 아니라 데이터를 의심할 것 (DailyLossRule 사례)",
+      "collapsed": false,
+      "gridPos": {
+        "w": 24,
+        "h": 1,
+        "x": 0,
+        "y": 17
+      },
+      "id": 6
+    },
+    {
+      "type": "timeseries",
+      "title": "리스크 판정 (건/min)",
+      "targets": [
+        {
+          "expr": "sum by (result) (rate(risk_check_total{job=\"monticker-api\"}[5m])) * 60",
+          "legendFormat": "{{result}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 0,
+        "y": 18
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "id": 7
+    },
+    {
+      "type": "timeseries",
+      "title": "거부 룰별 (건/min)",
+      "targets": [
+        {
+          "expr": "sum by (rule) (rate(risk_check_total{job=\"monticker-api\", result=\"blocked\"}[5m])) * 60",
+          "legendFormat": "{{rule}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 12,
+        "y": 18
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "id": 8
+    },
+    {
+      "type": "stat",
+      "title": "거부율 (5m)",
+      "targets": [
+        {
+          "expr": "sum(rate(risk_check_total{job=\"monticker-api\", result=\"blocked\"}[5m])) / sum(rate(risk_check_total{job=\"monticker-api\"}[5m])) * 100",
+          "refId": "A",
+          "legendFormat": "",
+          "instant": true
+        }
+      ],
+      "gridPos": {
+        "w": 4,
+        "h": 4,
+        "x": 0,
+        "y": 26
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 30
+              },
+              {
+                "color": "red",
+                "value": 60
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "정상 거래에서 30%를 넘으면 룰 입력(잔고·일봉)이 깨진 것",
+      "id": 9
+    },
+    {
+      "type": "row",
+      "title": "정합성 — 잔고 대사(ADR-043) · Saga · Outbox",
+      "collapsed": false,
+      "gridPos": {
+        "w": 24,
+        "h": 1,
+        "x": 0,
+        "y": 30
+      },
+      "id": 10
+    },
+    {
+      "type": "stat",
+      "title": "대사 불일치 (24h, alert)",
+      "targets": [
+        {
+          "expr": "sum(increase(ledger_reconciliation_mismatch_total{job=\"monticker-api\", mode=\"alert\"}[24h])) or vector(0)",
+          "refId": "A",
+          "legendFormat": "",
+          "instant": true
+        }
+      ],
+      "gridPos": {
+        "w": 4,
+        "h": 4,
+        "x": 0,
+        "y": 31
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "LedgerMismatch page. 자동 교정 금지 — runbook ledger-mismatch",
+      "id": 11
+    },
+    {
+      "type": "stat",
+      "title": "대사 불일치 (24h, report)",
+      "targets": [
+        {
+          "expr": "sum(increase(ledger_reconciliation_mismatch_total{job=\"monticker-api\", mode=\"report\"}[24h])) or vector(0)",
+          "refId": "A",
+          "legendFormat": "",
+          "instant": true
+        }
+      ],
+      "gridPos": {
+        "w": 4,
+        "h": 4,
+        "x": 4,
+        "y": 31
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "LEDGER_RECON_MODE=report 기간의 발견 — 0이 되면 alert로 전환",
+      "id": 12
+    },
+    {
+      "type": "stat",
+      "title": "대사 실행 (26h)",
+      "targets": [
+        {
+          "expr": "sum(increase(ledger_reconciliation_checked_total{job=\"monticker-api\"}[26h])) or vector(0)",
+          "refId": "A",
+          "legendFormat": "",
+          "instant": true
+        }
+      ],
+      "gridPos": {
+        "w": 4,
+        "h": 4,
+        "x": 8,
+        "y": 31
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "LedgerReconciliationDidNotRun: 평일 26시간 동안 0이면 배치가 안 돈 것",
+      "id": 13
+    },
+    {
+      "type": "stat",
+      "title": "Saga 미완료",
+      "targets": [
+        {
+          "expr": "max(saga_incomplete{job=\"monticker-api\"})",
+          "refId": "A",
+          "legendFormat": "",
+          "instant": true
+        }
+      ],
+      "gridPos": {
+        "w": 4,
+        "h": 4,
+        "x": 12,
+        "y": 31
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "SagaIncomplete. recoverIncomplete가 5분마다 정리한다 — 10분 넘게 남으면 수동 검토",
+      "id": 14
+    },
+    {
+      "type": "stat",
+      "title": "Outbox 미완료",
+      "targets": [
+        {
+          "expr": "max(outbox_pending{job=\"monticker-api\"})",
+          "refId": "A",
+          "legendFormat": "",
+          "instant": true
+        }
+      ],
+      "gridPos": {
+        "w": 4,
+        "h": 4,
+        "x": 16,
+        "y": 31
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 100
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "OutboxBacklog: > 100 또는 가장 오래된 것 > 10분",
+      "id": 15
+    },
+    {
+      "type": "stat",
+      "title": "Outbox 최고령 (s)",
+      "targets": [
+        {
+          "expr": "max(outbox_oldest_age_seconds{job=\"monticker-api\"})",
+          "refId": "A",
+          "legendFormat": "",
+          "instant": true
+        }
+      ],
+      "gridPos": {
+        "w": 4,
+        "h": 4,
+        "x": 20,
+        "y": 31
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 600
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "id": 16
+    },
+    {
+      "type": "row",
+      "title": "브로커 (KIS · Toss) — 실거래",
+      "collapsed": false,
+      "gridPos": {
+        "w": 24,
+        "h": 1,
+        "x": 0,
+        "y": 35
+      },
+      "id": 17
+    },
+    {
+      "type": "timeseries",
+      "title": "서킷브레이커 상태 (1=CLOSED 2=OPEN 3=HALF_OPEN)",
+      "targets": [
+        {
+          "expr": "max by (name) (resilience4j_circuitbreaker_state{job=\"monticker-api\", name=~\"kis|toss\"} * on() group_left() 1)",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 0,
+        "y": 36
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "description": "BrokerCircuitOpen page — runbook broker-cb-open. 잔고 조회는 OPEN 중 503(0원이 아니다)",
+      "id": 18
+    },
+    {
+      "type": "timeseries",
+      "title": "브로커 느린 호출 / 실패 비율 (%)",
+      "targets": [
+        {
+          "expr": "max by (name) (resilience4j_circuitbreaker_slow_call_rate{job=\"monticker-api\", name=~\"kis|toss\"})",
+          "legendFormat": "slow {{name}}",
+          "refId": "A"
+        },
+        {
+          "expr": "max by (name) (resilience4j_circuitbreaker_failure_rate{job=\"monticker-api\", name=~\"kis|toss\"})",
+          "legendFormat": "failure {{name}}",
+          "refId": "B"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 12,
+        "y": 36
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "stacking": {
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "unit": "percent",
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "description": "P0-2: slow-call(5초) 50% 또는 실패율 50%면 OPEN. -1은 창이 아직 안 찬 것",
+      "id": 19
+    },
+    {
+      "type": "timeseries",
+      "title": "브로커 호출 결과 (건/min)",
+      "targets": [
+        {
+          "expr": "sum by (name, kind) (rate(resilience4j_circuitbreaker_calls_seconds_count{job=\"monticker-api\", name=~\"kis|toss\"}[1m])) * 60",
+          "legendFormat": "{{name}} {{kind}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (name) (rate(resilience4j_circuitbreaker_not_permitted_calls_total{job=\"monticker-api\", name=~\"kis|toss\"}[1m])) * 60",
+          "legendFormat": "{{name}} not permitted (OPEN)",
+          "refId": "B"
+        }
+      ],
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 0,
+        "y": 44
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "id": 20
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  }
+}

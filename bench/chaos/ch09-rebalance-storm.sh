@@ -14,7 +14,7 @@ INTERVAL=${INTERVAL:-30}; CYCLES=${CYCLES:-10}; TICK_MS=${TICK_MS:-200}; WLOG=${
 KT=/opt/kafka/bin
 wready() { curl -s -o /dev/null -w '%{http_code}' "$WORKER/actuator/health/readiness"; }
 wpid() { pgrep -f 'worker-0.0.1-SNAPSHOT.jar' | head -1; }
-lag() { curl -s "$WORKER/actuator/prometheus" | grep '^kafka_consumer_fetch_manager_records_lag_max' | grep 'topic="market.ticks"' | awk '{if($NF+0>m)m=$NF+0} END{print m+0}'; }
+lag() { curl -s "$WORKER/actuator/prometheus" | grep '^kafka_consumer_fetch_manager_records_lag_max' | grep 'topic="market_ticks"' | awk '{if($NF+0>m)m=$NF+0} END{print m+0}'; }
 group_lag() { docker exec monticker-kafka $KT/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group "$1" 2>/dev/null | awk 'NR>1 && $1=="'$1'" {s+=$6} END{print s+0}'; }
 end_offsets() { docker exec monticker-kafka $KT/kafka-get-offsets.sh --bootstrap-server localhost:9092 --topic "$1" 2>/dev/null | awk -F: '{s+=$3} END{print s+0}'; }
 start_worker() { (nohup java -jar "$WORKER_JAR" > "$WLOG-$1.log" 2>&1 &); local s=$(date +%s); until [ "$(wready)" = "200" ] || [ $(( $(date +%s) - s )) -ge 120 ]; do sleep 1; done; echo $(( $(date +%s) - s )); }

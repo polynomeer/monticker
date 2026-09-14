@@ -34,8 +34,11 @@ configMapGenerator:
       - grafana/provisioning/dashboards/dashboards.yml
   - name: grafana-dashboards
     files:
-      - grafana/dashboards/api-overview.json
-      - grafana/dashboards/tick-pipeline.json
+      - grafana/dashboards/service-health.json
+      - grafana/dashboards/trading.json
+      - grafana/dashboards/realtime-pipeline.json
+      - grafana/dashboards/data-stores.json
+      - grafana/dashboards/capacity.json
 
 generatorOptions:
   disableNameSuffixHash: true   # Deployment가 고정 이름으로 참조한다. 갱신 시 pod 재시작은 rollout restart로.
