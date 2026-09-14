@@ -22,6 +22,7 @@ class DisclosureCollector(
     private val jdbc: JdbcTemplate,
     private val events: ApplicationEventPublisher,
     private val tx: TransactionTemplate,
+    private val meterRegistry: io.micrometer.core.instrument.MeterRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val mapper = ObjectMapper()
@@ -100,6 +101,7 @@ class DisclosureCollector(
                 stockId, title, description, Timestamp.from(eventTime), importance, meta,
             ).firstOrNull()
             if (id != null) {
+                meterRegistry.counter("stock_events_written_total", "source", "DART", "type", "DISCLOSURE_PUBLISHED").increment()
                 events.publishEvent(SearchIndexEvent.index(StockEventWriter.SEARCH_INDEX, id.toString(), StockEventWriter.searchPayload(
                     stockId = stockId, eventType = "DISCLOSURE_PUBLISHED", title = title, description = description,
                     eventTime = eventTime, importanceScore = importance, sourceType = "DART",

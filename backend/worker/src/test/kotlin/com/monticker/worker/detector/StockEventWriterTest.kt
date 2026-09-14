@@ -29,7 +29,7 @@ class StockEventWriterTest {
         every { execute(any<TransactionCallback<Any?>>()) } answers { firstArg<TransactionCallback<Any?>>().doInTransaction(mockk(relaxed = true)) }
     }
     private val events = mockk<ApplicationEventPublisher>(relaxed = true)
-    private val writer = StockEventWriter(jdbcTemplate, pushSender, eventKafkaProducer, events, tx)
+    private val writer = StockEventWriter(jdbcTemplate, io.micrometer.core.instrument.simple.SimpleMeterRegistry(), pushSender, eventKafkaProducer, events, tx)
 
     private fun makeEvent(eventTime: Instant = Instant.parse("2026-08-20T09:30:15Z")) = DetectedEvent(
         stockId = 1L,

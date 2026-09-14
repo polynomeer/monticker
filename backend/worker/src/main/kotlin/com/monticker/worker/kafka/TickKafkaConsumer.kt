@@ -61,6 +61,7 @@ class TickKafkaConsumer(
     private val meterRegistry: MeterRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+    init { meterRegistry.counter("dlt_messages_total", "topic", "market.ticks") }   // 0으로 미리 등록 — DltMessagesGrowing이 처음부터 검증 가능
     private val objectMapper = ObjectMapper().findAndRegisterModules()
 
     // role=event 에서만 Bean이 존재한다.

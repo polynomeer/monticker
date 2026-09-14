@@ -84,6 +84,10 @@ management:
     export:
       prometheus:
         enabled: true
+    distribution:
+      # Realtime Pipeline 대시보드가 histogram_quantile로 단계별 p99를 그린다 (summary 분위수는 pod 간 합산 불가)
+      percentiles-histogram:
+        tick.latency: true
     tags:
       application: monticker-worker
   tracing:

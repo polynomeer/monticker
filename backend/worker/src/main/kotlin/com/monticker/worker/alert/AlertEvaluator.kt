@@ -37,6 +37,11 @@ class AlertEvaluator(
     private val meterRegistry: MeterRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+    init {
+        // 카운터는 첫 실패 때 생긴다 — 0으로 미리 등록해 AlertRuleEvalFailing이 처음부터 검증 가능하게 (E7 재발 감시)
+        listOf("_fetch", "PRICE_ABOVE", "PRICE_BELOW", "VOLUME_SURGE", "RSI_BELOW", "RSI_ABOVE", "PRICE_BELOW_MA", "PRICE_ABOVE_MA", "HOLDING_DROP")
+            .forEach { meterRegistry.counter("alert_rule_eval_failed_total", "ruleType", it) }
+    }
     private val objectMapper = ObjectMapper()
 
     @EventListener

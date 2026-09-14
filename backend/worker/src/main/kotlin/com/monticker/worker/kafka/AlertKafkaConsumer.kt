@@ -25,6 +25,7 @@ class AlertKafkaConsumer(
     private val meterRegistry: MeterRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+    init { meterRegistry.counter("dlt_messages_total", "topic", TICK_PROCESSED_TOPIC) }   // 0으로 미리 등록 — DltMessagesGrowing이 처음부터 검증 가능
     private val objectMapper = ObjectMapper().findAndRegisterModules()
 
     @RetryableTopic(

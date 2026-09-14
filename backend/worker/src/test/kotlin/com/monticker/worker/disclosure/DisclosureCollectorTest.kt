@@ -18,7 +18,7 @@ class DisclosureCollectorTest {
         every { execute(any<TransactionCallback<Any?>>()) } answers { firstArg<TransactionCallback<Any?>>().doInTransaction(mockk(relaxed = true)) }
     }
     private val events = mockk<ApplicationEventPublisher>(relaxed = true)
-    private val collector  = DisclosureCollector(dartClient, jdbc, events, tx)
+    private val collector  = DisclosureCollector(dartClient, jdbc, events, tx, io.micrometer.core.instrument.simple.SimpleMeterRegistry())
 
     private fun stubStockIds(vararg pairs: Pair<String, Long>) {
         every { jdbc.query(any<String>(), any<RowMapper<Pair<String, Long>>>(), *anyVararg()) } returns

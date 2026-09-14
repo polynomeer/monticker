@@ -28,6 +28,7 @@ data class DetectedEvent(
 @Component
 class StockEventWriter(
     private val jdbcTemplate: JdbcTemplate,
+    private val meterRegistry: io.micrometer.core.instrument.MeterRegistry,
     private val pushSender: com.monticker.worker.push.ExpoPushSender,
     // ingestion.source=internal일 때는 빈 ObjectProvider — 주입 없이도 동작 (ADR-005)
     private val eventKafkaProducer: org.springframework.beans.factory.ObjectProvider<com.monticker.worker.kafka.EventKafkaProducer>,
@@ -89,6 +90,7 @@ class StockEventWriter(
         }
 
         log.info("Event created: {} {} score={}", event.eventType, event.stockId, event.importanceScore)
+        meterRegistry.counter("stock_events_written_total", "source", "SYSTEM", "type", event.eventType.name).increment()   // Realtime 대시보드 "이벤트 탐지"
         eventKafkaProducer.ifAvailable { it.publish(event) }
         sendEventPush(event)
         return true
