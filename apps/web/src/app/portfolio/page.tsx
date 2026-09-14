@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { getAccessToken } from "@/services/auth";
 import { usePaperPortfolio, usePaperHistory, usePaperTrade, type Holding, type TradeHistory } from "@/hooks/usePaperTrade";
+import { useToast } from "@/hooks/useToast";
 import TradeModal from "@/components/paper/TradeModal";
 import RiskPanel from "@/components/portfolio/RiskPanel";
 import { Card } from "@/components/ui/Card";
@@ -32,6 +33,7 @@ export default function PortfolioPage() {
   const { data: portfolio, isLoading } = usePaperPortfolio();
   const { data: history = [] } = usePaperHistory();
   const { reset } = usePaperTrade();
+  const { toast } = useToast();
 
   // 종목 검색
   useEffect(() => {
@@ -54,7 +56,11 @@ export default function PortfolioPage() {
 
   const handleReset = async () => {
     if (!confirm("계좌를 초기화하면 모든 거래 내역이 삭제됩니다.")) return;
-    await reset.mutateAsync();
+    try {
+      await reset.mutateAsync();
+    } catch (e) {
+      toast({ type: "error", title: "초기화 실패", message: e instanceof Error ? e.message : undefined });
+    }
   };
 
   if (!isLoggedIn) return (

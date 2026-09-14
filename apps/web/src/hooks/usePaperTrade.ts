@@ -86,8 +86,12 @@ export function usePaperTrade() {
   const reset = useMutation({
     mutationFn: async () => {
       const r = await authFetch("/api/paper/reset", { method: "POST" });
-      if (!r.ok) throw new Error("초기화 실패");
-      return r.json();
+      // 성공은 204 No Content — 본문이 없으니 json()을 부르면 성공인데도 실패로 떨어진다.
+      // 실패(409: 미체결 주문 있음 등)는 서버 메시지를 그대로 보여 준다.
+      if (!r.ok) {
+        const body = await r.json().catch(() => null);
+        throw new Error(body?.message ?? "초기화 실패");
+      }
     },
     onSuccess: refresh,
   });
