@@ -100,14 +100,10 @@
 - [x] ~~**계좌 초기화가 미체결 주문의 예약금을 방치한다 — 돈이 생긴다**~~ — 수정(2026-09-14): 미체결 BUY 주문이
   있으면 초기화를 409로 거부한다(먼저 취소). 초기화 뒤 리스너로 취소하는 방식은 순서가 같아(초기화 → 환불) 답이
   아니었다. 부수: 웹의 초기화 버튼이 204 응답에 `json()`을 호출해 **성공을 실패로 처리**하고 있었다 — 함께 수정.
-- [ ] **`columnDefinition = "jsonb"`만 있고 `@JdbcTypeCode(SqlTypes.JSON)`이 없는 String 컬럼 — INSERT가
-  전부 실패한다(null 포함)**. 원장·행동점수는 ADR-043에서 고쳤다(`5e113bb`). 남은 곳:
-  api `SubscriptionPlan.featuresJson`(시드 SQL로만 쓰이면 무해), `DetectedPattern.swingPointsJson`,
-  `TaxHarvestingLog.candidatesJson`; quant-engine `QuantBacktestResult`(×3), `RuleSet`(×2),
-  `PortfolioOptimization`(×3), `DetectedPattern`, `TaxHarvestingLog`. 각각 실제 INSERT 경로가 있는지
-  확인하고 `LedgerEventPersistenceIntegrationTest` 같은 실제-Hibernate 테스트를 붙일 것.
-  **같은 결함이 `RebalanceTarget`에서 이미 한 번 발견·수정됐는데 나머지는 점검되지 않았다** —
-  발견 시 같은 패턴을 전수 검색하는 습관이 필요하다.
+- [x] ~~**`columnDefinition = "jsonb"`만 있고 `@JdbcTypeCode(SqlTypes.JSON)`이 없는 String 컬럼**~~ — 전수 수정
+  (2026-09-14): api 4(`DetectedPattern`·`TaxHarvestingLog`는 실제 save() 경로 — 패턴 인식·절세 시뮬이 한 번도
+  저장된 적 없었다, `SubscriptionPlan`, `StockEvent`는 `"JSONB"` 대문자라 grep이 놓쳤다), quant-engine 10.
+  `JsonbColumnMappingTest`가 세 모듈의 모든 @Entity를 스캔해 재발을 막는다 — 이 테스트가 `StockEvent`를 잡았다.
 - [ ] **`alert_rules.stock_id`가 NULL인 룰은 절대 평가되지 않는다** —
   컬럼은 nullable인데 `AlertEvaluator.fetchRulesForStock`은 `WHERE stock_id = ?`로만 읽는다.
   NULL이 "전 종목 대상"을 의도한 건지, 그냥 쓰이지 않는 제약인지 확인이 필요하다.
