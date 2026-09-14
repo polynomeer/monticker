@@ -43,16 +43,6 @@ scrape_configs:
         target_label: instance
         replacement: monticker-quant-engine
 
-  # trading-service
-  - job_name: monticker-trading-service
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets: ['trading-service:8083']
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: monticker-trading-service
-
   # worker-market (WORKER_ROLE=market)
   - job_name: monticker-worker-market
     metrics_path: /actuator/prometheus

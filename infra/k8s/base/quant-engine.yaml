@@ -1,6 +1,6 @@
 # quant-engine: analytics / quant / backtest 전용 서비스 (MSA Stage 3)
 # api의 QUANT_ENGINE_URL 환경변수가 설정되면 요청이 이 서비스로 위임된다.
-# trading-service가 발행한 trading.order-filled 를 Kafka로 소비한다.
+# api(Modulith 외부화)가 발행한 trading.order-filled 를 Kafka로 소비한다. (ADR-048: trading-service 폐기)
 apiVersion: apps/v1
 kind: Deployment
 metadata:

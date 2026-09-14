@@ -21,7 +21,7 @@ groups:
       - alert: AllReplicasDown
         # 단일 pod 다운은 K8s가 처리한다. 사용자가 아픈 건 전부 죽었을 때다.
         expr: |
-          sum by (job) (up{job=~"monticker-(api|trading-service)"}) == 0
+          sum by (job) (up{job="monticker-api"}) == 0
         for: 1m
         labels: { severity: critical }
         annotations:

@@ -13,7 +13,7 @@ jobs:
       contents: write # gradle/actions/dependency-submission가 Dependency Graph에 제출하는 데 필요
     strategy:
       matrix:
-        module: [api, worker, trading-service, quant-engine]
+        module: [api, worker, quant-engine]
 
     services:
       postgres:

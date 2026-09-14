@@ -20,7 +20,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
  *
  * 실제 컨트롤러는 X-User-Id 헤더가 아니라 SecurityContextHolder의
  * Authentication.principal(Long)에서 userId를 얻는다 (JWT 기반 인증 전제,
- * 게이트웨이 뒤 내부 서비스인 trading-service의 X-User-Id 패턴과는 다르다).
+ * 폐기된 trading-service(ADR-048)가 쓰던 X-User-Id 패턴과는 다르다).
  * MockMvc standalone 설정으로 실제 컨트롤러를 호출해 이 계약을 검증한다.
  */
 class RuleSetControllerUserIdTest {

@@ -15,7 +15,7 @@ import org.springframework.retry.annotation.Backoff
 import org.springframework.stereotype.Component
 
 /**
- * trading-service가 발행하는 trading.order-filled 토픽을 소비한다.
+ * api가 Modulith 외부화로 발행하는 trading.order-filled 토픽을 소비한다 (ADR-048 이전 문서는 trading-service를 발행자로 적었지만 실제로 체결이 그쪽에서 난 적이 없다).
  *
  * MSA 모드에서 OrderFilledStrategyListener(Spring Event 방식)를 대체한다.
  * quant.trading-events.enabled=true 일 때만 활성화 (MSA 모드 구분).

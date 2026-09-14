@@ -69,7 +69,7 @@ anthropic:
   api-key: ${ANTHROPIC_API_KEY:}
 
 quant:
-  # true: trading-service Kafka 이벤트 구독 (MSA 모드)
+  # true: api가 Modulith 외부화로 발행하는 trading.order-filled 구독 (ADR-048: trading-service 폐기)
   # false: Spring Event 방식 (단일 프로세스 api 내 동작, 기본값)
   trading-events:
     enabled: ${QUANT_TRADING_EVENTS_ENABLED:false}

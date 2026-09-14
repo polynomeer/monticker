@@ -20,10 +20,6 @@ updates:
     schedule:
       interval: "weekly"
   - package-ecosystem: "gradle"
-    directory: "/backend/trading-service"
-    schedule:
-      interval: "weekly"
-  - package-ecosystem: "gradle"
     directory: "/backend/quant-engine"
     schedule:
       interval: "weekly"
@@ -45,10 +41,6 @@ updates:
       interval: "weekly"
   - package-ecosystem: "docker"
     directory: "/backend/worker"
-    schedule:
-      interval: "weekly"
-  - package-ecosystem: "docker"
-    directory: "/backend/trading-service"
     schedule:
       interval: "weekly"
   - package-ecosystem: "docker"
