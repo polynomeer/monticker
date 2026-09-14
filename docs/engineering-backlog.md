@@ -97,11 +97,9 @@
   미체결 BUY 주문의 `limit_price × 잔량`으로 채웠다(`ef5fd12`). 정산대기는 T+2 정산 스케줄러
   ([ADR-014](decisions/014-t2-paper-settlement-scheduler.md))가 관리하는 미정산 건에서 계산해야 한다.
   발견: [ADR-043](decisions/043-ledger-pagination-and-reconciliation.md) 작성 중.
-- [ ] **계좌 초기화가 미체결 주문의 예약금을 방치한다 — 돈이 생긴다** — `PaperTradingService.reset`은
-  cash를 1,000만으로 돌리지만 `orders`는 건드리지 않는다. 예약금 12만 원을 둔 채 초기화하고 그 주문을
-  취소하면 유저는 1,012만 원을 갖는다. 대사(ADR-043)는 이걸 잡지 못한다 — 원장이 정직하게 기록하므로
-  불변식은 성립한다. `reset`이 미체결 주문을 먼저 취소하거나(matching 모듈 호출) 초기화 금액에서
-  예약금을 빼야 한다. 발견: ADR-043 라이브 검증 (`adr043-live.sh` 7단계).
+- [x] ~~**계좌 초기화가 미체결 주문의 예약금을 방치한다 — 돈이 생긴다**~~ — 수정(2026-09-14): 미체결 BUY 주문이
+  있으면 초기화를 409로 거부한다(먼저 취소). 초기화 뒤 리스너로 취소하는 방식은 순서가 같아(초기화 → 환불) 답이
+  아니었다. 부수: 웹의 초기화 버튼이 204 응답에 `json()`을 호출해 **성공을 실패로 처리**하고 있었다 — 함께 수정.
 - [ ] **`columnDefinition = "jsonb"`만 있고 `@JdbcTypeCode(SqlTypes.JSON)`이 없는 String 컬럼 — INSERT가
   전부 실패한다(null 포함)**. 원장·행동점수는 ADR-043에서 고쳤다(`5e113bb`). 남은 곳:
   api `SubscriptionPlan.featuresJson`(시드 SQL로만 쓰이면 무해), `DetectedPattern.swingPointsJson`,
