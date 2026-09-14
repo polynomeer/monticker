@@ -346,11 +346,14 @@ class KisBrokerageClient(
                 )
             }
         } catch (e: CallNotPermittedException) {
-            log.warn("[CircuitBreaker:kis] 요청 차단됨 — 잔고 조회 건너뜀")
-            BrokerageBalance(BigDecimal.ZERO, BigDecimal.ZERO, emptyList())
+            // CH-06 발견: 여기서 0원 잔고를 돌려주면 증권사 장애 중 사용자에게 "잔고 0원·보유 없음"이 보이고,
+            // 리스크 게이트(buildPortfolioSnapshot)와 리밸런싱 미리보기는 빈 포트폴리오를 사실로 믿는다.
+            // 조회 불가는 조회 불가로 — 주문 경로와 같은 503이다.
+            log.warn("[CircuitBreaker:kis] 요청 차단됨 — 잔고 조회 불가")
+            throw ExternalServiceUnavailableException("kis", "KIS API 장애로 서킷브레이커가 열려 있습니다. 잔고를 확인할 수 없습니다.", e)
         } catch (e: RestClientException) {
             log.error("[KIS] 잔고 조회 실패: {}", e.message)
-            BrokerageBalance(BigDecimal.ZERO, BigDecimal.ZERO, emptyList())
+            throw ExternalServiceUnavailableException("kis", "KIS 잔고 조회에 실패했습니다. 잠시 후 다시 시도하세요.", e)
         }
     }
 
