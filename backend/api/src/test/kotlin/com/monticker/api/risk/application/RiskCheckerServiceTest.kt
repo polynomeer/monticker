@@ -45,7 +45,7 @@ class RiskCheckerServiceTest {
 
         // 1. daily pnl
         every {
-            jdbc.query(match<String> { it.contains("FROM fills") }, any<RowMapper<BigDecimal>>(), userId)
+            jdbc.query(match<String> { it.contains("avg_cost") }, any<RowMapper<BigDecimal>>(), userId, userId, any())
         } returns listOf(BigDecimal.ZERO)
 
         // accountCash
@@ -55,7 +55,7 @@ class RiskCheckerServiceTest {
 
         // 3. holdings (concentration + VaR 둘 다 이 단일 조회를 공유한다 — RiskRuleQueryService 참고)
         every {
-            jdbc.queryForList(match<String> { it.contains("paper_trades") && it.contains("GROUP BY stock_id") }, userId)
+            jdbc.queryForList(match<String> { it.contains("HAVING SUM") }, userId, userId)
         } returns emptyList()
 
         // 7. position count
@@ -82,7 +82,7 @@ class RiskCheckerServiceTest {
         stubSafeDefaults()
         // account cash 10,000,000 * 3% = 300,000 limit; loss of -400,000 exceeds it
         every {
-            jdbc.query(match<String> { it.contains("FROM fills") }, any<RowMapper<BigDecimal>>(), userId)
+            jdbc.query(match<String> { it.contains("avg_cost") }, any<RowMapper<BigDecimal>>(), userId, userId, any())
         } returns listOf(BigDecimal("-400000"))
 
         val result = service.check(userId, stockId, "SELL", 1, estimatedPrice)
@@ -98,7 +98,7 @@ class RiskCheckerServiceTest {
     fun `daily loss rule passes when loss is within limit`() {
         stubSafeDefaults()
         every {
-            jdbc.query(match<String> { it.contains("FROM fills") }, any<RowMapper<BigDecimal>>(), userId)
+            jdbc.query(match<String> { it.contains("avg_cost") }, any<RowMapper<BigDecimal>>(), userId, userId, any())
         } returns listOf(BigDecimal("-100000"))
 
         val result = service.check(userId, stockId, "SELL", 1, estimatedPrice)
@@ -144,7 +144,7 @@ class RiskCheckerServiceTest {
         // 가져온다 — 예전엔 이미 청산한 종목까지 포함하는 별도 DISTINCT 조회를 썼는데,
         // 지금 포트폴리오와 무관한 과거 종목을 리스크에 반영하던 버그였다.
         every {
-            jdbc.queryForList(match<String> { it.contains("paper_trades") && it.contains("GROUP BY stock_id") }, userId)
+            jdbc.queryForList(match<String> { it.contains("HAVING SUM") }, userId, userId)
         } returns listOf(mapOf("stock_id" to stockId, "qty" to 10))
 
         // candles_1d returns: provide >=6 closes so the 95th-percentile branch
@@ -182,7 +182,7 @@ class RiskCheckerServiceTest {
         // ADR-025 리팩터링 이후 보유 종목 수(positionCount)/신규 여부 판정도 holdings
         // 스냅샷 하나로 통일됐다 — 3개 보유 중인 상태를 이 조회 하나로 표현한다.
         every {
-            jdbc.queryForList(match<String> { it.contains("paper_trades") && it.contains("GROUP BY stock_id") }, userId)
+            jdbc.queryForList(match<String> { it.contains("HAVING SUM") }, userId, userId)
         } returns listOf(
             mapOf("stock_id" to 201L, "qty" to 5),
             mapOf("stock_id" to 202L, "qty" to 5),
@@ -210,7 +210,7 @@ class RiskCheckerServiceTest {
         // 이미 보유 중인 종목(stockId)이 3개 보유 목록에 포함돼 있다 — isNewStock=false이므로
         // PositionCountRule 자체가 평가되지 않아야 한다.
         every {
-            jdbc.queryForList(match<String> { it.contains("paper_trades") && it.contains("GROUP BY stock_id") }, userId)
+            jdbc.queryForList(match<String> { it.contains("HAVING SUM") }, userId, userId)
         } returns listOf(
             mapOf("stock_id" to stockId, "qty" to 10),
             mapOf("stock_id" to 202L, "qty" to 5),

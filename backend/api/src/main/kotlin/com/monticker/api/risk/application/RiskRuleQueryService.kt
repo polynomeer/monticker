@@ -156,6 +156,40 @@ class RiskRuleQueryService(
             stockId,
         ).firstOrNull() ?: BigDecimal.ZERO
 
+    companion object {
+        /**
+         * 모의투자 계좌의 체결은 두 경로로 쌓인다 — 매칭 엔진(`fills`)과 구 페이퍼 경로(`paper_trades`).
+         * 둘 다 같은 paper_accounts.cash를 움직이므로 리스크 판정은 합집합을 봐야 한다.
+         */
+        private const val PAPER_TRADES_CTE = """
+            WITH t AS (
+                SELECT stock_id, side, quantity, amount, filled_at AS at FROM fills        WHERE user_id = ?
+                UNION ALL
+                SELECT stock_id, side, quantity, amount, traded_at AS at FROM paper_trades WHERE user_id = ?
+            )"""
+
+        /**
+         * 오늘의 **실현 손익** — 오늘 매도한 수량 × (매도가 − 평균 매수단가).
+         * 평단가는 이동평균법(누적 매수금액 ÷ 누적 매수수량, 매도해도 변하지 않는다 — 증권사 평단가 방식).
+         * 이전 구현은 `SUM(SELL amount − BUY amount)`, 즉 현금 흐름이었다. 매수 자체가 "손실"로 잡혀
+         * 1,000만 계좌에서 하루 30만 원(3%)만 사면 모든 매수가 차단됐다(CH-05에서 발견).
+         */
+        const val REALIZED_PNL_TODAY_SQL = PAPER_TRADES_CTE + """,
+            cost AS (
+                SELECT stock_id, SUM(amount) / NULLIF(SUM(quantity), 0) AS avg_cost
+                FROM t WHERE side = 'BUY' GROUP BY stock_id
+            )
+            SELECT COALESCE(SUM(t.amount - t.quantity * c.avg_cost), 0)
+            FROM t JOIN cost c USING (stock_id)
+            WHERE t.side = 'SELL' AND t.at >= ?"""
+
+        /** 보유 종목 — 두 경로의 순수량. 이전엔 paper_trades만 봐서 매칭 엔진 체결이 집중도·종목 수 판정에 빠졌다. */
+        const val HOLDINGS_SQL = PAPER_TRADES_CTE + """
+            SELECT stock_id, SUM(CASE WHEN side = 'BUY' THEN quantity ELSE -quantity END) AS qty
+            FROM t GROUP BY stock_id
+            HAVING SUM(CASE WHEN side = 'BUY' THEN quantity ELSE -quantity END) > 0"""
+    }
+
     private fun paperSnapshot(userId: Long): PortfolioSnapshot {
         val accountCash = jdbc.query(
             "SELECT COALESCE(cash, 0) FROM paper_accounts WHERE user_id = ?",
@@ -163,20 +197,15 @@ class RiskRuleQueryService(
             userId,
         ).firstOrNull() ?: BigDecimal("10000000")
 
+        // "오늘"은 KST 기준 — 이전의 current_date는 DB 세션 타임존(UTC)이라 새벽 거래가 전날로 붙었다
+        val todayStartKst = Instant.now().atZone(ZoneId.of("Asia/Seoul")).toLocalDate().atStartOfDay(ZoneId.of("Asia/Seoul")).toInstant()
         val dailyPnl = jdbc.query(
-            """SELECT COALESCE(SUM(CASE WHEN side='SELL' THEN amount ELSE -amount END), 0)
-               FROM fills WHERE user_id = ? AND filled_at >= current_date""",
+            REALIZED_PNL_TODAY_SQL.trimIndent(),
             { rs, _ -> rs.getBigDecimal(1) },
-            userId,
+            userId, userId, java.sql.Timestamp.from(todayStartKst),
         ).firstOrNull() ?: BigDecimal.ZERO
 
-        val holdings = jdbc.queryForList(
-            """SELECT stock_id, SUM(CASE WHEN side='BUY' THEN quantity ELSE -quantity END) as qty
-               FROM paper_trades WHERE user_id = ?
-               GROUP BY stock_id
-               HAVING SUM(CASE WHEN side='BUY' THEN quantity ELSE -quantity END) > 0""",
-            userId,
-        ).map { row ->
+        val holdings = jdbc.queryForList(HOLDINGS_SQL.trimIndent(), userId, userId).map { row ->
             HoldingPosition(
                 stockId = (row["stock_id"] as Number).toLong(),
                 qty     = (row["qty"] as Number).toInt(),
