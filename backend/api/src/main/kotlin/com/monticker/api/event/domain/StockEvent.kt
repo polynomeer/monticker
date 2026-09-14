@@ -1,6 +1,8 @@
 package com.monticker.api.event.domain
 
 import jakarta.persistence.*
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import java.math.BigDecimal
 import java.time.Instant
 
@@ -37,6 +39,7 @@ class StockEvent(
 
     val sourceId: Long? = null,
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "JSONB")
     val metadataJson: String? = null,
 
