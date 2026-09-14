@@ -188,7 +188,7 @@ KIS API는 계좌별 앱 키/시크릿으로 OAuth2 토큰을 발급받아 사�
 
 | 구성요소 | 접근 | 비고 |
 |---------|------|------|
-| Grafana | `https://<host>/grafana` (Ingress) | 자체 로그인. 대시보드 `api-overview`, `tick-pipeline` 자동 프로비저닝 |
+| Grafana | `https://<host>/grafana` (Ingress) | 자체 로그인. 대시보드 5종(service-health·trading·realtime-pipeline·data-stores·capacity, [resilience-plan §4.6](resilience-plan.md)) 자동 프로비저닝 — 기본 홈은 service-health |
 | Prometheus | `kubectl port-forward -n monticker svc/prometheus 9090` | 인증이 없어 Ingress에 노출하지 않는다 |
 | Alertmanager | `kubectl port-forward -n monticker svc/alertmanager 9093` | 동일. 사일런스는 여기서 |
 

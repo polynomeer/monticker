@@ -335,7 +335,7 @@ Phase 0의 ADR-038~045는 이 목록과 **직교한다** — 저쪽은 규모, �
 |------|------|------|
 | P1-1 K8s 관측 스택 | `dbe01fe` | `infra/monitoring/`을 kustomize 루트로 — 규칙·대시보드·Alertmanager 템플릿이 compose와 **단일 소스**. pod 어노테이션 기반 SD, api·worker 어노테이션 추가(없어서 HTTP 메트릭이 안 잡히고 있었다). Grafana만 `/grafana`로 노출 |
 | P1-1 알람 재구성 | `3f7c9e4` `cff8860` | 5개 → **page 8 + ticket 14**. `ServiceDown`을 page에서 뺌(단일 pod는 K8s 몫). HTTP 히스토그램 버킷 노출(p95 알람용). `promtool check rules` 22 OK |
-| P1-2 삼켜지는 예외 계측 | `348152a` `8959378` `a97d596` `fd84258` | `candle_flush_failed_total`, `alert_rule_eval_failed_total{ruleType}`(+**룰 단위 격리** — 한 룰의 예외가 나머지를 막던 구조 수정), `dlt_messages_total{topic}` ×3, `search_fallback_total{index}` ×8, `ws_active_connections`, `outbox_pending_total`/`outbox_oldest_age_seconds`/`saga_incomplete_total`. worker 커스텀 Kafka 팩토리에 `MicrometerConsumerListener`(랙 메트릭이 없었다) |
+| P1-2 삼켜지는 예외 계측 | `348152a` `8959378` `a97d596` `fd84258` | `candle_flush_failed_total`, `alert_rule_eval_failed_total{ruleType}`(+**룰 단위 격리** — 한 룰의 예외가 나머지를 막던 구조 수정), `dlt_messages_total{topic}` ×3, `search_fallback_total{index}` ×8, `ws_active_connections`, `outbox_pending`/`outbox_oldest_age_seconds`/`saga_incomplete`(처음엔 `_total`로 등록 — 게이지는 접미사가 떨어져 알람이 빈 시계열을 봤다, 2026-09-14 정정). worker 커스텀 Kafka 팩토리에 `MicrometerConsumerListener`(랙 메트릭이 없었다) |
 | P1-3 `statement_timeout` | `235d9d3`~`cdced0e` | api 30s / worker 60s / trading 10s / quant 120s. 실제 Postgres에서 취소 발생 확인 |
 | P1-4 예약 스케일업 | `b3a0f01` | 08:45 KST minReplicas↑, 15:45 KST 원복. prod 6/3 |
 
@@ -433,8 +433,8 @@ K8s에서는 동작하지 않는다. **운영 환경에 관측 스택 자체가 
 | `ledger_reconciliation_mismatch_total` | counter | **잔고 드리프트 — page 알람** | E2 |
 | `candle_flush_failed_total` | counter | 캔들 유실 | E4, ADR-041 |
 | `alert_rule_eval_failed_total{ruleType}` | counter | **조용한 룰 사망(E7 전례)** | ADR-044 |
-| `saga_incomplete_total{status}` | gauge | Saga 잔류 | E3 |
-| `outbox_pending_total`, `outbox_age_seconds` | gauge | Outbox 적체 | A5 |
+| `saga_incomplete` | gauge | Saga 잔류 (게이지라 `_total` 없음 — 처음엔 `_total`로 등록해 알람이 빈 시계열을 봤다) | E3 |
+| `outbox_pending`, `outbox_oldest_age_seconds` | gauge | Outbox 적체 | A5 |
 | `backtest_queue_depth` | gauge | bulkhead 포화 | C4s |
 | `dlt_messages_total{topic}` | counter | DLT 유입 = 처리 실패 누적 | A5 |
 | `tick_pipeline_latency_seconds{stage}` | histogram | 이미 `LatencyTracker` 존재, Prometheus 노출 필요 | 실시간 SLO |
@@ -503,8 +503,12 @@ route:
 | **Data Stores** | 인프라 | Hikari 풀, Redis 지연/메모리, Timescale chunk/압축, ES 색인 지연 |
 | **Capacity** | 주간 리뷰 | 성장 추이, 파티션당 처리량, 저장 용량 예측 |
 
-기존 `api-overview.json` / `tick-pipeline.json`을 Service Health / Realtime Pipeline의
-출발점으로 삼는다.
+> **구현 (2026-09-14, `fea09a9`)**: 5종 전부 `infra/monitoring/grafana/dashboards/`에 있다 — 생성기
+> `gen_dashboards.py`가 원본, `check-metrics.py`가 알람·패널의 모든 PromQL을 실제 Prometheus에 대조한다.
+> 기존 `api-overview`·`tick-pipeline`은 **존재하지 않는 메트릭**(summary에 `_bucket`, `stock_events_written_total`,
+> `health_status` …)을 그리던 빈 패널이라 폐기했다. 대조가 찾아낸 것: 게이지에 `_total`을 붙여 `OutboxBacklog`·
+> `SagaIncomplete`가 빈 시계열을 보고 있었고, Kafka topic 라벨은 `market_ticks`로 노출돼 `TickPipelineStalled`의
+> 랙 절이 한 번도 매칭된 적 없었다. 둘 다 고쳤다.
 
 ### 4.7 로그 · 트레이스
 
@@ -1026,9 +1030,12 @@ CH-08(노드 손실)은 K8s 클러스터가 있어야 한다. CH-11(디스크), 
 
 ---
 
-## 8. 런북 (작성 대상)
+## 8. 런북 — 작성됨 ([docs/runbooks/](runbooks/README.md), 2026-09-14)
 
-알람마다 런북이 있어야 한다. 없는 알람은 "누군가 언젠가 보겠지"가 된다.
+알람마다 런북이 있어야 한다. 없는 알람은 "누군가 언젠가 보겠지"가 된다. 7종을 썼고 26개 알람 중 17개가
+`runbook:` 주석으로 연결된다. 나머지(`AllReplicasDown`·`HighJvmHeapUsage`·`NonBrokerCircuitOpen`·`BacktestQueueSaturated`·
+`WsConnectionsSkewed`·`OutboxBacklog`·`SagaIncomplete`·`AlertRuleEvalFailing`·`ApiLatencyHigh`)는 대시보드 패널 설명에
+조치가 있고, Outbox·Saga는 [ledger-mismatch.md](runbooks/ledger-mismatch.md)의 판별 표가 다룬다. 내용은 CH-01~09 실측(MTTR, 영향 범위)과 코드의 실제 정책(fail-open/closed, 재전송 주기)에서 나왔다.
 
 | 런북 | 대응 알람 | 핵심 내용 |
 |------|----------|----------|

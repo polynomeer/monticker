@@ -40,7 +40,7 @@ groups:
         labels: { severity: critical }
         annotations:
           summary: "API 5xx 비율 1% 초과"
-          description: "지난 5분간 5xx 비율 {{ $value | humanizePercentage }}. 조회 SLO(99.9%)의 에러버짓을 빠르게 소진 중입니다."
+          description: "지난 5분간 5xx 비율 {{ $value | humanizePercentage }}. 조회 SLO(99.9%)의 에러버짓을 빠르게 소진 중입니다 (runbook: deploy-rollback)."
 
       - alert: ApiLatencyHigh
         # application.yml의 percentiles-histogram 설정이 있어야 버킷이 노출된다.
@@ -65,7 +65,7 @@ groups:
         labels: { severity: critical }
         annotations:
           summary: "주문 경로 5xx 5% 초과"
-          description: "주문 접수 엔드포인트의 5xx 비율이 {{ $value | humanizePercentage }}입니다. 실거래 주문이 실패하고 있을 수 있습니다."
+          description: "주문 접수 엔드포인트의 5xx 비율이 {{ $value | humanizePercentage }}입니다. 실거래 주문이 실패하고 있을 수 있습니다 (runbook: deploy-rollback)."
 
       - alert: BrokerCircuitOpen
         # KIS/Toss 브레이커가 열리면 실주문이 전부 즉시 실패 처리된다.
@@ -109,7 +109,7 @@ groups:
         labels: { severity: ticket }
         annotations:
           summary: "원장 대사 리포트 모드에서 불일치 {{ $value }}건"
-          description: "LEDGER_RECON_MODE=report 상태. ledger_snapshots WHERE mismatch 로 유저·날짜를 찾아 조사하고, 0이 되면 alert 모드로 전환."
+          description: "LEDGER_RECON_MODE=report 상태. ledger_snapshots WHERE mismatch 로 유저·날짜를 찾아 조사하고, 0이 되면 alert 모드로 전환 (runbook: ledger-mismatch)."
 
       - alert: LedgerReconciliationDidNotRun
         # 배치가 안 돌면 불일치도 안 보인다 — 침묵을 알람으로. 평일 17:30 KST 실행, 26시간 동안 checked 증가 0이면 이상.
@@ -118,7 +118,7 @@ groups:
         labels: { severity: ticket }
         annotations:
           summary: "원장 대사 배치가 26시간 동안 돌지 않음"
-          description: "ledgerReconciliationJob이 실행되지 않았거나 대상 유저가 0명입니다. BatchJobScheduler 로그와 batch_job_execution을 확인할 것."
+          description: "ledgerReconciliationJob이 실행되지 않았거나 대상 유저가 0명입니다. BatchJobScheduler 로그와 batch_job_execution을 확인할 것 (runbook: ledger-mismatch)."
 
       - alert: IdempotencyStoreDown
         # 멱등성은 fail-closed(ADR/P0-1)라 Redis가 죽으면 주문이 503으로 거절된다. 사용자가 즉시 아프다.
@@ -139,7 +139,7 @@ groups:
         labels: { severity: warning }
         annotations:
           summary: "Redis fail-open 지속 (op={{ $labels.op }})"
-          description: "5분간 {{ $value }}회 Redis 실패로 fail-open이 발동했습니다. 서비스는 살아있지만 레이트리밋/캐시 없이 돌고 있습니다."
+          description: "5분간 {{ $value }}회 Redis 실패로 fail-open이 발동했습니다. 서비스는 살아있지만 레이트리밋/캐시 없이 돌고 있습니다 (runbook: redis-down)."
 
       - alert: HikariPoolNearExhaustion
         expr: hikaricp_connections_active / hikaricp_connections_max > 0.9
@@ -147,7 +147,7 @@ groups:
         labels: { severity: warning }
         annotations:
           summary: "{{ $labels.application }} DB 커넥션 풀 90% 이상"
-          description: "느린 쿼리나 커넥션 누수를 의심할 것. statement_timeout이 발동하고 있는지 로그 확인."
+          description: "느린 쿼리나 커넥션 누수를 의심할 것. statement_timeout이 발동하고 있는지 로그 확인 (runbook: db-failover)."
 
       - alert: HikariPendingThreads
         expr: hikaricp_connections_pending > 5
@@ -155,7 +155,7 @@ groups:
         labels: { severity: warning }
         annotations:
           summary: "{{ $labels.application }} 커넥션 대기 스레드 {{ $value }}개"
-          description: "요청이 DB 커넥션을 기다리고 있습니다. 풀 고갈 직전 신호."
+          description: "요청이 DB 커넥션을 기다리고 있습니다. 풀 고갈 직전 신호 (runbook: db-failover)."
 
       - alert: HighJvmHeapUsage
         expr: |
@@ -183,7 +183,7 @@ groups:
         labels: { severity: warning }
         annotations:
           summary: "DLT 유입: {{ $labels.topic }}"
-          description: "지난 15분간 {{ $value }}건이 재시도 후 DLT로 갔습니다. 수동 재처리 대상 — 원인을 보고 재발행할 것."
+          description: "지난 15분간 {{ $value }}건이 재시도 후 DLT로 갔습니다. 수동 재처리 대상 — 원인을 보고 재발행할 것 (runbook: tick-stalled)."
 
       - alert: OutboxBacklog
         expr: outbox_pending > 100 or outbox_oldest_age_seconds > 600   # 게이지엔 _total이 붙지 않는다 (BacklogGauges 주석)
@@ -209,7 +209,7 @@ groups:
         labels: { severity: ticket }
         annotations:
           summary: "ES 인덱스 {{ $labels.index }} 매핑이 설계와 다름"
-          description: "SearchIndexManager 로그의 차이 목록을 보고 재색인할 것. 동적 매핑으로 생성된 인덱스의 흔적이다."
+          description: "SearchIndexManager 로그의 차이 목록을 보고 재색인할 것. 동적 매핑으로 생성된 인덱스의 흔적이다 (runbook: search-index)."
 
       - alert: SearchIndexDltGrowing
         # search.index 배치가 4회 재시도 후에도 실패 — ES가 오래 죽었거나 문서가 매핑을 위반한다.
@@ -217,7 +217,7 @@ groups:
         labels: { severity: ticket }
         annotations:
           summary: "검색 색인 DLT {{ $value }}건"
-          description: "search.index-dlt를 확인하고 원인 해결 후 컨슈머 그룹 오프셋 되감기(ADR-042 §5)로 재처리."
+          description: "search.index-dlt를 확인하고 원인 해결 후 컨슈머 그룹 오프셋 되감기(ADR-042 §5)로 재처리 (runbook: search-index)."
 
       - alert: SearchFallbackSustained
         # ES가 죽은 채 몇 주가 지나도 모르는 상황을 막는다 (resilience-plan §A6).
@@ -226,14 +226,14 @@ groups:
         labels: { severity: warning }
         annotations:
           summary: "검색 폴백 지속 (index={{ $labels.index }})"
-          description: "ES 검색이 10분 이상 DB 폴백으로 동작 중입니다. 사용자는 검색 품질 저하만 겪지만 ES 상태를 확인할 것."
+          description: "ES 검색이 10분 이상 DB 폴백으로 동작 중입니다. 사용자는 검색 품질 저하만 겪지만 ES 상태를 확인할 것 (runbook: search-index)."
 
       - alert: CandleFlushFailing
         expr: increase(candle_flush_failed_total[10m]) > 0
         labels: { severity: warning }
         annotations:
           summary: "캔들 저장 실패"
-          description: "지난 10분간 {{ $value }}건의 candles_1m/1d upsert가 실패했습니다. 압축 chunk 충돌(ADR-041)이나 DB 문제. 조용히 캔들이 비어가는 중."
+          description: "지난 10분간 {{ $value }}건의 candles_1m/1d upsert가 실패했습니다. 압축 chunk 충돌(ADR-041)이나 DB 문제. 조용히 캔들이 비어가는 중 (runbook: tick-stalled)."
 
       - alert: AlertRuleEvalFailing
         # VOLUME_SURGE가 무효 SQL로 한 번도 발동한 적 없었던 사고의 재발 방지 (ADR-044).
@@ -269,4 +269,4 @@ groups:
         labels: { severity: warning }
         annotations:
           summary: "외부 호출 느림: {{ $labels.name }}"
-          description: "{{ $labels.name }} 호출의 {{ $value }}%가 slow-call 임계를 넘었습니다. 브레이커가 열리기 전 단계."
+          description: "{{ $labels.name }} 호출의 {{ $value }}%가 slow-call 임계를 넘었습니다. 브레이커가 열리기 전 단계 (runbook: broker-cb-open)."
