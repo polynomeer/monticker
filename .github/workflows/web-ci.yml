@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # 버전은 package.json의 packageManager(pnpm@9.15.9)에서 읽는다 — 여기에 version을 같이
       # 적으면 action-setup@v4가 "Multiple versions of pnpm specified"로 실패한다.
