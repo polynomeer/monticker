@@ -197,6 +197,24 @@ groups:
           summary: "미완료 Saga {{ $value }}건 15분 잔류"
           description: "order_sagas에 STARTED/COMPENSATING 상태가 15분 이상 남아 있습니다. 자동 복구(5분 주기)가 실패 중 — 수동 검토."
 
+      - alert: SearchIndexMappingMismatch
+        # ADR-042 — 기동 시 SearchIndexManager가 설계 매핑과 실제를 대조한다. 1이면 검색이 설계대로 동작하지 않는다
+        # (날짜 정렬 실패, nori 미적용 …). 자동 수정 없음 — POST /api/admin/search/reindex/{index}.
+        expr: max by (index) (search_index_mapping_mismatch) > 0
+        for: 10m
+        labels: { severity: ticket }
+        annotations:
+          summary: "ES 인덱스 {{ $labels.index }} 매핑이 설계와 다름"
+          description: "SearchIndexManager 로그의 차이 목록을 보고 재색인할 것. 동적 매핑으로 생성된 인덱스의 흔적이다."
+
+      - alert: SearchIndexDltGrowing
+        # search.index 배치가 4회 재시도 후에도 실패 — ES가 오래 죽었거나 문서가 매핑을 위반한다.
+        expr: increase(dlt_messages_total{topic="search.index"}[10m]) > 0
+        labels: { severity: ticket }
+        annotations:
+          summary: "검색 색인 DLT {{ $value }}건"
+          description: "search.index-dlt를 확인하고 원인 해결 후 컨슈머 그룹 오프셋 되감기(ADR-042 §5)로 재처리."
+
       - alert: SearchFallbackSustained
         # ES가 죽은 채 몇 주가 지나도 모르는 상황을 막는다 (resilience-plan §A6).
         expr: sum by (index) (increase(search_fallback_total[10m])) > 20
