@@ -117,15 +117,12 @@
   **실제 돈이 걸린 경로**다 — 하루 3% 이상 매수하면 모든 실거래 매수가 차단된다. 평단가는 증권사 잔고 API의
   `avgPrice`(보유 종목 응답에 있다)를 써서 오늘 체결된 매도의 실현 손익으로 재정의해야 한다.
   발견: CH-05 후속. 파일이 다른 세션의 미커밋 변경에 잠겨 있어 이번에 손대지 않았다.
-- [ ] **모의투자 계좌에 거래 경로가 둘이고 서로를 모른다 — ADR 필요** — `/api/paper/buy|sell`(즉시 체결,
-  `paper_trades` + `portfolio_positions` 갱신)과 `/api/matching/orders`(사가·호가창, `orders`/`fills`)가 같은
-  `paper_accounts.cash`를 움직이지만 **매칭 엔진 체결은 `portfolio_positions`에 반영되지 않는다.** 결과:
-  홈 포트폴리오·지갑 보유 평가액·`HOLDING_DROP` 알림이 매칭 엔진으로 산 종목을 모른다. 반대로 `reset`은
-  `paper_trades`만 지우고 `orders`/`fills`는 남긴다(감사 기록이라 지워선 안 되지만 그러면 리스크 판정의
-  합집합 보유량과 초기화된 포지션이 어긋난다). DailyLossRule 수정(2026-09-14)에서 리스크 판정은 두 경로의
-  합집합으로 바꿨지만 그건 증상 처리다. 선택지: (a) paper가 `OrderFilledEvent`를 구독해 포지션 프로젝션을
-  갱신하고 reset이 "미체결 없음 + 포지션 0"을 요구, (b) 구 페이퍼 경로를 매칭 엔진 위의 얇은 파사드로 통합.
-  (b)가 맞아 보이지만 도메인 핵심 구조 변경이라 ADR로 결정할 것. 발견: CH-05 후속 조사.
+- [x] ~~**모의투자 계좌에 거래 경로가 둘이고 서로를 모른다**~~ — [ADR-047](decisions/047-single-execution-path-for-paper-account.md)
+  (2026-09-14, `bd4d363`): 매칭 엔진이 유일한 체결 경로, `/api/paper/buy|sell`은 파사드, paper는 계좌 기록 모듈.
+  매칭 엔진의 공매도 허용도 함께 막았다.
+- [ ] **trading-service 복사본에 ADR-047이 없다** — MSA 모드(`TRADING_SERVICE_URL`)에서 매칭 화면 주문은 trading-service가
+  체결하는데 그쪽엔 `PaperExecutionListener`·매도 보유 확인이 없어 계좌 기록(포지션·정산·원장)이 빠진다. 복사본에 같은
+  변경을 넣거나(ADR-043 때처럼) trading-service를 정리할지 결정할 것. 이 복사본은 ADR-043·047 두 번 연속 발목을 잡았다.
 - [ ] **브로커 잔고 조회의 서킷브레이커 폴백이 "0원"** — `KisBrokerageClient.getBalance`의
   CB-open 경로가 `BrokerageBalance(ZERO, ZERO, [])`를 돌려준다. 증권사 장애 중 사용자에게 잔고가
   0원으로 보인다 — 우아한 실패가 아니라 오해를 부르는 실패. "조회 불가" 상태(nullable 또는

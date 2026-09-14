@@ -104,3 +104,34 @@ POST /api/paper/buy|sell ──▶ PaperTradingService (파사드)
   링크가 그 전환의 발판이다.
 - **자동 매매([ADR-036](036-ai-order-proposal.md) 이후 단계)가 서버 안에서 주문을 제출해야 할 때** — `matching::submit`을
   누가 쓸 수 있는지의 규칙을 다시 정한다. 지금은 사용자 요청 핸들러만이다.
+
+## 구현 노트 (2026-09-14)
+
+커밋 `bd4d363`. api 540/540, 통합 9/9. 로컬 라이브 검증: 포트폴리오 화면 경로(`/api/paper/buy`) → `orders`/`fills`/
+`paper_trades(fill_id)`/포지션/정산/원장 FILL(`paper_trade_id` = paper_trades.id); 매칭 화면 주문 → 미러링되어 홈
+포트폴리오·거래 내역·영수증에 보임; 보유 초과 매도 → 두 경로 모두 400; 매도 → SETTLEMENT; 대사 drift 0.
+
+### 결정대로
+
+§1 `matching::submit`(`OrderSubmitter.submitMarket`), §2 파사드(응답 형태 유지, 프론트 무변경), §3 동기 리스너
+(`PaperExecutionListener`, fill_id로 멱등), §4 V44 `paper_trades.fill_id` + 백필(로컬 117건), wallet의
+`OrderFilledEventListener.onOrderFilled` 제거, §5 사가의 매도 보유 수량 확인, §6 리스크 판정 `paper_trades`만.
+
+### 구현하며 바뀐 것
+
+- **VaRRule을 BUY 전용으로.** 파사드 전환으로 포트폴리오 화면의 매도에도 리스크 게이트가 걸리자, 보유 종목의 VaR가
+  한도를 넘으면 **매도까지 막혔다**(로컬 일봉 데이터의 −72% 점프로 재현). 노출 한도는 노출을 늘리는 주문만 막아야 한다
+  — 위험한 포지션을 정리하지 못하게 하는 리스크 룰은 자기모순이다. ConcentrationRule·PositionCountRule은 원래
+  BUY 전용이었고 VaR만 아니었다. DailyLossRule은 양방향 유지(당일 손실 후 거래 중단은 흔한 쿨오프 규칙).
+- **파사드의 `remainingCash`는 JDBC로 읽는다.** 사가가 cash를 JDBC로 바꾼 뒤 같은 트랜잭션의 JPA 1차 캐시 엔티티는
+  갱신 전 값을 준다 — 첫 라이브에서 1,000만 원 그대로 나왔다.
+
+### 알고 남긴 것
+
+- **MSA 모드 불일치.** `TRADING_SERVICE_URL`이 설정되면 `/api/matching/orders`는 trading-service로 위임되는데,
+  그 복사본에는 `PaperExecutionListener`도 매도 보유 확인도 없다. 파사드는 api 로컬 `MatchingService`를 부르므로
+  MSA 모드에서는 매칭 화면 주문만 계좌 기록이 빠진다. trading-service 복사본에 같은 변경을 넣거나 그 서비스를
+  정리해야 한다 — [engineering-backlog §9](../engineering-backlog.md).
+- V44 백필 이전에 매칭 엔진으로 체결된 거래의 원장 행은 `paper_trade_id`에 fills.id를 담고 있어 백필된
+  `paper_trades` 행과 링크되지 않는다(로컬 데이터뿐).
+

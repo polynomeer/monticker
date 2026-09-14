@@ -56,7 +56,11 @@ val passed = concentrationPct <= limits.concentrationLimitPct.toDouble()
 
 이 주문이 체결됐을 때를 **가정**하여 해당 종목의 비중을 미리 계산한다. 체결 후가 아니라 체결 전에 평가하는 것이 핵심 — 사후 평가는 이미 과도한 비중을 만든 뒤에야 경고하게 된다.
 
-### 2.3 VaR 한도 (VaRRule)
+### 2.3 VaR 한도 (VaRRule) — 매수 시에만 적용
+
+> **정정 (2026-09-14, [ADR-047](../decisions/047-single-execution-path-for-paper-account.md))**: 매도에는 적용하지
+> 않는다. 노출 한도가 매도를 막으면 위험한 포지션을 정리할 수 없다 — 포트폴리오 화면이 매칭 엔진의 리스크 게이트를
+>타게 되면서 실제로 매도 버튼이 잠겼다. 집중도·종목 수 룰과 같은 "매수 전용" 규칙이다.
 
 ```kotlin
 val allReturns = grouped.values.flatMap { rows ->

@@ -409,6 +409,11 @@ CREATE TABLE simulation_trades (
 
 ## Investment Wallet Tables (V14 — done)
 
+### paper_trades.fill_id (V44 — done)
+
+[ADR-047](decisions/047-single-execution-path-for-paper-account.md): `paper_trades`는 계좌의 실행 기록이고 매칭 엔진 체결
+(`fills`)과 `fill_id`(UNIQUE, nullable)로 1:1 링크된다. ADR-047 이전 구 페이퍼 경로의 거래는 NULL.
+
 ### ledger_events
 
 모든 잔고 변화의 append-only 원장. ~~잔고는 이벤트를 replay해서 계산한다.~~ **잔고의 authoritative
