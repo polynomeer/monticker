@@ -37,12 +37,14 @@ class KafkaTopicConfig(private val props: KafkaTopicProperties) {
         const val TICK_PROCESSED_ATTEMPTS = 3        // worker AlertKafkaConsumer
         const val ORDER_FILLED_ATTEMPTS = 4          // quant-engine OrderFilledKafkaConsumer
         const val NOTIFY_ATTEMPTS = 3                // worker NotifyKafkaConsumer (ADR-044)
+        const val SEARCH_INDEX_ATTEMPTS = 1          // api SearchIndexConsumer (ADR-042) — 배치 리스너라 블로킹 재시도 + -dlt만
 
         val all: Map<String, Int> = mapOf(
             "market.ticks" to MARKET_TICKS_ATTEMPTS,
             "market.tick-processed" to TICK_PROCESSED_ATTEMPTS,
             "trading.order-filled" to ORDER_FILLED_ATTEMPTS,
             "notify.commands" to NOTIFY_ATTEMPTS,
+            "search.index" to SEARCH_INDEX_ATTEMPTS,
         )
 
         /** Spring Kafka SUFFIX_WITH_INDEX_VALUE + dltTopicSuffix "-dlt" 규칙 그대로. */
@@ -66,6 +68,8 @@ class KafkaTopicConfig(private val props: KafkaTopicProperties) {
     @Bean fun notifyCommandsTopic()   = topic("notify.commands",       props.partitions.tickProcessed,  Duration.ofDays(1))
     // 유실 불가 — 복제 계수가 2 이상일 때만 minIsr가 의미 있다(단일 브로커에서 minIsr=2면 쓰기가 막힌다).
     @Bean fun orderFilledTopic()      = topic("trading.order-filled",   props.partitions.trading, Duration.ofDays(30), minIsrIfReplicated())
+    // ADR-042 — ES 인덱싱 아웃박스. 키 = "{index}:{docId}" 라 같은 문서의 색인/삭제 순서가 보장된다. 7일 = 재색인 되감기 창.
+    @Bean fun searchIndexTopic()      = topic("search.index",           props.partitions.searchIndex, Duration.ofDays(7))
     @Bean fun orderCancelledTopic()   = topic("trading.order-cancelled", props.partitions.trading, Duration.ofDays(30), minIsrIfReplicated())
 
     // KafkaAdmin은 NewTopic 빈과 NewTopics(묶음) 빈만 수집한다 — List<NewTopic>은 무시된다.
@@ -92,6 +96,7 @@ data class KafkaTopicProperties(
         val tickProcessed: Int = 6,
         val marketEvents: Int = 3,
         val trading: Int = 3,
+        val searchIndex: Int = 3,
         val retry: Int = 1,
     )
 }

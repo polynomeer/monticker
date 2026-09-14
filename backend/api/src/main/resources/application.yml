@@ -178,6 +178,12 @@ management:
       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
 
 app:
+  search:
+    # ADR-042 — 기동 시 인덱스가 없으면 @Setting/@Field 매핑으로 만든다(nori). 있으면 매핑을 대조해
+    # 어긋나면 search_index_mapping_mismatch 게이지를 올린다 — 자동으로 고치지 않는다(재색인은 관리자 몫).
+    manage-indices: ${SEARCH_MANAGE_INDICES:true}
+    # 기동 시 DB → ES 전량 동기화. 인덱스가 커지면 기동 자체가 장애라 기본 false — dev/local 프로필만 true.
+    reindex-on-startup: ${SEARCH_REINDEX_ON_STARTUP:false}
   wallet:
     # ADR-043 — 일일 원장 대사의 불일치 처리. alert: ERROR + LedgerMismatch 페이지 알람.
     # report: WARN + mode="report" 카운터만 — 최초 실행에서 기존 드리프트를 조사·정리할 때까지 (운영 ConfigMap이 결정).
@@ -192,6 +198,7 @@ app:
       tick-processed: ${KAFKA_PARTITIONS_TICK_PROCESSED:6}
       market-events: ${KAFKA_PARTITIONS_MARKET_EVENTS:3}
       trading: ${KAFKA_PARTITIONS_TRADING:3}
+      search-index: ${KAFKA_PARTITIONS_SEARCH_INDEX:3}
       retry: ${KAFKA_PARTITIONS_RETRY:1}
   mail:
     from: ${MAIL_FROM:noreply@monticker.io}

@@ -3,6 +3,8 @@ spring:
     show-sql: true
 
 app:
+  search:
+    reindex-on-startup: true   # ADR-042 — 로컬/dev는 ES가 비어 있을 수 있으니 기동 시 DB → ES 전량 동기화
   rate-limit:
     # 부하 테스트(bench/)가 X-Bench 헤더로 IP 레이트리밋을 우회하도록 허용. 운영 프로파일에는 없다 — 기본값 false.
     bench-bypass-enabled: true

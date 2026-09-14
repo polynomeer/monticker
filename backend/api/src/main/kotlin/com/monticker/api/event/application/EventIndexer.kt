@@ -3,7 +3,7 @@ package com.monticker.api.event.application
 import com.monticker.api.event.domain.StockEvent
 import com.monticker.api.event.infrastructure.StockEventDocument
 import com.monticker.api.event.infrastructure.StockEventSearchRepository
-import jakarta.annotation.PostConstruct
+import com.monticker.api.common.search.SearchReindexer
 import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
@@ -15,23 +15,17 @@ import java.time.Instant
 class EventIndexer(
     private val jdbc: JdbcTemplate,
     private val searchRepository: StockEventSearchRepository,
-) {
+) : SearchReindexer {
+    override val index = "stock_events"
+    override val documentClass: Class<*> = StockEventDocument::class.java
+
     private val log = LoggerFactory.getLogger(javaClass)
 
-    @PostConstruct
-    fun indexRecent() {
-        try {
-            val events = fetchRecent(limit = 10_000)
-            if (events.isEmpty()) {
-                log.info("No stock events to index in Elasticsearch")
-                return
-            }
-            val docs = events.map { StockEventDocument.from(it) }
-            docs.chunked(500).forEach { searchRepository.saveAll(it) }
-            log.info("Elasticsearch event index synced: {} documents", docs.size)
-        } catch (e: Exception) {
-            log.warn("Elasticsearch event indexing skipped: {}", e.message)
-        }
+    /** 최근 10,000건 — 관리자 재색인·dev 플래그로만 (ADR-042 §5). 신규 이벤트는 아직 Worker dual-write. */
+    override fun reindexAll(): Int {
+        val docs = fetchRecent(limit = 10_000).map { StockEventDocument.from(it) }
+        docs.chunked(500).forEach { searchRepository.saveAll(it) }
+        return docs.size
     }
 
     private fun fetchRecent(limit: Int): List<StockEvent> =

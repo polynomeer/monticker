@@ -1,14 +1,15 @@
 package com.monticker.api.watchlist.application
 
 import com.monticker.api.common.metrics.SearchMetrics
+import com.monticker.api.common.search.SearchIndexEvent
 import com.monticker.api.stock.application.StockService
 import com.monticker.api.watchlist.domain.WatchlistGroup
 import com.monticker.api.watchlist.domain.WatchlistItem
 import com.monticker.api.watchlist.infrastructure.WatchlistGroupRepository
 import com.monticker.api.watchlist.infrastructure.WatchlistItemDocument
 import com.monticker.api.watchlist.infrastructure.WatchlistItemRepository
-import com.monticker.api.watchlist.infrastructure.WatchlistSearchRepository
 import org.slf4j.LoggerFactory
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.elasticsearch.client.elc.NativeQuery
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations
 import org.springframework.stereotype.Service
@@ -20,9 +21,9 @@ class WatchlistService(
     private val groupRepository: WatchlistGroupRepository,
     private val itemRepository: WatchlistItemRepository,
     private val stockService: StockService,
-    private val watchlistSearchRepository: WatchlistSearchRepository,
     private val esOps: ElasticsearchOperations,
     private val searchMetrics: SearchMetrics,
+    private val events: ApplicationEventPublisher,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -51,7 +52,7 @@ class WatchlistService(
         val item = WatchlistItem(group = group, stock = stock, memo = memo)
         val saved = itemRepository.save(item)
 
-        indexToEs(saved, group, stock.name, stock.sector)
+        publishIndex(saved, group, stock.name, stock.sector)
         return saved
     }
 
@@ -61,7 +62,8 @@ class WatchlistService(
         }
         require(item.group.userId == userId) { "Access denied" }
         itemRepository.delete(item)
-        deleteFromEs(itemId)
+        // ADR-042: 삭제도 이벤트 — 트랜잭션이 롤백되면 이벤트도 함께 사라진다
+        events.publishEvent(SearchIndexEvent.delete(WatchlistIndexer.INDEX, itemId.toString()))
     }
 
     /**
@@ -107,36 +109,29 @@ class WatchlistService(
         }
     }
 
-    // ── ES 동기화 ─────────────────────────────────────────────────────────────
+    // ── ES 동기화 (ADR-042) ────────────────────────────────────────────────────
+    // 이전엔 여기서 ES를 직접 썼다 — 클래스 레벨 @Transactional 안에서 커밋 전에 색인해 롤백되면 유령 문서가
+    // 남았고, 실패는 WARN으로 삼켜졌다. 이제 완성된 문서를 SearchIndexEvent에 실어 같은 트랜잭션에 기록한다
+    // (event_publication). 커밋 후 Kafka search.index → SearchIndexConsumer가 벌크 색인하고, 실패는 재시도·DLT·
+    // Outbox 재전송이 받는다. 이 서비스는 더 이상 ES writer가 아니다 — 검색(read)만 한다.
 
-    private fun indexToEs(item: WatchlistItem, group: WatchlistGroup, stockName: String, sector: String?) {
-        try {
-            watchlistSearchRepository.save(
-                WatchlistItemDocument(
-                    id          = item.id.toString(),
-                    userId      = group.userId,
-                    groupId     = group.id,
-                    groupName   = group.name,
-                    stockId     = item.stock.id,
-                    symbol      = item.stock.symbol,
-                    stockName   = stockName,
-                    sector      = sector,
-                    memo        = item.memo,
-                    targetPrice = item.targetPrice?.toDouble(),
-                    createdAt   = item.createdAt,
-                )
-            )
-        } catch (e: Exception) {
-            log.warn("ES indexing failed for watchlist item id={}: {}", item.id, e.message)
-        }
-    }
-
-    private fun deleteFromEs(itemId: Long) {
-        try {
-            watchlistSearchRepository.deleteById(itemId.toString())
-        } catch (e: Exception) {
-            log.warn("ES delete failed for watchlist item id={}: {}", itemId, e.message)
-        }
+    private fun publishIndex(item: WatchlistItem, group: WatchlistGroup, stockName: String, sector: String?) {
+        val doc = WatchlistItemDocument(
+            id          = item.id.toString(),
+            userId      = group.userId,
+            groupId     = group.id,
+            groupName   = group.name,
+            stockId     = item.stock.id,
+            symbol      = item.stock.symbol,
+            stockName   = stockName,
+            sector      = sector,
+            memo        = item.memo,
+            targetPrice = item.targetPrice?.toDouble(),
+            createdAt   = item.createdAt,
+        )
+        // Spring Data ES 컨버터로 직렬화해야 @Field(format = epoch_millis) 같은 매핑 규칙과 _id 제외가 그대로 적용된다
+        val payload: Map<String, Any?> = esOps.elasticsearchConverter.mapObject(doc)
+        events.publishEvent(SearchIndexEvent.index(WatchlistIndexer.INDEX, doc.id, payload))
     }
 }
 

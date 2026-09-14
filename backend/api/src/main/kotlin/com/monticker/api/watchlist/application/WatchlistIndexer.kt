@@ -2,38 +2,31 @@ package com.monticker.api.watchlist.application
 
 import com.monticker.api.watchlist.infrastructure.WatchlistItemDocument
 import com.monticker.api.watchlist.infrastructure.WatchlistSearchRepository
-import jakarta.annotation.PostConstruct
+import com.monticker.api.common.search.SearchReindexer
 import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Component
 import java.time.Instant
 
 /**
- * 앱 기동 시 watchlist_items DB → ES 동기화.
- * 이후 추가/삭제는 WatchlistService의 dual-write로 실시간 반영된다.
+ * watchlist_items DB → ES 전량 동기화 (ADR-042 §5: 기동 시가 아니라 관리자 재색인·dev 플래그로만).
+ * 실시간 반영은 WatchlistService가 발행하는 SearchIndexEvent → SearchIndexConsumer 경로다.
  */
 @Component
 class WatchlistIndexer(
     private val jdbc: JdbcTemplate,
     private val searchRepository: WatchlistSearchRepository,
-) {
+) : SearchReindexer {
+    companion object { const val INDEX = "watchlist_items" }
+    override val index = INDEX
+    override val documentClass: Class<*> = WatchlistItemDocument::class.java
+
     private val log = LoggerFactory.getLogger(javaClass)
 
-    @PostConstruct
-    @Async
-    fun indexAll() {
-        try {
-            val docs = fetchAll()
-            if (docs.isEmpty()) {
-                log.info("No watchlist items to index in Elasticsearch")
-                return
-            }
-            docs.chunked(500).forEach { searchRepository.saveAll(it) }
-            log.info("Elasticsearch watchlist index synced: {} documents", docs.size)
-        } catch (e: Exception) {
-            log.warn("Elasticsearch watchlist indexing skipped: {}", e.message)
-        }
+    override fun reindexAll(): Int {
+        val docs = fetchAll()
+        docs.chunked(500).forEach { searchRepository.saveAll(it) }
+        return docs.size
     }
 
     private fun fetchAll(): List<WatchlistItemDocument> =

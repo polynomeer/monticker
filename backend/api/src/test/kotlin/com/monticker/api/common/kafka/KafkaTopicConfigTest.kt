@@ -49,7 +49,8 @@ class KafkaTopicConfigTest {
             "market.tick-processed-retry-0", "market.tick-processed-retry-1", "market.tick-processed-dlt",
             "trading.order-filled-retry-0", "trading.order-filled-retry-1", "trading.order-filled-retry-2", "trading.order-filled-dlt",
             "notify.commands-retry-0", "notify.commands-retry-1", "notify.commands-dlt",
+            "search.index-dlt",   // ADR-042 — 배치 컨슈머는 블로킹 재시도라 retry 토픽 없이 DLT만
         )
-        assertThat(declared).hasSize(13)
+        assertThat(declared).hasSize(14)
     }
 }

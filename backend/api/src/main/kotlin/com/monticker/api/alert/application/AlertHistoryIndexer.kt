@@ -2,38 +2,30 @@ package com.monticker.api.alert.application
 
 import com.monticker.api.alert.infrastructure.AlertHistoryDocument
 import com.monticker.api.alert.infrastructure.AlertHistorySearchRepository
-import jakarta.annotation.PostConstruct
+import com.monticker.api.common.search.SearchReindexer
 import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
-import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Component
 import java.time.Instant
 
 /**
- * 앱 기동 시 alert_histories 최근 50,000건 → ES 동기화.
- * 이후 신규 이력은 AlertEvaluator(worker) dual-write로 실시간 반영된다.
+ * alert_histories 최근 50,000건 → ES 동기화 — 관리자 재색인·dev 플래그로만 (ADR-042 §5).
+ * 신규 이력은 아직 api AlertService·worker AlertDispatcher의 dual-write로 반영된다 (전환 3단계).
  */
 @Component
 class AlertHistoryIndexer(
     private val jdbc: JdbcTemplate,
     private val searchRepository: AlertHistorySearchRepository,
-) {
+) : SearchReindexer {
+    override val index = "alert_histories"
+    override val documentClass: Class<*> = AlertHistoryDocument::class.java
+
     private val log = LoggerFactory.getLogger(javaClass)
 
-    @PostConstruct
-    @Async
-    fun indexRecent() {
-        try {
-            val docs = fetchRecent(limit = 50_000)
-            if (docs.isEmpty()) {
-                log.info("No alert histories to index in Elasticsearch")
-                return
-            }
-            docs.chunked(500).forEach { searchRepository.saveAll(it) }
-            log.info("Elasticsearch alert history index synced: {} documents", docs.size)
-        } catch (e: Exception) {
-            log.warn("Elasticsearch alert history indexing skipped: {}", e.message)
-        }
+    override fun reindexAll(): Int {
+        val docs = fetchRecent(limit = 50_000)
+        docs.chunked(500).forEach { searchRepository.saveAll(it) }
+        return docs.size
     }
 
     private fun fetchRecent(limit: Int): List<AlertHistoryDocument> =
