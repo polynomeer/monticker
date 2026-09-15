@@ -14,7 +14,7 @@
     "expo-device": "~7.0.0",
     "expo-constants": "~17.0.0",
     "react": "~18.3.0",
-    "react-native": "~0.76.0",
+    "react-native": "~0.87.1",
     "@react-navigation/native": "^7.0.14"
   },
   "devDependencies": {
