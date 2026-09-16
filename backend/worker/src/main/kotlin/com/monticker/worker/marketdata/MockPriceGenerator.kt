@@ -21,6 +21,9 @@ data class GeneratedTick(
     val tradeTime: Instant,
     val generatedAt: Instant = Instant.now(),
     val marketStatus: String = "OPEN",
+    // 종목별 단조 증가 시퀀스. Go market-gateway가 TICK_SEQ=true 일 때만 채운다(실험 M-002) — 없으면 null.
+    // ObjectMapper 기본값이 FAIL_ON_UNKNOWN_PROPERTIES=true 라 필드 없이는 seq가 실린 틱이 전부 DLT로 간다.
+    val seq: Long? = null,
 )
 
 private data class StockMeta(val id: Long, val symbol: String, val market: String)

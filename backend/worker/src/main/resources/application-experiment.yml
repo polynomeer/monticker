@@ -1,0 +1,9 @@
+# `experiment` 프로파일 — 실험(reports/M-0xx) 전용. 기본 프로파일의 동작은 바꾸지 않는다.
+# SPRING_PROFILES_ACTIVE=local,experiment 처럼 다른 프로파일에 덧붙여 쓴다.
+experiment:
+  tick-order:
+    hot-stock-id: ${EXP_HOT_STOCK_ID:0}     # 핫 종목(e2e 지연을 hot / 같은 파티션 / 나머지 로 나눠 본다)
+    slow-stock-id: ${EXP_SLOW_STOCK_ID:0}   # 이 종목의 틱마다 slow-ms 만큼 리스너 스레드를 붙잡는다
+    slow-ms: ${EXP_SLOW_MS:0}
+    redis-log: ${EXP_REDIS_LOG:false}      # 틱마다 Redis 스트림 experiment:tick-order 에 기록 (다중 프로세스·리밸런스 실험용)
+    worker-id: ${EXP_WORKER_ID:w}           # 스트림 기록의 프로세스 식별자

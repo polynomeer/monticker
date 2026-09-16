@@ -69,6 +69,10 @@ class TickKafkaConsumer(
     @Autowired(required = false)
     private var tickProcessedProducer: TickProcessedKafkaProducer? = null
 
+    // experiment 프로파일에서만 존재(reports/M-002). 기본 프로파일에서는 null — 비용은 null 체크 하나.
+    @Autowired(required = false)
+    private var tickOrderMonitor: com.monticker.worker.experiment.TickOrderMonitor? = null
+
     @RetryableTopic(
         attempts = "3",
         backoff = Backoff(delay = 2_000, multiplier = 2.0),
@@ -79,6 +83,7 @@ class TickKafkaConsumer(
     @KafkaListener(topics = ["market.ticks"], groupId = "monticker-worker")
     fun onTick(record: ConsumerRecord<String, String>) {
         val tick = objectMapper.readValue(record.value(), GeneratedTick::class.java)
+        tickOrderMonitor?.observe(record.partition(), tick)
         latencyTracker.recordTickGenerated(tick.stockId, tick.generatedAt)
         redisTickWriter.write(tick)
         candleAggregator.onTick(tick)
