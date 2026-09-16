@@ -1,0 +1,4 @@
+run	kill_to_last_msg_s	start_to_resume_s	silence_s	kafka_healthy_s	worker_ticks	worker_gaps	gateway_publish_failed	k6_conn_ok	k6_silence_p50_ms	k6_silence_p99_ms	api_broadcast_failed
+1	0.0	15.3	45.7	23	27921	1010	1010	1	45699	45704	162
+2	0.0	15.4	45.7	23	27941	1010	1010	1	45680	45695	296
+3	-0.0	15.3	45.7	22	28038	1010	1010	1	45700	45707	388

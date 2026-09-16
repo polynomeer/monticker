@@ -1,0 +1,39 @@
+
+
+  █ THRESHOLDS 
+
+    ws_connect_ok
+    ✗ 'rate>0.99' rate=31.24%
+
+    ws_stomp_connected
+    ✗ 'rate>0.99' rate=40.57%
+
+
+  █ TOTAL RESULTS 
+
+    EXECUTION
+    iteration_duration.........................: min=8.29s    med=8.33s p(95)=1m50s p(99)=1m50s max=1m50s
+    iterations.................................: 20368   140.439799/s
+    vus........................................: 899     min=78            max=10000
+    vus_max....................................: 10000   min=10000         max=10000
+
+    NETWORK
+    data_received..............................: 1.3 GB  9.3 MB/s
+    data_sent..................................: 5.0 MB  35 kB/s
+
+    WEBSOCKET
+    ws_connect_ok..............................: 31.24%  6363 out of 20368
+    ws_connecting..............................: min=326.12µs med=8.3s  p(95)=8.35s p(99)=8.46s max=1m0s 
+    ws_max_silence_ms..........................: min=812ms    med=1.22s p(95)=1.45s p(99)=1.51s max=1.53s
+    ws_messages................................: 4565192 31477.545415/s
+    ws_msgs_per_conn...........................: min=327      med=550   p(95)=550   p(99)=550   max=553  
+    ws_msgs_received...........................: 4574801 31543.800621/s
+    ws_msgs_sent...............................: 57366   395.545438/s
+    ws_session_duration........................: min=8.29s    med=8.31s p(95)=1m50s p(99)=1m50s max=1m50s
+    ws_sessions................................: 23566   162.490391/s
+    ws_stomp_connected.........................: 40.57%  9561 out of 23566
+    ws_tick_to_client_ms.......................: min=21ms     med=232ms p(95)=479ms p(99)=601ms max=898ms
+
+
+
+time="2026-09-17T01:14:01+09:00" level=error msg="thresholds on metrics 'ws_connect_ok, ws_stomp_connected' have been crossed"

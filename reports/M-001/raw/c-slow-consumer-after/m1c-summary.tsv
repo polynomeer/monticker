@@ -1,0 +1,4 @@
+slow	run	slow_closed	slow_close_s_min	slow_close_s_max	normal_p50_ms	normal_p95_ms	normal_p99_ms	normal_max_silence_p99_ms	normal_msgs	api_cpu_cores	api_heap_mb	api_threads	ws_out_delta
+25	1	25	3	3	122	15328	18182	20015	396256	0.3	770	115.0	21210
+25	2	25	3	3	121	14973	17880	19393	395993	0.2	839	116.0	21412
+25	3	25	3	3	121	16371	19258	21046	396233	0.2	902	118.0	21210

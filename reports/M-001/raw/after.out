@@ -1,0 +1,41 @@
+date=2026-09-16T16:50:09Z
+commit=43b7fd3
+host=arm64 10cpu 32GB
+java=openjdk version "21.0.10" 2026-01-20 LTS
+k6=k6 v1.0.0 (go1.24.2, darwin/arm64)
+go=go version go1.26.0 darwin/arm64
+docker=28.0.4
+vm_mem_mb: Mem:           7837        3387        2309         370        2142        3894
+monticker-kafka: mem_limit=1610612736 cpus=2000000000 image=apache/kafka:3.8.0
+monticker-redis: mem_limit=536870912 cpus=1000000000 image=redis:7-alpine
+monticker-postgres: mem_limit=1073741824 cpus=2000000000 image=timescale/timescaledb:latest-pg16
+[01:50:14] market.ticks 재생성: partitions=12
+[01:50:24] api 기동 pid=35623 (SPRING_JPA_SHOW_SQL=false SEARCH_REINDEX_ON_STARTUP=false)
+[01:50:31] gateway 기동 pid=35851 ()
+[01:51:29] 워밍업 완료
+[01:51:48]   느린 연결 25개 (구독 1010개씩) 포트: 49707 49706 49712 49715 49714 49710 49711 49709 49713 49708 
+[01:53:15]   m1c-S25-r1: 25 3 3 122 15328 18182 20015 396256 0.3 770 115.0 21210
+[01:53:43]   느린 연결 25개 (구독 1010개씩) 포트: 51168 51165 51167 51166 51169 51171 51170 51173 51172 51179 
+[01:55:10]   m1c-S25-r2: 25 3 3 121 14973 17880 19393 395993 0.2 839 116.0 21412
+[01:55:39]   느린 연결 25개 (구독 1010개씩) 포트: 52635 52632 52633 52636 52634 52637 52638 52639 52641 52645 
+[01:57:06]   m1c-S25-r3: 25 3 3 121 16371 19258 21046 396233 0.2 902 118.0 21210
+[01:57:16] 완료 → /Users/hammac/Projects/monticker/reports/M-001/raw/c-slow-consumer-after/m1c-summary.tsv
+date=2026-09-16T16:57:20Z
+commit=43b7fd3
+host=arm64 10cpu 32GB
+java=openjdk version "21.0.10" 2026-01-20 LTS
+k6=k6 v1.0.0 (go1.24.2, darwin/arm64)
+go=go version go1.26.0 darwin/arm64
+docker=28.0.4
+vm_mem_mb: Mem:           7837        3432        2264         369        2142        3848
+monticker-kafka: mem_limit=1610612736 cpus=2000000000 image=apache/kafka:3.8.0
+monticker-redis: mem_limit=536870912 cpus=1000000000 image=redis:7-alpine
+monticker-postgres: mem_limit=1073741824 cpus=2000000000 image=timescale/timescaledb:latest-pg16
+[01:57:25] market.ticks 재생성: partitions=12
+[01:57:35] api 기동 pid=43646 (SPRING_JPA_SHOW_SQL=false SEARCH_REINDEX_ON_STARTUP=false)
+[01:57:42] gateway 기동 pid=43881 ()
+[01:58:55] 워밍업 완료
+[02:01:22]   m1a-ws-N10000-r1: 1 1 5351545 89192 269 492 584 874         0
+[02:03:58]   m1a-ws-N10000-r2: 1 1 5350069 89168 258 456 556 644         0
+[02:06:34]   m1a-ws-N10000-r3: 1 1 5350195 89170 243 458 568 736         0
+[02:06:44] 완료 → /Users/hammac/Projects/monticker/reports/M-001/raw/a-ws-N10000-after/m1a-summary.tsv

@@ -1,0 +1,22 @@
+date=2026-09-16T17:06:47Z
+commit=43b7fd3
+host=arm64 10cpu 32GB
+java=openjdk version "21.0.10" 2026-01-20 LTS
+k6=k6 v1.0.0 (go1.24.2, darwin/arm64)
+go=go version go1.26.0 darwin/arm64
+docker=28.0.4
+vm_mem_mb: Mem:           7837        3488        2181         377        2168        3786
+monticker-kafka: mem_limit=1610612736 cpus=2000000000 image=apache/kafka:3.8.0
+monticker-redis: mem_limit=536870912 cpus=1000000000 image=redis:7-alpine
+monticker-postgres: mem_limit=1073741824 cpus=2000000000 image=timescale/timescaledb:latest-pg16
+[02:06:52] market.ticks 재생성: partitions=12
+[02:07:02] api 기동 pid=49700 (SPRING_JPA_SHOW_SQL=false SEARCH_REINDEX_ON_STARTUP=false)
+[02:07:08] gateway 기동 pid=49919 ()
+[02:08:07] 워밍업 완료
+[02:08:25]   느린 연결 25개 (구독 1010개씩) 포트: 54690 54692 54689 54691 54688 54694 54695 54693 54702 54706 
+[02:09:52]   m1c-S25-r1: 25 3 3 126 157 196 1108 396224 0.2 729 150.0 21210
+[02:10:20]   느린 연결 25개 (구독 1010개씩) 포트: 56137 56140 56141 56138 56143 56142 56139 56144 56145 56146 
+[02:11:48]   m1c-S25-r2: 25 4 4 126 152 191 1095 395972 0.2 724 150.0 21412
+[02:12:16]   느린 연결 25개 (구독 1010개씩) 포트: 57604 57607 57605 57608 57606 57609 57610 57613 57612 57614 
+[02:13:43]   m1c-S25-r3: 25 3 3 127 161 195 1068 396200 0.2 716 151.0 21210
+[02:13:53] 완료 → /Users/hammac/Projects/monticker/reports/M-001/raw/c-slow-consumer-pool/m1c-summary.tsv

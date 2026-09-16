@@ -1,0 +1,107 @@
+{
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {}
+    },
+    "metrics": {
+        "ws_messages": {
+            "count": 2214569,
+            "rate": 18451.759862272924
+        },
+        "ws_connecting": {
+            "p(95)": 7.6976247999999865,
+            "p(99)": 26.006296559999996,
+            "max": 64.163875,
+            "min": 0.309417,
+            "med": 0.969833
+        },
+        "vus": {
+            "min": 139,
+            "max": 5000,
+            "value": 301
+        },
+        "ws_msgs_per_conn": {
+            "p(99)": 425,
+            "max": 430,
+            "min": 252,
+            "med": 425,
+            "p(95)": 425
+        },
+        "data_sent": {
+            "count": 3041169,
+            "rate": 25338.98022079632
+        },
+        "ws_msgs_sent": {
+            "count": 34998,
+            "rate": 291.60287697508085
+        },
+        "ws_session_duration": {
+            "p(99)": 85082.70891926,
+            "max": 85298.294708,
+            "min": 85000.553834,
+            "med": 85002.1445415,
+            "p(95)": 85029.2676774
+        },
+        "ws_stomp_connected": {
+            "passes": 5833,
+            "fails": 0,
+            "thresholds": {
+                "rate>0.99": false
+            },
+            "value": 1
+        },
+        "data_received": {
+            "count": 651565983,
+            "rate": 5428839.224581308
+        },
+        "ws_tick_to_client_ms": {
+            "min": 22,
+            "med": 129,
+            "p(95)": 253,
+            "p(99)": 322,
+            "max": 432
+        },
+        "ws_max_silence_ms": {
+            "min": 898,
+            "med": 1020,
+            "p(95)": 1095,
+            "p(99)": 1131,
+            "max": 1152
+        },
+        "ws_msgs_received": {
+            "count": 2220402,
+            "rate": 18500.36034176877
+        },
+        "iteration_duration": {
+            "min": 85000.605875,
+            "med": 85002.3215625,
+            "p(95)": 85051.2657226,
+            "p(99)": 85109.86663351,
+            "max": 85341.462208
+        },
+        "ws_connect_ok": {
+            "passes": 5000,
+            "fails": 0,
+            "thresholds": {
+                "rate>0.99": false
+            },
+            "value": 1
+        },
+        "vus_max": {
+            "value": 5000,
+            "min": 5000,
+            "max": 5000
+        },
+        "iterations": {
+            "count": 5000,
+            "rate": 41.65993442126419
+        },
+        "ws_sessions": {
+            "count": 5833,
+            "rate": 48.600479495846805
+        }
+    }
+}

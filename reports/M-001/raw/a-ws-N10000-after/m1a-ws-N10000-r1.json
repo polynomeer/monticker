@@ -1,0 +1,107 @@
+{
+    "metrics": {
+        "ws_connecting": {
+            "min": 0.316125,
+            "med": 0.9038120000000001,
+            "p(95)": 73.44163959999996,
+            "p(99)": 222.90347058999978,
+            "max": 405.939125
+        },
+        "ws_msgs_received": {
+            "count": 5362506,
+            "rate": 36980.267234248946
+        },
+        "ws_tick_to_client_ms": {
+            "med": 269,
+            "p(95)": 492,
+            "p(99)": 584,
+            "max": 874,
+            "min": 64
+        },
+        "ws_msgs_per_conn": {
+            "min": 327,
+            "med": 550,
+            "p(95)": 550,
+            "p(99)": 550,
+            "max": 550
+        },
+        "ws_connect_ok": {
+            "passes": 6363,
+            "fails": 0,
+            "thresholds": {
+                "rate>0.99": false
+            },
+            "value": 1
+        },
+        "iterations": {
+            "rate": 43.8797533115163,
+            "count": 6363
+        },
+        "ws_stomp_connected": {
+            "passes": 10900,
+            "fails": 0,
+            "thresholds": {
+                "rate>0.99": false
+            },
+            "value": 1
+        },
+        "data_sent": {
+            "count": 5682985,
+            "rate": 39190.31586878005
+        },
+        "ws_msgs_sent": {
+            "count": 65400,
+            "rate": 451.0035936780082
+        },
+        "iteration_duration": {
+            "max": 110545.554875,
+            "min": 110000.574667,
+            "med": 110002.507958,
+            "p(95)": 110137.30382500001,
+            "p(99)": 110313.52521604
+        },
+        "vus": {
+            "value": 900,
+            "min": 42,
+            "max": 10000
+        },
+        "ws_max_silence_ms": {
+            "p(95)": 1198,
+            "p(99)": 1268,
+            "max": 1446,
+            "min": 809,
+            "med": 1086
+        },
+        "ws_sessions": {
+            "count": 10900,
+            "rate": 75.16726561300136
+        },
+        "vus_max": {
+            "value": 10000,
+            "min": 10000,
+            "max": 10000
+        },
+        "ws_messages": {
+            "count": 5351545,
+            "rate": 36904.67930779169
+        },
+        "ws_session_duration": {
+            "min": 110000.501959,
+            "med": 110002.11875,
+            "p(95)": 110093.58201279999,
+            "p(99)": 110265.18797904,
+            "max": 110545.51675
+        },
+        "data_received": {
+            "count": 1571970280,
+            "rate": 10840431.8873857
+        }
+    },
+    "root_group": {
+        "groups": {},
+        "checks": {},
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e"
+    }
+}

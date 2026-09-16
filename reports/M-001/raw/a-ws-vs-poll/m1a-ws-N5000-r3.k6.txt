@@ -1,0 +1,38 @@
+
+
+  █ THRESHOLDS 
+
+    ws_connect_ok
+    ✓ 'rate>0.99' rate=100.00%
+
+    ws_stomp_connected
+    ✓ 'rate>0.99' rate=100.00%
+
+
+  █ TOTAL RESULTS 
+
+    EXECUTION
+    iteration_duration.........................: min=1m25s    med=1m25s    p(95)=1m25s   p(99)=1m25s   max=1m25s   
+    iterations.................................: 5000    41.663074/s
+    vus........................................: 343     min=131          max=5000
+    vus_max....................................: 5000    min=5000         max=5000
+
+    NETWORK
+    data_received..............................: 652 MB  5.4 MB/s
+    data_sent..................................: 3.0 MB  25 kB/s
+
+    WEBSOCKET
+    ws_connect_ok..............................: 100.00% 5000 out of 5000
+    ws_connecting..............................: min=326.45µs med=960.37µs p(95)=10.41ms p(99)=31.85ms max=173.85ms
+    ws_max_silence_ms..........................: min=900ms    med=1.02s    p(95)=1.09s   p(99)=1.1s    max=1.15s   
+    ws_messages................................: 2214483 18452.433631/s
+    ws_msgs_per_conn...........................: min=252      med=425      p(95)=425     p(99)=425     max=426     
+    ws_msgs_received...........................: 2220316 18501.037773/s
+    ws_msgs_sent...............................: 34998   291.62485/s
+    ws_session_duration........................: min=1m25s    med=1m25s    p(95)=1m25s   p(99)=1m25s   max=1m25s   
+    ws_sessions................................: 5833    48.604142/s
+    ws_stomp_connected.........................: 100.00% 5833 out of 5833
+    ws_tick_to_client_ms.......................: min=22ms     med=127ms    p(95)=222ms   p(99)=271ms   max=380ms   
+
+
+

@@ -1,0 +1,4 @@
+mode	N	run	conn_ok	stomp_ok	msgs	msg_s	p50_ms	p95_ms	p99_ms	max_ms	http_reqs	req_s	http_fail	dropped	http_p99_ms	api_cpu_cores	api_heap_mb	api_threads	ws_out_delta
+ws	10000	1	1	1	5351545	89192	269	492	584	874									0
+ws	10000	2	1	1	5350069	89168	258	456	556	644									0
+ws	10000	3	1	1	5350195	89170	243	458	568	736									0

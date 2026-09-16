@@ -1,0 +1,107 @@
+{
+    "root_group": {
+        "checks": {},
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {}
+    },
+    "metrics": {
+        "ws_msgs_per_conn": {
+            "p(99)": 355,
+            "max": 355,
+            "min": 207,
+            "med": 350,
+            "p(95)": 350
+        },
+        "ws_messages": {
+            "count": 396084,
+            "rate": 3772.0907643793125
+        },
+        "data_sent": {
+            "count": 694964,
+            "rate": 6618.462967391019
+        },
+        "ws_msgs_received": {
+            "count": 397417,
+            "rate": 3784.785538692129
+        },
+        "ws_session_duration": {
+            "min": 70000.833375,
+            "med": 70002.6966665,
+            "p(95)": 70005.353934,
+            "p(99)": 70015.3414225,
+            "max": 70031.180958
+        },
+        "ws_connecting": {
+            "med": 1.146958,
+            "p(95)": 3.7086338,
+            "p(99)": 14.27834043999999,
+            "max": 30.408958,
+            "min": 0.585583
+        },
+        "ws_msgs_sent": {
+            "rate": 76.16864587689919,
+            "count": 7998
+        },
+        "ws_connect_ok": {
+            "passes": 1000,
+            "fails": 0,
+            "thresholds": {
+                "rate>0.99": false
+            },
+            "value": 1
+        },
+        "ws_sessions": {
+            "count": 1333,
+            "rate": 12.694774312816532
+        },
+        "iterations": {
+            "count": 1000,
+            "rate": 9.523461600012403
+        },
+        "vus_max": {
+            "value": 1000,
+            "min": 1000,
+            "max": 1000
+        },
+        "data_received": {
+            "count": 116270774,
+            "rate": 1107300.2513927205
+        },
+        "vus": {
+            "min": 13,
+            "max": 1000,
+            "value": 13
+        },
+        "ws_max_silence_ms": {
+            "max": 1116,
+            "min": 1080,
+            "med": 1105,
+            "p(95)": 1111,
+            "p(99)": 1114
+        },
+        "ws_stomp_connected": {
+            "passes": 1333,
+            "fails": 0,
+            "thresholds": {
+                "rate>0.99": false
+            },
+            "value": 1
+        },
+        "ws_tick_to_client_ms": {
+            "max": 176,
+            "min": 12,
+            "med": 119,
+            "p(95)": 149,
+            "p(99)": 158
+        },
+        "iteration_duration": {
+            "min": 70000.868334,
+            "med": 70002.820875,
+            "p(95)": 70005.61855059999,
+            "p(99)": 70015.45991559,
+            "max": 70031.268125
+        }
+    }
+}
