@@ -1,0 +1,17 @@
+# 실험(reports/M-0xx) 전용 compose 오버레이 — 인프라 컨테이너에 리소스 상한을 건다.
+#   docker compose -f docker-compose.yml -f bench/experiments/compose.limits.yml --profile kafka up -d postgres redis kafka
+# 값은 보고서의 "환경" 절에 그대로 적는다. 로컬 Docker VM(8GB)에서 다른 프로젝트 컨테이너와 같이 도는 걸 전제로 잡았다.
+# api·worker·gateway는 호스트 JVM/Go 프로세스라 여기 없다 — 보고서에 그 사실을 적는다.
+services:
+  kafka:
+    mem_limit: 1536m
+    cpus: 2.0
+    environment:
+      # 기본 1G 힙은 VM 잔여 메모리에서 OOM-kill 됐다(2026-09-16). 실험 부하(≤ 1만 tick/s)에 512m으로 충분하다.
+      KAFKA_HEAP_OPTS: "-Xmx512m -Xms512m"
+  redis:
+    mem_limit: 512m
+    cpus: 1.0
+  postgres:
+    mem_limit: 1024m
+    cpus: 2.0
