@@ -71,3 +71,11 @@ data/backfill/*.csv
 # 재검증하지 않아 타입 에러를 놓칠 수 있다(라이브로 확인됨).
 *.tsbuildinfo
 services/market-gateway/market-gateway
+# 실험 원본 중 큰 것(Redis 스트림 덤프 10MB×N, 프로세스 로그)은 커밋하지 않는다 — 스크립트로 재생성된다. 요약·분석 JSON·TSV 는 남긴다.
+reports/*/raw/**/*.stream
+reports/*/raw/**/worker*.log
+reports/*/raw/**/w1-*.log
+reports/*/raw/**/w2*.log
+reports/*/raw/**/gateway.log
+reports/*/raw/**/api.log
+bench/experiments/__pycache__/

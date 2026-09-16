@@ -8,6 +8,8 @@
   violations   = 스트림 도착 순서(= 처리 순서의 근사)에서 seq 가 그 종목의 지금까지 max 보다 작은 경우(중복 제외)
   handover_gap = w2 가 맡았던 파티션마다 "w2 마지막 처리 → w1 첫 처리" 간격의 최대(ms). 리밸런스 동안 그 파티션이 멈춘 시간
   w2_rejoin_s  = 재기동 명령 → w2 가 다시 틱을 처리한 첫 시각
+  w1_e2e_p99_ms_during = 생존자(w1)가 **자기 파티션**에서 kill 이후 50초 동안 본 e2e p99 — 리밸런스가 생존자를 멈추는지
+  w1_stall_max_ms      = 생존자의 처리 기록 사이 최장 공백(eager 리밸런스의 stop-the-world 가 여기 나타난다)
 """
 import sys, json, collections
 
@@ -30,7 +32,7 @@ while i < len(lines):
 
 maxseq = collections.defaultdict(int); seen = set(); dups = 0; viol = 0; affected = set()
 last_w2 = {}; first_w1_after = {}; w2_parts = set(); w2_first_after_restart = None
-e2e_w1_during = []
+e2e_w1_during = []; e2e_handed = []; w1_times = []   # w2 가 맡았던 파티션의 틱이 인계 후 처리될 때의 e2e — 인계 공백 동안 브로커에 쌓였던 시간
 for s, q, p, w, g, r in recs:
     if q < 0: continue
     key = (s, q)
@@ -43,8 +45,11 @@ for s, q, p, w, g, r in recs:
         elif r >= trestart and w2_first_after_restart is None: w2_first_after_restart = r
     elif w == "w1" and r > tkill and p in w2_parts and p not in first_w1_after:
         first_w1_after[p] = r
-    if w == "w1" and tkill <= r <= trestart: e2e_w1_during.append(r - g)
+    if w == "w1" and tkill <= r <= trestart + 30000 and p not in w2_parts: e2e_w1_during.append(r - g)   # 생존자 자기 파티션만
+    if p in w2_parts and r > tkill: e2e_handed.append(r - g)
+    if w == "w1": w1_times.append(r)
 gaps = [first_w1_after[p] - last_w2[p] for p in w2_parts if p in first_w1_after]
+w1_times.sort(); w1_stall = max((w1_times[k] - w1_times[k - 1] for k in range(1, len(w1_times))), default=0)   # 생존자가 아무것도 처리 못 한 최장 구간
 e2e_w1_during.sort()
 p99 = e2e_w1_during[int((len(e2e_w1_during) - 1) * 0.99)] if e2e_w1_during else None
 expected = sum(maxseq.values())
@@ -53,5 +58,7 @@ print(json.dumps({
     "dups": dups, "violations": viol, "stocks_affected": len(affected),
     "w2_partitions": sorted(w2_parts), "handover_gap_ms": max(gaps) if gaps else None, "handover_gaps_ms": sorted(gaps),
     "w2_rejoin_s": round((w2_first_after_restart - trestart) / 1000, 1) if w2_first_after_restart else None,
-    "w1_e2e_p99_ms_during": p99,
+    "w1_e2e_p99_ms_during": p99, "w1_stall_max_ms": w1_stall,
+    "handed_partitions_e2e_max_ms": max(e2e_handed) if e2e_handed else None,
+    "handed_partitions_ticks_over_1s": sum(1 for x in e2e_handed if x > 1000),
 }, ensure_ascii=False))

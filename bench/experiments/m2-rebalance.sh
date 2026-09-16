@@ -25,7 +25,7 @@ for r in $(seq 1 "$RUNS"); do
   sleep 8   # 두 멤버 모두 가입 후 파티션 분배 안정화
   warmup "${WARMUP:-20}" TICK_INTERVAL_MS=100 TICK_SEQ=true
   redis DEL experiment:tick-order >/dev/null
-  t0=$(date +%s%3N 2>/dev/null || python3 -c 'import time;print(int(time.time()*1000))')
+  t0=$(python3 -c 'import time;print(int(time.time()*1000))')   # macOS date 는 %3N 을 모른다
   start_gateway TICK_INTERVAL_MS=100 TICK_SEQ=true
   sleep "$KILL_AT"
   tkill=$(python3 -c 'import time;print(int(time.time()*1000))'); kill -9 "$W2"; wait "$W2" 2>/dev/null; W2=""

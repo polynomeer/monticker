@@ -4,11 +4,13 @@
 # 하나가 폭주를 전부 처리한다 — 같은 파티션에 매핑된 다른 종목이 같이 밀리는지가 질문이다.
 #
 # 조건(CASES): control(핫 없음) | hot(핫 종목 HOT_INTERVAL ms 간격) | hot-slow(핫 + 틱당 SLOW_MS 처리 지연 주입)
+#             | hot-none(핫 + 키 없이 라운드로빈 — 종목 하나가 2ms 간격이면 파티션 간 랙 차이가 곧 순서 위반이 된다)
+#             | hot-slow<N>(틱당 N ms — 핫 종목 ~90/s × 10ms = 스레드 시간의 90% 를 한 종목이 먹는 포화 직전 상태)
 # 부하: 나머지 201종목 100ms 간격(≈2,010/s) + 핫 종목 HOT_INTERVAL(기본 2ms = 500/s).
 # 실행: bench/experiments/m2-hot-stock.sh   (P C HOT_STOCK HOT_INTERVAL SLOW_MS RUNS HOLD)
 source "$(dirname "$0")/lib.sh"
 P="${P:-6}"; C="${C:-6}"; HOT_STOCK="${HOT_STOCK:-2}"; HOT_INTERVAL="${HOT_INTERVAL:-2}"; SLOW_MS="${SLOW_MS:-2}"
-RUNS="${RUNS:-3}"; HOLD="${HOLD:-40}"; CASES="${CASES:-control hot hot-slow}"
+RUNS="${RUNS:-3}"; HOLD="${HOLD:-40}"; CASES="${CASES:-control hot hot-slow hot-none}"
 env_snapshot
 SUM="$OUT/m2c-summary.tsv"
 printf 'case\trun\tticks\ttick_s\tviolations\tdups\tgaps\thot_partition\thot_n\thot_p50\thot_p95\thot_p99\tsame_n\tsame_p50\tsame_p95\tsame_p99\tother_n\tother_p50\tother_p95\tother_p99\tworker_cpu_cores\n' > "$SUM"
@@ -17,7 +19,8 @@ trap 'stop_pid "$GW_PID"; stop_pid "$WORKER_PID"' EXIT
 for case in $CASES; do
   stop_pid "$WORKER_PID"; WORKER_PID=""
   recreate_ticks_topic "$P"
-  slow=0; [ "$case" = hot-slow ] && slow=$SLOW_MS
+  slow=0
+  case $case in hot-slow) slow=$SLOW_MS;; hot-slow*) slow=${case#hot-slow};; esac   # hot-slow10 → 틱당 10ms
   start_worker "worker-$case" "$WORKER_PORT" KAFKA_CONSUMER_CONCURRENCY="$C" EXP_HOT_STOCK_ID="$HOT_STOCK" EXP_SLOW_STOCK_ID="$HOT_STOCK" EXP_SLOW_MS="$slow" || exit 1
   sleep 5
   warmup "${WARMUP:-20}" TICK_INTERVAL_MS=100 TICK_SEQ=true
@@ -25,8 +28,9 @@ for case in $CASES; do
     tag="m2c-$case-r$r"
     curl -s -X POST "$WORKER/experiment/tick-order/reset" >/dev/null
     sample_proc "$WORKER" "$HOLD" "$OUT/$tag.proc" & SP=$!
+    keymode=stock; [ "$case" = hot-none ] && keymode=none
     if [ "$case" = control ]; then start_gateway TICK_INTERVAL_MS=100 TICK_SEQ=true
-    else start_gateway TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_HOT_STOCK_ID="$HOT_STOCK" TICK_HOT_INTERVAL_MS="$HOT_INTERVAL"; fi
+    else start_gateway TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE="$keymode" TICK_HOT_STOCK_ID="$HOT_STOCK" TICK_HOT_INTERVAL_MS="$HOT_INTERVAL"; fi
     sleep "$HOLD"; stop_pid "$GW_PID"; GW_PID=""; wait "$SP" 2>/dev/null
     wait_drain 90 || log "  경고: 90s 내 랙 미소진 (lag=$(group_lag))"
     curl -s "$WORKER/experiment/tick-order" > "$OUT/$tag.json"
