@@ -86,5 +86,6 @@ class MarketTickBroadcastConsumer(
         val tradeTime: Instant,
         val generatedAt: Instant = Instant.now(),
         val marketStatus: String = "OPEN",
+        val seq: Long? = null,   // gateway TICK_SEQ=true(실험 M-002)일 때만 실린다 — 없으면 역직렬화가 거부해 브로드캐스트가 전부 죽는다
     )
 }
