@@ -138,6 +138,11 @@ ingestion:
 
 kafka:
   brokers: ${KAFKA_BROKERS:localhost:9092}
+  consumer:
+    # D-M2-03 (reports/M-002 §4.3) — 기본 45s 면 프로세스가 죽었을 때 그 파티션의 시세가 45초 멈춘다. 실험이 기준선을
+    # 재현할 때만 45000/15000 으로 되돌린다.
+    session-timeout-ms: ${KAFKA_SESSION_TIMEOUT_MS:10000}
+    heartbeat-interval-ms: ${KAFKA_HEARTBEAT_INTERVAL_MS:3000}
 
 worker:
   # 역할: all(단일 프로세스, 기본값) | market | event | alert

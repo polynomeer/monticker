@@ -1,6 +1,7 @@
 package com.monticker.worker.kafka
 
 import org.apache.kafka.clients.consumer.ConsumerConfig
+import org.apache.kafka.clients.consumer.CooperativeStickyAssignor
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
@@ -27,6 +28,8 @@ import org.springframework.kafka.core.MicrometerConsumerListener
 class KafkaConfig(
     @Value("\${kafka.brokers:localhost:9092}") private val brokers: String,
     @Value("\${spring.kafka.listener.concurrency:1}") private val concurrency: Int,
+    @Value("\${kafka.consumer.session-timeout-ms:10000}") private val sessionTimeoutMs: Int,
+    @Value("\${kafka.consumer.heartbeat-interval-ms:3000}") private val heartbeatIntervalMs: Int,
     private val meterRegistry: MeterRegistry,
 ) {
     @Bean
@@ -37,6 +40,13 @@ class KafkaConfig(
             ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java,
             ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG to StringDeserializer::class.java,
             ConsumerConfig.AUTO_OFFSET_RESET_CONFIG to "latest",
+            // M-002(b) / D-M2-03: 기본값(session.timeout 45s, eager 어사이너)에서는 worker 하나가 SIGKILL 되면 그 파티션이
+            // 45.0s 멈추고, 대체 프로세스가 그 사이에 합류하면 살아남은 프로세스까지 세션 만료까지(관측 18.5s) 전 파티션을
+            // 내려놓는다 — 시세 전체가 멈춘다. 10s/3s 는 Kafka 3.0 이전 기본값이고, cooperative-sticky 는 리밸런스 중에도
+            // 자기 파티션을 계속 처리한다(3회 재현 후 수정, reports/M-002 §4.3).
+            ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG to sessionTimeoutMs,
+            ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG to heartbeatIntervalMs,
+            ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG to listOf(CooperativeStickyAssignor::class.java.name),
         )
         // Spring Boot 자동구성 팩토리는 컨슈머 메트릭(records_lag_max 등)을 자동으로 붙이지만
         // 이 커스텀 팩토리는 그렇지 않다 — 컨슈머 랙 알람(TickPipelineStalled)이 여기에 의존한다 (P1-2).
