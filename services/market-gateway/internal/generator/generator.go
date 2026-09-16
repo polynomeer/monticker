@@ -20,18 +20,35 @@ type Publisher interface {
 	Publish(ctx context.Context, key string, t tick.Tick) error
 }
 
+// Options: 실험 전용 스위치(reports/M-002). 전부 0값이면 기본 동작이다 — 키=stockId, seq 없음, 핫 종목 없음.
+type Options struct {
+	Seq         bool          // 종목별 시퀀스 번호를 채운다 (TICK_SEQ)
+	KeyNone     bool          // 키 없이(nil) 발행해 파티션을 라운드로빈으로 돌린다 (TICK_KEY_MODE=none)
+	HotStockID  int64         // 이 종목만 HotInterval 로 발행한다 (TICK_HOT_STOCK_ID)
+	HotInterval time.Duration // 핫 종목의 틱 간격 (TICK_HOT_INTERVAL_MS)
+}
+
 // Run starts one goroutine per stock and blocks until ctx is cancelled.
 func Run(ctx context.Context, stocks []stock.Stock, pub Publisher, interval time.Duration) {
+	RunWith(ctx, stocks, pub, interval, Options{})
+}
+
+func RunWith(ctx context.Context, stocks []stock.Stock, pub Publisher, interval time.Duration, opt Options) {
 	for _, s := range stocks {
-		go tickLoop(ctx, s, pub, interval)
+		iv := interval
+		if opt.HotStockID != 0 && s.ID == opt.HotStockID && opt.HotInterval > 0 {
+			iv = opt.HotInterval
+		}
+		go tickLoop(ctx, s, pub, iv, opt)
 	}
 	<-ctx.Done()
 }
 
-func tickLoop(ctx context.Context, s stock.Stock, pub Publisher, interval time.Duration) {
+func tickLoop(ctx context.Context, s stock.Stock, pub Publisher, interval time.Duration, opt Options) {
 	price := s.BasePrice
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	var seq int64
 
 	for {
 		select {
@@ -48,7 +65,15 @@ func tickLoop(ctx context.Context, s stock.Stock, pub Publisher, interval time.D
 				TradeTime:   time.Now().UTC(),
 				GeneratedAt: time.Now().UTC(),
 			}
-			if err := pub.Publish(ctx, keyOf(s.ID), t); err != nil {
+			if opt.Seq {
+				seq++
+				t.Seq = seq
+			}
+			key := keyOf(s.ID)
+			if opt.KeyNone {
+				key = ""
+			}
+			if err := pub.Publish(ctx, key, t); err != nil {
 				log.Printf("publish failed for %s: %v", s.Symbol, err)
 			}
 		}

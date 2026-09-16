@@ -37,8 +37,14 @@ func (p *Producer) Publish(ctx context.Context, key string, t tick.Tick) error {
 	if err != nil {
 		return err
 	}
+	// key=""(TICK_KEY_MODE=none)는 nil 키로 보낸다 — kafka.Hash는 nil 키만 라운드로빈으로
+	// 돌리고, 빈 []byte는 해시돼 모든 틱이 한 파티션에 몰린다.
+	var k []byte
+	if key != "" {
+		k = []byte(key)
+	}
 	return p.writer.WriteMessages(ctx, kafka.Message{
-		Key:   []byte(key),
+		Key:   k,
 		Value: payload,
 	})
 }

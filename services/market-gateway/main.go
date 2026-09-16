@@ -53,7 +53,25 @@ func main() {
 	}
 	log.Printf("market-gateway: publishing to kafka brokers=%s topic=%s interval=%s (~%d tick/s)",
 		brokers, kafkaproducer.TicksTopic, interval, int(float64(len(stocks))/interval.Seconds()))
-	generator.Run(ctx, stocks, producer, interval)
+
+	// 실험 스위치(reports/M-002, bench/experiments/) — 기본값은 전부 꺼져 있고 와이어 포맷·키는 그대로다.
+	//   TICK_SEQ=true            종목별 시퀀스 번호(seq)를 채운다 → worker TickOrderMonitor가 순서 위반을 센다
+	//   TICK_KEY_MODE=none       키 없이 발행(파티션 라운드로빈) — "키=stockId vs 라운드로빈" 비교의 대조군
+	//   TICK_HOT_STOCK_ID=2 TICK_HOT_INTERVAL_MS=1   한 종목만 폭주시킨다 — 핫 종목 head-of-line 실험
+	opt := generator.Options{
+		Seq:     getenv("TICK_SEQ", "false") == "true",
+		KeyNone: getenv("TICK_KEY_MODE", "stock") == "none",
+	}
+	if v, err := strconv.ParseInt(getenv("TICK_HOT_STOCK_ID", "0"), 10, 64); err == nil && v > 0 {
+		opt.HotStockID = v
+		if ms, err := strconv.Atoi(getenv("TICK_HOT_INTERVAL_MS", "10")); err == nil && ms > 0 {
+			opt.HotInterval = time.Duration(ms) * time.Millisecond
+		}
+	}
+	if opt.Seq || opt.KeyNone || opt.HotStockID != 0 {
+		log.Printf("market-gateway: EXPERIMENT seq=%v keyNone=%v hotStock=%d hotInterval=%s", opt.Seq, opt.KeyNone, opt.HotStockID, opt.HotInterval)
+	}
+	generator.RunWith(ctx, stocks, producer, interval, opt)
 	log.Println("market-gateway: shutting down")
 }
 
