@@ -1,0 +1,4 @@
+run	ticks_logged	unique	expected	lost	dups	violations	stocks_affected	w2_partitions	handover_gap_ms	w2_rejoin_s	w1_e2e_p99_ms_during
+1	150086	150086	150086	0	0	0	0	[3, 4, 5]	12514	10.5	12238
+2	150288	150288	150288	0	0	0	0	[3, 4, 5]	10814	8.7	1368
+3	149884	149884	149884	0	0	0	0	[3, 4, 5]	10607	8.6	1620

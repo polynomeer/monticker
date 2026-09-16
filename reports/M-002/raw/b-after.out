@@ -1,0 +1,37 @@
+date=2026-09-16T15:23:54Z
+commit=5d3b89d
+host=arm64 10cpu 32GB
+java=openjdk version "21.0.10" 2026-01-20 LTS
+k6=k6 v1.0.0 (go1.24.2, darwin/arm64)
+go=go version go1.26.0 darwin/arm64
+docker=28.0.4
+vm_mem_mb: Mem:           7837        3385        2493         341        1959        3926
+monticker-kafka: mem_limit=1610612736 cpus=2000000000 image=apache/kafka:3.8.0
+monticker-redis: mem_limit=536870912 cpus=1000000000 image=redis:7-alpine
+monticker-postgres: mem_limit=1073741824 cpus=2000000000 image=timescale/timescaledb:latest-pg16
+[00:23:59] market.ticks 재생성: partitions=6
+[00:24:05] worker w1-r1 기동 pid=77975 port=58081 (KAFKA_CONSUMER_CONCURRENCY=3 EXP_REDIS_LOG=true EXP_WORKER_ID=w1)
+[00:24:12] worker w2-r1 기동 pid=78068 port=58082 (KAFKA_CONSUMER_CONCURRENCY=3 EXP_REDIS_LOG=true EXP_WORKER_ID=w2)
+[00:24:20] gateway 기동 pid=78215 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[00:24:42]   워밍업 20s 완료
+[00:24:42] gateway 기동 pid=78417 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[00:25:07]   w2 SIGKILL at +25s
+[00:25:33] worker w2b-r1 기동 pid=78819 port=58082 (KAFKA_CONSUMER_CONCURRENCY=3 EXP_REDIS_LOG=true EXP_WORKER_ID=w2)
+[00:26:01]   m2b-r1: 1 150086 150086 150086 0 0 0 0 [3, 4, 5] 12514 10.5 12238
+[00:26:11] worker w1-r2 기동 pid=79195 port=58081 (KAFKA_CONSUMER_CONCURRENCY=3 EXP_REDIS_LOG=true EXP_WORKER_ID=w1)
+[00:26:16] worker w2-r2 기동 pid=79274 port=58082 (KAFKA_CONSUMER_CONCURRENCY=3 EXP_REDIS_LOG=true EXP_WORKER_ID=w2)
+[00:26:24] gateway 기동 pid=79423 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[00:26:46]   워밍업 20s 완료
+[00:26:46] gateway 기동 pid=79644 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[00:27:11]   w2 SIGKILL at +25s
+[00:27:37] worker w2b-r2 기동 pid=80068 port=58082 (KAFKA_CONSUMER_CONCURRENCY=3 EXP_REDIS_LOG=true EXP_WORKER_ID=w2)
+[00:28:05]   m2b-r2: 2 150288 150288 150288 0 0 0 0 [3, 4, 5] 10814 8.7 1368
+[00:28:14] worker w1-r3 기동 pid=80440 port=58081 (KAFKA_CONSUMER_CONCURRENCY=3 EXP_REDIS_LOG=true EXP_WORKER_ID=w1)
+[00:28:20] worker w2-r3 기동 pid=80503 port=58082 (KAFKA_CONSUMER_CONCURRENCY=3 EXP_REDIS_LOG=true EXP_WORKER_ID=w2)
+[00:28:28] gateway 기동 pid=80663 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[00:28:50]   워밍업 20s 완료
+[00:28:50] gateway 기동 pid=80851 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[00:29:15]   w2 SIGKILL at +25s
+[00:29:41] worker w2b-r3 기동 pid=81257 port=58082 (KAFKA_CONSUMER_CONCURRENCY=3 EXP_REDIS_LOG=true EXP_WORKER_ID=w2)
+[00:30:10]   m2b-r3: 3 149884 149884 149884 0 0 0 0 [3, 4, 5] 10607 8.6 1620
+[00:30:10] 완료 → /Users/hammac/Projects/monticker/reports/M-002/raw/b-rebalance-after/m2b-summary.tsv

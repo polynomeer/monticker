@@ -1,0 +1,1 @@
+{"since_ms":44211,"ticks":80596,"ticks_with_seq":80596,"stocks":202,"violations":0,"dups":0,"gaps":0,"hot_stock_id":0,"hot_partition":null,"partitions_seen":[0],"e2e":{"other":{"n":80596,"p50_ms":32.127,"p95_ms":140.169,"p99_ms":589.316,"max_ms":742.347}},"first_violations":[]}

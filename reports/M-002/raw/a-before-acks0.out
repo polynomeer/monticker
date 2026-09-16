@@ -1,0 +1,160 @@
+date=2026-09-16T13:05:13Z
+commit=8b30ca7
+host=arm64 10cpu 32GB
+java=openjdk version "21.0.10" 2026-01-20 LTS
+k6=k6 v1.0.0 (go1.24.2, darwin/arm64)
+go=go version go1.26.0 darwin/arm64
+docker=28.0.4
+vm_mem_mb: Mem:           7837        2743        3847         260        1247        4659
+monticker-kafka: mem_limit=1610612736 cpus=2000000000 image=apache/kafka:3.8.0
+monticker-redis: mem_limit=536870912 cpus=1000000000 image=redis:7-alpine
+monticker-postgres: mem_limit=1073741824 cpus=2000000000 image=timescale/timescaledb:latest-pg16
+[22:05:31] market.ticks 재생성: partitions=1
+[22:05:38] worker worker-P1-C1-stock 기동 pid=45137 port=58081 (KAFKA_CONSUMER_CONCURRENCY=1)
+[22:05:43] gateway 기동 pid=45324 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:06:05]   워밍업 20s 완료
+[22:06:05] gateway 기동 pid=45548 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:06:49]   m2a-P1-C1-stock-r1: 80598 2015 0 0 0 37.171 418.269 598.948 704.356
+[22:06:49] gateway 기동 pid=46160 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:07:34]   m2a-P1-C1-stock-r2: 80598 2015 0 0 0 38.038 441.307 876.395 995.754
+[22:07:34] gateway 기동 pid=46776 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:08:18]   m2a-P1-C1-stock-r3: 80598 2015 0 0 0 31.762 133.866 434.625 657.417
+[22:08:24] market.ticks 재생성: partitions=1
+[22:08:32] worker worker-P1-C3-stock 기동 pid=47413 port=58081 (KAFKA_CONSUMER_CONCURRENCY=3)
+[22:08:37] gateway 기동 pid=47552 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:37:02]   워밍업 20s 완료
+[22:37:02] gateway 기동 pid=70091 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+date=2026-09-16T13:37:25Z
+commit=8b30ca7
+host=arm64 10cpu 32GB
+java=openjdk version "21.0.10" 2026-01-20 LTS
+k6=k6 v1.0.0 (go1.24.2, darwin/arm64)
+go=go version go1.26.0 darwin/arm64
+docker=28.0.4
+vm_mem_mb: Mem:           7837        3017        3448         268        1373        4376
+monticker-kafka: mem_limit=1610612736 cpus=2000000000 image=apache/kafka:3.8.0
+monticker-redis: mem_limit=536870912 cpus=1000000000 image=redis:7-alpine
+monticker-postgres: mem_limit=1073741824 cpus=2000000000 image=timescale/timescaledb:latest-pg16
+[22:37:31] market.ticks 재생성: partitions=1
+[22:37:38] worker worker-P1-C3-stock 기동 pid=70778 port=58081 (KAFKA_CONSUMER_CONCURRENCY=3)
+[22:37:43] gateway 기동 pid=71236 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:38:06]   워밍업 20s 완료
+[22:38:06] gateway 기동 pid=72025 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:38:50]   m2a-P1-C3-stock-r1: 80598 2015 0 0 0 46.742 907.023 1031.505 1136.165
+[22:38:50] gateway 기동 pid=73688 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:39:35]   m2a-P1-C3-stock-r2: 80598 2015 0 0 0 152.659 1455.111 1578.357 1717.48
+[22:39:35] gateway 기동 pid=74657 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:40:20]   m2a-P1-C3-stock-r3: 80598 2015 0 0 0 35.338 371.541 654.877 819.296
+[22:40:26] market.ticks 재생성: partitions=1
+[22:40:33] worker worker-P1-C6-stock 기동 pid=75302 port=58081 (KAFKA_CONSUMER_CONCURRENCY=6)
+[22:40:38] gateway 기동 pid=75450 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:40:59]   워밍업 20s 완료
+[22:40:59] gateway 기동 pid=75662 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:41:44]   m2a-P1-C6-stock-r1: 80396 2010 0 0 0 34.397 263.333 595.506 826.829
+[22:41:44] gateway 기동 pid=76604 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:42:29]   m2a-P1-C6-stock-r2: 80598 2015 0 0 0 39.711 269.067 599.008 829.858
+[22:42:29] gateway 기동 pid=77986 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:43:14]   m2a-P1-C6-stock-r3: 80598 2015 0 0 0 33.849 124.099 288.478 507.987
+[22:43:14] 완료 → /Users/hammac/Projects/monticker/reports/M-002/raw/a-before-acks0/m2a-summary.tsv
+date=2026-09-16T13:43:16Z
+commit=8b30ca7
+host=arm64 10cpu 32GB
+java=openjdk version "21.0.10" 2026-01-20 LTS
+k6=k6 v1.0.0 (go1.24.2, darwin/arm64)
+go=go version go1.26.0 darwin/arm64
+docker=28.0.4
+vm_mem_mb: Mem:           7837        2867        3546         278        1424        4516
+monticker-kafka: mem_limit=1610612736 cpus=2000000000 image=apache/kafka:3.8.0
+monticker-redis: mem_limit=536870912 cpus=1000000000 image=redis:7-alpine
+monticker-postgres: mem_limit=1073741824 cpus=2000000000 image=timescale/timescaledb:latest-pg16
+[22:43:21] market.ticks 재생성: partitions=3
+[22:43:28] worker worker-P3-C1-stock 기동 pid=79532 port=58081 (KAFKA_CONSUMER_CONCURRENCY=1)
+[22:43:33] gateway 기동 pid=79669 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:43:55]   워밍업 20s 완료
+[22:43:55] gateway 기동 pid=79887 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:44:40]   m2a-P3-C1-stock-r1: 80573 2014 0 0 0 46.635 291.317 1062.764 1478.217
+[22:44:40] gateway 기동 pid=80411 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:45:25]   m2a-P3-C1-stock-r2: 80598 2015 0 0 0 41.267 215.556 645.005 974.924
+[22:45:25] gateway 기동 pid=80927 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:46:09]   m2a-P3-C1-stock-r3: 80598 2015 133 0 133 46.705 611.466 1005.648 1428.582
+[22:46:14] market.ticks 재생성: partitions=3
+[22:46:22] worker worker-P3-C3-stock 기동 pid=81630 port=58081 (KAFKA_CONSUMER_CONCURRENCY=3)
+[22:46:27] gateway 기동 pid=81782 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:46:49]   워밍업 20s 완료
+[22:46:49] gateway 기동 pid=82077 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:47:34]   m2a-P3-C3-stock-r1: 80598 2015 335 0 335 25.326 63.619 543.645 879.349
+[22:47:34] gateway 기동 pid=82739 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:48:18]   m2a-P3-C3-stock-r2: 80598 2015 0 0 0 24.731 53.722 256.919 513.114
+[22:48:18] gateway 기동 pid=83993 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:49:03]   m2a-P3-C3-stock-r3: 80598 2015 0 0 0 23.847 44.19 91.349 224.09
+[22:49:10] market.ticks 재생성: partitions=3
+[22:49:17] worker worker-P3-C6-stock 기동 pid=85912 port=58081 (KAFKA_CONSUMER_CONCURRENCY=6)
+[22:49:22] gateway 기동 pid=86261 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:49:44]   워밍업 20s 완료
+[22:49:44] gateway 기동 pid=86516 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:50:28]   m2a-P3-C6-stock-r1: 80598 2015 64 0 64 25.092 76.682 210.232 496.727
+[22:50:28] gateway 기동 pid=87076 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:51:12]   m2a-P3-C6-stock-r2: 80598 2015 0 0 0 25.863 73.839 231.393 363.938
+[22:51:12] gateway 기동 pid=87797 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:51:57]   m2a-P3-C6-stock-r3: 80598 2015 0 0 0 25.606 51.371 118.269 250.596
+[22:52:03] market.ticks 재생성: partitions=6
+[22:52:10] worker worker-P6-C1-stock 기동 pid=88529 port=58081 (KAFKA_CONSUMER_CONCURRENCY=1)
+[22:52:15] gateway 기동 pid=88696 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:52:37]   워밍업 20s 완료
+[22:52:37] gateway 기동 pid=88940 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:53:22]   m2a-P6-C1-stock-r1: 80396 2010 0 0 0 38.405 115.715 260.51 539.021
+[22:53:22] gateway 기동 pid=89480 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:54:06]   m2a-P6-C1-stock-r2: 80598 2015 0 0 0 39.852 125.042 507.672 889.232
+[22:54:06] gateway 기동 pid=90034 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:54:50]   m2a-P6-C1-stock-r3: 80598 2015 0 0 0 37.667 68.564 184.73 385.692
+[22:54:55] market.ticks 재생성: partitions=6
+[22:55:02] worker worker-P6-C3-stock 기동 pid=90622 port=58081 (KAFKA_CONSUMER_CONCURRENCY=3)
+[22:55:07] gateway 기동 pid=90750 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:55:28]   워밍업 20s 완료
+[22:55:28] gateway 기동 pid=90953 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:56:13]   m2a-P6-C3-stock-r1: 80598 2015 0 0 0 24.739 40.027 82.968 232.534
+[22:56:13] gateway 기동 pid=91619 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:56:58]   m2a-P6-C3-stock-r2: 80598 2015 0 0 0 25.909 40.628 100.718 229.187
+[22:56:58] gateway 기동 pid=92184 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:57:43]   m2a-P6-C3-stock-r3: 80598 2015 0 0 0 25.729 43.171 77.598 176.755
+[22:57:49] market.ticks 재생성: partitions=6
+[22:57:56] worker worker-P6-C6-stock 기동 pid=92808 port=58081 (KAFKA_CONSUMER_CONCURRENCY=6)
+[22:58:01] gateway 기동 pid=92944 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:58:23]   워밍업 20s 완료
+[22:58:23] gateway 기동 pid=93146 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:59:08]   m2a-P6-C6-stock-r1: 80598 2015 0 0 0 20.431 32.621 58.738 214.503
+[22:59:08] gateway 기동 pid=93663 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[22:59:52]   m2a-P6-C6-stock-r2: 80598 2015 0 0 0 20.518 32.029 61.451 185.579
+[22:59:52] gateway 기동 pid=94153 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[23:00:37]   m2a-P6-C6-stock-r3: 80598 2015 0 0 0 20.908 32.19 63.82 203.513
+[23:00:43] market.ticks 재생성: partitions=12
+[23:00:49] worker worker-P12-C1-stock 기동 pid=94753 port=58081 (KAFKA_CONSUMER_CONCURRENCY=1)
+[23:00:54] gateway 기동 pid=94867 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[23:01:16]   워밍업 20s 완료
+[23:01:16] gateway 기동 pid=95088 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[23:02:00]   m2a-P12-C1-stock-r1: 80598 2015 30 0 30 39.166 87.864 329.4 625.593
+[23:02:00] gateway 기동 pid=95579 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[23:02:45]   m2a-P12-C1-stock-r2: 80598 2015 0 0 0 37.816 77.716 583.591 802.463
+[23:02:45] gateway 기동 pid=96106 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[23:03:29]   m2a-P12-C1-stock-r3: 80598 2015 30 0 30 39.739 99.162 358.818 773.379
+[23:03:35] market.ticks 재생성: partitions=12
+[23:03:41] worker worker-P12-C3-stock 기동 pid=96712 port=58081 (KAFKA_CONSUMER_CONCURRENCY=3)
+[23:03:46] gateway 기동 pid=96830 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[23:04:08]   워밍업 20s 완료
+[23:04:08] gateway 기동 pid=97166 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[23:04:53]   m2a-P12-C3-stock-r1: 80598 2015 0 0 0 25.101 41.196 191.219 454.883
+[23:04:53] gateway 기동 pid=97744 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[23:05:38]   m2a-P12-C3-stock-r2: 80598 2015 98 0 98 25.541 67.591 175.128 353.123
+[23:05:38] gateway 기동 pid=98438 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[23:06:23]   m2a-P12-C3-stock-r3: 80598 2015 55 0 55 26.844 65.792 145.06 329.062
+[23:06:31] market.ticks 재생성: partitions=12
+[23:06:39] worker worker-P12-C6-stock 기동 pid=99890 port=58081 (KAFKA_CONSUMER_CONCURRENCY=6)
+[23:06:44] gateway 기동 pid=480 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[23:07:06]   워밍업 20s 완료
+[23:07:06] gateway 기동 pid=1352 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[23:07:52]   m2a-P12-C6-stock-r1: 80598 2015 0 0 0 23.001 66.919 146.956 382.276
+[23:07:52] gateway 기동 pid=2690 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[23:08:36]   m2a-P12-C6-stock-r2: 80396 2010 116 0 116 21.488 53.848 187.75 428.466
+[23:08:36] gateway 기동 pid=3316 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock)
+[23:09:21]   m2a-P12-C6-stock-r3: 80598 2015 16 0 16 21.467 69.58 161.539 355.15
+[23:09:21] 완료 → /Users/hammac/Projects/monticker/reports/M-002/raw/a-before-acks0/m2a-summary.tsv

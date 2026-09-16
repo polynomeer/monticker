@@ -1,0 +1,1 @@
+{"run": "m2b-r2", "ticks_logged": 150086, "unique": 150086, "expected": 150086, "lost": 0, "dups": 0, "violations": 0, "stocks_affected": 0, "w2_partitions": [0, 3, 5], "handover_gap_ms": 45045, "handover_gaps_ms": [45045], "w2_rejoin_s": 25.1, "w1_e2e_p99_ms_during": 16987, "w1_stall_max_ms": 17042, "handed_partitions_e2e_max_ms": 45484, "handed_partitions_ticks_over_1s": 49894}

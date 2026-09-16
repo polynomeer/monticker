@@ -1,0 +1,75 @@
+date=2026-09-16T14:53:52Z
+commit=5d3b89d
+host=arm64 10cpu 32GB
+java=openjdk version "21.0.10" 2026-01-20 LTS
+k6=k6 v1.0.0 (go1.24.2, darwin/arm64)
+go=go version go1.26.0 darwin/arm64
+docker=28.0.4
+vm_mem_mb: Mem:           7837        3352        2658         327        1828        3977
+monticker-kafka: mem_limit=1610612736 cpus=2000000000 image=apache/kafka:3.8.0
+monticker-redis: mem_limit=536870912 cpus=1000000000 image=redis:7-alpine
+monticker-postgres: mem_limit=1073741824 cpus=2000000000 image=timescale/timescaledb:latest-pg16
+[23:53:57] market.ticks 재생성: partitions=6
+[23:54:04] worker worker-control 기동 pid=50326 port=58081 (KAFKA_CONSUMER_CONCURRENCY=6 EXP_HOT_STOCK_ID=2 EXP_SLOW_STOCK_ID=2 EXP_SLOW_MS=0)
+[23:54:09] gateway 기동 pid=50486 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[23:54:31]   워밍업 20s 완료
+[23:54:31] gateway 기동 pid=50719 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[23:55:13]   m2c-control-r1: 80598 2015 0 0 0 1 399 16.758 30.343 117.133 11954 18.961 32.995 120.721 68245 19.523 35.431 124.032
+[23:55:13] gateway 기동 pid=51304 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[23:55:56]   m2c-control-r2: 80598 2015 0 0 0 1 399 16.466 27.045 69.45 11958 19.195 29.189 71.114 68241 19.828 30.984 74.287
+[23:55:56] gateway 기동 pid=51854 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[23:56:38]   m2c-control-r3: 80598 2015 0 0 0 1 399 16.186 25.338 41.957 11963 19.013 27.701 60.851 68236 19.495 28.904 62.492
+[23:56:44] market.ticks 재생성: partitions=6
+[23:56:52] worker worker-hot 기동 pid=52820 port=58081 (KAFKA_CONSUMER_CONCURRENCY=6 EXP_HOT_STOCK_ID=2 EXP_SLOW_STOCK_ID=2 EXP_SLOW_MS=0)
+[23:56:57] gateway 기동 pid=53118 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[23:57:19]   워밍업 20s 완료
+[23:57:19] gateway 기동 pid=53619 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock TICK_HOT_STOCK_ID=2 TICK_HOT_INTERVAL_MS=2)
+[23:58:01]   m2c-hot-r1: 83791 2095 0 0 0 1 3592 11.209 16.668 41.231 11970 14.002 25.46 58.5 68229 18.666 31.019 60.086
+[23:58:01] gateway 기동 pid=54553 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock TICK_HOT_STOCK_ID=2 TICK_HOT_INTERVAL_MS=2)
+[23:58:43]   m2c-hot-r2: 83796 2095 0 0 0 1 3597 11.114 17.453 98.678 11970 13.376 28.508 140.05 68229 18.022 32.643 161.858
+[23:58:43] gateway 기동 pid=55105 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock TICK_HOT_STOCK_ID=2 TICK_HOT_INTERVAL_MS=2)
+[23:59:25]   m2c-hot-r3: 83783 2095 0 0 0 1 3584 11.049 16.466 30.154 11970 13.702 24.76 66.56 68229 17.64 27.56 57.704
+[23:59:31] market.ticks 재생성: partitions=6
+[23:59:38] worker worker-hot-slow 기동 pid=55892 port=58081 (KAFKA_CONSUMER_CONCURRENCY=6 EXP_HOT_STOCK_ID=2 EXP_SLOW_STOCK_ID=2 EXP_SLOW_MS=2)
+[23:59:43] gateway 기동 pid=56126 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[00:00:05]   워밍업 20s 완료
+[00:00:05] gateway 기동 pid=56605 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock TICK_HOT_STOCK_ID=2 TICK_HOT_INTERVAL_MS=2)
+[00:00:47]   m2c-hot-slow-r1: 83704 2093 0 0 0 1 3505 11.241 36.354 125.208 11970 17.073 55.136 142.885 68229 20.0 52.209 114.202
+[00:00:47] gateway 기동 pid=57863 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock TICK_HOT_STOCK_ID=2 TICK_HOT_INTERVAL_MS=2)
+[00:01:29]   m2c-hot-slow-r2: 83084 2077 0 0 0 1 3488 11.271 21.51 54.302 11880 16.348 35.862 85.525 67716 18.783 37.072 96.437
+[00:01:29] gateway 기동 pid=59112 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock TICK_HOT_STOCK_ID=2 TICK_HOT_INTERVAL_MS=2)
+[00:02:12]   m2c-hot-slow-r3: 83688 2092 0 0 0 1 3489 11.489 28.101 62.792 11970 17.865 38.298 88.373 68229 20.212 41.43 72.67
+[00:02:18] market.ticks 재생성: partitions=6
+[00:02:27] worker worker-hot-none 기동 pid=60312 port=58081 (KAFKA_CONSUMER_CONCURRENCY=6 EXP_HOT_STOCK_ID=2 EXP_SLOW_STOCK_ID=2 EXP_SLOW_MS=0)
+[00:02:32] gateway 기동 pid=60499 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[00:02:54]   워밍업 20s 완료
+[00:02:54] gateway 기동 pid=60794 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=none TICK_HOT_STOCK_ID=2 TICK_HOT_INTERVAL_MS=2)
+[00:03:37]   m2c-hot-none-r1: 83780 2094 107 0 107 1 3581 11.442 26.325 66.068 13206 16.954 33.564 85.088 66993 18.727 37.269 96.194
+[00:03:37] gateway 기동 pid=61732 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=none TICK_HOT_STOCK_ID=2 TICK_HOT_INTERVAL_MS=2)
+[00:04:19]   m2c-hot-none-r2: 83719 2093 172 0 172 0 3520 11.486 31.662 116.474 13123 17.199 43.713 153.668 67076 19.295 48.552 163.892
+[00:04:19] gateway 기동 pid=62838 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=none TICK_HOT_STOCK_ID=2 TICK_HOT_INTERVAL_MS=2)
+[00:05:02]   m2c-hot-none-r3: 83826 2096 84 0 83 5 3627 11.342 22.799 38.813 13159 17.148 28.6 54.175 67040 18.418 31.527 58.877
+bench/experiments/m2-hot-stock.sh: line 50: unexpected EOF while looking for matching `"'
+bench/experiments/m2-hot-stock.sh: line 51: syntax error: unexpected end of file
+date=2026-09-16T15:05:04Z
+commit=5d3b89d
+host=arm64 10cpu 32GB
+java=openjdk version "21.0.10" 2026-01-20 LTS
+k6=k6 v1.0.0 (go1.24.2, darwin/arm64)
+go=go version go1.26.0 darwin/arm64
+docker=28.0.4
+vm_mem_mb: Mem:           7837        3322        2640         330        1876        4002
+monticker-kafka: mem_limit=1610612736 cpus=2000000000 image=apache/kafka:3.8.0
+monticker-redis: mem_limit=536870912 cpus=1000000000 image=redis:7-alpine
+monticker-postgres: mem_limit=1073741824 cpus=2000000000 image=timescale/timescaledb:latest-pg16
+[00:05:09] market.ticks 재생성: partitions=6
+[00:05:17] worker w1-r1 기동 pid=63838 port=58081 (KAFKA_CONSUMER_CONCURRENCY=3 EXP_REDIS_LOG=true EXP_WORKER_ID=w1)
+[00:05:25] worker w2-r1 기동 pid=63961 port=58082 (KAFKA_CONSUMER_CONCURRENCY=3 EXP_REDIS_LOG=true EXP_WORKER_ID=w2)
+[00:05:33] gateway 기동 pid=64202 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[00:05:54]   워밍업 20s 완료
+[00:05:54] gateway 기동 pid=64526 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[00:06:20]   w2 SIGKILL at +25s
+[00:06:47] worker w2b-r1 기동 pid=65089 port=58082 (KAFKA_CONSUMER_CONCURRENCY=3 EXP_REDIS_LOG=true EXP_WORKER_ID=w2)
+bench/experiments/m2-rebalance.sh: line 36: 17895711543N: value too great for base (error token is "17895711543N")
+[00:06:47] 완료 → /Users/hammac/Projects/monticker/reports/M-002/raw/b-rebalance/m2b-summary.tsv
+[00:06:58]   pid 63838 SIGTERM 10s 무응답 → SIGKILL

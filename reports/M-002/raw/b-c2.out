@@ -1,0 +1,69 @@
+date=2026-09-16T15:07:08Z
+commit=5d3b89d
+host=arm64 10cpu 32GB
+java=openjdk version "21.0.10" 2026-01-20 LTS
+k6=k6 v1.0.0 (go1.24.2, darwin/arm64)
+go=go version go1.26.0 darwin/arm64
+docker=28.0.4
+vm_mem_mb: Mem:           7837        3285        2697         331        1856        4039
+monticker-kafka: mem_limit=1610612736 cpus=2000000000 image=apache/kafka:3.8.0
+monticker-redis: mem_limit=536870912 cpus=1000000000 image=redis:7-alpine
+monticker-postgres: mem_limit=1073741824 cpus=2000000000 image=timescale/timescaledb:latest-pg16
+[00:07:14] market.ticks 재생성: partitions=6
+[00:07:21] worker w1-r1 기동 pid=65706 port=58081 (KAFKA_CONSUMER_CONCURRENCY=3 EXP_REDIS_LOG=true EXP_WORKER_ID=w1)
+[00:07:29] worker w2-r1 기동 pid=65828 port=58082 (KAFKA_CONSUMER_CONCURRENCY=3 EXP_REDIS_LOG=true EXP_WORKER_ID=w2)
+[00:07:37] gateway 기동 pid=66032 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[00:07:58]   워밍업 20s 완료
+[00:07:58] gateway 기동 pid=66279 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[00:08:24]   w2 SIGKILL at +25s
+[00:08:51] worker w2b-r1 기동 pid=66890 port=58082 (KAFKA_CONSUMER_CONCURRENCY=3 EXP_REDIS_LOG=true EXP_WORKER_ID=w2)
+[00:09:31]   m2b-r1: 1 150288 150288 150288 0 0 0 0 [0, 2, 4] 45035 24.9 61
+[00:09:40] worker w1-r2 기동 pid=67636 port=58081 (KAFKA_CONSUMER_CONCURRENCY=3 EXP_REDIS_LOG=true EXP_WORKER_ID=w1)
+[00:09:46] worker w2-r2 기동 pid=67756 port=58082 (KAFKA_CONSUMER_CONCURRENCY=3 EXP_REDIS_LOG=true EXP_WORKER_ID=w2)
+[00:09:54] gateway 기동 pid=68011 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[00:10:16]   워밍업 20s 완료
+[00:10:16] gateway 기동 pid=68475 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[00:10:41]   w2 SIGKILL at +25s
+[00:11:09] worker w2b-r2 기동 pid=69085 port=58082 (KAFKA_CONSUMER_CONCURRENCY=3 EXP_REDIS_LOG=true EXP_WORKER_ID=w2)
+[00:11:46]   m2b-r2: 2 150086 150086 150086 0 0 0 0 [0, 3, 5] 45045 24.9 56
+[00:11:56] worker w1-r3 기동 pid=69755 port=58081 (KAFKA_CONSUMER_CONCURRENCY=3 EXP_REDIS_LOG=true EXP_WORKER_ID=w1)
+[00:12:02] worker w2-r3 기동 pid=69858 port=58082 (KAFKA_CONSUMER_CONCURRENCY=3 EXP_REDIS_LOG=true EXP_WORKER_ID=w2)
+[00:12:10] gateway 기동 pid=70013 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[00:12:32]   워밍업 20s 완료
+[00:12:32] gateway 기동 pid=70216 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[00:12:57]   w2 SIGKILL at +25s
+[00:13:23] worker w2b-r3 기동 pid=70660 port=58082 (KAFKA_CONSUMER_CONCURRENCY=3 EXP_REDIS_LOG=true EXP_WORKER_ID=w2)
+[00:13:59]   m2b-r3: 3 150288 150288 150288 0 0 0 0 [0, 3, 4] 45040 24.9 61
+[00:13:59] 완료 → /Users/hammac/Projects/monticker/reports/M-002/raw/b-rebalance/m2b-summary.tsv
+date=2026-09-16T15:14:02Z
+commit=5d3b89d
+host=arm64 10cpu 32GB
+java=openjdk version "21.0.10" 2026-01-20 LTS
+k6=k6 v1.0.0 (go1.24.2, darwin/arm64)
+go=go version go1.26.0 darwin/arm64
+docker=28.0.4
+vm_mem_mb: Mem:           7837        3415        2445         339        1977        3898
+monticker-kafka: mem_limit=1610612736 cpus=2000000000 image=apache/kafka:3.8.0
+monticker-redis: mem_limit=536870912 cpus=1000000000 image=redis:7-alpine
+monticker-postgres: mem_limit=1073741824 cpus=2000000000 image=timescale/timescaledb:latest-pg16
+[00:14:07] market.ticks 재생성: partitions=6
+[00:14:13] worker worker-hot-slow10 기동 pid=71273 port=58081 (KAFKA_CONSUMER_CONCURRENCY=6 EXP_HOT_STOCK_ID=2 EXP_SLOW_STOCK_ID=2 EXP_SLOW_MS=10)
+[00:14:18] gateway 기동 pid=71426 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[00:14:40]   워밍업 20s 완료
+[00:14:40] gateway 기동 pid=71650 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock TICK_HOT_STOCK_ID=2 TICK_HOT_INTERVAL_MS=2)
+[00:15:35]   m2c-hot-slow10-r1: 83856 2096 0 0 0 1 3657 5841.194 12201.854 12847.053 11970 5862.92 12222.145 12844.613 68229 17.534 24.781 45.686
+[00:15:35] gateway 기동 pid=72353 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock TICK_HOT_STOCK_ID=2 TICK_HOT_INTERVAL_MS=2)
+[00:16:30]   m2c-hot-slow10-r2: 83856 2096 0 0 0 1 3657 6269.115 12823.889 13501.22 11970 6281.996 12830.678 13507.018 68229 17.325 24.149 39.293
+[00:16:30] gateway 기동 pid=73025 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock TICK_HOT_STOCK_ID=2 TICK_HOT_INTERVAL_MS=2)
+[00:17:28]   m2c-hot-slow10-r3: 83846 2096 0 0 0 1 3647 6763.518 13705.056 14326.46 11970 6787.07 13741.553 14332.641 68229 17.883 25.121 41.119
+[00:17:35] market.ticks 재생성: partitions=6
+[00:17:41] worker worker-hot-slow20 기동 pid=73818 port=58081 (KAFKA_CONSUMER_CONCURRENCY=6 EXP_HOT_STOCK_ID=2 EXP_SLOW_STOCK_ID=2 EXP_SLOW_MS=20)
+[00:17:46] gateway 기동 pid=73958 (TICK_INTERVAL_MS=100 TICK_SEQ=true)
+[00:18:08]   워밍업 20s 완료
+[00:18:08] gateway 기동 pid=74163 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock TICK_HOT_STOCK_ID=2 TICK_HOT_INTERVAL_MS=2)
+[00:19:58]   m2c-hot-slow20-r1: 83849 2096 0 0 0 1 3650 31175.678 62416.911 65239.793 11970 31085.244 62519.376 65164.124 68229 17.784 26.109 54.634
+[00:19:58] gateway 기동 pid=75328 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock TICK_HOT_STOCK_ID=2 TICK_HOT_INTERVAL_MS=2)
+[00:21:46]   m2c-hot-slow20-r2: 83786 2095 0 0 0 1 3587 31167.765 62344.772 65133.865 11970 30755.189 62437.495 65126.13 68229 17.809 28.045 84.811
+[00:21:46] gateway 기동 pid=76460 (TICK_INTERVAL_MS=100 TICK_SEQ=true TICK_KEY_MODE=stock TICK_HOT_STOCK_ID=2 TICK_HOT_INTERVAL_MS=2)
+[00:23:35]   m2c-hot-slow20-r3: 83835 2096 0 0 0 1 3636 32092.042 63455.254 66250.897 11970 32228.721 63528.395 66225.917 68229 17.799 26.242 56.729
+[00:23:35] 완료 → /Users/hammac/Projects/monticker/reports/M-002/raw/c-hot-stock-slow10/m2c-summary.tsv
