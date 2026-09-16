@@ -10,6 +10,7 @@ import (
 	"log"
 	"math/rand"
 	"strconv"
+	"sync"
 	"time"
 
 	"monticker/market-gateway/internal/stock"
@@ -33,15 +34,23 @@ func Run(ctx context.Context, stocks []stock.Stock, pub Publisher, interval time
 	RunWith(ctx, stocks, pub, interval, Options{})
 }
 
+// RunWith 는 ctx 취소 뒤 모든 종목 고루틴이 끝날 때까지 기다린 다음 돌아온다 — 호출자가 그 뒤에 Producer.Close 를 불러야
+// kafka-go 의 Close/WriteMessages 경합(D-M2-02)에 걸리지 않는다.
 func RunWith(ctx context.Context, stocks []stock.Stock, pub Publisher, interval time.Duration, opt Options) {
+	var wg sync.WaitGroup
 	for _, s := range stocks {
 		iv := interval
 		if opt.HotStockID != 0 && s.ID == opt.HotStockID && opt.HotInterval > 0 {
 			iv = opt.HotInterval
 		}
-		go tickLoop(ctx, s, pub, iv, opt)
+		wg.Add(1)
+		go func(s stock.Stock, iv time.Duration) {
+			defer wg.Done()
+			tickLoop(ctx, s, pub, iv, opt)
+		}(s, iv)
 	}
 	<-ctx.Done()
+	wg.Wait()
 }
 
 func tickLoop(ctx context.Context, s stock.Stock, pub Publisher, interval time.Duration, opt Options) {

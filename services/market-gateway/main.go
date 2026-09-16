@@ -42,7 +42,8 @@ func main() {
 	}
 	log.Printf("market-gateway: loaded %d active stocks", len(stocks))
 
-	producer := kafkaproducer.New(brokers)
+	// KAFKA_REQUIRED_ACKS: none|one|all(기본). 기본값이 acks=0 이던 결함(D-M2-01)의 수정 — 실험만 none 으로 되돌린다.
+	producer := kafkaproducer.New(brokers, kafkaproducer.ParseAcks(getenv("KAFKA_REQUIRED_ACKS", "all")))
 	defer producer.Close()
 
 	// TICK_INTERVAL_MS: 종목당 틱 간격. 기본 1000ms(=종목 수 tick/s). 부하 시나리오 L-03(tick-storm)이
