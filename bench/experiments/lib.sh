@@ -36,7 +36,7 @@ start_worker() {
 }
 start_api() { # start_api [KEY=VAL ...] → API_PID
   env DB_URL="$DB_JDBC" REDIS_PORT="$REDIS_PORT" KAFKA_BROKERS="$KAFKA_BROKERS" SPRING_PROFILES_ACTIVE=local \
-      SERVER_PORT="$API_PORT" "$@" java -Xmx2g -jar "$API_JAR" > "$OUT/api.log" 2>&1 &
+      SERVER_PORT="$API_PORT" "$@" java -Xmx"${API_XMX:-2g}" -jar "$API_JAR" > "$OUT/api.log" 2>&1 &
   API_PID=$!
   wait_ready "$API" 180 || { log "api 기동 실패"; tail -20 "$OUT/api.log"; return 1; }
   log "api 기동 pid=$API_PID ($*)"
