@@ -21,7 +21,7 @@ class RiskCheckerServiceTest {
     private val objectMapper = ObjectMapper()
     private val riskRuleQueryService = RiskRuleQueryService(jdbc)
     private val auditLogger = RiskCheckAuditLogger(jdbc, objectMapper)
-    private val service = RiskCheckerService(riskLimitRepo, riskRuleQueryService, auditLogger, io.micrometer.core.instrument.simple.SimpleMeterRegistry())
+    private val service = RiskCheckerService(riskLimitRepo, riskRuleQueryService, auditLogger, io.micrometer.core.instrument.simple.SimpleMeterRegistry(), jdbc)
 
     private val userId = 1L
     private val stockId = 100L
@@ -42,6 +42,8 @@ class RiskCheckerServiceTest {
      */
     private fun stubSafeDefaults(limits: RiskLimit = defaultLimits) {
         every { riskLimitRepo.findByUserId(userId) } returns Optional.of(limits)
+        // 종목 존재 검사 — 기본은 존재로 스텁
+        every { jdbc.queryForObject(match<String> { it.contains("FROM stocks WHERE id") }, Boolean::class.java, any()) } returns true
 
         // 1. daily pnl
         every {
@@ -294,5 +296,16 @@ class RiskCheckerServiceTest {
         verify {
             jdbc.update(match<String> { it.contains("risk_check_logs") }, *anyVararg())
         }
+    }
+
+    @Test
+    fun `존재하지 않는 종목이면 NoSuchElementException`() {
+        every { riskLimitRepo.findByUserId(userId) } returns Optional.of(defaultLimits)
+        every { jdbc.queryForObject(match<String> { it.contains("FROM stocks WHERE id") }, Boolean::class.java, any()) } returns false
+        org.junit.jupiter.api.assertThrows<NoSuchElementException> {
+            service.check(userId, 999999L, "BUY", 1, estimatedPrice)
+        }
+        // 감사 로그 INSERT 는 실행되지 않아야 한다 (FK 위반 500 방지)
+        verify(exactly = 0) { jdbc.update(match<String> { it.contains("risk_check_logs") }, *anyVararg()) }
     }
 }

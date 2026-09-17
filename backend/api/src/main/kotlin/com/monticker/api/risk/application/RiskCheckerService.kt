@@ -65,7 +65,18 @@ class RiskCheckerService(
     private val riskRuleQueryService: RiskRuleQueryService,
     private val auditLogger: RiskCheckAuditLogger,
     private val registry: io.micrometer.core.instrument.MeterRegistry,
+    private val jdbc: JdbcTemplate,
 ) {
+
+    /**
+     * 존재하지 않는 종목의 주문은 리스크 판정 이전에 404로 막는다. 이 검사가 없으면 risk_check_logs 의
+     * stock_id FK 위반이 500으로 새어 나갔다(L-05 §4.2 발견). 종목 존재는 risk 도메인의 관심사가 아니지만,
+     * 없는 종목을 risk-check 할 수는 없다 — audit 로그 INSERT(FK) 전에 여기가 유일한 공통 길목이다.
+     */
+    private fun ensureStockExists(stockId: Long) {
+        val exists = jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM stocks WHERE id = ?)", Boolean::class.java, stockId) ?: false
+        if (!exists) throw NoSuchElementException("종목을 찾을 수 없습니다: $stockId")
+    }
     fun check(
         userId: Long,
         stockId: Long,
@@ -73,6 +84,7 @@ class RiskCheckerService(
         qty: Int,
         estimatedPrice: BigDecimal,
     ): RiskCheckResult {
+        ensureStockExists(stockId)
         val limits = riskLimitRepo.findByUserId(userId).orElseGet { RiskLimit(userId = userId) }
         val checks = riskRuleQueryService.evaluate(userId, stockId, side, qty, estimatedPrice, limits)
         return finalize(userId, stockId, side, qty, checks, accountType = "PAPER")
@@ -91,6 +103,7 @@ class RiskCheckerService(
         estimatedPrice: BigDecimal,
         snapshot: PortfolioSnapshot,
     ): RiskCheckResult {
+        ensureStockExists(stockId)
         val limits = riskLimitRepo.findByUserId(userId).orElseGet { RiskLimit(userId = userId) }
         val checks = riskRuleQueryService.evaluateWithSnapshot(stockId, side, qty, estimatedPrice, limits, snapshot)
         return finalize(userId, stockId, side, qty, checks, accountType = "REAL")

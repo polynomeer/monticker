@@ -142,8 +142,9 @@
 - [ ] **주문 경로 커넥션 풀 고갈 (§3.8 실증)** — L-05에서 동시 주문 ~100에 Hikari(20) 고갈, http p95 3s(=connection-timeout). 주문 tx가
   매칭+원장+Saga를 한 트랜잭션으로 커넥션을 오래 잡는다. 대응(PgBouncer+풀 축소)은 Phase 1(§6.3.1). Mongo 기동 시 5xx 급증 —
   주문 tx 중 외부(Mongo) 호출로 커넥션 장기 보유하는지 조사 필요([reports/L-05 §4.1](../reports/L-05.md)). 페이퍼 규모 실사용 영향 없음.
-- [ ] **없는 stockId 주문이 500 (경미)** — 존재하지 않는 종목 id로 주문 시 `risk_check_logs_stock_id_fkey` FK 위반이 500으로 샌다.
-  주문 경로가 종목 존재를 먼저 검증해 400/404로 돌려줄 것([reports/L-05 §4.2](../reports/L-05.md)). 정상 사용엔 영향 없음.
+- [x] **없는 stockId 주문이 500 (경미)** — ✅ 완료(2026-09-17). `RiskCheckerService.check`/`checkBrokerageOrder`가 리스크 판정·감사 로그 INSERT 전에
+  종목 존재를 확인해 없으면 `NoSuchElementException`(→404)을 던진다. 라이브 검증: 없는 id 7·8 → 404 "종목을 찾을 수 없습니다", 유효 id → 정상 체결.
+  페이퍼·실거래(brokerage) 양 경로 공통 길목(finalize 직전)에서 막는다.
 - [ ] **전용 부하 테스트 환경 구축** — 지금 `bench/`는 로컬 docker-compose를 때린다.
   절대 처리량·SLO 판정에는 prod 유사 환경이 필요하다
   ([ADR-045](decisions/045-performance-slo-and-verification-harness.md) §5).
