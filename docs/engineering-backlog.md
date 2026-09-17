@@ -32,6 +32,13 @@
 - [ ] **Toss `personal:order` 채널 활용 검토** — 계좌별 주문 체결 푸시. 지금 `BrokerageService`는 REST 폴링(`getOrderStatus`)만 쓴다 — 실시간 채널로 대체할 수 있는지 검토. [ADR-031 Revisit When](decisions/031-toss-realtime-tick-ingestion.md#revisit-when)
 - [x] **Netty `broadcast-gateway`(ADR-005) 채택 또는 제거 결정** — ✅ 제거로 결정, 완료(2026-09-08, [ADR-033](decisions/033-remove-netty-broadcast-gateway.md)). 프론트엔드 클라이언트 0건·CI 커버리지 0건·실검증 커밋 0건 확인 후 `services/broadcast-gateway` 삭제, 문서(architecture.md, technical/) 동기화.
 
+- [ ] **실시간 파이프라인 p95 꼬리 스파이크 원인 규명** — M-002(2026-09-17)에서 최적 조건(P6·C6)에서도 3회 중 1회꼴로 p95 1.5~2.6초
+  스파이크가 아무 조건에서나 났다. 분 경계 캔들 flush(`CandleAggregator.onTick → flush`, 리스너 스레드 동기 upsert)를 의심했으나
+  실행 창의 분 경계 교차 여부와 상관이 없어 **증명하지 못했다**([reports/M-002 §4.4](../reports/M-002.md)). 실시간 SLO(p99 300ms)를
+  P6C6도 안정적으로 못 지키는 원인 — 프로파일링부터. [ADR-050](decisions/050-realtime-pipeline-defaults-from-load-tests.md) Revisit.
+- [ ] **게이트웨이 무손실 시세(버퍼·재발행)** — M-001(b): Kafka 정지 30초에 유실 1,010건. acks=all이라 게이트웨이가 실패를 인지하지만
+  재시도 큐잉·로컬 버퍼가 없어 그대로 버린다. 페이퍼 트레이딩에선 감수 가능하나 실 체결가에선 재검토 대상([reports/M-001 §4.3](../reports/M-001.md)).
+
 ## 2. 조건부 주문 후속 (ADR-032)
 
 - [ ] **OTO(One-Triggers-Other) 구현** — 주문 "체결" 이벤트가 트리거라 가격 틱(`MarketTickReceivedEvent`)과는 다른 소스가 필요. `BrokerageOrder.fill()` 시점을 관찰하는 별도 이벤트/리스너 설계부터 시작. [ADR-032 Revisit When](decisions/032-conditional-orders.md#revisit-when)

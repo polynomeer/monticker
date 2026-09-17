@@ -97,6 +97,11 @@
 
 → fan-out은 **conflation(합쳐 보내기)** 없이는 성립하지 않는다(§6.1.3).
 
+> **실측(2026-09-17, [reports/M-001](../reports/M-001.md), [ADR-050](decisions/050-realtime-pipeline-defaults-from-load-tests.md))**: 한 api pod의 동시 WS 연결 상한은
+> Tomcat `max-connections` 기본값 **8,192**였고, 연결당 힙 **~140KB**였다. 즉 200,000 동접은 `max-connections`·`-Xmx`를
+> 올린 pod로도 pod당 ~8k → **최소 ~25 pod**가 필요하다(세로 확장이 아니라 pod 증설 문제 — §6.1과 ADR-038이 전제한 방향).
+> 같은 실험에서 WS push는 폴링 대비 서버 CPU 1/20이라, 폴링은 이 규모에서 애초에 후보가 아니다(D-M1-01).
+
 ---
 
 ## 2. 현재 아키텍처 (As-Is) 요약
@@ -162,6 +167,11 @@ backend/api (replicas 2, HPA 2~6)  — 모든 도메인 모듈이 프로세스 �
 - 근거: `docker-compose.yml:173` `KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"`,
   `KAFKA_CFG_NUM_PARTITIONS` 미설정 → 브로커 기본값 `num.partitions=1`
 - 근거: 코드베이스 전체에 `NewTopic` 빈이 없다 (`grep -rn "NewTopic"` → 0건)
+
+> **실측(2026-09-17, [reports/M-002](../reports/M-002.md))**: 202종목·2,015 tick/s에서 파티션×컨슈머를 격자로 재면
+> **파티션≈컨슈머 스레드≈6**이 지연 최소(p99 59~64ms)였고 12는 오히려 같거나 나빴다 — 아래 산정의 "파티션당 처리량"과 별개로,
+> **현재 규모의 최적 파티션 수는 6 근처**다. 큰 파티션 수는 미래 틱 레이트용 여유. 또한 게이트웨이 `acks=0` 결함(D-M2-01)이
+> 키=stockId인데도 순서를 깨뜨렸었다 — [ADR-050](decisions/050-realtime-pipeline-defaults-from-load-tests.md)으로 수정.
 
 파티션 1개 = **컨슈머 병렬성 1**. `ConcurrentKafkaListenerContainerFactory`의 concurrency를
 올려도 소용없다. 단일 파티션의 실질 처리량은 브로커 1대·복제 없음 기준 수천 msg/s 수준이며,
