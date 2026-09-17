@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { type Icon, ChartLineUp, Star, Bell, TestTube, Rocket } from "@phosphor-icons/react";
+import { type Icon, ChartLineUp, Star, Bell, TestTube, ShieldWarning, Sparkle, Rocket } from "@phosphor-icons/react";
 
-const STEPS: Array<{ title: string; description: string; icon: Icon }> = [
+const STEPS: Array<{ title: string; description: string; icon: Icon; note?: string }> = [
   {
     title: "monticker에 오신 것을 환영합니다",
     description: "실시간 주식 시세, AI 요약, 맞춤형 알림까지 — 한 곳에서 관리하세요.",
@@ -24,6 +24,17 @@ const STEPS: Array<{ title: string; description: string; icon: Icon }> = [
     title: "Quant Lab으로 전략을 테스트하세요",
     description: "나만의 매매 조건을 설정하고 과거 데이터로 백테스트 해보세요.",
     icon: TestTube,
+  },
+  {
+    title: "조건부 주문으로 리스크를 관리하세요",
+    description: "손절·익절가를 미리 걸어두면 목표가 도달 시 자동으로 주문이 실행됩니다. 하나가 체결되면 나머지를 취소하는 OCO 주문도 지원합니다.",
+    icon: ShieldWarning,
+  },
+  {
+    title: "AI 주문 제안을 참고하세요",
+    description: "종목별로 AI가 매수·매도 방향을 제안합니다. 승인해도 바로 주문되지 않고, 주문 폼에서 직접 확인한 뒤 실행합니다.",
+    note: "AI 제안은 투자자문이 아니며, 참고용 시뮬레이션 정보입니다.",
+    icon: Sparkle,
   },
   {
     title: "준비 완료!",
@@ -54,6 +65,9 @@ export default function OnboardingPage() {
         <div className="space-y-3">
           <h1 className="text-2xl font-bold tracking-tight">{current.title}</h1>
           <p className="text-sm text-dracula-comment leading-relaxed">{current.description}</p>
+          {current.note && (
+            <p className="text-xs text-dracula-line leading-relaxed pt-1">{current.note}</p>
+          )}
         </div>
 
         {/* 진행 점 */}

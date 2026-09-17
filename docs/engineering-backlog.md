@@ -24,7 +24,7 @@
   글자 크기(보통/크게/더 크게): `a11yStore`(persist) → `html[data-text-size]` → root font-size 100/112.5/125%(rem 기반, 앱 전체 비례). 검증: 더 크게→20px, 새로고침 유지.
   고대비: `html[data-contrast=high]` 언레이어드 규칙이 저대비 체계 토큰만 표적 — 뮤트 텍스트(gray-400/500/600·dracula-comment)·옅은 테두리(gray-100/200·dracula-line)를 진하게 + 포커스 링.
   검증: 다크 뮤트 텍스트 #6272a4→#c8d0ea, 테두리 14/14 밝아짐, 뮤트 텍스트 8/13 개선. **범위 한계**: 색이 고정 hex Tailwind 토큰이라(CSS 변수 아님) 자체 색 규칙을 가진 일부 요소는 미적용 — 완전 대비 팔레트는 토큰을 CSS 변수화하는 별도 리팩터가 필요(후속 후보).
-- [ ] **신규 기능 온보딩 보강** — [app/onboarding/page.tsx](../apps/web/src/app/onboarding/page.tsx)가 관심종목/알림/Quant Lab 백테스트만 다루고 조건부 주문·AI 주문 제안 같은 최근 추가 기능은 미포함.
+- [x] **신규 기능 온보딩 보강** — [app/onboarding/page.tsx](../apps/web/src/app/onboarding/page.tsx)에 조건부 주문(손절·익절·OCO)·AI 주문 제안 스텝 2개 추가. AI 스텝은 ADR-036 면책 문구("투자자문이 아니며 참고용 시뮬레이션")를 `note`로 노출하고, "승인해도 바로 주문되지 않고 주문 폼에서 확인 후 실행"임을 명시. 진행 점은 STEPS 길이 기반이라 7개로 자동 확장.
 
 ## 1. 실시간 시세 파이프라인 후속 (ADR-029~031)
 
