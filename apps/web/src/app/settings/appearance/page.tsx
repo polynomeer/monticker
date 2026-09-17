@@ -45,7 +45,7 @@ function Row({ label, description, children }: { label: string; description?: st
 export default function AppearanceSettingsPage() {
   const { theme, setTheme } = useTheme();
   const { chartTheme, setChartTheme } = useThemeStore();
-  const { textSize, setTextSize } = useA11yStore();
+  const { textSize, setTextSize, highContrast, setHighContrast } = useA11yStore();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -88,6 +88,16 @@ export default function AppearanceSettingsPage() {
             onChange={setTextSize}
             options={(Object.entries(TEXT_SIZES) as [TextSize, { label: string }][]).map(([v, t]) => ({ value: v, label: t.label }))}
           />
+        </Row>
+        <Row label="고대비 모드" description="흐린 글자와 옅은 테두리를 진하게, 포커스 표시를 뚜렷하게">
+          <button
+            role="switch"
+            aria-checked={highContrast}
+            onClick={() => setHighContrast(!highContrast)}
+            className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${highContrast ? "bg-blue-600 dark:bg-dracula-purple" : "bg-gray-300 dark:bg-dracula-line"}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${highContrast ? "translate-x-5" : ""}`} />
+          </button>
         </Row>
         <p className="text-xs text-gray-400 dark:text-dracula-comment mt-3">미리보기: 이 문장의 크기가 선택한 글자 크기로 바뀝니다.</p>
       </Card>

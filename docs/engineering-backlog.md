@@ -20,9 +20,10 @@
 - [ ] **차트 고급 모드** — 드로잉 툴, 차트 위 주문선, 자유 지표 추가가 전혀 없음(RSI/MACD는 별도 서브탭일 뿐 메인 차트 오버레이 아님). 비용이 큰 항목이라 후순위 — 착수 시 [ui-benchmarks.md](ui-benchmarks.md)의 TradingView/Robinhood 항목(차트 위 매수/매도 퀵버튼) 참고.
 - [ ] **목표/전략 단위 자산 뷰** — Quant Lab의 "전략" 개념과 실제 브로커리지 보유종목을 연결하는 뷰가 없음. 데이터 모델 변경 필요, 장기 항목.
 - [ ] **정기매수(적립식) 기능** — 코드에 개념 자체가 없음. Trading 212 Pies/Trade Republic Savings Plan처럼 "주기 설정"이 아니라 "목표·배분" 관점으로 설계할 것([ui-benchmarks.md](ui-benchmarks.md) 참고). 신규 도메인 기능이라 장기 항목.
-- [~] **접근성 — 정보 밀도/큰 글씨 모드** — 글자 크기(보통/크게/더 크게) ✅ 완료(2026-09-17). `/settings/appearance`에 화면 설정 페이지 신설
-  (테마·차트색상·글자크기 통합), `a11yStore`(persist) → `html[data-text-size]` → globals.css가 root font-size 100/112.5/125%로 확대(rem 기반이라 앱 전체 비례).
-  라이브 검증: 더 크게→20px, 새로고침 유지, 보통→16px 복귀, 콘솔 에러 0. **남은 것: 고대비 모드**(별도 대비 팔레트 필요) — 후속.
+- [x] **접근성 — 정보 밀도/큰 글씨·고대비 모드** — ✅ 완료(2026-09-17). `/settings/appearance` 화면 설정 페이지(테마·차트색상·글자크기·고대비).
+  글자 크기(보통/크게/더 크게): `a11yStore`(persist) → `html[data-text-size]` → root font-size 100/112.5/125%(rem 기반, 앱 전체 비례). 검증: 더 크게→20px, 새로고침 유지.
+  고대비: `html[data-contrast=high]` 언레이어드 규칙이 저대비 체계 토큰만 표적 — 뮤트 텍스트(gray-400/500/600·dracula-comment)·옅은 테두리(gray-100/200·dracula-line)를 진하게 + 포커스 링.
+  검증: 다크 뮤트 텍스트 #6272a4→#c8d0ea, 테두리 14/14 밝아짐, 뮤트 텍스트 8/13 개선. **범위 한계**: 색이 고정 hex Tailwind 토큰이라(CSS 변수 아님) 자체 색 규칙을 가진 일부 요소는 미적용 — 완전 대비 팔레트는 토큰을 CSS 변수화하는 별도 리팩터가 필요(후속 후보).
 - [ ] **신규 기능 온보딩 보강** — [app/onboarding/page.tsx](../apps/web/src/app/onboarding/page.tsx)가 관심종목/알림/Quant Lab 백테스트만 다루고 조건부 주문·AI 주문 제안 같은 최근 추가 기능은 미포함.
 
 ## 1. 실시간 시세 파이프라인 후속 (ADR-029~031)

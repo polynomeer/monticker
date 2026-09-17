@@ -13,6 +13,8 @@ export const TEXT_SIZES: Record<TextSize, { label: string; rootFontSize: string 
 interface A11yStore {
   textSize: TextSize;
   setTextSize: (v: TextSize) => void;
+  highContrast: boolean;
+  setHighContrast: (v: boolean) => void;
 }
 
 export const useA11yStore = create<A11yStore>()(
@@ -20,6 +22,8 @@ export const useA11yStore = create<A11yStore>()(
     (set) => ({
       textSize: "normal",
       setTextSize: (v) => set({ textSize: v }),
+      highContrast: false,
+      setHighContrast: (v) => set({ highContrast: v }),
     }),
     {
       name: "monticker-a11y",
@@ -38,4 +42,11 @@ export const useA11yStore = create<A11yStore>()(
 export function applyTextSize(size: TextSize) {
   if (typeof document === "undefined") return;
   document.documentElement.setAttribute("data-text-size", size);
+}
+
+/** html[data-contrast]를 세팅한다. globals.css가 이 속성으로 저대비 토큰(뮤트 텍스트·테두리)을 고대비로 덮는다. */
+export function applyContrast(high: boolean) {
+  if (typeof document === "undefined") return;
+  if (high) document.documentElement.setAttribute("data-contrast", "high");
+  else document.documentElement.removeAttribute("data-contrast");
 }
