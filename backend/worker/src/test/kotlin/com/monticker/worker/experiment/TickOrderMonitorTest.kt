@@ -11,7 +11,7 @@ import kotlin.test.assertEquals
 
 class TickOrderMonitorTest {
     private fun monitor(hot: Long = 0) =
-        TickOrderMonitor(SimpleMeterRegistry(), hot, 0, 0, false, "t", mockk<StringRedisTemplate>(relaxed = true))
+        TickOrderMonitor(SimpleMeterRegistry(), hot, 0, 0, false, "t", 500, mockk<StringRedisTemplate>(relaxed = true))
 
     private fun tick(stock: Long, seq: Long?) = GeneratedTick(
         stockId = stock, symbol = "S$stock", market = "KOSPI", price = BigDecimal.ONE, volume = 1,

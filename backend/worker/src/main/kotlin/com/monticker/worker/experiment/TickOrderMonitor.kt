@@ -46,6 +46,7 @@ class TickOrderMonitor(
     @Value("\${experiment.tick-order.slow-ms:0}") private val slowMs: Long,
     @Value("\${experiment.tick-order.redis-log:false}") private val redisLog: Boolean,
     @Value("\${experiment.tick-order.worker-id:w}") private val workerId: String,
+    @Value("\${experiment.tick-order.slow-tick-threshold-ms:500}") private val slowTickThresholdMs: Long,
     private val redis: StringRedisTemplate,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -67,6 +68,8 @@ class TickOrderMonitor(
     // 클래스별 e2e 샘플(ms). hot / same_partition_as_hot / other
     private val samples = ConcurrentHashMap<String, MutableList<Double>>()
     private val firstViolations = ArrayList<String>()
+    // 꼬리 스파이크 규명(M-002 §4.4): e2e 가 임계 초과인 틱의 벽시계 시각·종목·파티션·분내 위치를 남긴다.
+    private val slowTicks = java.util.Collections.synchronizedList(ArrayList<Map<String, Any>>())
 
     init {
         log.warn("[EXPERIMENT] TickOrderMonitor 활성 — hotStockId={} slowStockId={} slowMs={} redisLog={} workerId={}", hotStockId, slowStockId, slowMs, redisLog, workerId)
@@ -102,6 +105,15 @@ class TickOrderMonitor(
             else -> "other"
         }
         samples.computeIfAbsent(cls) { java.util.Collections.synchronizedList(ArrayList(200_000)) }.add(e2eMs)
+        if (e2eMs >= slowTickThresholdMs) {
+            val nowMs = System.currentTimeMillis()
+            if (slowTicks.size < SLOW_TICK_CAP) slowTicks.add(mapOf(
+                "at_ms" to nowMs,                                   // 벽시계 수신 시각
+                "e2e_ms" to e2eMs,
+                "stock" to tick.stockId, "partition" to partition,
+                "ms_into_minute" to (nowMs % 60_000L),             // 분 경계(캔들 flush) 정렬 확인용
+            ))
+        }
         if (redisLog) {
             redis.opsForStream<String, String>().add(STREAM, mapOf(
                 "s" to tick.stockId.toString(), "q" to (seq ?: -1).toString(), "p" to partition.toString(),
@@ -127,6 +139,8 @@ class TickOrderMonitor(
             "partitions_seen" to partitionOf.values.toSortedSet().toList(),
             "e2e" to perClass,
             "first_violations" to synchronized(firstViolations) { firstViolations.toList() },
+            "slow_tick_threshold_ms" to slowTickThresholdMs,
+            "slow_ticks" to synchronized(slowTicks) { slowTicks.toList() },
         )
     }
 
@@ -134,11 +148,13 @@ class TickOrderMonitor(
         states.clear(); partitionOf.clear(); samples.clear()
         ticks.set(0); withSeq.set(0); violations.set(0); dups.set(0); gaps.set(0)
         synchronized(firstViolations) { firstViolations.clear() }
+        synchronized(slowTicks) { slowTicks.clear() }
         startedAt.set(System.currentTimeMillis())
     }
 
     companion object {
         private const val SEEN_WINDOW = 4096
+        private const val SLOW_TICK_CAP = 5000
         const val STREAM = "experiment:tick-order"
     }
 }
