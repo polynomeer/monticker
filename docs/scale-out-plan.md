@@ -940,7 +940,7 @@ order.commands (파티션 64, key=stockId)
 | 0.5 ✅ | 압축 정책 + `price_ticks`/죽은 코드 제거 ([ADR-041](decisions/041-timescale-hypertable-promotion.md)) — 같은 V42 | §3.5 | S |
 | 0.6 ✅ | 원장 커서 페이징 + 대사 스냅샷 ([ADR-043](decisions/043-ledger-pagination-and-reconciliation.md)) — `ef5fd12`~`69595aa`. **라이브 검증에서 원장 INSERT가 전부 실패 중이었음을 발견**(jsonb 바인딩) — ADR-043 구현 노트 | §3.6 | M |
 | 0.7 ✅ | 알림 룰 인메모리 인덱스 + 평가/발송 분리 ([ADR-044](decisions/044-alert-rule-in-memory-index.md)) — `67ef564` `53f5902`. **가설 정정**: L-03 상한의 실제 원인은 감지기 Redis 왕복([ADR-046](decisions/046-detector-state-in-memory.md)), 600→5,000 tick/s | §3.4 | M |
-| 0.8 | SLO 정의 + 검증 하네스 확장 ([ADR-045](decisions/045-performance-slo-and-verification-harness.md)) | 이후 모든 판단의 근거 | M |
+| 0.8 ✅ | SLO 정의 + 검증 하네스 확장 ([ADR-045](decisions/045-performance-slo-and-verification-harness.md)) — SLO는 ADR-045 §1·resilience-plan §4.3, 하네스는 L-01~07·chaos·M-001/002. **정합성 하네스(§3)는 L-05로 완료**(2026-09-17, [reports/L-05](../reports/L-05.md)): order-burst + `bench/consistency/verify.py`, 원장 불변식·체결·Saga 대조. **커넥션 풀 고갈(§3.8) 하에서도 자금 정합성 0 확인** | M |
 
 > 0.8을 먼저 하는 것도 방법이다. **기준선 없이 최적화하면 개선을 증명할 수 없다.**
 > `bench/`에 k6 하네스가 이미 있으므로 시나리오만 추가하면 된다.

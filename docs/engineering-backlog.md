@@ -136,6 +136,14 @@
 - [x] ~~**ES 인덱스가 동적 매핑으로 생성됨 — 검색 설계 미적용**~~ — ADR-042 1단계(2026-09-14, `ede7bf6`):
   `SearchIndexManager`가 기동 시 생성·대조, 관리자 재색인, nori 이미지. 원인은 둘 — 아무도 `indexOps.create()`를
   안 불렀고, 공식 이미지에 nori가 없었다. 남은 것: worker 인덱스의 이벤트 전환(ADR-042 2·3단계).
+- [x] **L-05 order-burst + 정합성 검증 하네스** — ✅ 완료(2026-09-17, [reports/L-05](../reports/L-05.md)). ADR-045 §3의 마지막 미구현분.
+  `bench/scenarios/order-burst.js` + `bench/consistency/verify.py`(원장 불변식·체결 무결성·Saga 잔류 독립 대조). 동시 100 VU·2,000체결에서
+  자금 정합성 오차 0 — **커넥션 풀 고갈로 584건 5xx가 나도 드리프트 0**(실패 주문은 원자적으로 실패). scale-out-plan 0.8 완료.
+- [ ] **주문 경로 커넥션 풀 고갈 (§3.8 실증)** — L-05에서 동시 주문 ~100에 Hikari(20) 고갈, http p95 3s(=connection-timeout). 주문 tx가
+  매칭+원장+Saga를 한 트랜잭션으로 커넥션을 오래 잡는다. 대응(PgBouncer+풀 축소)은 Phase 1(§6.3.1). Mongo 기동 시 5xx 급증 —
+  주문 tx 중 외부(Mongo) 호출로 커넥션 장기 보유하는지 조사 필요([reports/L-05 §4.1](../reports/L-05.md)). 페이퍼 규모 실사용 영향 없음.
+- [ ] **없는 stockId 주문이 500 (경미)** — 존재하지 않는 종목 id로 주문 시 `risk_check_logs_stock_id_fkey` FK 위반이 500으로 샌다.
+  주문 경로가 종목 존재를 먼저 검증해 400/404로 돌려줄 것([reports/L-05 §4.2](../reports/L-05.md)). 정상 사용엔 영향 없음.
 - [ ] **전용 부하 테스트 환경 구축** — 지금 `bench/`는 로컬 docker-compose를 때린다.
   절대 처리량·SLO 판정에는 prod 유사 환경이 필요하다
   ([ADR-045](decisions/045-performance-slo-and-verification-harness.md) §5).
