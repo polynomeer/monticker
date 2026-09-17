@@ -1,0 +1,13 @@
+candle_flush_failed_total{application="monticker-worker"} 0.0
+candle_flush_seconds{application="monticker-worker",quantile="0.5"} 0.032505856
+candle_flush_seconds{application="monticker-worker",quantile="0.95"} 0.032505856
+candle_flush_seconds{application="monticker-worker",quantile="0.99"} 0.032505856
+candle_flush_seconds_count{application="monticker-worker"} 8
+candle_flush_seconds_sum{application="monticker-worker"} 0.209558209
+candle_flush_seconds_max{application="monticker-worker"} 0.047347334
+jvm_gc_pause_seconds_count{action="end of minor GC",application="monticker-worker",cause="G1 Evacuation Pause",gc="G1 Young Generation"} 75
+jvm_gc_pause_seconds_sum{action="end of minor GC",application="monticker-worker",cause="G1 Evacuation Pause",gc="G1 Young Generation"} 0.511
+jvm_gc_pause_seconds_count{action="end of minor GC",application="monticker-worker",cause="G1 Humongous Allocation",gc="G1 Young Generation"} 3
+jvm_gc_pause_seconds_sum{action="end of minor GC",application="monticker-worker",cause="G1 Humongous Allocation",gc="G1 Young Generation"} 0.028
+jvm_gc_pause_seconds_max{action="end of minor GC",application="monticker-worker",cause="G1 Evacuation Pause",gc="G1 Young Generation"} 0.022
+jvm_gc_pause_seconds_max{action="end of minor GC",application="monticker-worker",cause="G1 Humongous Allocation",gc="G1 Young Generation"} 0.017

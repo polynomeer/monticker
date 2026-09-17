@@ -49,10 +49,27 @@ worker 안에서 원인을 찾을 수 없다는 것이 결론이다. 남는 후�
 공유 호스트의 CPU/IO 경합이다. 같은 머신에서 gateway(202 goroutine)+worker(리스너 6스레드)+Kafka 가 10코어를 나눠 쓰므로,
 브로커나 호스트가 1~4초 fetch 를 멈추면 모든 컨슈머의 e2e 가 동시에 뛴다 — 관측된 신호와 정확히 일치한다.
 
-**증명하지 못한 것**: 브로커/호스트 측이 원인이라는 직접 증거(브로커 GC·CPU 로그)는 이 실험에 없다. 확정하려면
-브로커 측 GC·CPU 계측과 **격리된 prod 유사 부하 환경**([engineering-backlog §9](../docs/engineering-backlog.md))이 필요하다.
-페이퍼 트레이딩 규모에서는 실사용 영향이 없고(다음 틱이 곧 온다), 운영(전용 브로커·RF≥2·충분한 리소스)에서는 이 특정 스톨이
-재현되지 않을 가능성이 높다.
+### 2.3 브로커·호스트 계측 결과 (클래스 B 추가 규명)
+
+브로커 GC(`-Xlog:gc`, docker logs)와 브로커·DB CPU(`docker stats` 1~2초 샘플)를 붙여 3회 더 돌렸다([`tail-broker/`](M-002/raw/tail-broker/)).
+스파이크가 난 2회의 정렬:
+- **r2**(p99 4,266ms, 11:16:02~06): 스파이크 시작(11:16:03)에 **브로커 GC 93ms 정지**가 겹쳤다.
+- **r3**(p99 1,737ms, 11:18:52~56): 근처 브로커 GC 없음(11:18:15·11:19:39), 스파이크 초 브로커 CPU 25% — **아무 계측 신호와도 안 겹침**.
+- 두 회 모두 Postgres·Redis CPU 는 낮았다(≤5%). 브로커 CPU 는 평소 15~17%이나 **간헐적으로 195~233%(2코어 한도)까지 붙었다** —
+  다만 1~2초 샘플이라 스파이크 초의 sub-second 버스트를 놓쳤을 수 있다.
+
+즉 한 번은 브로커 GC 정지가 방아쇠였고 한 번은 잡히지 않았다. 일관된 단일 방아쇠를 이 스택에서 못 박았다.
+
+**정합적 메커니즘(부분 증명)**: 브로커 측 짧은 히컵(GC 정지, 또는 2코어 한도에 붙는 CPU 버스트)이 방아쇠가 되고, **CPU 포화 상태의
+공유 호스트가 이를 수 초로 증폭**한다 — gateway(202 goroutine)+worker(리스너 6스레드)+Kafka 가 10코어를 나눠 쓰므로, 브로커가 ~100ms
+멈추면 그동안 생성된 ~200틱이 쌓이고, 포화된 호스트에서 컨슈머가 그 백로그를 소진하는 데 수 초가 걸려 그 구간 모든 틱의 e2e(생성→수신)가
+튄다. 방아쇠가 순간의 높은 경합과 겹칠 때만 스파이크가 나므로 간헐적(~40%)이다.
+
+**증명하지 못한 것**: 매 스파이크의 sub-second 방아쇠(브로커 GC vs CPU 버스트 vs 호스트 스케줄러)를 이 공유·축소 스택에서 개별로
+못 박았다 — 1~2초 docker stats 샘플과 호스트 스케줄러 가시성 부족이 한계다. 확정하려면 **격리된 prod 유사 부하 환경**
+([engineering-backlog §9](../docs/engineering-backlog.md))에서 전용 브로커(적정 힙·전용 CPU·RF≥2)로 재현해야 한다.
+페이퍼 트레이딩 규모에서는 실사용 영향이 없고(다음 틱이 곧 온다), 운영급 리소스에서는 이 스톨이 재현되지 않을 가능성이 높다 —
+**공유·축소 로컬 스택의 아티팩트로 판정**하고, 격리 환경 재현을 남은 확인 과제로 둔다.
 
 ## 3. 결론
 
@@ -68,5 +85,10 @@ worker 안에서 원인을 찾을 수 없다는 것이 결론이다. 남는 후�
 OUT=reports/M-002/raw/tail-safepoint P=6 C=6 DURATION=180 THRESH=500 RUNS=4 bench/experiments/m2-tail.sh
 for r in 1 2 3 4; do python3 bench/experiments/m2-tail-analyze2.py reports/M-002/raw/tail-safepoint/tail-r$r.json \
   reports/M-002/raw/tail-safepoint/tail-r$r.gc.log reports/M-002/raw/tail-safepoint/worker-tail-r$r.log; done
+# 브로커·호스트 계측(클래스 B): compose.limits.yml 에 KAFKA_GC_LOG_OPTS 를 켜고 m2-tail.sh 가 docker stats 를 샘플링한다
+OUT=reports/M-002/raw/tail-broker P=6 C=6 DURATION=180 THRESH=500 RUNS=3 bench/experiments/m2-tail.sh
+for r in 1 2 3; do docker logs monticker-kafka 2>&1 | grep '\[gc' > reports/M-002/raw/tail-broker/kafka-gc.log
+  python3 bench/experiments/m2-tail-broker.py reports/M-002/raw/tail-broker/tail-r$r.json \
+    reports/M-002/raw/tail-broker/tail-r$r.dockerstats reports/M-002/raw/tail-broker/kafka-gc.log; done
 # 클래스 A(인라인 flush) 재현: 이 커밋 이전 CandleAggregator + 콜드 DB(candles truncate)로 위와 동일 실행
 ```
