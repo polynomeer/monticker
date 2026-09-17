@@ -7,8 +7,10 @@
 
 | 보고서 | 질문 | 상태 |
 |---|---|---|
-| [M-001](M-001.md) | WS push vs REST polling — N 클라이언트에서 지연·서버 비용, Kafka 정지 시 침묵·유실, 느린 소비자 | 진행 중 |
-| [M-002](M-002.md) | market.ticks 파티션 P × 컨슈머 C — 처리량·e2e·종목별 순서 위반, 리밸런스 중 중복·유실, 핫 종목 HOL | 진행 중 |
+| [M-001](M-001.md) | WS push vs REST polling — N 클라이언트에서 지연·서버 비용, Kafka 정지 시 침묵·유실, 느린 소비자 | 완료 (2026-09-17) — 결함 3건 |
+| [M-002](M-002.md) | market.ticks 파티션 P × 컨슈머 C — 처리량·e2e·종목별 순서 위반, 리밸런스 중 중복·유실, 핫 종목 HOL | 완료 (2026-09-17) — 결함 3건 |
+
+이번 실험의 파이프라인 기본값 변경은 [ADR-050](../docs/decisions/050-realtime-pipeline-defaults-from-load-tests.md)으로 승격했다.
 
 ## 실험이 찾은 결함
 
