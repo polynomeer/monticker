@@ -25,4 +25,7 @@ interface LedgerEventRepository : JpaRepository<LedgerEvent, Long> {
 
     /** 멱등성: 같은 체결의 같은 유형 원장이 이미 있으면 아웃박스 재전달(@ApplicationModuleListener 재시도)을 무시한다. */
     fun existsByPaperTradeIdAndEventType(paperTradeId: Long, eventType: LedgerEventType): Boolean
+
+    /** 멱등성(정산완료·취소·초기화): 같은 아웃박스 이벤트 재전달을 dedup_key 로 무시한다. */
+    fun existsByDedupKey(dedupKey: String): Boolean
 }

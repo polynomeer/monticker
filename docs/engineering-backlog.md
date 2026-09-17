@@ -145,8 +145,9 @@
 - [x] **원장 아웃박스 멱등성 결함 (D-L05-01)** — ✅ 완료(2026-09-17). 풀 고갈로 아웃박스 재전달 시 `LedgerService.recordBuy/recordSell`가
   FILL/SETTLEMENT 원장을 이중 기록해 대사 드리프트가 났다. `(paper_trade_id,event_type)` 멱등 체크 + 부분 유니크 인덱스(V46) + 기존 중복 제거로 수정.
   재검증 드리프트 0([reports/L-05 §4.4](../reports/L-05.md)).
-- [ ] **정산완료/초기화 원장 멱등화 (D-L05-01 후속)** — `recordSettlementComplete`/`recordReset`도 아웃박스(@ApplicationModuleListener) 구동이라
-  같은 이중 기록 가능성이 있다(paper_trade_id 없음 → settlementId 등 키로 멱등화). 실측 드리프트는 아직 없음(fee/tax 0 케이스), 예방적.
+- [x] **정산완료/초기화/취소 원장 멱등화 (D-L05-01 후속)** — ✅ 완료(2026-09-17). 아웃박스 구동 원장 중 paper_trade_id 로 키를 못 잡는
+  `recordSettlementComplete`(SETTLE:{settlementId})·`recordReset`(RESET:{eventId}, PaperAccountResetEvent 에 eventId 추가)·
+  주문취소 CASH_UNRESERVED(CANCEL:{orderId})에 범용 `dedup_key` 컬럼 + 부분 유니크 인덱스(V47) + 멱등 체크 적용. 유닛 테스트 4건 추가.
 - [x] **없는 stockId 주문이 500 (경미)** — ✅ 완료(2026-09-17). `RiskCheckerService.check`/`checkBrokerageOrder`가 리스크 판정·감사 로그 INSERT 전에
   종목 존재를 확인해 없으면 `NoSuchElementException`(→404)을 던진다. 라이브 검증: 없는 id 7·8 → 404 "종목을 찾을 수 없습니다", 유효 id → 정상 체결.
   페이퍼·실거래(brokerage) 양 경로 공통 길목(finalize 직전)에서 막는다.

@@ -83,6 +83,7 @@ class LedgerService(
         tax: BigDecimal,
         balanceAfter: BigDecimal,
     ) {
+        if (ledgerRepo.existsByDedupKey("SETTLE:$settlementId")) return   // 아웃박스 재전달 멱등
         val total = fee.add(tax)
         ledgerRepo.save(
             LedgerEvent(
@@ -93,6 +94,7 @@ class LedgerService(
                 stockId      = stockId,
                 description  = "T+2 정산 완료 (수수료 $fee, 세금 $tax)",
                 metadataJson = """{"settlementId":$settlementId,"fee":$fee,"tax":$tax}""",
+                dedupKey     = "SETTLE:$settlementId",
             )
         )
     }
@@ -164,9 +166,10 @@ class LedgerService(
     }
 
     /** 계좌 초기화 — 변화량이 0이면 기록하지 않는다 (초기 잔고 그대로였던 계좌). */
-    fun recordReset(userId: Long, previousCash: BigDecimal, newCash: BigDecimal) {
+    fun recordReset(userId: Long, previousCash: BigDecimal, newCash: BigDecimal, eventId: String) {
         val delta = newCash - previousCash
         if (delta.signum() == 0) return
+        if (ledgerRepo.existsByDedupKey("RESET:$eventId")) return   // 아웃박스 재전달 멱등 (초기화 이벤트별 고유 id)
         ledgerRepo.save(
             LedgerEvent(
                 userId       = userId,
@@ -175,6 +178,7 @@ class LedgerService(
                 balanceAfter = newCash,
                 description  = "모의투자 계좌 초기화",
                 metadataJson = """{"previousCash":$previousCash}""",
+                dedupKey     = "RESET:$eventId",
             )
         )
     }

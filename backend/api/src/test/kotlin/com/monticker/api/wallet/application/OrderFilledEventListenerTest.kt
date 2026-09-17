@@ -28,6 +28,7 @@ class OrderFilledEventListenerTest {
     @Test
     fun `a cancel refund is recorded as CASH_UNRESERVED, not as a DEPOSIT`() {
         val slot = slot<LedgerEvent>()
+        every { ledgerRepo.existsByDedupKey(any()) } returns false
         every { ledgerRepo.save(capture(slot)) } answers { slot.captured }
         every { jdbc.queryForObject(any<String>(), BigDecimal::class.java, 1L) } returns BigDecimal("9800000")
 
@@ -43,6 +44,13 @@ class OrderFilledEventListenerTest {
     fun `a cancel with nothing to refund writes no ledger row`() {
         listener.onOrderCancelled(cancelled("0"))
 
+        verify(exactly = 0) { ledgerRepo.save(any()) }
+    }
+
+    @Test
+    fun `a cancel refund is idempotent — outbox re-delivery writes no second row`() {
+        every { ledgerRepo.existsByDedupKey("CANCEL:10") } returns true
+        listener.onOrderCancelled(cancelled("200000"))
         verify(exactly = 0) { ledgerRepo.save(any()) }
     }
 }

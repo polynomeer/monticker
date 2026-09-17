@@ -49,6 +49,6 @@ class PaperTradeEventListener(
     @ApplicationModuleListener
     fun onPaperAccountReset(event: PaperAccountResetEvent) {
         log.info("[Wallet] PaperAccountResetEvent received: userId={} {} → {}", event.userId, event.previousCash, event.newCash)
-        ledgerService.recordReset(event.userId, event.previousCash, event.newCash)
+        ledgerService.recordReset(event.userId, event.previousCash, event.newCash, event.eventId)
     }
 }

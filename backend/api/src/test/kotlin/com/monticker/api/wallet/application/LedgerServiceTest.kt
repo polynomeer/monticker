@@ -64,9 +64,10 @@ class LedgerServiceTest {
     @Test
     fun `recordReset writes a DEPOSIT for the top-up back to the initial balance`() {
         val slot = slot<LedgerEvent>()
+        every { ledgerRepo.existsByDedupKey(any()) } returns false
         every { ledgerRepo.save(capture(slot)) } answers { slot.captured }
 
-        service.recordReset(userId = 1L, previousCash = BigDecimal("4000000"), newCash = BigDecimal("10000000"))
+        service.recordReset(userId = 1L, previousCash = BigDecimal("4000000"), newCash = BigDecimal("10000000"), eventId = "r1")
 
         assertThat(slot.captured.eventType).isEqualTo(LedgerEventType.DEPOSIT)
         assertThat(slot.captured.amount).isEqualByComparingTo(BigDecimal("6000000"))
@@ -76,9 +77,10 @@ class LedgerServiceTest {
     @Test
     fun `recordReset writes a WITHDRAWAL when the account was above the initial balance`() {
         val slot = slot<LedgerEvent>()
+        every { ledgerRepo.existsByDedupKey(any()) } returns false
         every { ledgerRepo.save(capture(slot)) } answers { slot.captured }
 
-        service.recordReset(userId = 1L, previousCash = BigDecimal("12000000"), newCash = BigDecimal("10000000"))
+        service.recordReset(userId = 1L, previousCash = BigDecimal("12000000"), newCash = BigDecimal("10000000"), eventId = "r2")
 
         assertThat(slot.captured.eventType).isEqualTo(LedgerEventType.WITHDRAWAL)
         assertThat(slot.captured.amount).isEqualByComparingTo(BigDecimal("-2000000"))
@@ -86,7 +88,7 @@ class LedgerServiceTest {
 
     @Test
     fun `recordReset writes nothing when the balance did not change`() {
-        service.recordReset(userId = 1L, previousCash = BigDecimal("10000000"), newCash = BigDecimal("10000000"))
+        service.recordReset(userId = 1L, previousCash = BigDecimal("10000000"), newCash = BigDecimal("10000000"), eventId = "r3")
 
         verify(exactly = 0) { ledgerRepo.save(any()) }
     }
@@ -211,6 +213,21 @@ class LedgerServiceTest {
     fun `recordSell is idempotent — skips save when SETTLEMENT already exists for the trade`() {
         every { ledgerRepo.existsByPaperTradeIdAndEventType(11L, LedgerEventType.SETTLEMENT) } returns true
         service.recordSell(userId = 1L, tradeId = 11L, stockId = 100L, amount = BigDecimal("60000"), balanceAfter = BigDecimal("1010000"))
+        verify(exactly = 0) { ledgerRepo.save(any()) }
+    }
+
+    @Test
+    fun `recordReset is idempotent by eventId`() {
+        every { ledgerRepo.existsByDedupKey("RESET:dup") } returns true
+        service.recordReset(userId = 1L, previousCash = BigDecimal("4000000"), newCash = BigDecimal("10000000"), eventId = "dup")
+        verify(exactly = 0) { ledgerRepo.save(any()) }
+    }
+
+    @Test
+    fun `recordSettlementComplete is idempotent by settlementId`() {
+        every { ledgerRepo.existsByDedupKey("SETTLE:77") } returns true
+        service.recordSettlementComplete(userId = 1L, settlementId = 77L, stockId = 100L,
+            fee = BigDecimal("10"), tax = BigDecimal("5"), balanceAfter = BigDecimal("999985"))
         verify(exactly = 0) { ledgerRepo.save(any()) }
     }
 }

@@ -34,6 +34,7 @@ class OrderFilledEventListener(
             event.orderId, event.userId, event.refundAmount)
 
         if (event.refundAmount <= BigDecimal.ZERO) return
+        if (ledgerRepo.existsByDedupKey("CANCEL:${event.orderId}")) return   // 아웃박스 재전달 멱등
 
         // ADR-043: 예약금 반환은 실현된 현금 이동이 아니다 — 제출 시 예약(reserveCash)은 원장에 없었으므로
         // 이걸 DEPOSIT으로 적으면 원장 합이 잔고보다 refund만큼 커져 대사가 어긋난다. CASH_UNRESERVED는
@@ -46,6 +47,7 @@ class OrderFilledEventListener(
                 amount       = event.refundAmount,
                 balanceAfter = balanceAfter,
                 description  = "주문 취소 — 예약금 해제 (orderId=${event.orderId})",
+                dedupKey     = "CANCEL:${event.orderId}",
             )
         )
     }
