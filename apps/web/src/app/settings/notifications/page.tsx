@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
+import SettingsTabs from "@/components/settings/SettingsTabs";
 
 interface NotifPref {
   pushEnabled: boolean;
@@ -82,6 +83,7 @@ export default function NotificationSettingsPage() {
   return (
     <div className="max-w-lg mx-auto px-4 py-6 sm:py-8 animate-fade-up">
       <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-dracula-fg mb-6">알림 설정</h1>
+      <SettingsTabs />
 
       <Card className="p-5" outerClassName="mb-6">
         <h2 className="text-sm font-semibold text-blue-600 dark:text-dracula-purple mb-3">전체 알림</h2>

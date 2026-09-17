@@ -9,6 +9,10 @@
     scroll-behavior: smooth;
   }
 
+  /* 접근성 — 글자 크기(큰 글씨 모드). Tailwind가 rem 기반이라 root font-size를 키우면 앱 전체가 비례 확대된다. a11yStore 참고. */
+  html[data-text-size="large"]  { font-size: 112.5%; }
+  html[data-text-size="xlarge"] { font-size: 125%; }
+
   body {
     font-feature-settings: "tnum" 1;
     word-break: keep-all;
