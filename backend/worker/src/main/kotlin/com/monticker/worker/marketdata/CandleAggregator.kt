@@ -2,19 +2,23 @@ package com.monticker.worker.marketdata
 
 import com.monticker.worker.common.DistributedLock
 import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import jakarta.annotation.PreDestroy
 import org.slf4j.LoggerFactory
+import org.springframework.jdbc.core.BatchPreparedStatementSetter
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.math.BigDecimal
+import java.sql.PreparedStatement
 import java.sql.Timestamp
 import java.time.Instant
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
 
 /**
  * candles_1d는 별도 배치 없이 여기서 매 1분봉 flush마다 당일(KST) 행을 함께 upsert한다.
@@ -31,6 +35,9 @@ class CandleAggregator(
     // resilience-plan §E4 / P1-2 — flush 실패는 로그만 남으면 조용히 캔들이 비어간다.
     // 압축 chunk 충돌(ADR-041)이 이 카운터로 드러나야 한다. 알람: CandleFlushFailing.
     private val flushFailed = meterRegistry.counter("candle_flush_failed_total")
+    // 캔들 flush 는 틱 리스너 스레드에서 동기 upsert 2건(candles_1m·candles_1d)을 한 트랜잭션으로 한다. 분 경계에서
+    // 종목마다 한 번씩 몰리므로, 실시간 p95 꼬리 스파이크(M-002 §4.4)의 후보다. 이 타이머로 flush 비용과 빈도를 직접 본다.
+    private val flushTimer = Timer.builder("candle.flush").publishPercentiles(0.5, 0.95, 0.99).register(meterRegistry)
 
     private val log = LoggerFactory.getLogger(javaClass)
     private val KST = ZoneId.of("Asia/Seoul")
@@ -39,6 +46,10 @@ class CandleAggregator(
     // in-memory OHLCV per (stockId, minute) — ConcurrentHashMap은 현재 단일 스레드 소비를
     // 전제로도 안전장치 차원에서 사용 (Kafka 리스너 concurrency 설정이 바뀌어도 구조적 보장)
     private val state = ConcurrentHashMap<Long, CandleState>()
+    // 완결된(분이 넘어간) 캔들을 여기 모아 두고, @Scheduled drainCompleted()가 리스너 스레드 밖에서 배치로 flush 한다.
+    // M-002 §4.4: 이전엔 onTick 이 분 경계에서 종목마다 inline 으로 upsert 2건을 해서, 202종목이 동시에 넘어가는 순간
+    // 리스너 스레드가 수십 ms 동안 틱을 못 읽고 e2e 꼬리가 500ms~1s 로 튀었다(콜드 스타트에서 특히). 큐 + 배치로 이 경로를 뗐다.
+    private val completed = ConcurrentLinkedQueue<CandleState>()
 
     data class CandleState(
         val stockId: Long,
@@ -55,8 +66,8 @@ class CandleAggregator(
         val prev = state[tick.stockId]
 
         if (prev == null || prev.minute != minute) {
-            // flush previous candle if exists
-            prev?.let { flush(it) }
+            // 이전 분 캔들은 여기서 DB 를 치지 않고 큐에 넣는다 — 실제 upsert 는 drainCompleted()가 배치로 한다.
+            prev?.let { completed.add(it) }
             state[tick.stockId] = CandleState(
                 stockId = tick.stockId,
                 minute  = minute,
@@ -74,21 +85,64 @@ class CandleAggregator(
         }
     }
 
-    private fun flush(c: CandleState) {
-        val dayStart = c.minute.atZone(KST).toLocalDate().atStartOfDay(KST).toInstant()
+    /** 큐에 쌓인 완결 캔들을 리스너 스레드 밖(스케줄러 스레드)에서 배치로 flush 한다. */
+    @Scheduled(fixedDelay = 1_000)
+    fun drainCompleted() {
+        if (completed.isEmpty()) return
+        val batch = ArrayList<CandleState>(minOf(completed.size, 512))
+        while (batch.size < 512) { val c = completed.poll() ?: break; batch.add(c) }
+        if (batch.isNotEmpty()) {
+            val t0 = System.currentTimeMillis()
+            flushBatch(batch)
+            log.info("[candle-drain] flushed {} candles in {}ms at {}", batch.size, System.currentTimeMillis() - t0, t0)
+        }
+        if (completed.isNotEmpty()) drainCompleted()   // 512 초과분(202종목 규모에선 한 번에 끝난다)
+    }
+
+    private fun flushBatch(batch: List<CandleState>) {
+        val sample = Timer.start()
         try {
-            // 두 upsert가 한쪽만 커밋된 채 어긋나지 않도록 하나의 트랜잭션으로 묶는다.
+            // 배치 전체(1m + 1d)를 한 트랜잭션으로 — 부분 커밋으로 두 테이블이 어긋나지 않게. 종목당 최대 1건이라
+            // 같은 (stock, day) 행이 배치 안에서 여러 번 겹치지 않는다(겹쳐도 ON CONFLICT 누적은 순서대로 안전).
             tx.executeWithoutResult {
-                upsertCandle("candles_1m", c.stockId, c.minute, c)
-                upsertCandle("candles_1d", c.stockId, dayStart, c)
+                batchUpsert("candles_1m", batch) { it.minute }
+                batchUpsert("candles_1d", batch) { it.minute.atZone(KST).toLocalDate().atStartOfDay(KST).toInstant() }
             }
         } catch (e: Exception) {
             flushFailed.increment()
-            log.error("Candle flush failed for stock {}: {}", c.stockId, e.message)
+            log.error("Candle batch flush failed for {} candles: {}", batch.size, e.message)
+        } finally {
+            sample.stop(flushTimer)
         }
     }
 
+    /** flushAll/onShutdown 대비: 단일 캔들 즉시 flush(리스너 스레드 밖에서만 불린다). */
+    private fun flush(c: CandleState) = flushBatch(listOf(c))
+
     // table은 항상 호출부의 상수 리터럴("candles_1m"/"candles_1d")이라 문자열 보간이 안전하다.
+    private fun batchUpsert(table: String, batch: List<CandleState>, bucketOf: (CandleState) -> Instant) {
+        jdbc.batchUpdate(
+            """
+            INSERT INTO $table (stock_id, candle_time, open, high, low, close, volume)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (stock_id, candle_time) DO UPDATE SET
+                high   = GREATEST($table.high, EXCLUDED.high),
+                low    = LEAST($table.low,     EXCLUDED.low),
+                close  = EXCLUDED.close,
+                volume = $table.volume + EXCLUDED.volume
+            """,
+            object : BatchPreparedStatementSetter {
+                override fun getBatchSize() = batch.size
+                override fun setValues(ps: PreparedStatement, i: Int) {
+                    val c = batch[i]
+                    ps.setLong(1, c.stockId); ps.setTimestamp(2, Timestamp.from(bucketOf(c)))
+                    ps.setBigDecimal(3, c.open); ps.setBigDecimal(4, c.high); ps.setBigDecimal(5, c.low)
+                    ps.setBigDecimal(6, c.close); ps.setLong(7, c.volume)
+                }
+            },
+        )
+    }
+
     private fun upsertCandle(table: String, stockId: Long, bucketTime: Instant, c: CandleState) {
         jdbc.update(
             """
@@ -107,8 +161,12 @@ class CandleAggregator(
         )
     }
 
-    // call at shutdown or periodically to flush current-minute candles
-    fun flushAll() = state.values.forEach { flush(it) }
+    // call at shutdown to flush everything: 큐에 쌓인 완결 캔들 + 아직 진행 중인 현재 분 캔들.
+    fun flushAll() {
+        drainCompleted()
+        val current = state.values.toList()
+        if (current.isNotEmpty()) flushBatch(current)
+    }
 
     // 프로세스 종료 시 마지막으로 누적 중이던 캔들을 flush — 없으면 배포·재시작마다 매번
     // 그 시점까지의 분봉/일봉이 통째로 유실된다. flushAll()은 이 시점 이후 재호출되지
