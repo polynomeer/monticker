@@ -44,6 +44,17 @@ Accepted
   send 시간/버퍼 한도만으로는 부족했다(느린 세션은 3초에 끊겨도 발행 스레드가 붙잡힘). → 세션 한도(`sendTimeLimit` 2s,
   버퍼 256KB)로 폭주 세션을 끊고, `app.ws.outbound-core-pool-size`로 발행 풀을 넓힌다(풀 50에서 정상 p99 196ms).
 
+### 4. 캔들 flush 를 틱 리스너 스레드에서 뗀다 (M-002-tail 클래스 A)
+
+`CandleAggregator`가 분 경계에서 종목마다 리스너 스레드에서 동기로 candles_1m·candles_1d upsert 를 했다. 202종목이 거의
+동시에 분을 넘기면 그 스레드가 수십 ms 동안 틱을 못 읽어 e2e p99 가 500ms~1s 로 튀었다([reports/M-002-tail](../../reports/M-002-tail.md)
+클래스 A, 콜드에서 느린 틱의 80%가 분 경계 직후). → 완결 캔들을 큐에 모으고 `@Scheduled(1s)`가 배치 upsert(개별 808건 →
+4배치)로 처리한다. DB I/O 가 지연 임계 경로(Kafka 리스너)에서 빠진다. 트레이드오프: 캔들 durability 가 최대 ~1초 늦어진다
+(분 경계에만 의미, 허용). 수정 후 6회에서 분 경계 스파이크 0.
+
+> M-002-tail 클래스 B(간헐적 JVM 전역 fetch 스톨, ~40% 실행)는 GC·safepoint·flush 어느 것도 아니어서 worker 밖(Kafka 브로커/
+> 공유 호스트)으로 좁혔고, 격리 환경에서 확정할 일로 남겼다([engineering-backlog §1](../engineering-backlog.md)).
+
 ### 파이프라인이 잘한 것 (바꾸지 않는다)
 
 - 키=stockId(ADR-005)는 acks를 고친 뒤 45회 순서 위반 0 — 라운드로빈은 빠른 종목에서 곧 깨지므로 유지가 맞다.

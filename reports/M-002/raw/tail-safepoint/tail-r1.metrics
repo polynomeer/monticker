@@ -1,0 +1,13 @@
+candle_flush_failed_total{application="monticker-worker"} 0.0
+candle_flush_seconds{application="monticker-worker",quantile="0.5"} 0.03145728
+candle_flush_seconds{application="monticker-worker",quantile="0.95"} 0.03145728
+candle_flush_seconds{application="monticker-worker",quantile="0.99"} 0.03145728
+candle_flush_seconds_count{application="monticker-worker"} 3
+candle_flush_seconds_sum{application="monticker-worker"} 0.11921554
+candle_flush_seconds_max{application="monticker-worker"} 0.043823166
+jvm_gc_pause_seconds_count{action="end of minor GC",application="monticker-worker",cause="CodeCache GC Threshold",gc="G1 Young Generation"} 1
+jvm_gc_pause_seconds_sum{action="end of minor GC",application="monticker-worker",cause="CodeCache GC Threshold",gc="G1 Young Generation"} 0.005
+jvm_gc_pause_seconds_count{action="end of minor GC",application="monticker-worker",cause="G1 Evacuation Pause",gc="G1 Young Generation"} 54
+jvm_gc_pause_seconds_sum{action="end of minor GC",application="monticker-worker",cause="G1 Evacuation Pause",gc="G1 Young Generation"} 0.3
+jvm_gc_pause_seconds_max{action="end of minor GC",application="monticker-worker",cause="CodeCache GC Threshold",gc="G1 Young Generation"} 0.005
+jvm_gc_pause_seconds_max{action="end of minor GC",application="monticker-worker",cause="G1 Evacuation Pause",gc="G1 Young Generation"} 0.006
