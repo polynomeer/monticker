@@ -79,3 +79,5 @@ reports/*/raw/**/w2*.log
 reports/*/raw/**/gateway.log
 reports/*/raw/**/api.log
 bench/experiments/__pycache__/
+reports/*/raw/**/*.out
+reports/*/raw/*.out
