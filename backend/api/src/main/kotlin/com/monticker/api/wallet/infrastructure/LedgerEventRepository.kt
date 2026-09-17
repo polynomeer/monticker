@@ -1,6 +1,7 @@
 package com.monticker.api.wallet.infrastructure
 
 import com.monticker.api.wallet.domain.LedgerEvent
+import com.monticker.api.wallet.domain.LedgerEventType
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
@@ -21,4 +22,7 @@ interface LedgerEventRepository : JpaRepository<LedgerEvent, Long> {
 
     /** 영수증: 거래 1건의 최신 원장 행. 이전엔 findAll()로 전 유저 원장을 힙에 올려 걸렀다. */
     fun findTopByPaperTradeIdOrderByIdDesc(paperTradeId: Long): LedgerEvent?
+
+    /** 멱등성: 같은 체결의 같은 유형 원장이 이미 있으면 아웃박스 재전달(@ApplicationModuleListener 재시도)을 무시한다. */
+    fun existsByPaperTradeIdAndEventType(paperTradeId: Long, eventType: LedgerEventType): Boolean
 }

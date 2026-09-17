@@ -21,6 +21,7 @@ class LedgerServiceTest {
     @Test
     fun `recordBuy stores a negative amount FILL event`() {
         val slot = slot<LedgerEvent>()
+        every { ledgerRepo.existsByPaperTradeIdAndEventType(any(), any()) } returns false
         every { ledgerRepo.save(capture(slot)) } answers { slot.captured }
 
         service.recordBuy(userId = 1L, tradeId = 10L, stockId = 100L, amount = BigDecimal("50000"), balanceAfter = BigDecimal("950000"))
@@ -36,6 +37,7 @@ class LedgerServiceTest {
     @Test
     fun `recordSell stores a positive amount SETTLEMENT event`() {
         val slot = slot<LedgerEvent>()
+        every { ledgerRepo.existsByPaperTradeIdAndEventType(any(), any()) } returns false
         every { ledgerRepo.save(capture(slot)) } answers { slot.captured }
 
         service.recordSell(userId = 1L, tradeId = 11L, stockId = 100L, amount = BigDecimal("60000"), balanceAfter = BigDecimal("1010000"))
@@ -196,5 +198,19 @@ class LedgerServiceTest {
 
         assertThat(result).hasSize(1)
         assertThat(result[0].eventType).isEqualTo("DEPOSIT")
+    }
+
+    @Test
+    fun `recordBuy is idempotent — skips save when FILL already exists for the trade`() {
+        every { ledgerRepo.existsByPaperTradeIdAndEventType(10L, LedgerEventType.FILL) } returns true
+        service.recordBuy(userId = 1L, tradeId = 10L, stockId = 100L, amount = BigDecimal("50000"), balanceAfter = BigDecimal("950000"))
+        verify(exactly = 0) { ledgerRepo.save(any()) }
+    }
+
+    @Test
+    fun `recordSell is idempotent — skips save when SETTLEMENT already exists for the trade`() {
+        every { ledgerRepo.existsByPaperTradeIdAndEventType(11L, LedgerEventType.SETTLEMENT) } returns true
+        service.recordSell(userId = 1L, tradeId = 11L, stockId = 100L, amount = BigDecimal("60000"), balanceAfter = BigDecimal("1010000"))
+        verify(exactly = 0) { ledgerRepo.save(any()) }
     }
 }

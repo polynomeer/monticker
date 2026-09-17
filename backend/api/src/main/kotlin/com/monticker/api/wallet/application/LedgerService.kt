@@ -44,6 +44,9 @@ class LedgerService(
     }
 
     fun recordBuy(userId: Long, tradeId: Long, stockId: Long, amount: BigDecimal, balanceAfter: BigDecimal) {
+        // 멱등성: 아웃박스 at-least-once 재전달(커넥션 풀 고갈 등으로 리스너 tx 완료 표시 실패 시 5분 뒤 재시도)에
+        // 원장이 중복 기록되던 버그(L-05에서 발견) — 이미 있으면 no-op. DB 유니크 인덱스(V46)가 경합 백스톱.
+        if (ledgerRepo.existsByPaperTradeIdAndEventType(tradeId, LedgerEventType.FILL)) return
         ledgerRepo.save(
             LedgerEvent(
                 userId = userId,
@@ -58,6 +61,7 @@ class LedgerService(
     }
 
     fun recordSell(userId: Long, tradeId: Long, stockId: Long, amount: BigDecimal, balanceAfter: BigDecimal) {
+        if (ledgerRepo.existsByPaperTradeIdAndEventType(tradeId, LedgerEventType.SETTLEMENT)) return
         ledgerRepo.save(
             LedgerEvent(
                 userId = userId,
