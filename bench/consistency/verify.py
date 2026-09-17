@@ -23,6 +23,24 @@ def q(sql):
     if out.returncode != 0: raise RuntimeError(out.stderr.strip())
     return [line.split("\t") for line in out.stdout.strip().splitlines() if line]
 
+import time
+def outbox_incomplete():
+    r = q("SELECT count(*) FROM event_publication WHERE completion_date IS NULL")
+    return int(r[0][0]) if r else 0
+# 원장 기록은 Modulith 아웃박스(@ApplicationModuleListener)로 비동기 커밋된다 — 커넥션 풀 고갈 등으로 리스너 tx가
+# 실패하면 event_publication 에 미완료로 남아 OutboxResubmissionConfig(5분 주기)가 재시도한다. 불변식은 "쉴 때"
+# 성립하므로, 검사 전에 아웃박스가 빌 때까지 기다린다(재시도는 5분 주기라 최대 ~6분). WAIT_OUTBOX=0 으로 끌 수 있다.
+if os.environ.get("WAIT_OUTBOX", "1") != "0":
+    deadline = time.time() + int(os.environ.get("OUTBOX_TIMEOUT", "420"))
+    n = outbox_incomplete()
+    if n:
+        print(f"# 아웃박스 미완료 {n}건 — 드레인 대기(최대 {int((deadline-time.time()))}s, 재시도 5분 주기)")
+        while time.time() < deadline:
+            time.sleep(15); m = outbox_incomplete()
+            if m != n: print(f"#   미완료 {m}건"); n = m
+            if m == 0: break
+        print(f"# 아웃박스 드레인 {'완료' if outbox_incomplete()==0 else '미완 — 그대로 검사'}")
+
 like = sys.argv[1] if len(sys.argv) > 1 else 'burst-%@bench.local'
 users = [int(r[0]) for r in q(f"SELECT id FROM users WHERE email LIKE '{like}' ORDER BY id")]
 print(f"# 대상 계정: {len(users)}개 (email LIKE '{like}')")

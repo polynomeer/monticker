@@ -139,9 +139,14 @@
 - [x] **L-05 order-burst + 정합성 검증 하네스** — ✅ 완료(2026-09-17, [reports/L-05](../reports/L-05.md)). ADR-045 §3의 마지막 미구현분.
   `bench/scenarios/order-burst.js` + `bench/consistency/verify.py`(원장 불변식·체결 무결성·Saga 잔류 독립 대조). 동시 100 VU·2,000체결에서
   자금 정합성 오차 0 — **커넥션 풀 고갈로 584건 5xx가 나도 드리프트 0**(실패 주문은 원자적으로 실패). scale-out-plan 0.8 완료.
-- [ ] **주문 경로 커넥션 풀 고갈 (§3.8 실증)** — L-05에서 동시 주문 ~100에 Hikari(20) 고갈, http p95 3s(=connection-timeout). 주문 tx가
-  매칭+원장+Saga를 한 트랜잭션으로 커넥션을 오래 잡는다. 대응(PgBouncer+풀 축소)은 Phase 1(§6.3.1). Mongo 기동 시 5xx 급증 —
-  주문 tx 중 외부(Mongo) 호출로 커넥션 장기 보유하는지 조사 필요([reports/L-05 §4.1](../reports/L-05.md)). 페이퍼 규모 실사용 영향 없음.
+- [ ] **주문 경로 커넥션 풀 고갈 (§3.8 실증)** — L-05에서 동시 주문 ~100에 Hikari(20) 고갈(active=20/pending=70, http p95 3s=connection-timeout).
+  주문 tx가 매칭+원장+Saga+감사로그(REQUIRES_NEW=2번째 커넥션)를 잡는다. 대응(PgBouncer+풀 축소)은 Phase 1(§6.3.1). 페이퍼 규모 실사용 영향 없음.
+  (Mongo 상관 의심은 오답 확인 — 순수 구조적, [reports/L-05 §4.1](../reports/L-05.md)).
+- [x] **원장 아웃박스 멱등성 결함 (D-L05-01)** — ✅ 완료(2026-09-17). 풀 고갈로 아웃박스 재전달 시 `LedgerService.recordBuy/recordSell`가
+  FILL/SETTLEMENT 원장을 이중 기록해 대사 드리프트가 났다. `(paper_trade_id,event_type)` 멱등 체크 + 부분 유니크 인덱스(V46) + 기존 중복 제거로 수정.
+  재검증 드리프트 0([reports/L-05 §4.4](../reports/L-05.md)).
+- [ ] **정산완료/초기화 원장 멱등화 (D-L05-01 후속)** — `recordSettlementComplete`/`recordReset`도 아웃박스(@ApplicationModuleListener) 구동이라
+  같은 이중 기록 가능성이 있다(paper_trade_id 없음 → settlementId 등 키로 멱등화). 실측 드리프트는 아직 없음(fee/tax 0 케이스), 예방적.
 - [x] **없는 stockId 주문이 500 (경미)** — ✅ 완료(2026-09-17). `RiskCheckerService.check`/`checkBrokerageOrder`가 리스크 판정·감사 로그 INSERT 전에
   종목 존재를 확인해 없으면 `NoSuchElementException`(→404)을 던진다. 라이브 검증: 없는 id 7·8 → 404 "종목을 찾을 수 없습니다", 유효 id → 정상 체결.
   페이퍼·실거래(brokerage) 양 경로 공통 길목(finalize 직전)에서 막는다.
