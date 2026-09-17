@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ShieldWarning, CheckCircle, XCircle, ArrowsClockwise } from "@phosphor-icons/react";
+import { ShieldWarning, CheckCircle, XCircle, ArrowsClockwise, Sparkle } from "@phosphor-icons/react";
 import { getAccessToken } from "@/services/auth";
 import {
   useBrokerageAccount,
@@ -13,11 +13,22 @@ import {
 } from "@/hooks/useBrokerage";
 import { useToast } from "@/hooks/useToast";
 import { ApiError } from "@/services/brokerage";
+import { authFetch } from "@/services/api";
 import { Card } from "@/components/ui/Card";
-import type { RebalanceExecutionResponse } from "@monticker/types";
+import type { RebalanceExecutionResponse, RebalanceTargetSource } from "@monticker/types";
 
 interface StockHit { id: number; symbol: string; name: string; }
-interface WeightRow { symbol: string; name: string; weightPct: string; }
+interface WeightRow { symbol: string; name: string; weightPct: string; id?: number; }
+
+/** /api/analytics/portfolio/optimize 응답 — weights 는 stockId 키. (analytics 페이지의 로컬 타입과 동일) */
+interface OptimizationResult {
+  stockIds: number[];
+  weights: Record<string, number>;
+  expectedReturn: number;
+  expectedRisk: number;
+  suggestion: string;
+  error: string | null;
+}
 
 function pct(n: number) { return (n * 100).toFixed(2); }
 
@@ -32,6 +43,10 @@ export default function RebalancePage() {
   const [executeError, setExecuteError] = useState<string | null>(null);
   const [lastExecution, setLastExecution] = useState<RebalanceExecutionResponse | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [source, setSource] = useState<RebalanceTargetSource>("MANUAL");
+  const [optimizing, setOptimizing] = useState(false);
+  const [optimizeError, setOptimizeError] = useState<string | null>(null);
+  const [optimizeInfo, setOptimizeInfo] = useState<{ expectedReturn: number; expectedRisk: number; suggestion: string } | null>(null);
 
   useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
 
@@ -46,7 +61,11 @@ export default function RebalancePage() {
     if (!target) return;
     setThresholdPct(target.thresholdPct.toFixed(2));
     setRows(Object.entries(target.weights).map(([symbol, w]) => ({ symbol, name: symbol, weightPct: (w * 100).toFixed(1) })));
+    setSource(target.source);
   }, [target]);
+
+  // 수동 편집은 최적화 산출물의 출처를 무효화한다 — MANUAL 로 되돌리고 최적화 요약도 지운다.
+  const markManual = () => { setSource("MANUAL"); setOptimizeInfo(null); };
 
   useEffect(() => {
     if (searchQuery.length < 1) { setSearchResults([]); return; }
@@ -59,14 +78,63 @@ export default function RebalancePage() {
 
   const addStock = (hit: StockHit) => {
     if (rows.some(r => r.symbol === hit.symbol)) { setSearchQuery(""); setSearchResults([]); return; }
-    setRows(rs => [...rs, { symbol: hit.symbol, name: hit.name, weightPct: "" }]);
+    setRows(rs => [...rs, { symbol: hit.symbol, name: hit.name, weightPct: "", id: hit.id }]);
     setSearchQuery("");
     setSearchResults([]);
+    markManual();
   };
 
-  const removeStock = (symbol: string) => setRows(rs => rs.filter(r => r.symbol !== symbol));
-  const updateWeight = (symbol: string, weightPct: string) =>
+  const removeStock = (symbol: string) => { setRows(rs => rs.filter(r => r.symbol !== symbol)); markManual(); };
+  const updateWeight = (symbol: string, weightPct: string) => {
     setRows(rs => rs.map(r => (r.symbol === symbol ? { ...r, weightPct } : r)));
+    markManual();
+  };
+
+  /** 저장된 목표에서 복원한 행은 id 가 없다 — 최적화 호출에 필요한 stockId 를 검색 API 로 보강한다. */
+  const ensureIds = async (): Promise<Array<WeightRow & { id: number }>> =>
+    Promise.all(rows.map(async r => {
+      if (r.id != null) return { ...r, id: r.id };
+      const res = await fetch(`/api/stocks/search?query=${encodeURIComponent(r.symbol)}`);
+      const hits: StockHit[] = res.ok ? await res.json() : [];
+      const hit = hits.find(h => h.symbol === r.symbol);
+      if (!hit) throw new Error(`종목 ID를 찾을 수 없습니다: ${r.symbol}`);
+      return { ...r, id: hit.id };
+    }));
+
+  const handleOptimize = async () => {
+    setOptimizeError(null);
+    if (rows.length < 2) { setOptimizeError("최적 비중을 계산하려면 종목이 2개 이상이어야 합니다."); return; }
+    setOptimizing(true);
+    try {
+      const withIds = await ensureIds();
+      const params = new URLSearchParams();
+      withIds.forEach(r => params.append("stockIds", String(r.id)));
+      const res = await authFetch(`/api/analytics/portfolio/optimize?${params}`);
+      if (!res.ok) throw new Error("최적화 계산에 실패했습니다.");
+      const result: OptimizationResult = await res.json();
+      if (result.error) throw new Error(result.error);
+      // 각 비중을 소수 1자리로 반올림하면 합이 100을 살짝 넘어(예: 100.1%) 저장이 막힐 수 있다.
+      // 초과분은 가장 큰 비중에서 덜어 합계를 100% 이하로 맞춘다.
+      const rounded = withIds.map(r => Math.round((result.weights[String(r.id)] ?? 0) * 1000) / 10);
+      const overflow = rounded.reduce((a, b) => a + b, 0) - 100;
+      if (overflow > 0) {
+        const maxIdx = rounded.indexOf(Math.max(...rounded));
+        rounded[maxIdx] = Math.round((rounded[maxIdx] - overflow) * 10) / 10;
+      }
+      setRows(withIds.map((r, i) => ({
+        symbol: r.symbol,
+        name: r.name,
+        id: r.id,
+        weightPct: rounded[i].toFixed(1),
+      })));
+      setOptimizeInfo({ expectedReturn: result.expectedReturn, expectedRisk: result.expectedRisk, suggestion: result.suggestion });
+      setSource("OPTIMIZER");
+    } catch (e) {
+      setOptimizeError(e instanceof ApiError ? e.message : (e as Error).message);
+    } finally {
+      setOptimizing(false);
+    }
+  };
 
   const totalWeightPct = rows.reduce((sum, r) => sum + (Number(r.weightPct) || 0), 0);
   const isSaveValid = rows.length > 0 && rows.every(r => Number(r.weightPct) > 0) && totalWeightPct <= 100 && Number(thresholdPct) > 0;
@@ -77,7 +145,7 @@ export default function RebalancePage() {
       await saveTarget.mutateAsync({
         weights: Object.fromEntries(rows.map(r => [r.symbol, Number(r.weightPct) / 100])),
         thresholdPct: Number(thresholdPct),
-        source: "MANUAL",
+        source,
       });
       toast({ type: "success", title: "저장 완료", message: "목표 비중이 저장되었습니다." });
       setShowPreview(false);
@@ -142,7 +210,14 @@ export default function RebalancePage() {
 
       {/* 목표 비중 설정 */}
       <Card className="p-5" outerClassName="mb-6">
-        <h2 className="text-sm font-bold text-gray-900 dark:text-dracula-fg mb-3">목표 비중</h2>
+        <div className="flex items-center gap-2 mb-3">
+          <h2 className="text-sm font-bold text-gray-900 dark:text-dracula-fg">목표 비중</h2>
+          {source === "OPTIMIZER" && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-dracula-purple/10 text-dracula-purple text-[10px] font-semibold px-2 py-0.5">
+              <Sparkle size={10} weight="fill" aria-hidden /> 최적화됨
+            </span>
+          )}
+        </div>
 
         <div className="relative mb-4">
           <input
@@ -203,6 +278,34 @@ export default function RebalancePage() {
             <span className="text-xs text-gray-500 dark:text-dracula-comment">%p</span>
           </div>
         </div>
+
+        {/* 최적화 — /api/analytics/portfolio/optimize 결과를 목표 비중에 채운다 */}
+        <button onClick={handleOptimize} disabled={rows.length < 2 || optimizing}
+          className="w-full py-2.5 rounded-xl font-bold text-sm border border-dracula-purple/40 text-dracula-purple hover:bg-dracula-purple/10 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100 mb-3 flex items-center justify-center gap-2">
+          <Sparkle size={16} weight="bold" aria-hidden />
+          {optimizing ? "계산 중..." : "최적 비중 계산해 채우기"}
+        </button>
+
+        {optimizeError && <p className="text-xs text-dracula-red mb-3">{optimizeError}</p>}
+
+        {optimizeInfo && (
+          <div className="rounded-lg bg-dracula-purple/5 border border-dracula-purple/20 p-3 mb-4 space-y-2">
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-500 dark:text-dracula-comment">기대 수익률 (연환산)</span>
+              <span className="font-mono font-semibold text-dracula-green">{pct(optimizeInfo.expectedReturn)}%</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-500 dark:text-dracula-comment">예상 위험 (변동성)</span>
+              <span className="font-mono font-semibold text-gray-900 dark:text-dracula-fg">{pct(optimizeInfo.expectedRisk)}%</span>
+            </div>
+            {optimizeInfo.suggestion && (
+              <p className="text-xs text-dracula-purple leading-relaxed pt-1 border-t border-dracula-purple/20">{optimizeInfo.suggestion}</p>
+            )}
+            <p className="text-[10px] text-gray-500 dark:text-dracula-comment leading-relaxed">
+              최적화 결과는 과거 데이터 기반 참고용이며 투자자문이 아닙니다. 저장 전 비중을 검토하세요.
+            </p>
+          </div>
+        )}
 
         {saveError && (
           <div className="flex items-start gap-2 rounded-lg border border-dracula-red/40 bg-dracula-red/10 p-3 mb-4">
