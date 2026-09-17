@@ -81,3 +81,4 @@ reports/*/raw/**/api.log
 bench/experiments/__pycache__/
 reports/*/raw/**/*.out
 reports/*/raw/*.out
+bench/consistency/__pycache__/
