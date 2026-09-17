@@ -9,6 +9,8 @@ services:
     environment:
       # 기본 1G 힙은 VM 잔여 메모리에서 OOM-kill 됐다(2026-09-16). 실험 부하(≤ 1만 tick/s)에 512m으로 충분하다.
       KAFKA_HEAP_OPTS: "-Xmx512m -Xms512m"
+      # M-002-tail 클래스 B 규명 — 브로커 GC 정지를 docker logs 로 본다(시각 포함). 실험 전용.
+      KAFKA_GC_LOG_OPTS: "-Xlog:gc*:stdout:time,level,tags"
   redis:
     mem_limit: 512m
     cpus: 1.0

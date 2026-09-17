@@ -19,9 +19,16 @@ for r in $(seq 1 "$RUNS"); do
   warmup "${WARMUP:-25}" TICK_INTERVAL_MS=100 TICK_SEQ=true
   curl -s -X POST "$WORKER/experiment/tick-order/reset" >/dev/null
 
+  # 브로커/DB 자원 1초 샘플링(클래스 B 규명 — 스파이크 순간 브로커 CPU 가 2코어 한도에 붙는지 본다)
+  ( end=$(( $(date +%s) + DURATION + 5 ))
+    while [ "$(date +%s)" -lt "$end" ]; do
+      ts=$(python3 -c 'import time;print(int(time.time()*1000))')
+      docker stats --no-stream --format '{{.Name}} {{.CPUPerc}} {{.MemUsage}}' monticker-kafka monticker-postgres monticker-redis 2>/dev/null         | sed "s/^/$ts /" >> "$OUT/$tag.dockerstats"
+    done ) & SAMP=$!
   start_gateway TICK_INTERVAL_MS=100 TICK_SEQ=true
   log "  r$r: ${DURATION}s 관측 (P=$P C=$C thresh=${THRESH}ms)"
   sleep "$DURATION"
+  kill "$SAMP" 2>/dev/null
   stop_pid "$GW_PID"; GW_PID=""
   wait_drain 60
   curl -s "$WORKER/experiment/tick-order" > "$OUT/$tag.json"
