@@ -84,6 +84,37 @@ class AuthServiceTest {
             .hasMessageContaining("이메일")
     }
 
+    // ── resendVerification — 이메일 존재/인증 여부를 노출하지 않는다(H4, forgotPassword와 동일 패턴) ──
+
+    @Test
+    fun `resendVerification sends a new email for an unverified user`() {
+        val user = User(id = 1L, email = "u@test.com", passwordHash = "x", nickname = "유저", emailVerified = false)
+        every { userRepository.findByEmail("u@test.com") } returns Optional.of(user)
+
+        service.resendVerification("u@test.com")
+
+        verify { emailService.sendVerificationEmail("u@test.com", any()) }
+    }
+
+    @Test
+    fun `resendVerification silently no-ops for an email that doesn't exist`() {
+        every { userRepository.findByEmail("nobody@test.com") } returns Optional.empty()
+
+        service.resendVerification("nobody@test.com")
+
+        verify(exactly = 0) { emailService.sendVerificationEmail(any(), any()) }
+    }
+
+    @Test
+    fun `resendVerification silently no-ops for an already-verified email`() {
+        val user = User(id = 1L, email = "u@test.com", passwordHash = "x", nickname = "유저", emailVerified = true)
+        every { userRepository.findByEmail("u@test.com") } returns Optional.of(user)
+
+        service.resendVerification("u@test.com")
+
+        verify(exactly = 0) { emailService.sendVerificationEmail(any(), any()) }
+    }
+
     @Test
     fun `login returns tokens for valid credentials`() {
         val hashed = encoder.encode("pass1234!")

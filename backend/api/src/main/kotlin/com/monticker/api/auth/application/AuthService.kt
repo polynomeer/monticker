@@ -67,10 +67,12 @@ class AuthService(
         redis.delete("$VERIFY_PREFIX$token")
     }
 
+    // forgotPassword와 같은 이유로 이메일 존재 여부·인증 상태를 노출하지 않는다(H4) — 등록되지
+    // 않았거나 이미 인증된 이메일이면 조용히 아무 일도 하지 않는다. 컨트롤러는 항상 같은
+    // 메시지를 반환한다.
     fun resendVerification(email: String) {
-        val user = userRepository.findByEmail(email)
-            .orElseThrow { IllegalArgumentException("등록되지 않은 이메일입니다.") }
-        require(!user.emailVerified) { "이미 인증된 이메일입니다." }
+        val user = userRepository.findByEmail(email).orElse(null) ?: return
+        if (user.emailVerified) return
         sendVerificationEmail(user)
     }
 
