@@ -106,6 +106,11 @@ LIMIT가격)만 검증하고 `quantity`(별도 파라미터)는 검증하지 않
 그대로 브로커로.
 **조치**: 상류에서 `qty>0` 강제(V-C1/H2와 함께). 추정가를 못 구하면 통과가 아니라 **보수적 거부**.
 🔒 부분 잠김(`BrokerageService.kt`) / ✅ `RiskRuleQueryService.kt`는 수정 가능.
+**후속(2026-09-21, P0 회귀)**: 보수적 거부(5c53b2b)가 페이퍼 **시장가 매수 전부**를 막았다 — MARKET 주문은 지정가가
+없어 `RiskCheckedAspect`(가격 파라미터 없는 `MatchingService.submitMarket`)와 `MatchingController`(`limitPrice ?: ZERO`)가
+게이트에 ZERO를 넘기기 때문. `RiskCheckerService.check`가 `estimatedPrice<=0`이면 `RiskRuleQueryService.currentPrice`
+(candles_1m 최근가 — 사가의 예약금 기준과 같은 조회)로 채우고, 그것도 없을 때만 불명으로 남겨 거부한다. "모르는 가격으로 승인"
+금지는 그대로다. 실거래 `checkBrokerageOrder`는 호출자가 가격을 명시하는 계약이라 폴백 대상이 아니다.
 
 ### V-H4 — `riskCheckMutation`이 `res.ok` 미확인 → 에러 본문을 리스크 결과로 렌더
 **근거**: `matching/page.tsx:101-110` — `submitMutation`(`:122`)과 달리 `if (!res.ok) throw`가 없어 4xx/5xx

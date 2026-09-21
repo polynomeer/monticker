@@ -66,15 +66,16 @@ jobs:
       # 이미 일치한다(localhost:5432/monticker, localhost:6379). OAuth2/DART/Naver
       # 같은 외부 연동 키는 전부 선택값이라 비워둬도 부팅에 영향 없다.
       #
-      # InsecureSecretGuard는 jwt.secret/credential-encryption-key가 git에 커밋된
-      # 개발용 기본값 그대로면 기동을 거부한다(docs/security-review.md C1). 이 잡은
-      # 일회용 CI 컨테이너에서 그 기본값으로 API를 띄우는 게 목적이므로 docker-compose.yml과
-      # 같이 명시적으로 허용한다 — 실제 배포 경로(infra/k8s)에는 절대 설정하지 말 것.
+      # JWT_SECRET/CREDENTIAL_ENCRYPTION_KEY는 매 실행마다 새로 만든다. InsecureSecretGuard
+      # (docs/security-review.md C1)가 git에 커밋된 공개 기본값과 같으면 부팅을 거부하므로,
+      # 기본값에 의존하던 이 잡은 가드 도입 이후 매번 "API failed to start"로 죽었다.
+      # ALLOW_INSECURE_DEV_SECRETS=true로 가드를 끄는 대신 값을 발급해 프로덕션과 같은 경로를
+      # 태운다 — e2e는 토큰을 직접 만들지 않고 API 로그인으로 받으므로 값 자체는 상관없다.
       - name: Start API in background
         working-directory: backend/api
-        env:
-          ALLOW_INSECURE_DEV_SECRETS: "true"
         run: |
+          export JWT_SECRET="$(openssl rand -base64 48)"
+          export CREDENTIAL_ENCRYPTION_KEY="$(openssl rand -base64 32)"
           nohup ./gradlew bootRun --console=plain -q > /tmp/api.log 2>&1 &
           for i in $(seq 1 60); do
             if grep -q "Started ApiApplication" /tmp/api.log 2>/dev/null; then

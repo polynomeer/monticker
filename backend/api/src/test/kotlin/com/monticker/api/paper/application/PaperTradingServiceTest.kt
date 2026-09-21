@@ -60,6 +60,28 @@ class PaperTradingServiceTest {
         io.mockk.verify(exactly = 0) { tradeRepo.save(any()) }
     }
 
+    // 5c53b2b 회귀(P0) — 새 1,000만 계좌에서 `POST /api/paper/buy {stockId:2, quantity:11}`이 ConcentrationRule로
+    // 거부됐다. 파사드는 가격을 모른다(MARKET) — 가격 없이 매칭 엔진에 넘기고, 게이트가 최근가를 스스로 구해야 한다.
+    // jdbc는 strict mock이라 파사드가 직접 가격을 조회하려 들면 여기서 실패한다.
+    @Test
+    fun `buy on a fresh account submits the market order without a price and returns the fill`() {
+        every { accountRepo.findByUserId(1L) } returns Optional.of(PaperAccount(userId = 1L))
+        every { orderSubmitter.submitMarket(1L, 2L, "BUY", 11) } returns MarketOrderResult(
+            orderId = 20L, fillId = 88L, stockId = 2L, side = "BUY", quantity = 11,
+            fillPrice = java.math.BigDecimal("70000"), amount = java.math.BigDecimal("770000"), filledAt = java.time.Instant.now(),
+        )
+        every { tradeRepo.findByFillId(88L) } returns PaperTrade(id = 600L, userId = 1L, stockId = 2L, side = "BUY", quantity = 11,
+            price = java.math.BigDecimal("70000"), amount = java.math.BigDecimal("770000"), fillId = 88L)
+        every { jdbc.query(match<String> { it.contains("SELECT cash") }, any<org.springframework.jdbc.core.RowMapper<java.math.BigDecimal>>(), 1L) } returns listOf(java.math.BigDecimal("9230000"))
+
+        val result = service.buy(userId = 1L, stockId = 2L, quantity = 11)
+
+        org.assertj.core.api.Assertions.assertThat(result.tradeId).isEqualTo(600L)
+        org.assertj.core.api.Assertions.assertThat(result.quantity).isEqualTo(11)
+        org.assertj.core.api.Assertions.assertThat(result.remainingCash).isEqualByComparingTo("9230000")
+        io.mockk.verify(exactly = 1) { orderSubmitter.submitMarket(1L, 2L, "BUY", 11) }
+    }
+
     @Test
     fun `a risk rejection from the matching engine propagates unchanged`() {
         every { accountRepo.findByUserId(1L) } returns Optional.of(PaperAccount(userId = 1L))
