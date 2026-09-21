@@ -120,6 +120,7 @@ export interface ConditionalOrderResponse {
   executedOrderId: number | null;
   createdAt: string;
   triggeredAt: string | null;
+  expiresAt: string | null;
 }
 
 // ADR-034 — 리밸런싱 실행 자동화(실브로커리지, 수동 실행).
