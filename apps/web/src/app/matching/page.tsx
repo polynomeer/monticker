@@ -16,6 +16,9 @@ const STOCKS = [
   { id: 5, label: "AAPL" },    { id: 6, label: "NVDA" },
 ];
 
+// V-L7 — 주문 폼에 수량 상한이 전혀 없어 1e9 같은 값이 클라 검사를 그대로 통과했다.
+const MAX_ORDER_QUANTITY = 1_000_000;
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 interface OrderDto {
@@ -191,8 +194,8 @@ function OrderForm({ stockId, setStockId, presetSide }: { stockId: number; setSt
         </div>
         <div>
           <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">수량</label>
-          <input type="number" min={1} value={quantity}
-            onChange={e => setQuantity(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+          <input type="number" min={1} max={MAX_ORDER_QUANTITY} value={quantity}
+            onChange={e => setQuantity(Math.min(MAX_ORDER_QUANTITY, Math.max(1, Math.floor(Number(e.target.value) || 1))))}
             className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg text-sm px-3 py-2 transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50" />
         </div>
       </div>

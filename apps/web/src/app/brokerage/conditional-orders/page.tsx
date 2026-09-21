@@ -15,6 +15,9 @@ interface StockHit { id: number; symbol: string; name: string; }
 
 function fmt(n: number) { return n.toLocaleString("ko-KR", { maximumFractionDigits: 0 }); }
 
+// V-L7 — 주문 폼에 수량 상한이 전혀 없어 1e9 같은 값이 클라 검사를 그대로 통과했다.
+const MAX_ORDER_QUANTITY = 1_000_000;
+
 const TRIGGER_LABEL: Record<ConditionalTriggerType, string> = {
   STOP_LOSS: "손절",
   TAKE_PROFIT: "익절",
@@ -305,11 +308,11 @@ export default function ConditionalOrderPage() {
               <div className="flex items-center gap-2">
                 <button onClick={() => setQuantity(q => Math.max(1, q - 1))}
                   className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-dracula-line text-gray-900 dark:text-dracula-fg font-bold text-lg hover:opacity-80 active:scale-95 transition-all duration-150">−</button>
-                <input type="number" min={1} value={quantity}
-                  onChange={e => setQuantity(Math.max(1, Number(e.target.value)))}
+                <input type="number" min={1} max={MAX_ORDER_QUANTITY} value={quantity}
+                  onChange={e => setQuantity(Math.min(MAX_ORDER_QUANTITY, Math.max(1, Number(e.target.value))))}
                   className="flex-1 text-center font-mono text-lg font-bold bg-white dark:bg-dracula-line/30 text-gray-900 dark:text-dracula-fg
                              border border-gray-300 dark:border-dracula-line rounded-lg py-2 transition-colors focus:outline-none focus:border-dracula-purple" />
-                <button onClick={() => setQuantity(q => q + 1)}
+                <button onClick={() => setQuantity(q => Math.min(MAX_ORDER_QUANTITY, q + 1))}
                   className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-dracula-line text-gray-900 dark:text-dracula-fg font-bold text-lg hover:opacity-80 active:scale-95 transition-all duration-150">+</button>
               </div>
             </div>
