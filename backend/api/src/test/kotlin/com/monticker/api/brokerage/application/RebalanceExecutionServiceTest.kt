@@ -75,6 +75,21 @@ class RebalanceExecutionServiceTest {
     }
 
     @Test
+    fun `수량이 Int 범위를 넘으면 그 leg는 버려진다`() {
+        // V-L5 — BigDecimal.toInt()는 예외 없이 32비트로 wrap한다. diffPct*totalValue/price가
+        // Int.MAX_VALUE(약 21억)를 넘으면 엉뚱한 수량으로 이어질 수 있어 leg 자체를 버려야 한다.
+        val target = makeTarget(mapOf("005930" to BigDecimal("1.00")))
+        every { targetService.get(1L) } returns target
+        every { brokerageService.getBalance(1L) } returns makeBalance(BigDecimal("5000000000000"), emptyList())
+        every { jdbc.queryForObject(match<String> { it.contains("candles_1m") }, eq(BigDecimal::class.java), eq("005930")) } returns BigDecimal("1")
+        stubStockId("005930", 2L)
+
+        val preview = service.preview(1L)
+
+        assertThat(preview.legs).isEmpty()
+    }
+
+    @Test
     fun `목표에 없는 보유 종목은 전량 매도 후보가 되고 보유 수량을 넘지 않는다`() {
         val target = makeTarget(emptyMap())
         every { targetService.get(1L) } returns target

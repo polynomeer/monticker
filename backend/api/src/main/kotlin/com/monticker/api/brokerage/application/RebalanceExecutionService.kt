@@ -139,7 +139,12 @@ class RebalanceExecutionService(
             val price = holding?.currentPrice ?: currentPrice(symbol) ?: return@mapNotNull null
             if (price <= BigDecimal.ZERO) return@mapNotNull null
 
-            var quantity = diffPct.abs().multiply(totalValue).divide(price, 0, RoundingMode.DOWN).toInt()
+            val rawQuantity = diffPct.abs().multiply(totalValue).divide(price, 0, RoundingMode.DOWN)
+            // V-L5 — BigDecimal.toInt()는 예외 없이 32비트로 wrap한다. 음수 wrap은 아래
+            // quantity<=0 가드가 걸러내지만, Int.MAX_VALUE를 넘는 양수 wrap은 그대로 통과해
+            // 엉뚱한(대개 훨씬 작은) 수량으로 주문이 나갈 수 있다 — 넘으면 이 leg를 버린다.
+            if (rawQuantity > BigDecimal(Int.MAX_VALUE)) return@mapNotNull null
+            var quantity = rawQuantity.toInt()
             if (side == OrderSide.SELL) quantity = minOf(quantity, holding?.quantity ?: 0)
             if (quantity <= 0) return@mapNotNull null
 
