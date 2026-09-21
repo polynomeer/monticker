@@ -15,6 +15,7 @@ import {
   createConditionalOrder,
   createOcoOrder,
   executeRebalance,
+  getActiveBrokerageOrdersForSymbol,
   getBrokerageAccount,
   getBrokerageBalance,
   getBrokerageOrders,
@@ -47,6 +48,16 @@ export function useBrokerageOrders(page: number, enabled: boolean) {
     queryKey: ["brokerage", "orders", page],
     queryFn: () => getBrokerageOrders(page),
     enabled,
+  });
+}
+
+/** 종목 상세 차트의 주문선용 — 계좌 연동돼 있을 때만 활성화 */
+export function useActiveBrokerageOrdersForSymbol(symbol: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["brokerage", "orders", "active", symbol],
+    queryFn:  () => getActiveBrokerageOrdersForSymbol(symbol),
+    enabled,
+    refetchInterval: enabled ? 10_000 : false,
   });
 }
 

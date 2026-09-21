@@ -80,6 +80,13 @@ export async function getBrokerageOrders(page: number, size = 20): Promise<PageR
   return res.json();
 }
 
+/** 종목 상세 차트의 주문선용 — 한 종목의 미체결 주문만(페이지네이션 없음). */
+export async function getActiveBrokerageOrdersForSymbol(symbol: string): Promise<BrokerageOrderResponse[]> {
+  const res = await authFetch(`/api/brokerage/orders/active?symbol=${encodeURIComponent(symbol)}`);
+  await throwIfNotOk(res);
+  return res.json();
+}
+
 export async function getBrokerageSettlements(page: number, size = 20): Promise<PageResponse<BrokerageSettlementResponse>> {
   const res = await authFetch(`/api/brokerage/settlements?page=${page}&size=${size}`);
   await throwIfNotOk(res);
