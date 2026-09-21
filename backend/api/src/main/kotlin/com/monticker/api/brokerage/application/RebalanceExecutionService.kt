@@ -9,6 +9,7 @@ import com.monticker.api.brokerage.infrastructure.BrokerageOrderRequest
 import com.monticker.api.brokerage.infrastructure.RebalanceExecutionLegRepository
 import com.monticker.api.brokerage.infrastructure.RebalanceExecutionRepository
 import com.monticker.api.brokerage.domain.BrokerageOrderStatus
+import com.monticker.api.common.exception.BusinessRuleException
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
@@ -49,14 +50,14 @@ class RebalanceExecutionService(
     private val log = LoggerFactory.getLogger(javaClass)
 
     fun preview(userId: Long): RebalancePreview {
-        val target = targetService.get(userId) ?: throw IllegalStateException("저장된 리밸런싱 목표가 없습니다.")
+        val target = targetService.get(userId) ?: throw BusinessRuleException("저장된 리밸런싱 목표가 없습니다.")
         return computePreview(userId, target)
     }
 
     fun execute(userId: Long): RebalanceExecution {
-        val target = targetService.get(userId) ?: throw IllegalStateException("저장된 리밸런싱 목표가 없습니다.")
+        val target = targetService.get(userId) ?: throw BusinessRuleException("저장된 리밸런싱 목표가 없습니다.")
         val plan = computePreview(userId, target)
-        if (plan.legs.isEmpty()) throw IllegalStateException("임계값을 넘는 리밸런싱 대상이 없습니다.")
+        if (plan.legs.isEmpty()) throw BusinessRuleException("임계값을 넘는 리밸런싱 대상이 없습니다.")
 
         // ADR-032와 같은 이유로 execute() 전체를 하나의 트랜잭션으로 묶지 않는다 — 뒤 leg의
         // DB 실패가 앞서 이미 브로커에 나간 leg의 기록까지 롤백해선 안 된다. 각 저장/주문

@@ -62,6 +62,15 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    fun `BusinessRuleException은 메시지에 키워드가 없어도 항상 409를 반환한다`() {
+        // 전역 예외 분류 개선(docs/validation-hardening-plan.md) — 키워드 매칭에 기대지 않는
+        // 명시적 타입. "저장된 리밸런싱 목표가 없습니다." 같은 메시지는 IllegalStateException
+        // 키워드("불가"/"없음" 등)와 우연히도 안 겹쳐 500으로 샜었다.
+        val resp = handler.handleBusinessRule(BusinessRuleException("저장된 리밸런싱 목표가 없습니다."))
+        assertThat(resp.statusCode).isEqualTo(HttpStatus.CONFLICT)
+    }
+
+    @Test
     fun `서버 내부 IllegalStateException은 500을 반환한다`() {
         val resp = handler.handleIllegalState(IllegalStateException("내부 컴포넌트 오류"))
         assertThat(resp.statusCode).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR)

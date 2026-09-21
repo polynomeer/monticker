@@ -3,6 +3,7 @@ package com.monticker.api.brokerage.application
 import com.monticker.api.brokerage.domain.*
 import com.monticker.api.brokerage.domain.BrokerageOrderStatus
 import com.monticker.api.brokerage.infrastructure.*
+import com.monticker.api.common.exception.BusinessRuleException
 import io.mockk.*
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -39,7 +40,7 @@ class RebalanceExecutionServiceTest {
     @Test
     fun `저장된 목표가 없으면 preview는 실패한다`() {
         every { targetService.get(1L) } returns null
-        assertThatThrownBy { service.preview(1L) }.isInstanceOf(IllegalStateException::class.java)
+        assertThatThrownBy { service.preview(1L) }.isInstanceOf(BusinessRuleException::class.java)
     }
 
     @Test
@@ -97,7 +98,7 @@ class RebalanceExecutionServiceTest {
         every { targetService.get(1L) } returns target
         every { brokerageService.getBalance(1L) } returns makeBalance(BigDecimal.ZERO, emptyList())
 
-        assertThatThrownBy { service.execute(1L) }.isInstanceOf(IllegalStateException::class.java)
+        assertThatThrownBy { service.execute(1L) }.isInstanceOf(BusinessRuleException::class.java)
     }
 
     @Test

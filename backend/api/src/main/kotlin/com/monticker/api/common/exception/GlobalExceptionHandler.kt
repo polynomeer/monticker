@@ -72,6 +72,11 @@ class GlobalExceptionHandler {
     fun handleReconnectRequired(e: ReconnectRequiredException) =
         error(HttpStatus.UNAUTHORIZED, e.message ?: "재연동이 필요합니다.")
 
+    // 메시지 키워드 매칭에 기대지 않고 항상 409로 매핑되는 명시적 비즈니스 규칙 예외.
+    @ExceptionHandler(BusinessRuleException::class)
+    fun handleBusinessRule(e: BusinessRuleException) =
+        error(HttpStatus.CONFLICT, e.message ?: "처리할 수 없는 상태입니다")
+
     // 외부 서비스 서킷브레이커 OPEN — 우리 장애가 아니라 의존 서비스 장애. 503 + Retry-After.
     @ExceptionHandler(ExternalServiceUnavailableException::class)
     fun handleExternalUnavailable(e: ExternalServiceUnavailableException): ResponseEntity<ErrorResponse> =

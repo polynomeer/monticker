@@ -19,6 +19,7 @@ import com.monticker.api.brokerage.infrastructure.BrokerageSettlementRepository
 import com.monticker.api.brokerage.infrastructure.BrokerageToken
 import com.monticker.api.brokerage.infrastructure.MockBrokerageClient
 import com.monticker.api.common.aop.RiskLimitException
+import com.monticker.api.common.exception.BusinessRuleException
 import com.monticker.api.common.exception.ReconnectRequiredException
 import com.monticker.api.risk.application.RiskCheckResult
 import com.monticker.api.risk.application.RiskCheckerService
@@ -222,7 +223,7 @@ class BrokerageServiceTest {
         every { fakeClient.cancelOrder(any(), "KIS123", "00950") } returns
             BrokerageCancelResult(cancelled = false, reason = "이미 체결된 주문입니다")
 
-        assertThrows<IllegalStateException> { serviceWithFakeClient(fakeClient).cancelOrder(userId = 1L, orderId = 1L) }
+        assertThrows<BusinessRuleException> { serviceWithFakeClient(fakeClient).cancelOrder(userId = 1L, orderId = 1L) }
 
         assertThat(order.status).isEqualTo(BrokerageOrderStatus.SUBMITTED)
         verify(exactly = 0) { orderRepo.save(any()) }

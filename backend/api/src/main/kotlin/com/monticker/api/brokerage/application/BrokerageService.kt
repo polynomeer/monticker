@@ -18,6 +18,7 @@ import com.monticker.api.brokerage.infrastructure.BrokerageOrderRequest
 import com.monticker.api.brokerage.infrastructure.BrokerageSettlementRepository
 import com.monticker.api.brokerage.infrastructure.BrokerageToken
 import com.monticker.api.common.aop.RiskLimitException
+import com.monticker.api.common.exception.BusinessRuleException
 import com.monticker.api.common.exception.ReconnectRequiredException
 import com.monticker.api.risk.application.HoldingPosition
 import com.monticker.api.risk.application.PortfolioSnapshot
@@ -185,12 +186,11 @@ class BrokerageService(
 
         val account = getAccount(userId)
         val credentials = requireCredentials(account)
-        val pgOrderId = order.pgOrderId ?: throw IllegalStateException("증권사 주문번호가 없어 취소할 수 없습니다.")
+        val pgOrderId = order.pgOrderId ?: throw BusinessRuleException("증권사 주문번호가 없어 취소할 수 없습니다.")
         val result = clientRegistry.get(account.provider).cancelOrder(credentials, pgOrderId, order.brokerOrderRef)
 
         if (!result.cancelled) {
-            // "불가" 키워드가 있어야 GlobalExceptionHandler가 이걸 409로 처리한다(그 외는 500).
-            throw IllegalStateException("증권사에서 주문 취소가 불가능합니다: ${result.reason ?: "사유 없음"}")
+            throw BusinessRuleException("증권사에서 주문 취소가 불가능합니다: ${result.reason ?: "사유 없음"}")
         }
 
         order.cancel()
