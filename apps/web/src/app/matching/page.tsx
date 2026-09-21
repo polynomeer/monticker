@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { CheckCircle, Prohibit, Check, X } from "@phosphor-icons/react";
 import { authFetch } from "@/services/api";
+import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
 import OrderBook from "@/components/stock/OrderBook";
 import OrderProposalCard from "@/components/ai/OrderProposalCard";
@@ -249,6 +250,7 @@ function OrderForm({ stockId, setStockId, presetSide }: { stockId: number; setSt
 
 function OrderHistoryPanel() {
   const qc = useQueryClient();
+  const { toast } = useToast();
   const [tab, setTab] = useState<"orders" | "fills">("orders");
 
   const { data: orders = [] } = useQuery<OrderDto[]>({
@@ -272,9 +274,13 @@ function OrderHistoryPanel() {
 
   const cancelMutation = useMutation({
     mutationFn: async (orderId: number) => {
-      await authFetch(`/api/matching/orders/${orderId}`, { method: "DELETE" });
+      const res = await authFetch(`/api/matching/orders/${orderId}`, { method: "DELETE" });
+      // V-L8 — res.ok를 확인하지 않으면 취소 실패(이미 체결됐거나 권한 없음 등)가
+      // 성공처럼 처리돼 목록이 갱신되고 사용자는 실패를 알 방법이 없다.
+      if (!res.ok) { const e = await res.json(); throw new Error(e.message ?? "주문 취소에 실패했습니다."); }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["matching", "orders"] }),
+    onError: (e) => toast({ type: "error", title: "주문 취소 실패", message: (e as Error).message }),
   });
 
   return (
