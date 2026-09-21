@@ -41,7 +41,7 @@ class MockBrokerageClient(
     )
 
     override fun issueToken(appKey: String, appSecret: String): BrokerageToken {
-        log.info("[MockKIS] 토큰 발급: appKey={}", appKey)
+        log.info("[MockKIS] 토큰 발급")
         return BrokerageToken(
             accessToken = "mock_token_${UUID.randomUUID()}",
             expiresIn   = 86400L,
