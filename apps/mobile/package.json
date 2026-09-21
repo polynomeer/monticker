@@ -8,7 +8,7 @@
     "ios": "expo start --ios"
   },
   "dependencies": {
-    "expo": "~52.0.0",
+    "expo": "~57.0.23",
     "expo-router": "~4.0.0",
     "expo-notifications": "~0.29.0",
     "expo-device": "~7.0.0",
