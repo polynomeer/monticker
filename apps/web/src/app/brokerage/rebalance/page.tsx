@@ -137,7 +137,8 @@ export default function RebalancePage() {
   };
 
   const totalWeightPct = rows.reduce((sum, r) => sum + (Number(r.weightPct) || 0), 0);
-  const isSaveValid = rows.length > 0 && rows.every(r => Number(r.weightPct) > 0) && totalWeightPct <= 100 && Number(thresholdPct) > 0;
+  const isSaveValid = rows.length > 0 && rows.every(r => Number(r.weightPct) > 0) && totalWeightPct <= 100 &&
+    Number(thresholdPct) > 0 && Number(thresholdPct) <= 100;
 
   const handleSave = async () => {
     setSaveError(null);
@@ -271,7 +272,7 @@ export default function RebalancePage() {
           <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">실행 임계값 — 괴리가 이 값 이상인 종목만 리밸런싱 대상이 됩니다</label>
           <div className="flex items-center gap-2">
             <input
-              type="number" min={0} step={0.1} value={thresholdPct}
+              type="number" min={0} max={100} step={0.1} value={thresholdPct}
               onChange={e => setThresholdPct(e.target.value)}
               className="w-24 rounded-lg border px-3 py-2 text-sm text-right font-mono border-gray-300 bg-white text-gray-900 dark:border-dracula-line dark:bg-dracula-surface dark:text-dracula-fg focus:outline-none focus:ring-2 focus:ring-dracula-purple/50 focus:border-dracula-purple transition-all duration-150"
             />
