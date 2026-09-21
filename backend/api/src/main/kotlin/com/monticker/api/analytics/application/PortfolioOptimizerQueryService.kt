@@ -83,12 +83,23 @@ class PortfolioOptimizerQueryService(
         }
     }
 
+    /**
+     * 분산 최소화 + 목표수익률 페널티(Lagrangian relaxation) — 등식 제약(포트폴리오 기대수익률
+     * = targetReturn)이 있는 QP를 투영 경사하강으로 근사한다. targetReturn이 그냥 무시되던 버그
+     * 였다(V-M4) — cov 그래디언트만 쓰면 모든 target이 같은 전역 최소분산해로 수렴해 frontier
+     * 10점이 동일 가중치가 된다. returnPenaltyLambda는 분산 그래디언트(cov 스케일 ~1e-4)와
+     * 페널티 그래디언트(mu 스케일 ~1e-3, 편차 제곱이라 더 작음)가 비슷한 크기로 경합하도록
+     * 잡은 경험적 값 — 너무 작으면 target이 여전히 무시되고, 너무 크면 분산 최소화가 무의미해진다.
+     */
     fun minimizeVariance(cov: Array<DoubleArray>, mu: DoubleArray, targetReturn: Double, iterations: Int = 500): DoubleArray {
         var w = DoubleArray(mu.size) { 1.0 / mu.size }
         val lr = 0.01
+        val returnPenaltyLambda = 500.0
         repeat(iterations) {
-            val grad = DoubleArray(w.size) { i -> 2.0 * (0 until w.size).sumOf { j -> cov[i][j] * w[j] } }
-            for (i in w.indices) w[i] -= lr * grad[i]
+            val varianceGrad = DoubleArray(w.size) { i -> 2.0 * (0 until w.size).sumOf { j -> cov[i][j] * w[j] } }
+            val returnGap = portfolioReturn(w, mu) - targetReturn
+            val returnPenaltyGrad = DoubleArray(w.size) { i -> 2.0 * returnPenaltyLambda * returnGap * mu[i] }
+            for (i in w.indices) w[i] -= lr * (varianceGrad[i] + returnPenaltyGrad[i])
             w = projectToSimplex(w)
         }
         return w

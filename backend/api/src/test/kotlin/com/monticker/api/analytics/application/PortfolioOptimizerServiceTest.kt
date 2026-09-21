@@ -174,6 +174,23 @@ class PortfolioOptimizerServiceTest {
     }
 
     @Test
+    fun `minimizeVariance shifts weight toward the higher-return asset as targetReturn rises`() {
+        // V-M4 — targetReturn used to be a dead parameter: every target converged to the same
+        // global minimum-variance weights. Asset 1 has both higher return and higher variance,
+        // so chasing a higher target should require leaning into it despite the risk cost.
+        val cov = arrayOf(
+            doubleArrayOf(0.0001, 0.0),
+            doubleArrayOf(0.0, 0.0004),
+        )
+        val mu = doubleArrayOf(0.0005, 0.0020)
+
+        val lowTargetWeights = queryService.minimizeVariance(cov, mu, targetReturn = 0.0005)
+        val highTargetWeights = queryService.minimizeVariance(cov, mu, targetReturn = 0.0020)
+
+        assertThat(highTargetWeights[1]).isGreaterThan(lowTargetWeights[1])
+    }
+
+    @Test
     fun `minimizeVariance produces weights that sum to one`() {
         val cov = arrayOf(
             doubleArrayOf(0.0004, 0.0001),
