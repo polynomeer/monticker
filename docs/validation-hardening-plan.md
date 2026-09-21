@@ -5,12 +5,29 @@
 > [security-review.md](security-review.md), 장애 대응은 [resilience-plan.md](resilience-plan.md),
 > 출시 게이트는 [launch-plan.md](launch-plan.md).
 
-작성일: 2026-09-21 · 기준 커밋: `bbdb567` · 상태: **점검 결과 + 작업계획**
+작성일: 2026-09-21 · 기준 커밋: `bbdb567` · 상태: **✅ 전 항목 반영 완료 (PR #80, 2026-09-21)**
 
 이 문서는 "검증이 충분히 작성돼 있는가"를 코드 레벨에서 점검한 결과다. [security-review.md](security-review.md)의
 C3(실주문 API 입력검증 부재)·H2(41개 컨트롤러 중 39개 Bean Validation 없음)와 **겹치는 부분은
 재기술하지 않고 참조**하며, 그 문서가 다루지 않은 **논리 분기·수량/가격 검증·옵티마이저/리밸런싱
 로직**의 결함을 추가로 정리한다.
+
+> **진행 상태 (2026-09-21 업데이트)** — 아래 §2~5의 발견 항목은 **PR #80에서 P0/P1/P2 전부 코드에
+> 반영**됐다([launch-plan.md](launch-plan.md) Phase 2.1이 종결을 추적). 본 세션에서 병합된 코드를 직접
+> 재확인한 항목: **V-C1**(`BrokerageController.submitOrder`에 `@Valid` + 경계 `valueOf`, `BrokerageService`가
+> 미등록 종목을 리스크 게이트 건너뛰기 대신 거부), **V-H1**(matching 수량 클램프·`isValid`·`MAX_ORDER_QUANTITY`),
+> **V-H2**(`ConditionalOrderService` `require(quantity>0)`), **V-H3**(`RiskRuleQueryService`의 `qty<=0` 가드 +
+> `estimatedPrice<=0` 보수적 처리), **V-H4**(`riskCheckMutation` `res.ok`), **V-M1**(`isLimitPriceValid`),
+> **V-M4**(`minimizeVariance`가 `targetReturn`을 실제 사용), **V-M5**(`distinct()` + `MAX_STOCK_IDS=20`),
+> **V-M6**(리밸런싱 미저장 편집 시 실행 차단), **V-L2**(90일 만료 스케줄러). 해당 소스 다수가 주석에
+> 본 문서의 finding ID(V-C1/V-H3/V-L2 등)를 인용한다.
+>
+> **의도적으로 유지(수정 안 함)**: V-L1 계열의 "HTTP 200 + `error` 필드" 반환 계약(옵티마이저·
+> `RegimeDetectorService`) — 호출자가 `error`를 확인하는 반환값 기반 에러 규약으로 남긴다.
+> **사람이 처리할 잔여**: launch-plan Phase 2.1의 인프라 항목(monticker-tls Secret, Redis/ES 운영 인증
+> 토폴로지 확인, JWT iss/aud 도입에 따른 1회성 세션 무효화, CSP unsafe-inline 트레이드오프 등).
+>
+> 따라서 §6의 "작업 계획"은 **역사적 기록**이며, 신규 착수 대상은 없다.
 
 ---
 
