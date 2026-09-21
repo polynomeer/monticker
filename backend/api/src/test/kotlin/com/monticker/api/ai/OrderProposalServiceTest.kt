@@ -29,8 +29,8 @@ class OrderProposalServiceTest {
         priceActionService, stockService, anthropicClient, anthropicConfig, objectMapper,
     )
 
-    private fun proposal(status: OrderProposalStatus, expiresAt: Instant) = OrderProposal(
-        id = 1, userId = 1L, stockId = 2L, side = OrderProposalSide.BUY,
+    private fun proposal(status: OrderProposalStatus, expiresAt: Instant, side: OrderProposalSide = OrderProposalSide.BUY) = OrderProposal(
+        id = 1, userId = 1L, stockId = 2L, side = side,
         reasoning = "테스트 근거", status = status, expiresAt = expiresAt,
     )
 
@@ -100,6 +100,19 @@ class OrderProposalServiceTest {
         assertThatThrownBy { service.approve(1L, 1L) }
             .isInstanceOf(IllegalStateException::class.java)
             .hasMessageContaining("만료")
+    }
+
+    @Test
+    fun `HOLD 제안은 승인할 수 없다`() {
+        // V-L3 — HOLD엔 승인할 주문 방향이 없다. 허용하면 프론트가 free-text side로 흘려보내
+        // 실주문 폼의 enum 검증을 우회하는 악성 입력 경로가 된다.
+        val p = proposal(OrderProposalStatus.PENDING, Instant.now().plusSeconds(600), side = OrderProposalSide.HOLD)
+        every { orderProposalRepository.findByUserIdAndId(1L, 1L) } returns p
+
+        assertThatThrownBy { service.approve(1L, 1L) }
+            .isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("HOLD")
+            .hasMessageContaining("불가")
     }
 
     @Test

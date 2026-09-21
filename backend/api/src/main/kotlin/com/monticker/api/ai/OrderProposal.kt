@@ -45,6 +45,10 @@ class OrderProposal(
     fun approve() {
         check(status == OrderProposalStatus.PENDING) { "이미 처리된 제안은 승인 불가합니다" }
         check(Instant.now().isBefore(expiresAt)) { "만료된 제안은 승인 불가합니다" }
+        // HOLD는 "아무것도 하지 마라"는 제안이라 승인할 주문 방향이 없다 — 승인을 허용하면
+        // 프론트가 이를 free-text side로 그대로 주문 폼에 흘려보내 V-C1/H3류의 악성 입력이
+        // 될 수 있다(V-L3).
+        check(side != OrderProposalSide.HOLD) { "HOLD 제안은 승인 불가합니다" }
         status = OrderProposalStatus.APPROVED
         decidedAt = Instant.now()
     }
