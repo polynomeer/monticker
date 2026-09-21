@@ -254,6 +254,9 @@ API_ENV="$API_ENV ALLOWED_ORIGINS=http://localhost:${WEB_PORT} APP_BASE_URL=http
 # 호스트에 노출된 포트로 접속한다. smtp.auth=true가 고정값이라 자격증명 문자열
 # 자체는 있어야 하지만 MailHog는 인증을 실제로 검사하지 않는다 — 아무 값이나 무방.
 API_ENV="$API_ENV MAIL_HOST=localhost MAIL_PORT=${MAILHOG_SMTP_PORT} MAIL_USERNAME=test MAIL_PASSWORD=test"
+# docs/security-review.md C1 — jwt.secret/credential-encryption-key의 공개된 기본값을 그대로
+# 쓰는 걸 InsecureSecretGuard가 막는다. 순수 로컬 dev는 이 스위치로 명시적으로 허용한다.
+API_ENV="$API_ENV ALLOW_INSECURE_DEV_SECRETS=true"
 # MSA 모드(--msa)는 역할 분리 워커만 — api 환경변수 추가 없음 (quant-engine·trading-service는 ADR-048/049로 폐기)
 if [ "$WITH_KAFKA" = true ]; then
   API_ENV="$API_ENV KAFKA_BROKERS=localhost:${KAFKA_PORT}"

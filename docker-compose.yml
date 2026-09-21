@@ -94,6 +94,11 @@ services:
       MAIL_USERNAME: ${MAIL_USERNAME:-test}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-test}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # docs/security-review.md C1 — jwt.secret/credential-encryption-key의 공개된
+      # 기본값을 그대로 쓰는 걸 InsecureSecretGuard가 막는다. 이 파일은 로컬 dev 전용
+      # (mailhog/jaeger/pinpoint 포함)이라 명시적으로 허용한다 — 실제 배포는
+      # infra/k8s/base(SPRING_PROFILES_ACTIVE=prod)를 통해야 한다.
+      ALLOW_INSECURE_DEV_SECRETS: ${ALLOW_INSECURE_DEV_SECRETS:-true}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
       # Pinpoint agent 활성화 (--profile pinpoint 와 함께 사용)
       PINPOINT_ENABLE: ${PINPOINT_ENABLE:-false}

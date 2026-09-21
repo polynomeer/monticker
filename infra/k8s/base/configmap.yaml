@@ -4,6 +4,9 @@ metadata:
   name: monticker-config
   namespace: monticker
 data:
+  # docs/security-review.md C1 — 이게 없으면 application-prod.yml이 아예 안 읽혀서
+  # jwt.secret/credential-encryption-key가 리포에 커밋된 공개 기본값으로 배포된다.
+  SPRING_PROFILES_ACTIVE: "prod"
   DB_URL: "jdbc:postgresql://postgres:5432/monticker"
   REDIS_HOST: "redis"
   REDIS_PORT: "6379"
