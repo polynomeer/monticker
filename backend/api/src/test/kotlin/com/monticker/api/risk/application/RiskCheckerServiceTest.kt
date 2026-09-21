@@ -131,6 +131,36 @@ class RiskCheckerServiceTest {
         assertThat(concentrationCheck.passed).isTrue()
     }
 
+    // V-H3 — 음수/0 수량은 집중도·VaR 계산을 newHoldingValue≈0으로 무력화시켜 리스크 게이트를
+    // 그냥 통과시키는 우회 경로였다. QuantityRule 가드가 이를 막는지 회귀로 고정한다.
+    @Test
+    fun `quantity rule fails when order quantity is not positive`() {
+        stubSafeDefaults()
+
+        val result = service.check(userId, stockId, "BUY", -5, estimatedPrice)
+
+        val quantityCheck = result.checks.first { it.rule == "QuantityRule" }
+        assertThat(quantityCheck.passed).isFalse()
+        assertThat(quantityCheck.detail).contains("0보다 커야")
+        assertThat(result.blockedBy).isEqualTo("QuantityRule")
+        assertThat(result.approved).isFalse()
+    }
+
+    // V-H3 — 추정가를 못 구하면(estimatedPrice<=0) newHoldingValue≈0으로 집중도가 통과해버린다.
+    // 값을 모르는데 안전하다 판정하지 않고 보수적으로 거부하는지 고정한다.
+    @Test
+    fun `concentration rule fails when estimated price is unavailable on a buy`() {
+        stubSafeDefaults()
+
+        val result = service.check(userId, stockId, "BUY", 100, BigDecimal.ZERO)
+
+        val concentrationCheck = result.checks.first { it.rule == "ConcentrationRule" }
+        assertThat(concentrationCheck.passed).isFalse()
+        assertThat(concentrationCheck.detail).contains("추정가를 확인할 수 없어")
+        assertThat(result.blockedBy).isEqualTo("ConcentrationRule")
+        assertThat(result.approved).isFalse()
+    }
+
     @Test
     fun `var rule fails when estimated VaR exceeds limit`() {
         val tightLimits = RiskLimit(
