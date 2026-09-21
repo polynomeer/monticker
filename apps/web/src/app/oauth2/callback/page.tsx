@@ -8,16 +8,17 @@ export default function OAuth2CallbackPage() {
   const params = useSearchParams();
 
   useEffect(() => {
-    const accessToken  = params.get("accessToken");
-    const refreshToken = params.get("refreshToken");
-    const error        = params.get("error");
+    // refreshToken은 URL에 없다 — 서버가 리다이렉트 응답에 HttpOnly 쿠키로 이미 실어 보냈다
+    // (docs/security-review.md C2). accessToken만 짧은 수명(15분)이라 URL로 받는다.
+    const accessToken = params.get("accessToken");
+    const error       = params.get("error");
 
-    if (error || !accessToken || !refreshToken) {
+    if (error || !accessToken) {
       router.replace("/login?error=oauth2");
       return;
     }
 
-    saveTokens({ accessToken, refreshToken });
+    saveTokens({ accessToken });
     router.replace("/");
   }, [params, router]);
 

@@ -32,10 +32,10 @@ function SocialButton({
   );
 }
 
-async function mockSocialLogin(provider: string): Promise<{ accessToken: string; refreshToken: string }> {
+async function mockSocialLogin(provider: string): Promise<{ accessToken: string }> {
   const res = await fetch(
     `${API_URL}/api/auth/mock-social?provider=${provider}`,
-    { method: "POST" },
+    { method: "POST", credentials: "include" },
   );
   if (!res.ok) throw new Error("Mock 소셜 로그인 실패");
   return res.json();

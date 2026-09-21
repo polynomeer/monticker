@@ -19,17 +19,12 @@ export async function authFetch(input: string, init: RequestInit = {}): Promise<
     },
   });
 
-  // 401이면 refresh 시도
+  // 401이면 refresh 시도 — refreshToken은 HttpOnly 쿠키로만 오가므로 여기서 직접 읽을 수
+  // 없다. 쿠키가 아예 없으면(비로그인) refreshTokens()가 401을 던지고 catch로 빠진다.
   if (response.status === 401 && !isRefreshing) {
-    const refreshToken = typeof window !== "undefined" ? localStorage.getItem("refreshToken") : null;
-    if (!refreshToken) {
-      clearTokens();
-      return response;
-    }
-
     isRefreshing = true;
     try {
-      const newTokens = await refreshTokens(refreshToken);
+      const newTokens = await refreshTokens();
       saveTokens(newTokens);
       isRefreshing = false;
 
