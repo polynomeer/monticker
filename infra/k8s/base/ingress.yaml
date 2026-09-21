@@ -35,6 +35,10 @@ metadata:
       add_header X-Content-Type-Options  "nosniff"           always;
       add_header X-Frame-Options         "DENY"              always;
       add_header Referrer-Policy         "strict-origin"     always;
+      # docs/security-review.md P2-2 — HTTPS로 온 응답에만 브라우저가 이 헤더를 존중하므로
+      # base(TLS 없는 로컬)에 둬도 안전하다. TLS 강제(ssl-redirect)는 overlays/prod에서만
+      # 켠다 — base에서 강제하면 로컬 kubectl port-forward/HTTP 테스트가 막힌다.
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
       # Upstream 정보 노출 차단
       proxy_hide_header X-Powered-By;

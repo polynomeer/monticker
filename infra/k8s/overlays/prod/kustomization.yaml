@@ -24,6 +24,28 @@ patches:
     target:
       kind: ConfigMap
       name: scaling-schedule
+  # docs/security-review.md P2-2 — base는 TLS 없는 로컬 host(monticker.local)를 그대로 둔다
+  # (kubectl port-forward/로컬 HTTP 테스트가 막히면 안 되므로). 실제 도메인·TLS 강제는
+  # prod에서만 켠다. monticker-tls Secret은 secret.yaml과 같은 원칙 — 여기엔 없고 실배포
+  # 전에 cert-manager(권장) 또는 수동 발급으로 반드시 채워야 한다.
+  - patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: monticker.io
+      - op: add
+        path: /spec/tls
+        value:
+          - hosts: ["monticker.io"]
+            secretName: monticker-tls
+      - op: add
+        path: /metadata/annotations/nginx.ingress.kubernetes.io~1ssl-redirect
+        value: "true"
+      - op: add
+        path: /metadata/annotations/nginx.ingress.kubernetes.io~1force-ssl-redirect
+        value: "true"
+    target:
+      kind: Ingress
+      name: monticker-ingress
 
 images:
   - name: monticker/api
