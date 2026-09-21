@@ -35,7 +35,10 @@ class RebalanceTargetService(
             require(weight > BigDecimal.ZERO) { "비중은 0보다 커야 합니다: $symbol" }
             resolveStockId(symbol) ?: throw IllegalArgumentException("존재하지 않는 종목입니다: $symbol")
         }
-        require(thresholdPct > BigDecimal.ZERO) { "임계값은 0보다 커야 합니다." }
+        // 100을 넘으면 RebalanceExecutionService:127의 thresholdFraction(=thresholdPct/100)이
+        // 1을 넘어 diffPct.abs()<thresholdFraction이 항상 참이 된다 — 저장은 성공하지만
+        // execute()가 영원히 "대상 없음"만 반환하는, 쓸 수 없는 설정으로 조용히 굳는다(V-M3).
+        require(thresholdPct > BigDecimal.ZERO && thresholdPct <= BigDecimal(100)) { "임계값은 0보다 크고 100 이하이어야 합니다." }
 
         val account = accountRepo.findByUserIdAndIsActiveTrue(userId)
             .orElseThrow { IllegalStateException("연동된 증권사 계좌가 없습니다.") }
