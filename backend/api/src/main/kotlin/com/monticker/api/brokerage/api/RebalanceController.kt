@@ -10,6 +10,11 @@ import com.monticker.api.brokerage.domain.RebalanceExecutionLeg
 import com.monticker.api.brokerage.domain.RebalanceTarget
 import com.monticker.api.brokerage.domain.RebalanceTargetSource
 import com.monticker.api.common.aop.RateLimited
+import jakarta.validation.Valid
+import jakarta.validation.constraints.DecimalMax
+import jakarta.validation.constraints.DecimalMin
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.NotEmpty
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.web.PageableDefault
@@ -21,9 +26,9 @@ import java.time.Instant
 // ── 요청/응답 DTO ─────────────────────────────────────────────────────────────
 
 data class SaveRebalanceTargetRequest(
-    val weights: Map<String, BigDecimal>,
-    val thresholdPct: BigDecimal = BigDecimal("5.00"),
-    val source: String = "MANUAL",
+    @field:NotEmpty val weights: Map<String, BigDecimal>,
+    @field:DecimalMin("0.01") @field:DecimalMax("100.00") val thresholdPct: BigDecimal = BigDecimal("5.00"),
+    @field:NotBlank val source: String = "MANUAL",
 )
 
 data class RebalanceTargetResponse(
@@ -82,7 +87,7 @@ class RebalanceController(
     @RateLimited(limit = 30, windowSec = 60, keyPrefix = "rebalance.target")
     fun saveTarget(
         @RequestHeader("Authorization") token: String,
-        @RequestBody req: SaveRebalanceTargetRequest,
+        @Valid @RequestBody req: SaveRebalanceTargetRequest,
     ): ResponseEntity<RebalanceTargetResponse> {
         val target = targetService.save(
             userId(token), req.weights, req.thresholdPct, RebalanceTargetSource.valueOf(req.source.uppercase()),

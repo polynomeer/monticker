@@ -8,6 +8,10 @@ import com.monticker.api.brokerage.domain.ConditionalTriggerType
 import com.monticker.api.brokerage.domain.OrderSide
 import com.monticker.api.brokerage.domain.OrderType
 import com.monticker.api.common.aop.RateLimited
+import jakarta.validation.Valid
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Positive
+import jakarta.validation.constraints.Size
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.web.PageableDefault
@@ -19,9 +23,9 @@ import java.time.Instant
 // ── 요청 DTO ───────────────────────────────────────────────────────────────────
 
 data class ConditionalOrderLegRequest(
-    val triggerType: String,
-    val triggerPrice: BigDecimal,
-    val orderType: String,
+    @field:NotBlank val triggerType: String,
+    @field:Positive val triggerPrice: BigDecimal,
+    @field:NotBlank val orderType: String,
     val limitPrice: BigDecimal? = null,
 ) {
     fun toLeg() = ConditionalOrderLeg(
@@ -33,17 +37,17 @@ data class ConditionalOrderLegRequest(
 }
 
 data class CreateConditionalOrderRequest(
-    val symbol: String,
-    val side: String,
-    val quantity: Int,
-    val leg: ConditionalOrderLegRequest,
+    @field:NotBlank val symbol: String,
+    @field:NotBlank val side: String,
+    @field:Positive val quantity: Int,
+    @field:Valid val leg: ConditionalOrderLegRequest,
 )
 
 data class CreateOcoOrderRequest(
-    val symbol: String,
-    val side: String,
-    val quantity: Int,
-    val legs: List<ConditionalOrderLegRequest>,
+    @field:NotBlank val symbol: String,
+    @field:NotBlank val side: String,
+    @field:Positive val quantity: Int,
+    @field:Valid @field:Size(min = 2, max = 2) val legs: List<ConditionalOrderLegRequest>,
 )
 
 // ── 응답 DTO ───────────────────────────────────────────────────────────────────
@@ -81,7 +85,7 @@ class ConditionalOrderController(
     @RateLimited(limit = 30, windowSec = 60, keyPrefix = "conditional-order.create")
     fun create(
         @RequestHeader("Authorization") token: String,
-        @RequestBody req: CreateConditionalOrderRequest,
+        @Valid @RequestBody req: CreateConditionalOrderRequest,
     ): ResponseEntity<ConditionalOrderResponse> {
         val order = conditionalOrderService.create(
             userId(token), req.symbol, OrderSide.valueOf(req.side.uppercase()), req.quantity, req.leg.toLeg(),
@@ -93,7 +97,7 @@ class ConditionalOrderController(
     @RateLimited(limit = 30, windowSec = 60, keyPrefix = "conditional-order.create")
     fun createOco(
         @RequestHeader("Authorization") token: String,
-        @RequestBody req: CreateOcoOrderRequest,
+        @Valid @RequestBody req: CreateOcoOrderRequest,
     ): ResponseEntity<List<ConditionalOrderResponse>> {
         val orders = conditionalOrderService.createOco(
             userId(token), req.symbol, OrderSide.valueOf(req.side.uppercase()), req.quantity, req.legs.map { it.toLeg() },

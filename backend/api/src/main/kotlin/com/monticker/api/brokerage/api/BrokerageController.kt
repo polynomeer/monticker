@@ -6,6 +6,9 @@ import com.monticker.api.brokerage.domain.*
 import com.monticker.api.brokerage.infrastructure.BrokerageBalance
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRequest
 import com.monticker.api.common.aop.RateLimited
+import jakarta.validation.Valid
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Positive
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.web.PageableDefault
@@ -18,17 +21,17 @@ import java.time.LocalDate
 // ── 요청 DTO ───────────────────────────────────────────────────────────────────
 
 data class ConnectRequest(
-    val provider: String,
-    val appKey: String,
-    val appSecret: String,
-    val accountNumber: String,
+    @field:NotBlank val provider: String,
+    @field:NotBlank val appKey: String,
+    @field:NotBlank val appSecret: String,
+    @field:NotBlank val accountNumber: String,
 )
 
 data class OrderRequest(
-    val symbol: String,
-    val side: String,
-    val orderType: String,
-    val quantity: Int,
+    @field:NotBlank val symbol: String,
+    @field:NotBlank val side: String,
+    @field:NotBlank val orderType: String,
+    @field:Positive val quantity: Int,
     val limitPrice: BigDecimal? = null,
 )
 
@@ -99,7 +102,7 @@ class BrokerageController(
     @RateLimited(limit = 10, windowSec = 3600, keyPrefix = "brokerage.connect")
     fun connect(
         @RequestHeader("Authorization") token: String,
-        @RequestBody req: ConnectRequest,
+        @Valid @RequestBody req: ConnectRequest,
     ): ResponseEntity<AccountResponse> {
         val provider = BrokerageProvider.valueOf(req.provider.uppercase())
         val account = brokerageService.connect(userId(token), provider, req.appKey, req.appSecret, req.accountNumber)
@@ -137,18 +140,18 @@ class BrokerageController(
     // 브로커 쪽에서 차단되는 사고를 막을 수 있다.
     //
     // side/orderType/quantity는 여기 경계에서 즉시 검증한다 — ConditionalOrderController와
-    // 같은 패턴(valueOf 실패 시 GlobalExceptionHandler가 400으로 매핑). 예전엔 이 검증이
-    // BrokerageService.submitOrder 안쪽, 실제 브로커 호출 이후에 일어나 잘못된 값이 이미
-    // 실계좌로 나간 뒤에야 걸러졌다(docs/security-review.md C3, docs/validation-hardening-plan.md V-C1).
+    // 같은 패턴(valueOf 실패 시 GlobalExceptionHandler가 400으로 매핑, quantity는 OrderRequest의
+    // @Positive가 이보다도 먼저 걸러낸다). 예전엔 이 검증이 BrokerageService.submitOrder 안쪽,
+    // 실제 브로커 호출 이후에 일어나 잘못된 값이 이미 실계좌로 나간 뒤에야 걸러졌다
+    // (docs/security-review.md C3, docs/validation-hardening-plan.md V-C1).
     @PostMapping("/orders")
     @RateLimited(limit = 30, windowSec = 60, keyPrefix = "brokerage.order")
     fun submitOrder(
         @RequestHeader("Authorization") token: String,
-        @RequestBody req: OrderRequest,
+        @Valid @RequestBody req: OrderRequest,
     ): ResponseEntity<OrderResponse> {
         val side = OrderSide.valueOf(req.side.uppercase())
         val orderType = OrderType.valueOf(req.orderType.uppercase())
-        require(req.quantity > 0) { "수량은 0보다 커야 합니다." }
 
         val order = brokerageService.submitOrder(
             userId(token),
