@@ -202,6 +202,13 @@ class BrokerageService(
     fun getOrders(userId: Long, pageable: Pageable): Page<BrokerageOrder> =
         orderRepo.findAllByUserIdOrderBySubmittedAtDesc(userId, pageable)
 
+    @Transactional(readOnly = true)
+    fun getActiveOrdersForSymbol(userId: Long, symbol: String): List<BrokerageOrder> =
+        orderRepo.findAllByUserIdAndSymbolAndStatusIn(
+            userId, symbol,
+            listOf(BrokerageOrderStatus.SUBMITTED, BrokerageOrderStatus.PARTIALLY_FILLED),
+        )
+
     // ── 정산 ───────────────────────────────────────────────────────────────────
 
     /**

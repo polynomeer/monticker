@@ -193,6 +193,16 @@ class BrokerageController(
         return ResponseEntity.ok(page)
     }
 
+    // 종목 상세 차트의 주문선용 — 한 종목의 미체결(SUBMITTED/PARTIALLY_FILLED) 주문만.
+    @GetMapping("/orders/active")
+    fun getActiveOrdersForSymbol(
+        @RequestHeader("Authorization") token: String,
+        @RequestParam symbol: String,
+    ): ResponseEntity<List<OrderResponse>> {
+        val orders = brokerageService.getActiveOrdersForSymbol(userId(token), symbol).map { it.toResponse() }
+        return ResponseEntity.ok(orders)
+    }
+
     // 정산 내역 조회
     @GetMapping("/settlements")
     fun getSettlements(
