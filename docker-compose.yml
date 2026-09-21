@@ -22,6 +22,10 @@ services:
     image: monticker/elasticsearch:8.13.4-nori
     container_name: monticker-elasticsearch
     environment:
+      # docs/security-review.md M3 — 의도적으로 무인증. 이 파일은 로컬 개발 전용이고(운영은
+      # infra/k8s에 이 서비스들 manifest 자체가 없다 — 실제 배포는 managed 서비스로 추정),
+      # API/worker는 이제 spring.elasticsearch.username/password(ELASTICSEARCH_USERNAME/
+      # PASSWORD)를 지원하니 인증된 ES 앞에서는 그 값만 채우면 된다.
       - discovery.type=single-node
       - xpack.security.enabled=false
       - ES_JAVA_OPTS=-Xms512m -Xmx512m
@@ -55,6 +59,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: monticker-redis
+    # docs/security-review.md M3 — 의도적으로 무인증(로컬 개발 전용, 위 ES와 같은 이유).
+    # REDIS_PASSWORD 환경변수로 API/worker 둘 다 인증된 Redis에 붙을 수 있다.
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
