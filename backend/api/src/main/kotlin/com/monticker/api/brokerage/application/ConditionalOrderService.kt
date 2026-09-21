@@ -14,6 +14,8 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 data class ConditionalOrderLeg(
@@ -47,6 +49,7 @@ class ConditionalOrderService(
                 userId = userId, accountId = account.id, stockId = stockId, symbol = symbol,
                 side = side, triggerType = leg.triggerType, triggerPrice = leg.triggerPrice,
                 orderType = leg.orderType, limitPrice = leg.limitPrice, quantity = quantity,
+                expiresAt = defaultExpiry(),
             )
         )
         log.info("조건부 주문 등록: userId={} symbol={} triggerType={} triggerPrice={}", userId, symbol, leg.triggerType, leg.triggerPrice)
@@ -63,13 +66,14 @@ class ConditionalOrderService(
         legs.forEach { validateLeg(it) }
 
         val groupId = UUID.randomUUID()
+        val expiresAt = defaultExpiry()
         val orders = conditionalOrderRepo.saveAll(
             legs.map { leg ->
                 ConditionalOrder(
                     userId = userId, accountId = account.id, stockId = stockId, symbol = symbol,
                     side = side, triggerType = leg.triggerType, triggerPrice = leg.triggerPrice,
                     orderType = leg.orderType, limitPrice = leg.limitPrice, quantity = quantity,
-                    ocoGroupId = groupId,
+                    ocoGroupId = groupId, expiresAt = expiresAt,
                 )
             }
         )
@@ -106,4 +110,14 @@ class ConditionalOrderService(
         runCatching {
             jdbc.queryForObject("SELECT id FROM stocks WHERE symbol = ?", Long::class.java, symbol)
         }.getOrNull()
+
+    // V-L2 — expiresAt/EXPIRED가 스키마엔 있지만 아무도 채우지 않아 조건부 주문이 영원히
+    // ACTIVE로 남았다(등록 후 잊혀진 조건이 몇 달 뒤 낡은 가격 가정으로 실거래를 낼 수 있는
+    // 위험 — 만료 스케줄러는 ConditionalOrderExpiryScheduler). 90일은 실제 증권사 스탑주문의
+    // 통상적인 GTC 상한(예: 국내 HTS 스탑/지정가 주문 최대 유효기간)에 맞춘 기본값이다.
+    private fun defaultExpiry(): Instant = Instant.now().plus(DEFAULT_EXPIRY_DAYS, ChronoUnit.DAYS)
+
+    companion object {
+        private const val DEFAULT_EXPIRY_DAYS = 90L
+    }
 }

@@ -15,6 +15,8 @@ import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.springframework.jdbc.core.JdbcTemplate
 import java.math.BigDecimal
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.Optional
 
 class ConditionalOrderServiceTest {
@@ -74,6 +76,20 @@ class ConditionalOrderServiceTest {
     }
 
     @Test
+    fun `등록 시 90일 뒤로 만료일이 채워진다`() {
+        // V-L2 — expiresAt이 계속 null이면 조건부 주문이 영원히 ACTIVE로 남는다.
+        stubAccountAndStock()
+        val savedSlot = slot<ConditionalOrder>()
+        every { conditionalOrderRepo.save(capture(savedSlot)) } answers { savedSlot.captured }
+
+        service.create(1L, "005930", OrderSide.SELL, 10, ConditionalOrderLeg(ConditionalTriggerType.STOP_LOSS, BigDecimal("70000"), OrderType.MARKET))
+
+        val expiresAt = savedSlot.captured.expiresAt
+        assertThat(expiresAt).isNotNull()
+        assertThat(expiresAt).isCloseTo(Instant.now().plus(90, ChronoUnit.DAYS), org.assertj.core.api.Assertions.within(1, ChronoUnit.MINUTES))
+    }
+
+    @Test
     fun `OCO는 정확히 2개의 조건이 필요하다`() {
         stubAccountAndStock()
 
@@ -97,6 +113,8 @@ class ConditionalOrderServiceTest {
 
         assertThat(result).hasSize(2)
         assertThat(result[0].ocoGroupId).isNotNull().isEqualTo(result[1].ocoGroupId)
+        assertThat(result[0].expiresAt).isNotNull()
+        assertThat(result[1].expiresAt).isEqualTo(result[0].expiresAt)
     }
 
     @Test

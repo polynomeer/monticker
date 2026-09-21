@@ -67,6 +67,7 @@ data class ConditionalOrderResponse(
     val executedOrderId: Long?,
     val createdAt: Instant,
     val triggeredAt: Instant?,
+    val expiresAt: Instant?,
 )
 
 // ── 컨트롤러 ───────────────────────────────────────────────────────────────────
@@ -138,5 +139,6 @@ class ConditionalOrderController(
         executedOrderId = executedOrderId,
         createdAt       = createdAt,
         triggeredAt     = triggeredAt,
+        expiresAt       = expiresAt,
     )
 }
