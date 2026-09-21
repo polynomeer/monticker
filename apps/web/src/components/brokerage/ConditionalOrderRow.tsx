@@ -56,6 +56,11 @@ export function ConditionalOrderRow({ o, showTypeBadge }: { o: ConditionalOrderR
         <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">
           {o.quantity}주 · {o.orderType === "LIMIT" ? `지정가 ₩${fmt(o.limitPrice ?? 0)}` : "시장가"}로 발동
           {" · "}{new Date(o.createdAt).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+          {/* V-L2 — 조건부 주문이 잊혀진 채 무기한 남지 않도록 만료일을 도입했다 — 언제
+              사라지는지 사용자에게도 보여준다. */}
+          {o.status === "ACTIVE" && o.expiresAt && (
+            <> · {new Date(o.expiresAt).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" })} 만료</>
+          )}
         </p>
         {o.failReason && <p className="text-xs text-dracula-red mt-0.5">{o.failReason}</p>}
       </div>
