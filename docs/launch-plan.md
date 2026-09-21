@@ -78,6 +78,21 @@
 
 ---
 
+## Phase 2.1 — 보안/입력검증 2차 점검 — ✅ 완료 (2026-09-21)
+
+[docs/security-review.md](security-review.md)·[docs/validation-hardening-plan.md](validation-hardening-plan.md) 전체 재점검 — 두 문서의 P0/P1/P2 전 항목 수정 완료([PR #80](https://github.com/polynomeer/monticker/pull/80)). 코드로 닫을 수 있는 부분은 전부 끝났다. 아래는 그 결과로 남은, **실제 배포 전에 사람이 확인·실행해야 하는** 잔여 항목이다 — Phase 2와 동일하게 Claude가 대신할 수 없는 영역:
+
+- [ ] **`monticker-tls` K8s Secret 프로비저닝.** `infra/k8s/overlays/prod`가 이제 TLS를 강제한다(HSTS 헤더 + `ssl-redirect`/`force-ssl-redirect`). 참조하는 `monticker-tls` Secret은 `infra/k8s/base/secret.yaml`과 같은 원칙의 placeholder — cert-manager(권장, 이 저장소엔 아직 없음) 또는 수동 발급으로 실배포 전 반드시 채울 것.
+- [ ] **Redis/Elasticsearch 실제 운영 토폴로지 확인.** `infra/k8s/base`엔 이 둘의 manifest 자체가 없다 — 실제 프로덕션이 managed 서비스(이미 인증됨)인지, 별도로 인증을 켜야 하는지 미확인. 앱은 이제 `REDIS_PASSWORD`/`ELASTICSEARCH_USERNAME`/`ELASTICSEARCH_PASSWORD` 환경변수를 지원하니, 인증이 필요한 인스턴스라면 그 값만 채우면 된다.
+- [ ] **JWT `iss`/`aud` 클레임 배포는 전체 세션을 강제 로그아웃시킨다.** 기존에 발급된 토큰엔 이 클레임이 없어 검증에 실패한다 — 시크릿 로테이션과 동급의 1회성 비용. 배포 타이밍·사용자 공지 필요.
+- [ ] **CSP `unsafe-inline`(script-src)이 프로덕션에 남아 있다.** `unsafe-eval`은 제거했지만, `unsafe-inline`은 Next.js의 정적 프리렌더링과 nonce 기반 CSP가 근본적으로 호환되지 않아(실제 프로덕션 빌드로 확인 — 정적 페이지엔 nonce를 심을 요청 컨텍스트가 없다) 남겨뒀다. 더 엄격한 CSP가 꼭 필요해지면 앱 전체를 동적 렌더링으로 전환해야 하는 별도 아키텍처 결정이 필요하다.
+- [ ] **Bean Validation은 브로커리지 계열 컨트롤러에만 적용됨.** 39개 컨트롤러 중 ~35개는 아직 선언적 검증(`@Valid`)이 없다(security-review.md H2) — 문서가 명시한 우선순위대로 브로커리지부터 처리했다. 나머지는 점진적으로 진행.
+- [ ] **`RegimeDetectorService`가 옵티마이저에 있던 것과 같은 "200 + error 필드" 패턴을 그대로 갖고 있다.** 이번 점검 중 발견했지만 두 문서의 명시된 범위 밖이라 수정하지 않았다 — `AnalyticsController.optimizePortfolio`(V-L1로 수정됨)를 참고해 같이 고칠 것.
+
+세부 내역·라이브 검증 방법은 [PR #80](https://github.com/polynomeer/monticker/pull/80)과 각 커밋 메시지 참고.
+
+---
+
 ## Phase 3 — 인프라/배포 — 부분 완료 (2026-09-06)
 
 [docs/deployment.md](deployment.md)가 외부 서비스 등록(OAuth, PG, KIS)과 환경변수 체크리스트를 이미 다룬다. 여기서는 그 다음 단계, 즉 "실제로 띄우고 운영하는" 부분만 다룬다. 실제 클라우드 계정·도메인이 필요한 항목은 이 세션에서 대신 처리할 수 없어 미완료로 남았다 — 그 외에는 실제로 실행/검증했다.
@@ -163,6 +178,7 @@ General Availability
 | 0 | ✅ 암호화·동시성·서킷브레이커 3항목 완료 (2026-09-05) | Phase 4의 `BROKERAGE_MOCK_ENABLED=false` 전환 허용 |
 | 1 | 이용약관·개인정보처리방침 실제 게시 + 법률 자문 완료 | Phase 7의 Closed/GA 진행 허용 |
 | 2 | ✅ 보안 강화 완료 (2026-09-05) — 시크릿 관리 전환만 실제 클라우드 프로비저닝 대기 | Phase 7의 Closed beta 진행 허용 |
+| 2.1 | ✅ 보안/입력검증 2차 점검 완료 (2026-09-21) — 코드 수정은 끝났고, TLS Secret 프로비저닝·Redis/ES 인증 토폴로지 확인만 실제 배포 시 대기 | Phase 7의 Closed beta 진행 허용 |
 | 3 | 🟡 부분 완료 (2026-09-06) — 백업/모니터링/부하테스트/이미지 빌드·푸시 실증 완료, 도메인·실클러스터 배포는 미완료 | Phase 7의 모든 단계 진행 허용 |
 | 4 | 🟡 부분 완료 (2026-09-06) — 웹훅/결제 버그 6건 + 정기결제 백엔드·프론트엔드 위젯 연동 완료, 라이브 키 발급·세무 처리는 미완료 | 실제 유료 결제·구독 오픈 허용 (라이브 키 발급 전까지는 mock 유지) |
 | 6 | E2E + 펜테스트 완료 | Phase 7의 GA 진행 허용 |
