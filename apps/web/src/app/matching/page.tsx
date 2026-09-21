@@ -98,14 +98,25 @@ function OrderForm({ stockId, setStockId, presetSide }: { stockId: number; setSt
     if (presetSide) setSide(presetSide);
   }, [presetSide]);
 
+  const parsedLimitPrice = parseFloat(limitPrice);
+  const isBuy = side === "BUY";
+  const isQuantityValid = Number.isInteger(quantity) && quantity > 0;
+  const isLimitPriceValid = orderType !== "LIMIT" || (limitPrice !== "" && Number.isFinite(parsedLimitPrice) && parsedLimitPrice > 0);
+  const isValid = isQuantityValid && isLimitPriceValid;
+
+  const orderPayload = () => ({
+    stockId, side, orderType, quantity,
+    limitPrice: orderType === "LIMIT" ? parsedLimitPrice : null,
+  });
+
   const riskCheckMutation = useMutation({
     mutationFn: async () => {
       const res = await authFetch("/api/risk/check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stockId, side, orderType, quantity,
-          limitPrice: orderType === "LIMIT" && limitPrice ? parseFloat(limitPrice) : null }),
+        body: JSON.stringify(orderPayload()),
       });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.message ?? "리스크 확인 실패"); }
       return res.json() as Promise<RiskCheckResult>;
     },
     onSuccess: (data) => { setRiskResult(data); setResult(null); },
@@ -116,8 +127,7 @@ function OrderForm({ stockId, setStockId, presetSide }: { stockId: number; setSt
       const res = await authFetch("/api/matching/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stockId, side, orderType, quantity,
-          limitPrice: orderType === "LIMIT" && limitPrice ? parseFloat(limitPrice) : null }),
+        body: JSON.stringify(orderPayload()),
       });
       if (!res.ok) { const e = await res.json(); throw new Error(e.message ?? "주문 실패"); }
       return res.json() as Promise<SubmitOrderResponse>;
@@ -127,9 +137,6 @@ function OrderForm({ stockId, setStockId, presetSide }: { stockId: number; setSt
       qc.invalidateQueries({ queryKey: ["matching", "orders"] });
     },
   });
-
-  const isBuy = side === "BUY";
-  const isValid = Number.isInteger(quantity) && quantity > 0;
 
   return (
     <Card className="p-5 space-y-4">
