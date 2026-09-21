@@ -26,6 +26,8 @@ class JwtTokenProvider(
         val now = System.currentTimeMillis()
         return Jwts.builder()
             .subject(userId.toString())
+            .issuer(ISSUER)
+            .audience().add(AUDIENCE).and()
             .claim("email", email)
             .claim("role", role)
             .issuedAt(Date(now))
@@ -38,6 +40,8 @@ class JwtTokenProvider(
         val now = System.currentTimeMillis()
         return Jwts.builder()
             .subject(userId.toString())
+            .issuer(ISSUER)
+            .audience().add(AUDIENCE).and()
             .issuedAt(Date(now))
             .expiration(Date(now + refreshTokenExpiryMs))
             .signWith(key)
@@ -59,6 +63,17 @@ class JwtTokenProvider(
 
     fun refreshTokenExpiryMs(): Long = refreshTokenExpiryMs
 
+    // L2 — iss/aud를 검증하면 이 서비스가 발급하지 않은(또는 다른 용도의) 토큰이 같은
+    // JWT_SECRET을 알아도 여기서 곧바로 거부된다. 비밀키 자체가 새면 이 검증도 우회되지만,
+    // 서명 키 재사용·설정 실수 같은 인접 실패 모드에 대한 방어선을 하나 더 둔다.
     private fun parseClaims(token: String): Claims =
-        Jwts.parser().verifyWith(key).build().parseSignedClaims(token).payload
+        Jwts.parser().verifyWith(key)
+            .requireIssuer(ISSUER)
+            .requireAudience(AUDIENCE)
+            .build().parseSignedClaims(token).payload
+
+    companion object {
+        private const val ISSUER = "monticker-api"
+        private const val AUDIENCE = "monticker-web"
+    }
 }
