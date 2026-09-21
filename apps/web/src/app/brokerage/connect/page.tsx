@@ -159,6 +159,7 @@ export default function BrokerageConnectPage() {
           <Input
             key={`${provider}-key`}
             label={meta.keyLabel}
+            type="password"
             placeholder={meta.keyPlaceholder}
             value={appKey}
             onChange={e => setAppKey(e.target.value)}
