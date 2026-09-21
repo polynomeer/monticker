@@ -100,19 +100,19 @@ class BrokerageService(
         val account = getAccount(userId)
         val client = clientRegistry.get(account.provider)
         val credentials = requireCredentials(account)
+        // 등록되지 않은 종목은 리스크 게이트를 평가할 스냅샷 근거(candles/보유 비중)가 없다.
+        // 예전엔 이 경우 리스크 체크를 건너뛰고 그대로 브로커에 보냈는데, 그게 곧 게이트
+        // 우회 수단이었다(docs/validation-hardening-plan.md V-C1) — 건너뛰지 않고 거부한다.
         val stockId = resolveStockId(request.symbol)
+            ?: throw IllegalArgumentException("등록되지 않은 종목입니다: ${request.symbol}")
 
         // ADR-025 — 페이퍼 트레이딩과 동일한 사전 리스크 게이트. 증권사에 보내기 전에
         // 막는다 — 실패하면 실제 주문은 아예 나가지 않는다.
-        if (stockId != null) {
-            val estimatedPrice = request.limitPrice ?: currentPrice(request.symbol) ?: BigDecimal.ZERO
-            val snapshot = buildPortfolioSnapshot(userId, client, credentials)
-            val riskResult = riskChecker.checkBrokerageOrder(userId, stockId, request.side, request.quantity, estimatedPrice, snapshot)
-            if (!riskResult.approved) {
-                throw RiskLimitException(riskResult.blockedBy ?: "Unknown risk rule")
-            }
-        } else {
-            log.warn("리스크 체크 건너뜀 — 종목을 찾을 수 없음: symbol={}", request.symbol)
+        val estimatedPrice = request.limitPrice ?: currentPrice(request.symbol) ?: BigDecimal.ZERO
+        val snapshot = buildPortfolioSnapshot(userId, client, credentials)
+        val riskResult = riskChecker.checkBrokerageOrder(userId, stockId, request.side, request.quantity, estimatedPrice, snapshot)
+        if (!riskResult.approved) {
+            throw RiskLimitException(riskResult.blockedBy ?: "Unknown risk rule")
         }
 
         val result = client.submitOrder(credentials, request)

@@ -135,18 +135,27 @@ class BrokerageController(
     // 주문 제출 — 매칭 엔진의 모의투자 주문(matching.order)과 동일한 한도. 실브로커 API 자체에도
     // 별도 rate limit이 있으므로(KIS/Toss), 여기서 과다 요청을 먼저 걸러야 사용자의 API 키가
     // 브로커 쪽에서 차단되는 사고를 막을 수 있다.
+    //
+    // side/orderType/quantity는 여기 경계에서 즉시 검증한다 — ConditionalOrderController와
+    // 같은 패턴(valueOf 실패 시 GlobalExceptionHandler가 400으로 매핑). 예전엔 이 검증이
+    // BrokerageService.submitOrder 안쪽, 실제 브로커 호출 이후에 일어나 잘못된 값이 이미
+    // 실계좌로 나간 뒤에야 걸러졌다(docs/security-review.md C3, docs/validation-hardening-plan.md V-C1).
     @PostMapping("/orders")
     @RateLimited(limit = 30, windowSec = 60, keyPrefix = "brokerage.order")
     fun submitOrder(
         @RequestHeader("Authorization") token: String,
         @RequestBody req: OrderRequest,
     ): ResponseEntity<OrderResponse> {
+        val side = OrderSide.valueOf(req.side.uppercase())
+        val orderType = OrderType.valueOf(req.orderType.uppercase())
+        require(req.quantity > 0) { "수량은 0보다 커야 합니다." }
+
         val order = brokerageService.submitOrder(
             userId(token),
             BrokerageOrderRequest(
                 symbol     = req.symbol,
-                side       = req.side.uppercase(),
-                orderType  = req.orderType.uppercase(),
+                side       = side.name,
+                orderType  = orderType.name,
                 quantity   = req.quantity,
                 limitPrice = req.limitPrice,
             )

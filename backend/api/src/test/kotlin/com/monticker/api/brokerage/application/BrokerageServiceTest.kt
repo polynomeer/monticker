@@ -159,19 +159,17 @@ class BrokerageServiceTest {
     }
 
     @Test
-    fun `종목을 찾을 수 없으면 리스크 체크를 건너뛰고 주문은 진행한다`() {
-        val account   = makeAccount()
-        val orderSlot = slot<BrokerageOrder>()
+    fun `종목을 찾을 수 없으면 리스크 체크를 건너뛰지 않고 주문을 거부한다`() {
+        val account = makeAccount()
         every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
-        every { orderRepo.save(capture(orderSlot)) } returns makeOrder()
-        every { settlementRepo.save(any()) } returns makeSettlement()
         every { jdbc.queryForObject("SELECT id FROM stocks WHERE symbol = ?", Long::class.java, any()) } throws RuntimeException("not found")
-        every { jdbc.queryForObject(any<String>(), eq(BigDecimal::class.java), any()) } returns BigDecimal("70000")
 
-        service.submitOrder(1L, BrokerageOrderRequest("999999", "BUY", "MARKET", 10))
+        assertThrows<IllegalArgumentException> {
+            service.submitOrder(1L, BrokerageOrderRequest("999999", "BUY", "MARKET", 10))
+        }
 
-        assertThat(orderSlot.captured.stockId).isNull()
         verify(exactly = 0) { riskChecker.checkBrokerageOrder(any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { orderRepo.save(any()) }
     }
 
     // ── settle ────────────────────────────────────────────────────────────────
