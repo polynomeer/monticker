@@ -67,8 +67,19 @@ export default function ConditionalOrderPage() {
     setCurrentPrice(data?.price ?? 0);
   };
 
-  const isSingleValid = !!stock && quantity > 0 && Number(triggerPrice) > 0 && (orderType === "MARKET" || Number(limitPrice) > 0);
-  const isOcoValid = !!stock && quantity > 0 && Number(stopLossPrice) > 0 && Number(takeProfitPrice) > 0;
+  // ADR-032 — 방향이 반전된 트리거는 등록 즉시 "이미 참"이라 다음 틱에 바로 발동된다
+  // (ConditionalTriggerType.isTriggered: STOP_LOSS/PRICE_BELOW는 현재가<=trigger,
+  // TAKE_PROFIT/PRICE_ABOVE는 현재가>=trigger). 현재가를 아직 못 구했으면(0) 판단 근거가
+  // 없으니 막지 않는다 — 그 경우는 triggerPrice>0 검사만으로 최소한의 방어가 이미 있다.
+  const isBelowType = triggerType === "STOP_LOSS" || triggerType === "PRICE_BELOW";
+  const singleDirectionValid = currentPrice <= 0 || Number(triggerPrice) <= 0 ||
+    (isBelowType ? Number(triggerPrice) < currentPrice : Number(triggerPrice) > currentPrice);
+  const ocoDirectionValid = currentPrice <= 0 ||
+    ((Number(stopLossPrice) <= 0 || Number(stopLossPrice) < currentPrice) &&
+     (Number(takeProfitPrice) <= 0 || Number(takeProfitPrice) > currentPrice));
+
+  const isSingleValid = !!stock && quantity > 0 && Number(triggerPrice) > 0 && (orderType === "MARKET" || Number(limitPrice) > 0) && singleDirectionValid;
+  const isOcoValid = !!stock && quantity > 0 && Number(stopLossPrice) > 0 && Number(takeProfitPrice) > 0 && ocoDirectionValid;
   const isPending = createSingle.isPending || createOco.isPending;
 
   const handleSubmitSingle = async () => {
@@ -235,6 +246,13 @@ export default function ConditionalOrderPage() {
                   <input type="number" min={0} value={triggerPrice} onChange={e => setTriggerPrice(e.target.value)}
                     placeholder={`현재가 ₩${fmt(currentPrice)}`}
                     className="w-full rounded-lg border px-4 py-2.5 text-sm font-mono border-gray-300 bg-white text-gray-900 dark:border-dracula-line dark:bg-dracula-surface dark:text-dracula-fg focus:outline-none focus:ring-2 focus:ring-dracula-purple/50 focus:border-dracula-purple transition-all duration-150" />
+                  {!singleDirectionValid && (
+                    <p className="text-xs text-dracula-orange mt-1">
+                      {isBelowType
+                        ? `현재가(₩${fmt(currentPrice)})보다 낮아야 합니다 — 이대로면 등록 즉시 발동됩니다.`
+                        : `현재가(₩${fmt(currentPrice)})보다 높아야 합니다 — 이대로면 등록 즉시 발동됩니다.`}
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex gap-1 mb-4 border-b border-gray-200 dark:border-dracula-line">
@@ -265,12 +283,18 @@ export default function ConditionalOrderPage() {
                   <input type="number" min={0} value={stopLossPrice} onChange={e => setStopLossPrice(e.target.value)}
                     placeholder={`현재가 ₩${fmt(currentPrice)}보다 낮게`}
                     className="w-full rounded-lg border px-4 py-2.5 text-sm font-mono border-gray-300 bg-white text-gray-900 dark:border-dracula-line dark:bg-dracula-surface dark:text-dracula-fg focus:outline-none focus:ring-2 focus:ring-dracula-red/50 focus:border-dracula-red transition-all duration-150" />
+                  {currentPrice > 0 && Number(stopLossPrice) > 0 && Number(stopLossPrice) >= currentPrice && (
+                    <p className="text-xs text-dracula-orange mt-1">현재가(₩{fmt(currentPrice)})보다 낮아야 합니다 — 이대로면 등록 즉시 발동됩니다.</p>
+                  )}
                 </div>
                 <div className="mb-4">
                   <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">익절가 (이 가격 이상 오르면 발동)</label>
                   <input type="number" min={0} value={takeProfitPrice} onChange={e => setTakeProfitPrice(e.target.value)}
                     placeholder={`현재가 ₩${fmt(currentPrice)}보다 높게`}
                     className="w-full rounded-lg border px-4 py-2.5 text-sm font-mono border-gray-300 bg-white text-gray-900 dark:border-dracula-line dark:bg-dracula-surface dark:text-dracula-fg focus:outline-none focus:ring-2 focus:ring-dracula-green/50 focus:border-dracula-green transition-all duration-150" />
+                  {currentPrice > 0 && Number(takeProfitPrice) > 0 && Number(takeProfitPrice) <= currentPrice && (
+                    <p className="text-xs text-dracula-orange mt-1">현재가(₩{fmt(currentPrice)})보다 높아야 합니다 — 이대로면 등록 즉시 발동됩니다.</p>
+                  )}
                 </div>
               </>
             )}
