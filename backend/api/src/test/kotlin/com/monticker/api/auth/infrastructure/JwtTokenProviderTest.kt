@@ -33,6 +33,28 @@ class JwtTokenProviderTest {
     }
 
     @Test
+    fun `two refresh tokens issued back-to-back for the same user differ`() {
+        // iat/exp는 초 단위라 jti가 없으면 같은 초에 발급된 두 토큰이 바이트까지 같아진다 —
+        // 그러면 refresh_tokens.token_hash UNIQUE 제약에 걸려 가입 직후 로그인이 500을 냈다.
+        val first = provider.generateRefreshToken(42L)
+        val second = provider.generateRefreshToken(42L)
+
+        assertThat(first).isNotEqualTo(second)
+        assertThat(provider.validateToken(first)).isTrue()
+        assertThat(provider.validateToken(second)).isTrue()
+        assertThat(provider.getUserId(first)).isEqualTo(42L)
+        assertThat(provider.getUserId(second)).isEqualTo(42L)
+    }
+
+    @Test
+    fun `two access tokens issued back-to-back for the same user differ`() {
+        val first = provider.generateAccessToken(1L, "user@test.com", "USER")
+        val second = provider.generateAccessToken(1L, "user@test.com", "USER")
+
+        assertThat(first).isNotEqualTo(second)
+    }
+
+    @Test
     fun `tampered token fails validation`() {
         val token = provider.generateAccessToken(1L, "user@test.com", "USER")
         assertThat(provider.validateToken(token + "tampered")).isFalse()

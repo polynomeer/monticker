@@ -76,6 +76,27 @@ class AuthServiceTest {
         verify(exactly = 0) { emailService.sendVerificationEmail(any(), any()) }
     }
 
+    // 가입 직후(같은 초 안에) 로그인하면 두 refresh token이 동일해 refresh_tokens.token_hash
+    // UNIQUE 제약에 걸려 500이 났다. 각 발급이 서로 다른 해시를 INSERT하는지 확인한다.
+    @Test
+    fun `signup then immediate login stores two distinct refresh token hashes`() {
+        val user = User(id = 3L, email = "fast@test.com", passwordHash = encoder.encode("password1!"), nickname = "빠른")
+        every { userRepository.existsByEmail("fast@test.com") } returns false
+        every { userRepository.save(any()) } returns user
+        every { userRepository.findByEmail("fast@test.com") } returns Optional.of(user)
+        val hashes = mutableListOf<String>()
+        every {
+            jdbc.update(match<String> { it.startsWith("INSERT INTO refresh_tokens") }, 3L, capture(hashes), any())
+        } returns 1
+
+        val signedUp = service.signup("fast@test.com", "password1!", "빠른")
+        val loggedIn = service.login("fast@test.com", "password1!")
+
+        assertThat(signedUp.refreshToken).isNotEqualTo(loggedIn.refreshToken)
+        assertThat(hashes).hasSize(2)
+        assertThat(hashes[0]).isNotEqualTo(hashes[1])
+    }
+
     @Test
     fun `signup throws when email already exists`() {
         every { userRepository.existsByEmail("dup@test.com") } returns true

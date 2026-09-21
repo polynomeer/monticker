@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.modulith.NamedInterface
 import org.springframework.stereotype.Component
 import java.util.Date
+import java.util.UUID
 import javax.crypto.SecretKey
 
 /**
@@ -25,6 +26,7 @@ class JwtTokenProvider(
     fun generateAccessToken(userId: Long, email: String, role: String): String {
         val now = System.currentTimeMillis()
         return Jwts.builder()
+            .id(UUID.randomUUID().toString())
             .subject(userId.toString())
             .issuer(ISSUER)
             .audience().add(AUDIENCE).and()
@@ -36,9 +38,13 @@ class JwtTokenProvider(
             .compact()
     }
 
+    // jti — iat/exp는 초 단위라 같은 사용자에게 같은 초에 발급한 두 토큰은 바이트까지 동일했다.
+    // refresh_tokens.token_hash에 UNIQUE가 걸려 있어 가입 직후 로그인(또는 연속 로그인)이
+    // DuplicateKeyException으로 500을 냈다. 무작위 jti를 넣어 발급마다 토큰을 유일하게 만든다.
     fun generateRefreshToken(userId: Long): String {
         val now = System.currentTimeMillis()
         return Jwts.builder()
+            .id(UUID.randomUUID().toString())
             .subject(userId.toString())
             .issuer(ISSUER)
             .audience().add(AUDIENCE).and()
