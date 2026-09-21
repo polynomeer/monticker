@@ -25,6 +25,8 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      # docs/security-review.md M3 — api와 같은 Redis 인스턴스. 비워두면 지금처럼 무인증.
+      password: ${REDIS_PASSWORD:}
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}
     port: ${MAIL_PORT:587}
