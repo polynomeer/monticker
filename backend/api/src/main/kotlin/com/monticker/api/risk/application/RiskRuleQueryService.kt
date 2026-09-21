@@ -49,6 +49,18 @@ class RiskRuleQueryService(
         val checks = mutableListOf<RuleResult>()
         val accountCash = snapshot.cash
 
+        // 0. Quantity Guard — 음수/0 수량은 집중도·VaR 계산을 newHoldingValue≈0으로 무력화시켜
+        // 실노출과 무관하게 통과시킨다(V-H3). 어떤 side든 상류 검증을 못 믿는다는 가정 하에 여기서도 거부한다.
+        if (qty <= 0) {
+            checks.add(RuleResult(
+                rule    = "QuantityRule",
+                passed  = false,
+                detail  = "주문 수량은 0보다 커야 합니다: $qty",
+                current = qty.toDouble(),
+                limit   = 0.0,
+            ))
+        }
+
         // 1. Daily Loss Rule
         val lossLimitAmt = accountCash.multiply(limits.dailyLossLimitPct)
             .divide(BigDecimal("100"), 4, java.math.RoundingMode.HALF_UP)
@@ -63,22 +75,34 @@ class RiskRuleQueryService(
 
         // 2. Concentration Rule (BUY only)
         if (side == "BUY") {
-            val totalStockValue = snapshot.holdings.sumOf { h ->
-                currentPrice(h.stockId).multiply(BigDecimal(h.qty)).toDouble()
-            }
-            val totalAssets      = accountCash.toDouble() + totalStockValue
-            val currentQty       = snapshot.holdings.find { it.stockId == stockId }?.qty ?: 0
-            val currentValue     = estimatedPrice.multiply(BigDecimal(currentQty)).toDouble()
-            val newHoldingValue  = currentValue + estimatedPrice.multiply(BigDecimal(qty)).toDouble()
-            val concentrationPct = if (totalAssets > 0) newHoldingValue / totalAssets * 100 else 0.0
             val concentrationLimit = limits.concentrationLimitPct.toDouble()
-            checks.add(RuleResult(
-                rule    = "ConcentrationRule",
-                passed  = concentrationPct <= concentrationLimit,
-                detail  = "집중도 ${String.format("%.2f", concentrationPct)}% / 한도 ${concentrationLimit}%",
-                current = concentrationPct,
-                limit   = concentrationLimit,
-            ))
+            if (estimatedPrice <= BigDecimal.ZERO) {
+                // 추정가를 못 구한 경우(V-H3) — newHoldingValue≈0이 되어 통과해버리는 대신
+                // 보수적으로 거부한다. 값을 모르는데 안전하다고 판정할 수는 없다.
+                checks.add(RuleResult(
+                    rule    = "ConcentrationRule",
+                    passed  = false,
+                    detail  = "추정가를 확인할 수 없어 집중도를 판정할 수 없습니다.",
+                    current = 0.0,
+                    limit   = concentrationLimit,
+                ))
+            } else {
+                val totalStockValue = snapshot.holdings.sumOf { h ->
+                    currentPrice(h.stockId).multiply(BigDecimal(h.qty)).toDouble()
+                }
+                val totalAssets      = accountCash.toDouble() + totalStockValue
+                val currentQty       = snapshot.holdings.find { it.stockId == stockId }?.qty ?: 0
+                val currentValue     = estimatedPrice.multiply(BigDecimal(currentQty)).toDouble()
+                val newHoldingValue  = currentValue + estimatedPrice.multiply(BigDecimal(qty)).toDouble()
+                val concentrationPct = if (totalAssets > 0) newHoldingValue / totalAssets * 100 else 0.0
+                checks.add(RuleResult(
+                    rule    = "ConcentrationRule",
+                    passed  = concentrationPct <= concentrationLimit,
+                    detail  = "집중도 ${String.format("%.2f", concentrationPct)}% / 한도 ${concentrationLimit}%",
+                    current = concentrationPct,
+                    limit   = concentrationLimit,
+                ))
+            }
         }
 
         // 3. VaR Rule (BUY only — ADR-047)

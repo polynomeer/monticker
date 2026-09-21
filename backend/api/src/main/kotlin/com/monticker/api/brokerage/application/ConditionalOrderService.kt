@@ -37,6 +37,7 @@ class ConditionalOrderService(
 
     @Transactional
     fun create(userId: Long, symbol: String, side: OrderSide, quantity: Int, leg: ConditionalOrderLeg): ConditionalOrder {
+        require(quantity > 0) { "수량은 0보다 커야 합니다." }
         val account = activeAccount(userId)
         val stockId = resolveStockId(symbol) ?: throw IllegalArgumentException("존재하지 않는 종목입니다: $symbol")
         validateLeg(leg)
@@ -56,6 +57,7 @@ class ConditionalOrderService(
     @Transactional
     fun createOco(userId: Long, symbol: String, side: OrderSide, quantity: Int, legs: List<ConditionalOrderLeg>): List<ConditionalOrder> {
         require(legs.size == 2) { "OCO는 정확히 2개의 조건이 필요합니다." }
+        require(quantity > 0) { "수량은 0보다 커야 합니다." }
         val account = activeAccount(userId)
         val stockId = resolveStockId(symbol) ?: throw IllegalArgumentException("존재하지 않는 종목입니다: $symbol")
         legs.forEach { validateLeg(it) }
