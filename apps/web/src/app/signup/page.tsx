@@ -37,6 +37,7 @@ export default function SignupPage() {
     else if (nickname.length < 2) e.nickname = "닉네임은 2자 이상이어야 합니다.";
     if (!password)               e.password = "비밀번호를 입력해주세요.";
     else if (password.length < 8) e.password = "비밀번호는 8자 이상이어야 합니다.";
+    else if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) e.password = "비밀번호는 영문과 숫자를 포함해야 합니다.";
     return e;
   };
 
