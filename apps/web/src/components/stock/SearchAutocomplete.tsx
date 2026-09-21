@@ -22,6 +22,7 @@ export default function SearchAutocomplete() {
   const [open, setOpen]     = useState(false);
   const [loading, setLoading] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const router = useRouter();
   const chartTheme = useThemeStore(s => CHART_THEMES[s.chartTheme]);
   const { entries: recentlyViewed } = useRecentlyViewedStocks();
@@ -29,16 +30,25 @@ export default function SearchAutocomplete() {
   useEffect(() => {
     if (query.length < 1) { setResults([]); return; }
     if (timerRef.current) clearTimeout(timerRef.current);
+    // V-L6 (같은 패턴 다른 페이지들도 수정) — 요청 id/AbortController 가드가 없으면 더 늦게
+    // 도착한 이전 검색어의 응답이 최신 결과를 덮어쓸 수 있다.
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     timerRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/screener/search?query=${encodeURIComponent(query)}&limit=20`);
+        const res = await fetch(`/api/screener/search?query=${encodeURIComponent(query)}&limit=20`, { signal: controller.signal });
         if (res.ok) {
           const data = await res.json();
           setResults(data.items ?? []);
           setOpen((data.items ?? []).length > 0);
         }
-      } finally { setLoading(false); }
+      } catch (e) {
+        if ((e as Error).name !== "AbortError") throw e;
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
     }, 200);
   }, [query]);
 

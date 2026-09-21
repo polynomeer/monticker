@@ -44,11 +44,18 @@ export default function BrokerageOrderPage() {
 
   useEffect(() => {
     if (searchQuery.length < 1) { setSearchResults([]); return; }
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
-      const r = await fetch(`/api/stocks/search?query=${encodeURIComponent(searchQuery)}`);
-      if (r.ok) setSearchResults((await r.json()).slice(0, 6));
+      try {
+        const r = await fetch(`/api/stocks/search?query=${encodeURIComponent(searchQuery)}`, { signal: controller.signal });
+        if (r.ok) setSearchResults((await r.json()).slice(0, 6));
+      } catch (e) {
+        if ((e as Error).name !== "AbortError") throw e;
+      }
     }, 200);
-    return () => clearTimeout(timer);
+    // V-L6 — 요청 id/AbortController 가드가 없으면 더 늦게 도착한 이전 검색어의 응답이
+    // 최신 결과를 덮어쓸 수 있다. 다음 검색어가 오거나 언마운트되면 진행 중인 요청도 취소한다.
+    return () => { clearTimeout(timer); controller.abort(); };
   }, [searchQuery]);
 
   const selectStock = async (hit: StockHit) => {
