@@ -19,7 +19,10 @@ import java.math.BigDecimal
  *  - quantity:      파라미터명 "quantity" (Int)
  *  - estimatedPrice: 파라미터명 "estimatedPrice" 또는 "limitPrice" (BigDecimal)
  *
- * 추출할 수 없는 파라미터는 기본값으로 대체한다.
+ * 추출할 수 없는 파라미터는 기본값으로 대체한다. 가격이 없으면(MARKET 주문 — MatchingService.submitMarket처럼
+ * 시그니처에 가격 파라미터가 없는 경우) ZERO를 넘기며, 이는 "가격 불명"의 신호다 — RiskCheckerService.check가
+ * 최근가로 치환하고, 그것도 없으면 규칙이 보수적으로 거부한다(V-H3). 여기서 가격을 조회하지 않는 이유는
+ * 조회 로직을 리스크 도메인 한 곳에 두기 위해서다.
  */
 @Aspect
 @Component
