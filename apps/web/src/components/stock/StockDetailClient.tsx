@@ -217,7 +217,7 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
 
         {/* ===== 좌측: 차트 ===== */}
         <div className="flex min-h-0 flex-col gap-3.5">
-          <Card outerClassName="flex flex-[1.35] min-h-0" className="flex flex-col min-h-0 overflow-hidden p-0">
+          <Card outerClassName="flex flex-[1.35] min-h-0" className="flex flex-1 min-w-0 flex-col min-h-0 overflow-hidden p-0">
             <div className="flex flex-0 items-center gap-1.5 border-b border-gray-100 dark:border-white/5 px-3.5 py-2">
               <span className="text-xs font-bold text-gray-900 dark:text-dracula-fg">차트</span>
               <div className="flex-1" />
@@ -331,7 +331,7 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
             </div>
           </Card>
 
-          <Card outerClassName="flex flex-1 min-h-0" className="flex flex-col min-h-0 overflow-hidden p-0">
+          <Card outerClassName="flex flex-1 min-h-0" className="flex flex-1 min-w-0 flex-col min-h-0 overflow-hidden p-0">
             <div className="flex flex-0 items-center gap-1 px-3.5 pt-2.5">
               {LEFT_TABS.map(t => (
                 <button key={t.value} onClick={() => setLeftTab(t.value)}
