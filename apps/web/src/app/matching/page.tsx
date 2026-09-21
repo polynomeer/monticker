@@ -129,6 +129,7 @@ function OrderForm({ stockId, setStockId, presetSide }: { stockId: number; setSt
   });
 
   const isBuy = side === "BUY";
+  const isValid = Number.isInteger(quantity) && quantity > 0;
 
   return (
     <Card className="p-5 space-y-4">
@@ -182,7 +183,8 @@ function OrderForm({ stockId, setStockId, presetSide }: { stockId: number; setSt
         </div>
         <div>
           <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">수량</label>
-          <input type="number" min={1} value={quantity} onChange={e => setQuantity(+e.target.value)}
+          <input type="number" min={1} value={quantity}
+            onChange={e => setQuantity(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
             className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg text-sm px-3 py-2 transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50" />
         </div>
       </div>
@@ -218,11 +220,11 @@ function OrderForm({ stockId, setStockId, presetSide }: { stockId: number; setSt
 
       {/* 버튼 */}
       <div className="grid grid-cols-2 gap-2">
-        <button onClick={() => riskCheckMutation.mutate()} disabled={riskCheckMutation.isPending}
+        <button onClick={() => riskCheckMutation.mutate()} disabled={riskCheckMutation.isPending || !isValid}
           className="py-2.5 rounded-xl border border-dracula-purple text-dracula-purple text-sm font-semibold hover:bg-dracula-purple/10 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100">
           {riskCheckMutation.isPending ? "확인 중..." : "리스크 사전 확인"}
         </button>
-        <button onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending}
+        <button onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending || !isValid}
           className={`py-2.5 rounded-xl text-sm font-bold text-white active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100
             ${isBuy ? "bg-[#ff5050] hover:bg-[#ff3030]" : "bg-[#4a8fd4] hover:bg-[#3a7fc4]"}`}>
           {submitMutation.isPending ? "처리 중..." : `${isBuy ? "매수" : "매도"} 주문`}
