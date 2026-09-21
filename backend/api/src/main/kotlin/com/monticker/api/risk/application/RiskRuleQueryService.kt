@@ -172,11 +172,18 @@ class RiskRuleQueryService(
         return checks
     }
 
-    // queryForObject는 결과가 0건이면 EmptyResultDataAccessException을 던진다 — 아직 한 번도
-    // 거래하지 않아 paper_accounts/캔들 행이 없는 사용자가 있으면 GlobalExceptionHandler의
-    // catch-all에 잡혀 안내 메시지 없는 500으로 샌다. query+firstOrNull은 0건이어도 예외 없이
-    // 빈 리스트를 준다. (PaperTradingService.getCurrentPrice와 동일한 패턴)
-    private fun currentPrice(stockId: Long): BigDecimal =
+    /**
+     * 종목의 최근가(candles_1m 마지막 close). 보유 종목 평가와 MARKET 주문의 추정가 폴백
+     * (RiskCheckerService.check) 양쪽이 쓴다 — 사가(OrderSagaOrchestrator.getCurrentPrice)가
+     * 예약금을 잡는 기준과 같은 조회라, 게이트와 예약이 서로 다른 가격을 보지 않는다.
+     * 캔들이 없으면 ZERO — 호출자가 "가격 불명"으로 보수적으로 처리해야 한다(V-H3).
+     *
+     * queryForObject는 결과가 0건이면 EmptyResultDataAccessException을 던진다 — 아직 한 번도
+     * 거래하지 않아 paper_accounts/캔들 행이 없는 사용자가 있으면 GlobalExceptionHandler의
+     * catch-all에 잡혀 안내 메시지 없는 500으로 샌다. query+firstOrNull은 0건이어도 예외 없이
+     * 빈 리스트를 준다. (PaperTradingService.getCurrentPrice와 동일한 패턴)
+     */
+    internal fun currentPrice(stockId: Long): BigDecimal =
         jdbc.query(
             "SELECT close FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1",
             { rs, _ -> rs.getBigDecimal("close") },

@@ -52,6 +52,8 @@ Accepted | Deprecated | Superseded by ADR-NNN
 
 ## Reference Docs
 
+- [docs/README.md](docs/README.md) — 독자별·주제별 전체 문서 색인. 새 문서를 추가하면 여기에도 등록한다
+- [CONTRIBUTING.md](CONTRIBUTING.md) — 로컬 환경, 커밋/PR 규칙, 영역별 주의사항 (사람·에이전트 공통)
 - [docs/product.md](docs/product.md) — product identity, feature axes, product scope, key design decisions
 - [docs/resilience-plan.md](docs/resilience-plan.md) — 장애 시나리오별 대응 능력 판정(현재 P0 결함 8건), 모니터링·부하테스트·카오스테스트 설계
 - [docs/security-review.md](docs/security-review.md) — 시큐어 코딩/보안 설계 점검: Critical 3건(하드코딩된 JWT·암호화 키가 실제로 라이브에 올라가는 배포 경로 공백, 토큰 localStorage 저장, 실브로커 주문 API 입력검증 부재), 우선순위별 개선방안

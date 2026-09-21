@@ -77,6 +77,14 @@ class RiskCheckerService(
         val exists = jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM stocks WHERE id = ?)", Boolean::class.java, stockId) ?: false
         if (!exists) throw NoSuchElementException("종목을 찾을 수 없습니다: $stockId")
     }
+
+    /**
+     * 페이퍼 경로. `estimatedPrice <= 0`은 "호출자가 가격을 모른다"는 뜻이다 — MARKET 주문은 지정가가 없어
+     * RiskCheckedAspect(파라미터에 가격이 없는 MatchingService.submitMarket)와 MatchingController
+     * (`limitPrice ?: ZERO`)가 ZERO를 넘긴다. V-H3 이후 RiskRuleQueryService가 추정가 불명을 보수적으로
+     * 거부하게 되면서 모든 시장가 매수가 ConcentrationRule로 막혔다(5c53b2b 회귀). 여기서 최근가를
+     * 채워 넣고, 그것도 없을 때만 불명으로 남겨 규칙이 거부하게 한다 — "모르는 가격으로 승인"은 그대로 금지.
+     */
     fun check(
         userId: Long,
         stockId: Long,
@@ -86,7 +94,8 @@ class RiskCheckerService(
     ): RiskCheckResult {
         ensureStockExists(stockId)
         val limits = riskLimitRepo.findByUserId(userId).orElseGet { RiskLimit(userId = userId) }
-        val checks = riskRuleQueryService.evaluate(userId, stockId, side, qty, estimatedPrice, limits)
+        val price = if (estimatedPrice > BigDecimal.ZERO) estimatedPrice else riskRuleQueryService.currentPrice(stockId)
+        val checks = riskRuleQueryService.evaluate(userId, stockId, side, qty, price, limits)
         return finalize(userId, stockId, side, qty, checks, accountType = "PAPER")
     }
 

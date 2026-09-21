@@ -21,12 +21,12 @@ class RiskCheckedAspectTest {
     private val aspect = RiskCheckedAspect(riskChecker)
 
     private lateinit var proxy: SampleOrderService
+    private lateinit var marketProxy: MarketOrderService
 
     @BeforeEach
     fun setUp() {
-        val factory = AspectJProxyFactory(SampleOrderService())
-        factory.addAspect(aspect)
-        proxy = factory.getProxy()
+        proxy = AspectJProxyFactory(SampleOrderService()).also { it.addAspect(aspect) }.getProxy()
+        marketProxy = AspectJProxyFactory(MarketOrderService()).also { it.addAspect(aspect) }.getProxy()
     }
 
     @Test
@@ -48,11 +48,39 @@ class RiskCheckedAspectTest {
             .hasMessageContaining("DailyLossRule")
     }
 
+    // 5c53b2b 회귀 — MatchingService.submitMarket(userId, stockId, side, quantity)처럼 가격 파라미터가 없는
+    // 시장가 진입점. 어스펙트는 ZERO를 "가격 불명" 신호로 넘기고, 최근가 치환은 RiskCheckerService.check가 맡는다.
+    // 게이트가 최근가로 승인하면 메서드가 실행돼야 한다.
+    @Test
+    fun `@RiskChecked — 가격 파라미터가 없는 MARKET 주문은 ZERO 신호로 판정을 위임하고 통과 시 실행`() {
+        every { riskChecker.check(1L, 2L, "BUY", 11, BigDecimal.ZERO) } returns approved()
+
+        val result = marketProxy.submitMarket(userId = 1L, stockId = 2L, side = "BUY", quantity = 11)
+
+        assertThat(result).isEqualTo("FILLED")
+        verify(exactly = 1) { riskChecker.check(1L, 2L, "BUY", 11, BigDecimal.ZERO) }
+    }
+
+    @Test
+    fun `@RiskChecked — MARKET 주문도 최근가까지 없어 차단되면 RiskLimitException`() {
+        every { riskChecker.check(1L, 2L, "BUY", 11, BigDecimal.ZERO) } returns blocked("ConcentrationRule")
+
+        assertThatThrownBy { marketProxy.submitMarket(userId = 1L, stockId = 2L, side = "BUY", quantity = 11) }
+            .isInstanceOf(RiskLimitException::class.java)
+            .hasMessageContaining("ConcentrationRule")
+    }
+
     // ── 픽스처 ─────────────────────────────────────────────────────────────────
 
     open class SampleOrderService {
         @RiskChecked
         open fun placeOrder(userId: Long, stockId: Long, side: String, quantity: Int, estimatedPrice: BigDecimal): String = "OK"
+    }
+
+    /** MatchingService.submitMarket과 같은 시그니처 — 가격 파라미터 없음. */
+    open class MarketOrderService {
+        @RiskChecked
+        open fun submitMarket(userId: Long, stockId: Long, side: String, quantity: Int): String = "FILLED"
     }
 
     private fun approved() = RiskCheckResult(

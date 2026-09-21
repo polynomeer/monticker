@@ -77,6 +77,15 @@ class RiskCheckerServiceTest {
 
         // 10. log insert
         every { jdbc.update(any<String>(), *anyVararg()) } returns 1
+
+        // 11. 최근가(candles_1m) — MARKET 주문의 추정가 폴백. 기본은 "캔들 없음"
+        stubLatestPrice(emptyList())
+    }
+
+    private fun stubLatestPrice(closes: List<BigDecimal>) {
+        every {
+            jdbc.query(match<String> { it.contains("FROM candles_1m") }, any<RowMapper<BigDecimal>>(), stockId)
+        } returns closes
     }
 
     @Test
@@ -146,11 +155,40 @@ class RiskCheckerServiceTest {
         assertThat(result.approved).isFalse()
     }
 
-    // V-H3 — 추정가를 못 구하면(estimatedPrice<=0) newHoldingValue≈0으로 집중도가 통과해버린다.
-    // 값을 모르는데 안전하다 판정하지 않고 보수적으로 거부하는지 고정한다.
+    // 5c53b2b 회귀 — 페이퍼 시장가 매수(/api/paper/buy, MARKET /api/matching/orders)는 지정가가 없어
+    // 게이트에 ZERO가 들어온다. V-H3의 보수적 거부가 그대로 적용되면 모든 시장가 매수가 막힌다.
+    // ZERO는 "가격 불명"의 신호로 보고 최근가를 채워 평가해야 한다: 1,000만 계좌에 80,000×10 = 8%.
     @Test
-    fun `concentration rule fails when estimated price is unavailable on a buy`() {
+    fun `market order without a price resolves the live price and passes within the concentration limit`() {
         stubSafeDefaults()
+        stubLatestPrice(listOf(BigDecimal("80000")))
+
+        val result = service.check(userId, stockId, "BUY", 10, BigDecimal.ZERO)
+
+        val concentrationCheck = result.checks.first { it.rule == "ConcentrationRule" }
+        assertThat(concentrationCheck.passed).isTrue()
+        assertThat(concentrationCheck.current).isCloseTo(8.0, org.assertj.core.data.Offset.offset(0.01))
+        assertThat(result.approved).isTrue()
+        assertThat(result.blockedBy).isNull()
+    }
+
+    @Test
+    fun `an explicit estimated price is used as-is and the live price is not looked up`() {
+        stubSafeDefaults()
+
+        service.check(userId, stockId, "BUY", 100, estimatedPrice)
+
+        verify(exactly = 0) {
+            jdbc.query(match<String> { it.contains("FROM candles_1m") }, any<RowMapper<BigDecimal>>(), stockId)
+        }
+    }
+
+    // V-H3 — 추정가를 못 구하면(estimatedPrice<=0) newHoldingValue≈0으로 집중도가 통과해버린다.
+    // 최근가 폴백까지 실패한(캔들 0건) 경우 값을 모르는데 안전하다 판정하지 않고 보수적으로 거부하는지 고정한다.
+    @Test
+    fun `concentration rule fails when neither an estimated price nor a live price is available on a buy`() {
+        stubSafeDefaults()
+        stubLatestPrice(emptyList())
 
         val result = service.check(userId, stockId, "BUY", 100, BigDecimal.ZERO)
 

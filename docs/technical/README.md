@@ -9,6 +9,7 @@ monticker의 핵심 기술 구현에 대한 심층 기술 문서입니다.
 | [ema-event-detection.md](./ema-event-detection.md) | EMA 기반 이상 탐지 | Kotlin, EMA, 적응형 임계값 |
 | [timescaledb-candle-pipeline.md](./timescaledb-candle-pipeline.md) | 캔들 데이터 파이프라인 | TimescaleDB, Hypertable, CAgg |
 | [latency-tradeoff.md](./latency-tradeoff.md) | 시세 파이프라인 지연-정확성 트레이드오프 | WebSocket, REST, STOMP |
+| [market-hours-vwap.md](./market-hours-vwap.md) | 장 시간 처리와 VWAP | MarketSchedule, VWAP, 지연 측정 |
 
 ## 실시간 시스템
 
@@ -37,7 +38,7 @@ monticker의 핵심 기술 구현에 대한 심층 기술 문서입니다.
 | [quant-rule-engine.md](./quant-rule-engine.md) | Quant Lab 룰 엔진 — 조건식 평가 | RSI/MACD/Bollinger, DSL 평가, 신뢰도 점수 |
 | [quant-analytics-algorithms.md](./quant-analytics-algorithms.md) | 포트폴리오 최적화·패턴 인식·국면 분류 | Gradient Descent, ZigZag, ADX |
 | [event-sourcing-ledger.md](./event-sourcing-ledger.md) | Investment Wallet 이벤트 소싱 원장 | 이벤트 소싱, 잔고 재구성 |
-| [backend-test-strategy.md](./backend-test-strategy.md) | 백엔드 테스트 전략 | MockK, JdbcTemplate 목킹, 311 tests |
+| [backend-test-strategy.md](./backend-test-strategy.md) | 백엔드 테스트 전략 | MockK, JdbcTemplate 목킹, Testcontainers 통합 테스트 |
 
 ## 성능 최적화
 
@@ -75,7 +76,7 @@ monticker의 핵심 기술 구현에 대한 심층 기술 문서입니다.
 
 ## 관련 문서
 
+- [문서 색인](../README.md) — 독자별·주제별 전체 문서 지도
 - [Architecture Overview](../architecture.md) — 전체 시스템 아키텍처
 - [Data Model](../data-model.md) — DB 스키마
 - [ADRs](../decisions/) — 아키텍처 결정 기록
-| [market-hours-vwap.md](./market-hours-vwap.md) | 장 시간 처리와 VWAP | MarketSchedule, VWAP, 지연 측정 |

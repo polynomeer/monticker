@@ -118,7 +118,7 @@ Framework:   Next.js 15 (App Router)
 Language:    TypeScript
 Server state: TanStack Query
 Client state: Zustand
-Chart:       Lightweight Charts 4   ← use addCandlestickSeries(), NOT addSeries()
+Chart:       Apache ECharts 6 (via chart adapter — see technical/chart-adapter-pattern.md)
 UI:          Tailwind CSS (Dracula dark theme)
 Realtime:    WebSocket (STOMP)
 Virtualisation: TanStack Virtual (screener, 500 rows → ~17 DOM nodes)
@@ -135,8 +135,10 @@ Push:        Expo Push Notifications
 
 ```
 Business data:    PostgreSQL 16
-Time-series:      TimescaleDB (candles_1m, candles_1d)
+Time-series:      TimescaleDB (price_ticks, candles_1m, candles_1d hypertables)
 Cache / Realtime: Redis 7
+Documents:        MongoDB 7 (rule_sets 문서, alert_histories) — MONGODB_URI
+Search:           Elasticsearch (검색 인덱스, DB 폴백) — see elasticsearch.md
 ```
 
 ### Infra
