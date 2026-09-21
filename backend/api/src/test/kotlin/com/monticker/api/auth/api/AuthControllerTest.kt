@@ -75,6 +75,20 @@ class AuthControllerTest {
     }
 
     @Test
+    fun `회원가입 - 숫자로만 된 비밀번호는 400`() {
+        // P2-4 — 길이만 충족해도 영문 또는 숫자 중 하나만 있으면 거부돼야 한다.
+        mvc.post("/api/auth/signup") {
+            contentType = MediaType.APPLICATION_JSON
+            content = objectMapper.writeValueAsString(
+                mapOf("email" to "user@test.com", "password" to "12345678", "nickname" to "tester")
+            )
+            with(csrf())
+        }.andExpect {
+            status { isBadRequest() }
+        }
+    }
+
+    @Test
     @WithMockUser
     fun `회원가입 - 정상 요청은 200`() {
         given(authService.signup(anyString(), anyString(), anyString())).willReturn(

@@ -9,11 +9,17 @@ import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 import org.springframework.http.ResponseEntity
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 import java.time.Duration
+
+// P2-4 — 길이(8자)만 요구하던 데서 영문+숫자 최소 조합을 요구하도록 강화. 특수문자까지
+// 강제하지는 않는다 — NIST 800-63B도 과도한 조합 규칙보다 길이를 우선시하라고 권고한다.
+private const val PASSWORD_PATTERN = "^(?=.*[A-Za-z])(?=.*\\d).+$"
+private const val PASSWORD_PATTERN_MESSAGE = "비밀번호는 영문과 숫자를 포함해야 합니다."
 
 @Validated
 @RestController
@@ -94,7 +100,7 @@ class AuthController(
     }
 
     @PostMapping("/reset-password")
-    fun resetPassword(@RequestBody req: ResetPasswordRequest): ResponseEntity<MessageResponse> {
+    fun resetPassword(@Valid @RequestBody req: ResetPasswordRequest): ResponseEntity<MessageResponse> {
         authService.resetPassword(req.token, req.newPassword)
         return ResponseEntity.ok(MessageResponse("비밀번호가 변경되었습니다. 다시 로그인해주세요."))
     }
@@ -120,7 +126,9 @@ class AuthController(
 
 data class SignupRequest(
     @field:Email @field:NotBlank val email: String,
-    @field:Size(min = 8, max = 100) @field:NotBlank val password: String,
+    @field:Size(min = 8, max = 100) @field:NotBlank
+    @field:Pattern(regexp = PASSWORD_PATTERN, message = PASSWORD_PATTERN_MESSAGE)
+    val password: String,
     @field:NotBlank @field:Size(min = 2, max = 30) val nickname: String,
 )
 data class LoginRequest(
@@ -130,7 +138,9 @@ data class LoginRequest(
 data class EmailRequest(@field:Email @field:NotBlank val email: String)
 data class ResetPasswordRequest(
     @field:NotBlank val token: String,
-    @field:Size(min = 8, max = 100) @field:NotBlank val newPassword: String,
+    @field:Size(min = 8, max = 100) @field:NotBlank
+    @field:Pattern(regexp = PASSWORD_PATTERN, message = PASSWORD_PATTERN_MESSAGE)
+    val newPassword: String,
 )
 data class DeleteAccountRequest(@field:NotBlank val password: String)
 
