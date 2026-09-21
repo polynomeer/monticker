@@ -231,11 +231,18 @@ app:
   security:
     # BrokerageAccount.accessToken 등 민감 컬럼 암호화 키 (AES-256, Base64 32바이트).
     # 아래 값은 로컬 개발 전용 — 프로덕션은 반드시 별도 발급한 키로 오버라이드(application-prod.yml 참고).
+    # 이 리터럴 값은 git에 커밋된 적이 있어 공개돼 있다 — InsecureSecretGuard가 이 값 그대로
+    # 배포되는 걸 막는다 (docs/security-review.md C1). 순수 로컬 개발이면 아래 allow-insecure-dev-secrets 참고.
     credential-encryption-key: ${CREDENTIAL_ENCRYPTION_KEY:HSKZ1kiMBZ80UfTmpyhmFXh6TtteeeweRhbngzaD4yk=}
+    # true면 InsecureSecretGuard가 위 기본값/jwt.secret 기본값을 그대로 써도 기동을 막지 않는다.
+    # 로컬 개발 전용 스위치 — 프로덕션에서 절대 true로 설정하지 말 것 (application-prod.yml 참고).
+    allow-insecure-dev-secrets: ${ALLOW_INSECURE_DEV_SECRETS:false}
 
 
 jwt:
-  secret: monticker-dev-secret-key-must-be-at-least-32-bytes-long
+  # 이 리터럴 값도 credential-encryption-key와 마찬가지로 git에 커밋된 적이 있어 공개돼 있다 —
+  # InsecureSecretGuard가 이 값 그대로 배포되는 걸 막는다 (docs/security-review.md C1).
+  secret: ${JWT_SECRET:monticker-dev-secret-key-must-be-at-least-32-bytes-long}
   access-token-expiry-ms: 900000
   refresh-token-expiry-ms: 604800000
 

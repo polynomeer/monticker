@@ -51,6 +51,7 @@ app:
     # Secret Manager/Vault로 관리 권장 — 이 키가 유출되면 저장된 모든 브로커 크리덴셜이 유출된다.
     # 키를 교체하면 기존에 암호화된 값은 더 이상 복호화할 수 없다 — 재연동 필요.
     credential-encryption-key: ${CREDENTIAL_ENCRYPTION_KEY}
+    allow-insecure-dev-secrets: false     # 절대 true로 변경 금지
 
 anthropic:
   api-key: ${ANTHROPIC_API_KEY}
