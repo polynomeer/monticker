@@ -23,26 +23,33 @@ Write spec / issue
 ```
 monticker/
 ├── apps/
-│   ├── web/          # Next.js
-│   └── mobile/       # React Native / Expo (added later)
+│   ├── web/          # Next.js 15
+│   └── mobile/       # Expo (React Native)
 ├── backend/
-│   ├── api/          # Spring Boot API
-│   └── worker/       # Spring Boot async workers
+│   ├── api/          # Spring Boot API (Spring Modulith, 26 modules)
+│   ├── worker/       # Spring Boot async workers
+│   ├── quant-engine/     # retired — ADR-049
+│   └── trading-service/  # retired — ADR-048
+├── services/
+│   └── market-gateway/   # Go tick gateway → Kafka
 ├── packages/
-│   ├── types/        # Shared TypeScript types
-│   └── api-client/   # Shared API client
+│   └── types/        # Shared TypeScript types
 ├── infra/
-│   ├── docker/
-│   └── nginx/
-├── docs/             # Product, architecture, decisions
+│   ├── docker/  k8s/  monitoring/  db/  pinpoint/
+├── bench/            # k6 load tests
+├── reports/          # load / chaos test reports
+├── docs/             # See docs/README.md for the full index
 ├── .claude/
-│   ├── agents/       # Subagent definitions
-│   └── settings.json
+│   ├── agents/       # Subagent definitions (6)
+│   ├── settings.json
+│   └── launch.json
 ├── .github/
-│   ├── workflows/
-│   └── ISSUE_TEMPLATE/
+│   ├── workflows/    # backend-ci · web-ci · e2e-ci · mobile-ci · deploy-images · pr-review
+│   ├── ISSUE_TEMPLATE/
+│   └── pull_request_template.md
 ├── CLAUDE.md
-├── .mcp.json
+├── CONTRIBUTING.md
+├── dev.sh
 ├── docker-compose.yml
 └── Makefile
 ```
