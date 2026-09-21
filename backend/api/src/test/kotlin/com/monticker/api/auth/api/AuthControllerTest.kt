@@ -6,6 +6,7 @@ import com.monticker.api.auth.infrastructure.CustomOAuth2UserService
 import com.monticker.api.auth.infrastructure.HttpCookieOAuth2AuthorizationRequestRepository
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
 import com.monticker.api.auth.infrastructure.OAuth2SuccessHandler
+import com.monticker.api.auth.infrastructure.RefreshTokenCookie
 import com.monticker.api.auth.config.SecurityConfig
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.anyString
@@ -33,7 +34,7 @@ import org.springframework.test.web.servlet.post
 // RedisGuard: RateLimitFilter/IdempotencyFilter(슬라이스에 포함되는 Filter 빈)가 요구한다.
 // 목으로 대체하면 failOpen()이 null을 돌려줘 Kotlin 언박싱 NPE가 나므로 실제 빈을 쓴다 —
 // 의존인 MeterRegistry는 슬라이스에 없어 SimpleMeterRegistry를 함께 올린다.
-@Import(SecurityConfig::class, RedisGuard::class, SimpleMeterRegistry::class)
+@Import(SecurityConfig::class, RedisGuard::class, SimpleMeterRegistry::class, RefreshTokenCookie::class)
 class AuthControllerTest {
 
     @Autowired lateinit var mvc: MockMvc
@@ -105,14 +106,23 @@ class AuthControllerTest {
     }
 
     @Test
-    fun `로그아웃 - refreshToken을 넘기면 204를 반환하고 해당 토큰만 폐기한다`() {
+    fun `로그아웃 - refreshToken 쿠키를 넘기면 204를 반환하고 해당 토큰만 폐기한다`() {
         mvc.post("/api/auth/logout") {
-            contentType = MediaType.APPLICATION_JSON
-            content = objectMapper.writeValueAsString(mapOf("refreshToken" to "some-refresh-token"))
+            cookie(jakarta.servlet.http.Cookie("refreshToken", "some-refresh-token"))
             with(csrf())
         }.andExpect {
             status { isNoContent() }
         }
         org.mockito.Mockito.verify(authService).logout("some-refresh-token")
+    }
+
+    @Test
+    fun `로그아웃 - refreshToken 쿠키가 없어도 204를 반환한다`() {
+        mvc.post("/api/auth/logout") {
+            with(csrf())
+        }.andExpect {
+            status { isNoContent() }
+        }
+        org.mockito.Mockito.verify(authService, org.mockito.Mockito.never()).logout(anyString())
     }
 }

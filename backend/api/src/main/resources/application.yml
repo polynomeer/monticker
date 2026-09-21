@@ -213,6 +213,9 @@ app:
   base-url: ${APP_BASE_URL:http://localhost:3000}
   cors:
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost:3000,https://*.monticker.io}
+  # docs/security-review.md C2 — refresh token 쿠키의 Secure 속성. 로컬은 http라 false가
+  # 기본값이고, 프로덕션은 반드시 https라 application-prod.yml에서 true로 강제한다.
+  cookie-secure: ${COOKIE_SECURE:false}
   social:
     mock:
       enabled: ${SOCIAL_MOCK_ENABLED:false}  # 로컬 개발 전용 — 프로덕션은 반드시 false

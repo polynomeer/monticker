@@ -29,6 +29,7 @@ app:
   base-url: ${APP_BASE_URL}
   cors:
     allowed-origins: ${ALLOWED_ORIGINS}
+  cookie-secure: true                     # 절대 false로 변경 금지 — https 전제
   social:
     mock:
       enabled: false                      # 절대 true로 변경 금지

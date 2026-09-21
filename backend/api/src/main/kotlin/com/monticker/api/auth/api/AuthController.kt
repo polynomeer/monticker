@@ -3,6 +3,9 @@ package com.monticker.api.auth.api
 import com.monticker.api.auth.application.AuthService
 import com.monticker.api.auth.application.TokenPair
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
+import com.monticker.api.auth.infrastructure.RefreshTokenCookie
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
@@ -10,6 +13,7 @@ import jakarta.validation.constraints.Size
 import org.springframework.http.ResponseEntity
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
+import java.time.Duration
 
 @Validated
 @RestController
@@ -17,14 +21,18 @@ import org.springframework.web.bind.annotation.*
 class AuthController(
     private val authService: AuthService,
     private val jwtTokenProvider: JwtTokenProvider,
+    private val refreshTokenCookie: RefreshTokenCookie,
 ) {
 
     @PostMapping("/signup")
-    fun signup(@Valid @RequestBody req: SignupRequest): ResponseEntity<SignupResponse> {
+    fun signup(
+        @Valid @RequestBody req: SignupRequest,
+        response: HttpServletResponse,
+    ): ResponseEntity<SignupResponse> {
         val tokens = authService.signup(req.email, req.password, req.nickname)
+        setRefreshCookie(response, tokens.refreshToken)
         return ResponseEntity.ok(SignupResponse(
-            accessToken  = tokens.accessToken,
-            refreshToken = tokens.refreshToken,
+            accessToken = tokens.accessToken,
             emailVerificationSent = true,
         ))
     }
@@ -42,26 +50,39 @@ class AuthController(
     }
 
     @PostMapping("/login")
-    fun login(@Valid @RequestBody req: LoginRequest): ResponseEntity<TokenResponse> {
+    fun login(
+        @Valid @RequestBody req: LoginRequest,
+        response: HttpServletResponse,
+    ): ResponseEntity<TokenResponse> {
         return try {
-            ResponseEntity.ok(authService.login(req.email, req.password).toResponse())
+            val tokens = authService.login(req.email, req.password)
+            setRefreshCookie(response, tokens.refreshToken)
+            ResponseEntity.ok(tokens.toResponse())
         } catch (e: IllegalArgumentException) {
             ResponseEntity.status(401).build()
         }
     }
 
+    // refresh token은 요청 바디가 아니라 HttpOnly 쿠키(Path=/api/auth)로만 온다 — JS가
+    // 읽을 수 없으니 애초에 바디에 실어 보낼 수도 없다 (docs/security-review.md C2).
     @PostMapping("/refresh")
-    fun refresh(@RequestBody req: RefreshRequest): ResponseEntity<TokenResponse> {
+    fun refresh(request: HttpServletRequest, response: HttpServletResponse): ResponseEntity<TokenResponse> {
+        val refreshToken = refreshTokenCookie.read(request)
+            ?: return ResponseEntity.status(401).build()
         return try {
-            ResponseEntity.ok(authService.refresh(req.refreshToken).toResponse())
+            val tokens = authService.refresh(refreshToken)
+            setRefreshCookie(response, tokens.refreshToken)
+            ResponseEntity.ok(tokens.toResponse())
         } catch (e: IllegalArgumentException) {
+            refreshTokenCookie.clear(response)
             ResponseEntity.status(401).build()
         }
     }
 
     @PostMapping("/logout")
-    fun logout(@RequestBody req: RefreshRequest): ResponseEntity<Void> {
-        authService.logout(req.refreshToken)
+    fun logout(request: HttpServletRequest, response: HttpServletResponse): ResponseEntity<Void> {
+        refreshTokenCookie.read(request)?.let { authService.logout(it) }
+        refreshTokenCookie.clear(response)
         return ResponseEntity.noContent().build()
     }
 
@@ -88,6 +109,13 @@ class AuthController(
         authService.deleteAccount(userId, req.password)
         return ResponseEntity.ok(MessageResponse("계정이 삭제되었습니다."))
     }
+
+    private fun setRefreshCookie(response: HttpServletResponse, refreshToken: String) {
+        refreshTokenCookie.set(
+            response, refreshToken,
+            Duration.ofMillis(jwtTokenProvider.refreshTokenExpiryMs()),
+        )
+    }
 }
 
 data class SignupRequest(
@@ -99,7 +127,6 @@ data class LoginRequest(
     @field:Email @field:NotBlank val email: String,
     @field:NotBlank val password: String,
 )
-data class RefreshRequest(@field:NotBlank val refreshToken: String)
 data class EmailRequest(@field:Email @field:NotBlank val email: String)
 data class ResetPasswordRequest(
     @field:NotBlank val token: String,
@@ -107,8 +134,9 @@ data class ResetPasswordRequest(
 )
 data class DeleteAccountRequest(@field:NotBlank val password: String)
 
-data class TokenResponse(val accessToken: String, val refreshToken: String)
-data class SignupResponse(val accessToken: String, val refreshToken: String, val emailVerificationSent: Boolean)
+// refreshToken은 더 이상 바디에 담기지 않는다 — HttpOnly 쿠키로만 오간다 (C2).
+data class TokenResponse(val accessToken: String)
+data class SignupResponse(val accessToken: String, val emailVerificationSent: Boolean)
 data class MessageResponse(val message: String)
 
-private fun TokenPair.toResponse() = TokenResponse(accessToken, refreshToken)
+private fun TokenPair.toResponse() = TokenResponse(accessToken)
