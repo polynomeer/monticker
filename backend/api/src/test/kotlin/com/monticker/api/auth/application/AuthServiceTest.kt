@@ -37,7 +37,8 @@ class AuthServiceTest {
     }
     private val emailService = mockk<EmailService>(relaxed = true)
     private val guard = RedisGuard(SimpleMeterRegistry())
-    private val service = AuthService(userRepository, provider, encoder, jdbc, redis, emailService, guard)
+    private val revocationService = mockk<RefreshTokenRevocationService>(relaxed = true)
+    private val service = AuthService(userRepository, provider, encoder, jdbc, redis, emailService, guard, revocationService)
 
     @Test
     fun `signup creates user and returns tokens`() {
@@ -196,6 +197,20 @@ class AuthServiceTest {
 
         assertThatThrownBy { service.refresh(refreshToken) }
             .isInstanceOf(IllegalArgumentException::class.java)
+    }
+
+    @Test
+    fun `refresh reuse of an already-rotated token revokes every session for that user`() {
+        // H3 — a validly-signed token with no matching DB row is either a stale rotated-out
+        // token being replayed (possible theft) or a token from a logged-out session. Either
+        // way, revoke the whole family instead of just rejecting this one request.
+        val refreshToken = provider.generateRefreshToken(9L)
+        every { jdbc.queryForObject(any<String>(), Int::class.java, any<String>(), 9L) } returns 0
+
+        assertThatThrownBy { service.refresh(refreshToken) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+
+        verify { revocationService.revokeAll(9L) }
     }
 
     @Test

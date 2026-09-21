@@ -38,6 +38,7 @@ class AuthService(
     private val redis: StringRedisTemplate,
     private val emailService: EmailService,
     private val guard: RedisGuard,
+    private val revocationService: RefreshTokenRevocationService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -115,7 +116,16 @@ class AuthService(
             "SELECT COUNT(*) FROM refresh_tokens WHERE token_hash = ? AND user_id = ? AND expires_at > now()",
             Int::class.java, tokenHash, userId,
         ) ?: 0
-        require(count > 0) { "만료되었거나 유효하지 않은 refresh token입니다." }
+        if (count == 0) {
+            // 서명은 유효한데 DB엔 없다 — 정상 흐름이라면 있을 수 없다(로그아웃했거나, 이미
+            // 회전으로 폐기된 토큰을 다시 쓴 것). 탈취된 토큰의 재사용 가능성으로 보고 이
+            // 사용자의 모든 refresh token을 폐기해 전체 세션을 강제 종료한다(H3). 정상적인
+            // 동시 탭 경쟁 상황도 이 경로를 탈 수 있지만, 재로그인 한 번으로 복구되는 비용이
+            // 탈취 토큰을 계속 살려두는 위험보다 작다. 곧바로 던지는 예외가 이 메서드의
+            // 트랜잭션을 롤백시키므로, 폐기는 REQUIRES_NEW로 별도 커밋한다.
+            revocationService.revokeAll(userId)
+            throw IllegalArgumentException("만료되었거나 유효하지 않은 refresh token입니다.")
+        }
         jdbc.update("DELETE FROM refresh_tokens WHERE token_hash = ?", tokenHash)
         val user = userRepository.findById(userId).orElseThrow()
         require(!user.isDeleted) { "탈퇴한 계정입니다." }
