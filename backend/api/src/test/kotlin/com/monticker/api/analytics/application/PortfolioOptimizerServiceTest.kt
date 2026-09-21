@@ -47,6 +47,21 @@ class PortfolioOptimizerServiceTest {
     }
 
     @Test
+    fun `optimize dedupes stock ids before checking the minimum`() {
+        // V-M5 — a duplicated id must not count as two distinct stocks.
+        val result = service.optimize(1L, listOf(100L, 100L), null)
+
+        assertThat(result.error).isEqualTo("최소 2개 이상의 종목이 필요합니다")
+    }
+
+    @Test
+    fun `optimize rejects more than the maximum number of stocks`() {
+        val result = service.optimize(1L, (1L..21L).toList(), null)
+
+        assertThat(result.error).isEqualTo("종목은 최대 20개까지 지정할 수 있습니다")
+    }
+
+    @Test
     fun `optimize returns an error when fewer than 30 days of data are available`() {
         stubCandles(100L, minLen = 10, startPrice = 100.0, dailyReturn = 0.001)
         stubCandles(200L, minLen = 10, startPrice = 200.0, dailyReturn = 0.001)
@@ -99,6 +114,16 @@ class PortfolioOptimizerServiceTest {
     @Test
     fun `getEfficientFrontier returns an empty list for fewer than two stocks`() {
         assertThat(service.getEfficientFrontier(1L, listOf(100L))).isEmpty()
+    }
+
+    @Test
+    fun `getEfficientFrontier returns an empty list for a deduped count below two`() {
+        assertThat(service.getEfficientFrontier(1L, listOf(100L, 100L))).isEmpty()
+    }
+
+    @Test
+    fun `getEfficientFrontier returns an empty list beyond the maximum stock count`() {
+        assertThat(service.getEfficientFrontier(1L, (1L..21L).toList())).isEmpty()
     }
 
     @Test

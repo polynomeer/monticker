@@ -7,6 +7,8 @@ import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDate
 import kotlin.math.sqrt
 
+private const val MAX_STOCK_IDS = 20
+
 @Service
 @Transactional(readOnly = true)
 class PortfolioOptimizerQueryService(
@@ -14,9 +16,16 @@ class PortfolioOptimizerQueryService(
 ) {
     private val tradingDaysPerYear = 252.0
 
-    fun optimizeCompute(stockIds: List<Long>, targetReturn: Double?): OptimizationResult {
+    fun optimizeCompute(rawStockIds: List<Long>, targetReturn: Double?): OptimizationResult {
+        // V-M5 — 중복 id는 stockIds.indices.associate{...}에서 마지막 것만 남아 조용히 잘못된
+        // 결과를 내고, @Cacheable 키가 배열 리터럴이라 순열/중복으로 캐시도 우회한다. 상한이
+        // 없으면 종목당 전구간 JDBC 스캔 + O(n²) 공분산 + 500×10 경사하강이 무제한으로 늘어난다.
+        val stockIds = rawStockIds.distinct()
         if (stockIds.size < 2) {
             return OptimizationResult(error = "최소 2개 이상의 종목이 필요합니다")
+        }
+        if (stockIds.size > MAX_STOCK_IDS) {
+            return OptimizationResult(error = "종목은 최대 ${MAX_STOCK_IDS}개까지 지정할 수 있습니다")
         }
 
         val returnsByStock = loadDailyReturns(stockIds)
@@ -60,8 +69,9 @@ class PortfolioOptimizerQueryService(
         )
     }
 
-    fun getEfficientFrontierCompute(stockIds: List<Long>): List<FrontierPoint> {
-        if (stockIds.size < 2) return emptyList()
+    fun getEfficientFrontierCompute(rawStockIds: List<Long>): List<FrontierPoint> {
+        val stockIds = rawStockIds.distinct()
+        if (stockIds.size < 2 || stockIds.size > MAX_STOCK_IDS) return emptyList()
 
         val returnsByStock = loadDailyReturns(stockIds)
         val minLen = returnsByStock.values.minOfOrNull { it.size } ?: 0

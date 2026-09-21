@@ -1,5 +1,6 @@
 package com.monticker.api.analytics.api
 
+import com.monticker.api.analytics.application.OptimizationResult
 import com.monticker.api.analytics.application.PatternRecognizerService
 import com.monticker.api.analytics.application.PortfolioOptimizerService
 import com.monticker.api.analytics.application.PositionSizerService
@@ -25,7 +26,13 @@ class AnalyticsController(
     fun optimizePortfolio(
         @RequestParam stockIds: List<Long>,
         @RequestParam(required = false) targetReturn: Double?,
-    ) = ResponseEntity.ok(portfolioOptimizerService.optimize(userId(), stockIds, targetReturn))
+    ): ResponseEntity<OptimizationResult> {
+        val result = portfolioOptimizerService.optimize(userId(), stockIds, targetReturn)
+        // V-L1 — 종목 수·데이터 부족 같은 입력 오류를 200 + error 필드로 돌려보내면 호출자가
+        // error를 확인하지 않는 한 weights={}를 성공으로 취급한다. 400으로 명확히 던진다.
+        if (result.error != null) throw IllegalArgumentException(result.error)
+        return ResponseEntity.ok(result)
+    }
 
     @GetMapping("/portfolio/frontier")
     fun getFrontier(@RequestParam stockIds: List<Long>) =
