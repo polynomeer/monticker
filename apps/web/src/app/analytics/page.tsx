@@ -16,7 +16,7 @@ interface OptimizationResult {
   stockIds: number[]; weights: Record<string, number>;
   expectedReturn: number; expectedRisk: number;
   currentEqualWeightRisk: number; currentEqualWeightReturn: number;
-  suggestion: string; error: string | null;
+  suggestion: string;
 }
 interface HarvestingCandidate {
   stockId: number; symbol: string; name: string; quantity: number;
@@ -75,12 +75,15 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 function PortfolioOptimizerTab() {
   const [selected, setSelected] = useState<number[]>([2, 3, 5, 6]);
 
-  const { data, refetch, isFetching } = useQuery<OptimizationResult>({
+  const { data, error, refetch, isFetching } = useQuery<OptimizationResult>({
     queryKey: ["analytics", "optimize", selected],
     queryFn: async () => {
       const params = new URLSearchParams();
       selected.forEach(id => params.append("stockIds", String(id)));
       const res = await authFetch(`/api/analytics/portfolio/optimize?${params}`);
+      // V-L1 — 백엔드가 종목 수·데이터 부족 같은 입력 오류를 이제 200+error 필드가 아니라
+      // 400으로 던진다(docs/validation-hardening-plan.md).
+      if (!res.ok) { const e = await res.json(); throw new Error(e.message ?? "최적화 계산에 실패했습니다."); }
       return res.json();
     },
     enabled: false,
@@ -120,9 +123,9 @@ function PortfolioOptimizerTab() {
         {selected.length < 2 && <p className="text-xs text-dracula-red mt-2">2개 이상 종목을 선택하세요</p>}
       </Card>
 
-      {data?.error && <p className="text-sm text-dracula-red">{data.error}</p>}
+      {error && <p className="text-sm text-dracula-red">{(error as Error).message}</p>}
 
-      {data && !data.error && (
+      {data && (
         <Card className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>

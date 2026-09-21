@@ -27,7 +27,6 @@ interface OptimizationResult {
   expectedReturn: number;
   expectedRisk: number;
   suggestion: string;
-  error: string | null;
 }
 
 function pct(n: number) { return (n * 100).toFixed(2); }
@@ -110,9 +109,15 @@ export default function RebalancePage() {
       const params = new URLSearchParams();
       withIds.forEach(r => params.append("stockIds", String(r.id)));
       const res = await authFetch(`/api/analytics/portfolio/optimize?${params}`);
-      if (!res.ok) throw new Error("최적화 계산에 실패했습니다.");
+      // V-L1 — 백엔드가 입력 오류를 이제 200+error 필드가 아니라 400으로 던진다.
+      if (!res.ok) { const e = await res.json(); throw new Error(e.message ?? "최적화 계산에 실패했습니다."); }
       const result: OptimizationResult = await res.json();
-      if (result.error) throw new Error(result.error);
+      // V-L4 — 옵티마이저 결과에 없는 종목을 조용히 0%로 채우면, 뒤이은 저장 검증(모든 비중>0)이
+      // 원인 표시 없이 막혀버린다. 생략된 종목이 있으면 미리 알린다.
+      const missingIds = withIds.filter(r => !(String(r.id) in result.weights));
+      if (missingIds.length > 0) {
+        setOptimizeError(`다음 종목은 최적화 결과에 없어 0%로 채워졌습니다: ${missingIds.map(r => r.name).join(", ")}`);
+      }
       // 각 비중을 소수 1자리로 반올림하면 합이 100을 살짝 넘어(예: 100.1%) 저장이 막힐 수 있다.
       // 초과분은 가장 큰 비중에서 덜어 합계를 100% 이하로 맞춘다.
       const rounded = withIds.map(r => Math.round((result.weights[String(r.id)] ?? 0) * 1000) / 10);
