@@ -64,6 +64,7 @@ monticker의 모든 문서를 **독자별 · 주제별**로 정리한 색인입�
 | [screener.md](screener.md) | 스크리너 화면 설계 |
 | [settlement.md](settlement.md) | 정산 시스템 설계 — 페이퍼/전략마켓/구독/증권사 4종, Mock→Real 전환 지점 |
 | [event-storming.html](event-storming.html) | 이벤트 스토밍 결과 (브라우저로 열기) |
+| [images/](images/) | README·매뉴얼용 화면 스크린샷. 재생성은 `apps/web/scripts/capture-screenshots.mjs` ([../CONTRIBUTING.md](../CONTRIBUTING.md#문서-스크린샷-다시-찍기)) |
 
 ### 설계·결정
 

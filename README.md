@@ -19,6 +19,10 @@
                                           포워드 테스트 vs 백테스트 일치율: 94%
 ```
 
+![monticker 홈 — 실시간 시세, 모의 포트폴리오, 주목 종목과 최근 이벤트](docs/images/home.png)
+
+<p align="center"><sub>홈 대시보드. 아래 스크린샷은 모두 로컬 Mock 시세로 띄운 개발 환경 캡처이며, 화면 안의 가격·수익률은 실제 시장 데이터가 아닙니다.</sub></p>
+
 ---
 
 ## 목차
@@ -62,6 +66,8 @@ monticker는 8개의 기능 축으로 구성됩니다. 모두 구현되어 있�
 ### 2. 이벤트 타임라인 (핵심)
 가격 급등(`PRICE_SPIKE`)·거래량 급증(`VOLUME_SURGE`)을 EMA(α=0.1) 기반 적응형 임계값으로 탐지해 `stock_events`에 기록하고, 뉴스·공시·차트 패턴과 함께 차트 위에 마커로 겹쳐 보여줍니다. 가격이 아니라 **이벤트가 중심 도메인**입니다 ([ADR-003](docs/decisions/003-stock-events-central.md)).
 
+![종목 상세 — 차트, 호가창, 이벤트 타임라인, 종목 스코어, 모의투자 주문 패널이 한 화면에](docs/images/stock-detail.png)
+
 ### 3. 뉴스 · 공시 · AI 요약
 네이버 뉴스·DART 공시를 수집해 종목에 매핑하고(Bloom Filter로 URL 중복 제거), Claude API로 "최근 이벤트·뉴스·가격 동향" 요약을 생성합니다. 국내 종목은 밸류에이션 스코어와 투자자별 매매 동향(KIS)도 제공합니다.
 
@@ -74,11 +80,25 @@ monticker는 8개의 기능 축으로 구성됩니다. 모두 구현되어 있�
 - **리스크 한도**: 주문 **전**에 일일손실·집중도·VaR·종목수·거래빈도 5개 규칙을 동기 검사. 한도 초과는 체결 엔진에 도달하지 않습니다.
 - **정산**: 체결 후 T+2 영업일 자동 정산 스케줄러.
 
+| 체결엔진 — CLOB 호가창과 미체결 주문 | 리스크 한도 — 현재 노출도와 한도 설정 |
+|---|---|
+| ![체결엔진](docs/images/matching.png) | ![리스크](docs/images/risk.png) |
+
 ### 6. 투자 지갑 (Investment Wallet)
 모든 잔고 변경을 append-only 원장 이벤트로 기록하고, 잔고는 이벤트 replay로 계산합니다. 돈의 이동 지도(현금/예약금/평가액/정산대기), 투자 영수증, 주문 시점 감정 태그 × 수익률 분석, 하루 주문 리플레이, 투자 행동/생존 점수를 제공합니다. 원장 정합성은 야간 대조 작업으로 검증합니다 ([ADR-043](docs/decisions/043-ledger-pagination-and-reconciliation.md)).
 
+| 돈의 이동 지도 | 원장 타임라인 |
+|---|---|
+| ![투자 지갑](docs/images/wallet.png) | ![원장 타임라인](docs/images/wallet-timeline.png) |
+
 ### 7. Quant Lab — 룰셋 빌더 · 백테스트 · 포워드 테스트
 코딩 없이 `IF 현재가 > MA20 AND 거래량 > 20일 평균×2 AND RSI BETWEEN 30,70 THEN 매수` 같은 규칙을 만들고, 수수료·세금·슬리피지를 반영한 백테스트(look-ahead bias 방지, 신뢰도 A~D 등급)와 장 마감 후 일 1회 평가되는 포워드 테스트로 검증합니다. Quant Analytics로 Markowitz 최적화·효율적 프론티어·손익통산 시뮬레이션·Kelly 포지션 사이징·차트 패턴 인식·시장 국면 분류도 제공합니다.
+
+![Quant Lab — 백테스트 결과, 신뢰도 등급, 자산 곡선, 거래 내역](docs/images/quant-lab-backtest.png)
+
+| 룰셋 빌더 (코딩 없는 조건식) | Quant Analytics — 포트폴리오 최적화 |
+|---|---|
+| ![룰셋 빌더](docs/images/quant-lab-builder.png) | ![포트폴리오 최적화](docs/images/analytics.png) |
 
 ### 8. 전략 마켓 · 구독 · 커뮤니티
 검증된 룰셋을 공유·판매하되 **룰셋 자체는 절대 클라이언트로 내려가지 않습니다** — 서버에서 평가한 신호만 전달하고, 소유자와 유료 구독자만 신호 토픽을 구독할 수 있습니다 ([ADR-035](docs/decisions/035-strategy-market-signal-access-control.md)). FREE/PRO/QUANT 플랜, 제작자 70% 수익 분배, 종목별 커뮤니티 댓글(매수·매도 권유는 키워드+AI로 fail-closed 차단)을 포함합니다.
@@ -91,6 +111,12 @@ monticker는 자체 증권사 라이선스가 없습니다. 사용자가 본인 
 - **AI 주문 제안**: LLM은 방향(BUY/SELL/HOLD)과 근거만 제안하고 수량·가격은 절대 정하지 않으며, "승인"은 제안 상태만 바꿉니다. 실제 제출은 사용자가 주문 폼에서 직접 눌러야 합니다 ([ADR-036](docs/decisions/036-ai-order-proposal.md))
 - 브로커 자격증명은 AES-256-GCM으로 암호화 저장, 현금 예약은 원자적 조건부 UPDATE로 동시성 검증 완료
 - 실제 앱키 발급(실명·사업자 인증)과 자본시장법 법무 검토는 사람의 액션이 필요해 대기 중 — [docs/human-action-items.md](docs/human-action-items.md)
+
+| 실전투자 주문 (리스크 게이트 + AI 제안) | 조건부 주문 — 손절/익절 OCO |
+|---|---|
+| ![실전투자 주문](docs/images/brokerage-orders.png) | ![조건부 주문](docs/images/brokerage-conditional.png) |
+
+<sub>실전투자 화면은 `BROKERAGE_MOCK_ENABLED=true`의 Mock 브로커로 캡처한 것입니다.</sub>
 
 ---
 

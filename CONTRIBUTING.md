@@ -234,6 +234,20 @@ cd backend/api && MAIL_HOST=localhost MAIL_PORT=1025 MAIL_USERNAME=test MAIL_PAS
 
 Worker가 `price_ticks` hypertable에 1초마다 틱을 쓰면 TimescaleDB가 `candles_1m_cagg`(매 1분)와 `candles_1d_cagg`(매 1시간) 뷰를 자동 집계합니다. `GET /api/stocks/{id}/candles`는 CAgg 뷰를 우선 쓰고 없으면 `CandleAggregator`가 채운 `candles_1m`로 폴백합니다. 상세: [timescaledb-candle-pipeline.md](docs/technical/timescaledb-candle-pipeline.md).
 
+### 문서 스크린샷 다시 찍기
+
+README와 사용자 매뉴얼의 `docs/images/*.png`는 Playwright 스크립트로 생성합니다. 화면이 바뀌면 다시 찍어서 함께 커밋하세요.
+
+```bash
+./dev.sh                                    # API·Worker·Web 기동
+BASE=http://localhost:3000 API=http://localhost:8080 \
+  pnpm --filter @monticker/web exec node scripts/capture-screenshots.mjs   # 전체
+pnpm --filter @monticker/web exec node scripts/capture-screenshots.mjs wallet matching   # 일부만
+```
+
+- 기본 계정은 `docs-shot@monticker.local` / `Docs12345`(`EMAIL`/`PASSWORD`로 변경). 그 계좌에 모의투자 보유종목·룰셋·백테스트 결과·Mock 브로커 연동이 있어야 화면이 비어 보이지 않으니, 처음이면 API로 몇 건 만들어 두세요.
+- 캡처는 1440px 폭 다크 테마이며 Next.js dev 오버레이는 자동으로 숨깁니다. 커밋 전에 `docs/images/`가 5MB를 넘지 않는지 확인하세요.
+
 ### 관측 도구
 
 ```bash
