@@ -55,6 +55,7 @@ Accepted | Deprecated | Superseded by ADR-NNN
 - [docs/product.md](docs/product.md) — product identity, feature axes, product scope, key design decisions
 - [docs/resilience-plan.md](docs/resilience-plan.md) — 장애 시나리오별 대응 능력 판정(현재 P0 결함 8건), 모니터링·부하테스트·카오스테스트 설계
 - [docs/security-review.md](docs/security-review.md) — 시큐어 코딩/보안 설계 점검: Critical 3건(하드코딩된 JWT·암호화 키가 실제로 라이브에 올라가는 배포 경로 공백, 토큰 localStorage 저장, 실브로커 주문 API 입력검증 부재), 우선순위별 개선방안
+- [docs/validation-hardening-plan.md](docs/validation-hardening-plan.md) — 입력값·논리분기 검증 점검: 정상 사용자의 잘못된 입력·놓친 분기 관점(실주문이 검증보다 먼저 브로커 호출, 수량>0/정수 검증 누락, 리스크 게이트 우회, 옵티마이저/리밸런싱 로직 결함), P0~P2 작업계획. security-review.md의 C3/H2를 보완
 - [docs/scale-out-plan.md](docs/scale-out-plan.md) — 대규모 트래픽·데이터 대응 아키텍처 전환 계획: 병목 인벤토리, 목표 아키텍처, Phase 0~4 로드맵
 - [docs/launch-plan.md](docs/launch-plan.md) — commercial launch checklist: tech debt gates, legal/compliance, security, infra, phased rollout
 - [docs/legal-review-brief.md](docs/legal-review-brief.md) — briefing pack (facts + question list, not legal advice) to hand an actual lawyer for Phase 1 sign-off
