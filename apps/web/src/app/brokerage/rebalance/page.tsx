@@ -46,6 +46,10 @@ export default function RebalancePage() {
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeError, setOptimizeError] = useState<string | null>(null);
   const [optimizeInfo, setOptimizeInfo] = useState<{ expectedReturn: number; expectedRisk: number; suggestion: string } | null>(null);
+  // V-M6 — 괴리 미리보기/실행은 서버에 저장된 target만 본다. rows/thresholdPct를 편집(직접
+  // 수정 또는 최적화 결과 채우기)하고 저장을 누르지 않으면, 미리보기·실행은 그 편집 내용을
+  // 조용히 무시하고 마지막으로 저장된 값 기준으로 동작한다 — 편집 중이라는 걸 알린다.
+  const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
 
@@ -61,10 +65,11 @@ export default function RebalancePage() {
     setThresholdPct(target.thresholdPct.toFixed(2));
     setRows(Object.entries(target.weights).map(([symbol, w]) => ({ symbol, name: symbol, weightPct: (w * 100).toFixed(1) })));
     setSource(target.source);
+    setIsDirty(false);
   }, [target]);
 
   // 수동 편집은 최적화 산출물의 출처를 무효화한다 — MANUAL 로 되돌리고 최적화 요약도 지운다.
-  const markManual = () => { setSource("MANUAL"); setOptimizeInfo(null); };
+  const markManual = () => { setSource("MANUAL"); setOptimizeInfo(null); setIsDirty(true); };
 
   useEffect(() => {
     if (searchQuery.length < 1) { setSearchResults([]); return; }
@@ -141,6 +146,7 @@ export default function RebalancePage() {
       })));
       setOptimizeInfo({ expectedReturn: result.expectedReturn, expectedRisk: result.expectedRisk, suggestion: result.suggestion });
       setSource("OPTIMIZER");
+      setIsDirty(true);
     } catch (e) {
       setOptimizeError(e instanceof ApiError ? e.message : (e as Error).message);
     } finally {
@@ -163,6 +169,7 @@ export default function RebalancePage() {
       toast({ type: "success", title: "저장 완료", message: "목표 비중이 저장되었습니다." });
       setShowPreview(false);
       setLastExecution(null);
+      setIsDirty(false);
     } catch (e) {
       setSaveError(e instanceof ApiError ? e.message : (e as Error).message);
     }
@@ -285,7 +292,7 @@ export default function RebalancePage() {
           <div className="flex items-center gap-2">
             <input
               type="number" min={0} max={100} step={0.1} value={thresholdPct}
-              onChange={e => setThresholdPct(e.target.value)}
+              onChange={e => { setThresholdPct(e.target.value); setIsDirty(true); }}
               className="w-24 rounded-lg border px-3 py-2 text-sm text-right font-mono border-gray-300 bg-white text-gray-900 dark:border-dracula-line dark:bg-dracula-surface dark:text-dracula-fg focus:outline-none focus:ring-2 focus:ring-dracula-purple/50 focus:border-dracula-purple transition-all duration-150"
             />
             <span className="text-xs text-gray-500 dark:text-dracula-comment">%p</span>
@@ -327,6 +334,9 @@ export default function RebalancePage() {
           </div>
         )}
 
+        {isDirty && (
+          <p className="text-xs text-dracula-orange mb-2">저장되지 않은 변경사항이 있습니다 — 저장해야 아래 미리보기/실행에 반영됩니다.</p>
+        )}
         <button onClick={handleSave} disabled={!isSaveValid || saveTarget.isPending}
           className="w-full py-2.5 rounded-xl font-bold text-sm text-white bg-blue-600 dark:bg-dracula-purple dark:text-dracula-bg active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100">
           {saveTarget.isPending ? "저장 중..." : "목표 비중 저장"}
@@ -337,6 +347,18 @@ export default function RebalancePage() {
       {target && (
         <Card className="p-5" outerClassName="mb-6">
           <h2 className="text-sm font-bold text-gray-900 dark:text-dracula-fg mb-3">실행</h2>
+
+          {/* V-M6 — 미리보기/실행 둘 다 위 편집 상태가 아니라 마지막으로 저장된 target을
+              대상으로 동작한다. 편집 중인데 모르고 실행하면 의도하지 않은 비중으로 실제
+              주문이 나갈 수 있어, 편집 중엔 눈에 띄게 알리고 실행 자체를 막는다. */}
+          {isDirty && (
+            <div className="flex items-start gap-2 rounded-lg border border-dracula-orange/40 bg-dracula-orange/10 p-3 mb-3">
+              <ShieldWarning size={18} weight="bold" className="text-dracula-orange shrink-0 mt-0.5" aria-hidden />
+              <p className="text-xs text-dracula-orange">
+                편집 중인 내용이 아직 저장되지 않았습니다. 아래 미리보기/실행은 저장된 이전 목표 비중을 기준으로 동작합니다 — 지금 편집한 비중으로 실행하려면 먼저 저장하세요.
+              </p>
+            </div>
+          )}
 
           <button onClick={handlePreview} disabled={previewLoading}
             className="w-full py-2.5 rounded-xl font-bold text-sm border border-gray-300 dark:border-dracula-line text-gray-700 dark:text-dracula-fg hover:bg-gray-50 dark:hover:bg-dracula-line/30 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 mb-3 flex items-center justify-center gap-2">
@@ -373,9 +395,9 @@ export default function RebalancePage() {
                   </div>
                 )}
 
-                <button onClick={handleExecute} disabled={executeMutation.isPending}
+                <button onClick={handleExecute} disabled={executeMutation.isPending || isDirty}
                   className="w-full py-3 rounded-xl font-bold text-sm text-white bg-dracula-orange active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100">
-                  {executeMutation.isPending ? "실행 중..." : `${previewData.legs.length}건 실행 — 실제 주문이 제출됩니다`}
+                  {executeMutation.isPending ? "실행 중..." : isDirty ? "저장되지 않은 변경사항이 있습니다" : `${previewData.legs.length}건 실행 — 실제 주문이 제출됩니다`}
                 </button>
               </>
             )
