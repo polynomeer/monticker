@@ -35,10 +35,18 @@ spring:
   # CH-04 카오스 실험이 search_fallback_total로 잡아냈다 (resilience-plan §6.3).
   elasticsearch:
     uris: ${ELASTICSEARCH_URI:http://localhost:9200}
+    # docs/security-review.md M3 — 로컬 docker-compose는 xpack.security 비활성 상태라 비워두면
+    # 지금과 동일하게 무인증으로 붙는다. 인증된 ES(managed 서비스 등) 앞에서는 두 값만 채우면 된다.
+    username: ${ELASTICSEARCH_USERNAME:}
+    password: ${ELASTICSEARCH_PASSWORD:}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      # docs/security-review.md M3 — 위 ES와 같은 이유로 비워두면 지금처럼 무인증. rate
+      # limiting·로그인 실패 카운터·이메일 인증 토큰이 전부 이 Redis에 있어 인증 없이 접근
+      # 가능하면 이 방어들을 우회/조작당할 수 있다 — 인증된 Redis 앞에서는 채워 넣는다.
+      password: ${REDIS_PASSWORD:}
       # 명시하지 않으면 Lettuce 기본 60초 — Redis가 느려지면 요청이 60초씩 매달려 Tomcat 스레드가
       # 고갈된다(resilience-plan §A2). 시세 조회에 200ms 넘게 걸리면 그건 이미 장애다.
       timeout: 200ms
