@@ -12,6 +12,9 @@ jobs:
     permissions:
       contents: write # gradle/actions/dependency-submission가 Dependency Graph에 제출하는 데 필요
     strategy:
+      # 한 모듈이 실패해도 나머지는 끝까지 돌린다 — 기본 fail-fast는 첫 실패가 다른 모듈을
+      # cancel해서 그 모듈의 결과를 한 번도 못 보게 만든다.
+      fail-fast: false
       matrix:
         module: [api, worker]
 
@@ -46,10 +49,13 @@ jobs:
 
       # GitHub Dependency Graph에 이 모듈의 의존성을 제출한다 — Dependabot 취약점 알림은
       # Gradle 프로젝트의 경우 lockfile 파싱만으로는 동작하지 않고 이 그래프가 있어야 켜진다.
+      # 저장소 설정에서 Dependency Graph가 꺼져 있으면 제출이 거부된다 — 그걸로 테스트 매트릭스
+      # 전체를 죽이지 않고 경고만 남긴다(기본값 false면 첫 모듈 실패가 나머지를 cancel한다).
       - name: Submit dependency graph — ${{ matrix.module }}
         uses: gradle/actions/dependency-submission@v4
         with:
           build-root-directory: backend/${{ matrix.module }}
+          dependency-graph-continue-on-failure: true
 
       - name: Unit tests — ${{ matrix.module }}
         run: cd backend/${{ matrix.module }} && ./gradlew test
