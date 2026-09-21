@@ -39,7 +39,7 @@ export default function BrokerageOrderPage() {
   useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
 
   const { data: account, isLoading: accountLoading } = useBrokerageAccount();
-  const { data: balance } = useBrokerageBalance(!!account);
+  const { data: balance, isLoading: balanceLoading, isError: balanceError } = useBrokerageBalance(!!account);
   const submitOrder = useSubmitBrokerageOrder();
 
   useEffect(() => {
@@ -71,10 +71,15 @@ export default function BrokerageOrderPage() {
     ? (priceForEstimate > 0 ? Math.floor(cash / priceForEstimate) : 0)
     : (holding?.quantity ?? 0);
 
+  // balance===undefined는 "0원"과 "아직 모름"을 구분할 수 없다 — 로딩/에러 중엔 maxQty를
+  // 신뢰할 수 없으니 제출을 막는다(V-M7). 정상 로딩 완료 후에는 잔고/보유 수량 상한도 반영한다.
+  const balanceReady = !balanceLoading && !balanceError;
   const isValid =
     !!stock &&
     quantity > 0 &&
-    (orderType === "MARKET" || Number(limitPrice) > 0);
+    (orderType === "MARKET" || Number(limitPrice) > 0) &&
+    balanceReady &&
+    quantity <= maxQty;
 
   const handleSubmit = async () => {
     if (!stock) return;
@@ -237,9 +242,18 @@ export default function BrokerageOrderPage() {
                   ))}
                 </div>
               )}
-              <p className="text-[10px] mt-1 text-gray-500 dark:text-dracula-comment">
-                {side === "BUY" ? `최대 매수 가능 ${fmt(maxQty)}주` : `보유 수량 ${fmt(holding?.quantity ?? 0)}주`}
+              <p className={`text-[10px] mt-1 ${balanceError ? "text-dracula-orange" : "text-gray-500 dark:text-dracula-comment"}`}>
+                {balanceLoading
+                  ? "잔고 조회 중..."
+                  : balanceError
+                  ? "잔고 조회 실패 — 새로고침 후 다시 시도해주세요."
+                  : side === "BUY" ? `최대 매수 가능 ${fmt(maxQty)}주` : `보유 수량 ${fmt(holding?.quantity ?? 0)}주`}
               </p>
+              {balanceReady && quantity > maxQty && (
+                <p className="text-[10px] mt-0.5 text-dracula-red">
+                  {side === "BUY" ? "가용 현금을 초과했습니다." : "보유 수량을 초과했습니다."}
+                </p>
+              )}
             </div>
 
             {/* 주문 금액 */}
