@@ -55,7 +55,7 @@ cp .env.example .env
 
 - **pnpm 워크스페이스만 사용합니다.** `npm install`·`yarn`은 `pnpm-lock.yaml`과 `package.json#pnpm` overrides(팬텀 호이스트 방지)를 깨뜨립니다. 패키지 추가는 `pnpm --filter @monticker/web add <pkg>` 형태로.
 - **Java 21 툴체인** — Gradle wrapper가 강제합니다. 다른 JDK로 바꾸지 마세요.
-- **Flyway 마이그레이션은 append-only** — 이미 머지된 `V*.sql`은 수정하지 않고 새 버전을 추가합니다. 현재 최신은 `V47`.
+- **Flyway 마이그레이션은 append-only** — 이미 머지된 `V*.sql`은 수정하지 않고 새 버전을 추가합니다. 현재 최신은 `V49`.
 - **`backend/quant-engine`, `backend/trading-service`는 폐기됐습니다** ([ADR-048](docs/decisions/048-retire-trading-service.md), [ADR-049](docs/decisions/049-retire-quant-engine.md)). 기능 변경을 거기에 넣지 마세요. 해당 로직은 `backend/api`의 `matching`·`quant` 모듈에 있습니다.
 - **Spring Modulith 경계** — `backend/api`의 모듈 간 참조는 `ModulithStructureTest`가 검증합니다. 다른 모듈의 `domain`/`infrastructure`를 직접 import하지 말고 `application` 서비스나 이벤트를 통하세요 ([ADR-019](docs/decisions/019-spring-modulith-boundary-conventions.md)).
 - **시크릿은 절대 커밋하지 않습니다.** `.env`는 `.gitignore`에 있습니다. 새 외부 연동을 추가하면 `.env.example`에 빈 값으로 키 이름만 추가하고, 키가 없을 때 Mock으로 폴백되게 만드세요.
@@ -159,7 +159,7 @@ cp .env.example .env
 - 도메인 모델의 핵심 구조(이벤트 소싱, CQRS, Saga 등)를 채택했을 때
 - 비기능 요건(성능, 보안, 비용)이 설계에 영향을 줬을 때
 
-번호는 기존 최대 + 1 (현재 050). 형식은 `Status / Context / Decision / Reasons / Consequences / Revisit When` — 템플릿 전문은 [CLAUDE.md](CLAUDE.md#architecture-decision-records-adrs). **기존 ADR을 번복할 때는 새 ADR을 쓰고 기존 ADR의 Status를 `Superseded by ADR-NNN`으로 바꿉니다.** 기존 ADR 본문을 고쳐 쓰지 않습니다.
+번호는 기존 최대 + 1 (현재 052). 형식은 `Status / Context / Decision / Reasons / Consequences / Revisit When` — 템플릿 전문은 [CLAUDE.md](CLAUDE.md#architecture-decision-records-adrs). **기존 ADR을 번복할 때는 새 ADR을 쓰고 기존 ADR의 Status를 `Superseded by ADR-NNN`으로 바꿉니다.** 기존 ADR 본문을 고쳐 쓰지 않습니다.
 
 폐기 결정도 ADR입니다 — [ADR-048](docs/decisions/048-retire-trading-service.md)처럼 "만들었지만 트래픽이 0이라 없앤다"는 판단과 근거 실측을 남기세요.
 

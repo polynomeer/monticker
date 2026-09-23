@@ -540,6 +540,64 @@ CREATE TABLE investment_behavior_scores (
 
 ---
 
+## Watch Rule Tables (V49 — done, [ADR-051](decisions/051-event-triggered-paper-orders.md))
+
+탐지된 이벤트를 모의투자 주문으로 연결하는 규칙과 그 발동 기록. **모의투자 계좌 전용**이다.
+
+### watch_rules
+
+```sql
+CREATE TABLE watch_rules (
+    id                   BIGSERIAL   PRIMARY KEY,
+    user_id              BIGINT      NOT NULL REFERENCES users(id),
+    stock_id             BIGINT      NOT NULL REFERENCES stocks(id),
+    event_type           VARCHAR(50) NOT NULL,   -- PRICE_SPIKE / PRICE_DROP / VOLUME_SURGE
+    side                 VARCHAR(4)  NOT NULL,   -- BUY / SELL
+    quantity             INTEGER     NOT NULL,
+    min_importance_score INTEGER     NOT NULL DEFAULT 0,   -- 이 값 미만이면 발동 안 함
+    cooldown_sec         INTEGER     NOT NULL DEFAULT 600, -- 직전 체결 후 재발동 금지 구간
+    is_active            BOOLEAN     NOT NULL DEFAULT true,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT ck_watch_rules_side       CHECK (side IN ('BUY', 'SELL')),
+    CONSTRAINT ck_watch_rules_quantity   CHECK (quantity > 0),
+    CONSTRAINT ck_watch_rules_importance CHECK (min_importance_score BETWEEN 0 AND 100),
+    CONSTRAINT ck_watch_rules_cooldown   CHECK (cooldown_sec >= 0)
+);
+
+-- 컨슈머의 조회 경로
+CREATE INDEX idx_watch_rules_stock_event ON watch_rules (stock_id, event_type) WHERE is_active;
+```
+
+### watch_rule_executions
+
+성공뿐 아니라 거부·건너뜀도 남긴다 — 사용자가 "왜 안 샀는지" 볼 수 있어야 한다.
+
+```sql
+CREATE TABLE watch_rule_executions (
+    id             BIGSERIAL   PRIMARY KEY,
+    watch_rule_id  BIGINT      NOT NULL REFERENCES watch_rules(id) ON DELETE CASCADE,
+    user_id        BIGINT      NOT NULL REFERENCES users(id),
+    stock_event_id BIGINT      NOT NULL,
+    status         VARCHAR(20) NOT NULL,   -- EXECUTED / REJECTED / SKIPPED
+    order_id       BIGINT,
+    fill_price     NUMERIC(18,4),
+    quantity       INTEGER,
+    reason         TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT ck_watch_rule_exec_status CHECK (status IN ('EXECUTED', 'REJECTED', 'SKIPPED'))
+);
+
+-- 멱등 키 — 아웃박스 재전달·컨슈머 리밸런싱에서 기록이 두 줄 생기지 않게 한다.
+CREATE UNIQUE INDEX ux_watch_rule_exec_idempotency
+    ON watch_rule_executions (watch_rule_id, stock_event_id);
+```
+
+> `orders.idempotency_key`(V48)도 같은 ADR에서 추가됐다. **중복 체결을 막는 것은 그쪽**이고,
+> 이 유니크는 기록 중복만 막는다. 둘 다 필요하다.
+
+---
+
 ## Quant Analytics Tables (V16 — done)
 
 ### detected_patterns

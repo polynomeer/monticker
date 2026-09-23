@@ -79,6 +79,7 @@ monticker는 8개의 기능 축으로 구성됩니다. 모두 구현되어 있�
 - **체결엔진**: 실제 거래소처럼 가격·시간 우선 CLOB 매칭, 부분 체결, 슬리피지 시뮬레이션.
 - **리스크 한도**: 주문 **전**에 일일손실·집중도·VaR·종목수·거래빈도 5개 규칙을 동기 검사. 한도 초과는 체결 엔진에 도달하지 않습니다.
 - **정산**: 체결 후 T+2 영업일 자동 정산 스케줄러.
+- **Watch rule (이벤트 트리거 자동 주문)**: "이 종목에 거래량 급증이 감지되면 10주 매수" 같은 규칙을 미리 걸어두면, 탐지된 이벤트가 아웃박스를 거쳐 모의투자 주문이 됩니다. 손으로 낸 주문과 **같은 리스크 게이트**를 통과하며, 중복 전달이 있어도 체결은 한 번입니다(주문 멱등 키 + 발동 기록 유니크). 거부·건너뜀도 이유와 함께 기록되어 "왜 안 샀는지" 확인할 수 있습니다 — 모의투자 계좌 전용이며 실계좌 자동 실행은 의도적으로 범위 밖입니다 ([ADR-051](docs/decisions/051-event-triggered-paper-orders.md)).
 
 | 체결엔진 — CLOB 호가창과 미체결 주문 | 리스크 한도 — 현재 노출도와 한도 설정 |
 |---|---|
@@ -416,6 +417,8 @@ CI는 PR마다 `backend-ci`(api·worker 매트릭스, unit + integration), `web-
 | **이벤트 중심 도메인** | 가격이 아닌 `stock_events`를 중심 객체로 두고 EMA(α=0.1) 적응형 임계값으로 급등·급증을 탐지, 분 단위 유니크 인덱스로 중복 방지 | [ADR-003](docs/decisions/003-stock-events-central.md), [ema-event-detection.md](docs/technical/ema-event-detection.md) |
 | **모듈러 모놀리스 → 필요한 만큼만 분리** | Spring Modulith로 모듈 경계를 테스트(`ModulithStructureTest`)로 강제. quant-engine·trading-service를 MSA로 추출했다가 실측(트래픽 0, in-process bulkhead로 충분)으로 **폐기 결정을 ADR로 남김** | [ADR-001](docs/decisions/001-modular-monolith.md), [ADR-048](docs/decisions/048-retire-trading-service.md), [ADR-049](docs/decisions/049-retire-quant-engine.md) |
 | **주문 처리 정합성** | Saga 오케스트레이션 + 보상 트랜잭션 + 5분 복구 스케줄러, Outbox(`event_publication`)로 at-least-once Kafka 발행, `X-Idempotency-Key` 멱등성, 원자적 조건부 UPDATE로 현금 예약 — Testcontainers 10스레드 동시성 테스트로 검증 | [ADR-011](docs/decisions/011-order-saga-orchestration.md), [ADR-008](docs/decisions/008-outbox-pattern-spring-modulith.md), [ADR-007](docs/decisions/007-idempotency-key-filter.md) |
+| **이벤트 → 주문 연결** | 탐지 이벤트를 아웃박스로 발행해 watch rule이 모의주문을 낸다. 중복 전달 하에서 정확히 한 번 체결을 주문 멱등 키와 발동 기록 유니크로 보장하고, 10스레드 동시 경합으로 검증 | [ADR-051](docs/decisions/051-event-triggered-paper-orders.md) |
+| **락 전략을 실측으로 골랐다** | 현금 예약을 원자적 UPDATE·비관적 락·CAS 세 가지로 구현해 같은 부하로 비교(ATOMIC이 약 7배). 첫 측정이 커넥션 풀 없이 이뤄져 차이가 묻힌 것을 발견하고 재측정한 과정까지 기록 | [ADR-052](docs/decisions/052-cash-reservation-lock-strategy.md) |
 | **이벤트 소싱 원장** | 잔고 컬럼 없이 append-only `ledger_events` replay로 잔고 계산, 스냅샷 페이지네이션, 야간 대조(mismatch 시 자동 교정 금지 → 런북) | [ADR-013](docs/decisions/013-append-only-ledger-wallet.md), [ADR-043](docs/decisions/043-ledger-pagination-and-reconciliation.md) |
 | **CLOB 체결엔진 + 사전 리스크 게이트** | TreeMap 기반 호가 큐, 가격/시간 우선, 다단 슬리피지. 주문 전 동기 5규칙(일일손실·집중도·VaR·종목수·빈도) 검사, 실주문도 같은 게이트 강제 | [matching-engine-clob.md](docs/technical/matching-engine-clob.md), [ADR-025](docs/decisions/025-real-brokerage-order-safety-gate.md) |
 | **실시간 파이프라인** | Kafka 파티션 키=stockId, 컨슈머 파티션 고정 배정, 전역 토픽 제거, 부하 테스트로 기본값 산출. TimescaleDB hypertable + continuous aggregate로 캔들 자동 집계 | [ADR-029](docs/decisions/029-price-broadcast-pipeline.md), [ADR-038](docs/decisions/038-broadcast-consumer-partition-assignment.md), [ADR-050](docs/decisions/050-realtime-pipeline-defaults-from-load-tests.md), [ADR-041](docs/decisions/041-timescale-hypertable-promotion.md) |

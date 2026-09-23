@@ -55,6 +55,7 @@ Monticker
 ├── Paper Trading + Investment Wallet
 │   ├── 체결 엔진 (CLOB — Order Book, 가격/시간 우선, 부분체결, 슬리피지)
 │   ├── 실시간 리스크 한도 시스템 (주문 전 VaR·집중도·일일손실 체크)
+│   ├── Watch Rule (이벤트 감지 → 모의 자동 주문, 모의계좌 전용)
 │   ├── 체결 순간 상태머신 (주문접수→예약→체결→정산)
 │   ├── 내 돈 이동 타임라인 (원장 기반)
 │   ├── 투자 영수증 (체결금·수수료·정산 상태)
@@ -92,6 +93,7 @@ monticker
 ├── 5. Watchlist & portfolio observation
 ├── 6. Paper trading + Investment Wallet
 │       원장 기반 돈의 이동 타임라인, 투자 영수증, 감정 태그
+│       Watch Rule — 감지된 이벤트를 모의 주문으로 연결 (ADR-051)
 ├── 7. Quant Lab — ruleset builder + backtest + forward test   ← NEW
 └── 8. Strategy Market — share / sell verified strategies     ← NEW
 ```
@@ -575,4 +577,5 @@ Investment Wallet (upcoming)
 6. **원장(ledger) 패턴**: Investment Wallet의 모든 잔고 변경은 이벤트 로그로 기록. 잔고는 이벤트를 replay해서 계산 가능해야 함.
 7. **감정 태그 ≠ 투자 조언**: 교육용 피드백으로만 제공. "이 종목을 팔아라" 형태의 추천 금지.
 8. **BYOK 브로커 연동** ([ADR-023](decisions/023-commercialization-pivot.md)): monticker는 자체 브로커 라이선스를 보유하지 않는다. 실주문은 항상 사용자 본인 명의 계좌(Toss/KIS)의 API 키로 실행되며, monticker는 그 키를 대신 사용하는 클라이언트로만 동작한다.
-9. **AI는 제안, 실행은 사용자 승인 후 기존 리스크·주문 엔진 경유**: LLM이 주문을 직접 실행하지 않는다. `Order Proposal → Risk Validation → User Confirmation → Order Executor` 흐름을 벗어나지 않는다.
+9. **이벤트는 관찰로 끝나지 않는다 — 단, 모의계좌 한정** ([ADR-051](decisions/051-event-triggered-paper-orders.md)): 감지된 `stock_events`는 사용자가 사전에 선언한 watch rule을 통해 모의투자 주문이 될 수 있다. 실계좌 자동 실행은 범위 밖이며(ADR-025/036의 선), 자동 주문도 손으로 낸 주문과 같은 리스크 게이트를 통과한다.
+10. **AI는 제안, 실행은 사용자 승인 후 기존 리스크·주문 엔진 경유**: LLM이 주문을 직접 실행하지 않는다. `Order Proposal → Risk Validation → User Confirmation → Order Executor` 흐름을 벗어나지 않는다.

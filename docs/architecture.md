@@ -18,6 +18,19 @@ External data sources
   → chart timeline (web / mobile)
 ```
 
+Watch rule([ADR-051](decisions/051-event-triggered-paper-orders.md))이 이 파이프라인의 끝에 **행동**을 붙인다 —
+탐지 로직은 그대로 두고 소비자만 하나 늘린다:
+
+```
+stock_events INSERT (worker)
+  → @Externalized StockEventDetectedEvent   (같은 트랜잭션, 커밋 후 외부화)
+  → Kafka market.event-detected (key=stockId)
+  → WatchRuleConsumer (api, groupId=monticker-watch-rule)
+  → WatchRuleExecutor — 활성 룰 조회 → 중요도/쿨다운 판정
+  → matching::submit (리스크 게이트 통과) → 모의투자 체결
+  → watch_rule_executions 기록 (EXECUTED / REJECTED / SKIPPED + 사유)
+```
+
 Quant Lab adds a second pipeline:
 
 ```
@@ -180,6 +193,7 @@ See [ADR-005](decisions/005-kafka-go-gateway-netty-broadcast.md) and [kafka-tick
 | Order Book | KIS WebSocket → Redis / Yahoo Finance / Mock chain | Done |
 | VWAP | Computed from candles_1m | Done |
 | Latency Tracking | Micrometer Timer, `/api/latency` | Done |
+| **Watch Rule** | `watch_rules`, `watch_rule_executions` | Done ([ADR-051](decisions/051-event-triggered-paper-orders.md)) — 탐지 이벤트 → 모의 자동 주문, 모의계좌 전용 |
 
 ### Implemented Modules (Quant Lab — V13)
 
@@ -348,6 +362,9 @@ GET /api/strategies/{id}/signal   (subscriber endpoint)
 | V14 | Create Investment Wallet tables (ledger_events, order_emotion_tags, investment_behavior_scores) |
 | V15 | Create Matching Engine tables (orders, fills, risk_limits, risk_check_logs) |
 | V16 | Create Quant Analytics tables (detected_patterns, regime_history, harvesting_logs) |
+| … | (V17–V47 — 상세는 `backend/api/src/main/resources/db/migration/`) |
+| V48 | Add `orders.idempotency_key` + 부분 유니크 인덱스 ([ADR-051](decisions/051-event-triggered-paper-orders.md)) |
+| V49 | Create Watch Rule tables (watch_rules, watch_rule_executions) |
 
 ---
 
@@ -416,6 +433,13 @@ GET    /api/risk/limits                       # 내 리스크 한도 조회
 PUT    /api/risk/limits                       # 한도 설정
 POST   /api/risk/check                        # 주문 전 리스크 시뮬레이션 (dry-run)
 GET    /api/risk/exposure                     # 현재 포트폴리오 리스크 노출도
+
+# Watch Rule (ADR-051) — 이벤트 트리거 모의 자동주문
+GET    /api/watch-rules                       # 내 룰 목록
+POST   /api/watch-rules                       # 룰 생성 (stockId, eventType, side, quantity, ...)
+PATCH  /api/watch-rules/{ruleId}              # 수량·중요도 하한·쿨다운·활성 여부 수정
+DELETE /api/watch-rules/{ruleId}
+GET    /api/watch-rules/executions            # 발동 이력 (EXECUTED / REJECTED / SKIPPED + 사유)
 
 # Investment Wallet
 GET    /api/wallet                            # 돈의 이동 지도 (현금/예약금/평가액/정산대기)
@@ -913,6 +937,7 @@ make up-full
 | `trading.order-filled` | `backend/api` (Modulith `@Externalized`, Outbox) | (현재 없음 — quant live-tracking 도입 시. api 안에서는 `OrderFilledStrategyListener`가 같은 이벤트를 받는다) |
 | `trading.order-cancelled` | `backend/api` (Modulith `@Externalized`, Outbox) | — |
 | `search.index` | `backend/api`, `worker` (Modulith `@Externalized`, [ADR-042](decisions/042-outbox-based-es-indexing.md)) | `backend/api` `SearchIndexConsumer` |
+| `market.event-detected` | `worker` (Modulith `@Externalized`, [ADR-051](decisions/051-event-triggered-paper-orders.md)) | `backend/api` `WatchRuleConsumer` (group `monticker-watch-rule`) |
 
 ### MSA Key Design Decisions
 
@@ -1023,6 +1048,7 @@ userId는 SecurityContextHolder에서 추출하므로 컨트롤러 메서드 시
 | `GET /api/stocks/{id}/summary` | 30회 | 1시간 | `ai.summary` |
 | `GET /api/wallet/emotion-analysis` | 10회 | 1시간 | `wallet.emotion` |
 | `POST /api/quant/rulesets/{id}/backtest` | 10회 | 1시간 | `quant.backtest` |
+| `POST /api/watch-rules` | 20회 | 1시간 | `watchrule.create` |
 | `POST /api/batch/jobs/candle-backfill` | 5회 | 1시간 | `batch.candle_backfill` |
 
 ## Graceful Shutdown
@@ -1057,6 +1083,19 @@ DLT 핸들러(`@DltHandler`)는 ERROR 레벨 로그를 남긴다. 재처리는 �
 | `POST /api/matching/orders` | ✅ | 24시간 |
 
 Redis 키: `idempotency:{userId}:{X-Idempotency-Key}`. 2xx 응답만 캐싱한다.
+
+### 서버 내부 발행 주문의 멱등성 (ADR-051)
+
+위 필터는 **바깥에서 들어온 요청**만 보호한다. 서버가 이벤트를 소비해 스스로 내는 주문(watch rule)은
+필터를 타지 않는데 아웃박스는 at-least-once다 — 그래서 멱등 키를 주문 행으로 내렸다.
+
+```
+OrderSubmitter.submitMarket(..., idempotencyKey = "WR:{ruleId}:{eventId}")
+  → orders.idempotency_key 부분 유니크(V48)
+  → 같은 키 재제출 시 새 주문·새 체결 없이 첫 체결을 replay
+```
+
+사용자가 화면에서 낸 주문은 키가 null이고 기존 필터가 계속 담당한다.
 
 ## Bulkhead — Backtest 격리
 
