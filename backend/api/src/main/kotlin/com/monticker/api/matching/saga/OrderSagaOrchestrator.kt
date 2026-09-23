@@ -121,6 +121,9 @@ class OrderSagaOrchestrator(
             quantity  = req.quantity,
             limitPrice = limitPrice,
             status    = OrderStatus.PENDING,
+            // ADR-051 — 부분 유니크 인덱스(V48)가 백스톱이다. MatchingService의 사전 조회와 경합해
+            // 두 스레드가 동시에 들어와도 두 번째 INSERT는 DB가 거부한다.
+            idempotencyKey = req.idempotencyKey,
         ))
         saga.orderId = order.id
 

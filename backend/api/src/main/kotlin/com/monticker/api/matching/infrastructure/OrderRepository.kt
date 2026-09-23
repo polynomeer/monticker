@@ -10,4 +10,7 @@ interface OrderRepository : JpaRepository<Order, Long> {
     fun findByStockIdAndStatusIn(stockId: Long, statuses: List<OrderStatus>): List<Order>
     fun findAllByUserIdOrderByCreatedAtDesc(userId: Long): List<Order>
     fun countByUserIdAndCreatedAtAfter(userId: Long, after: Instant): Long
+
+    /** ADR-051 — 멱등 재제출 판정. 키가 있으면 새 주문을 만들지 않고 이 주문을 돌려준다. */
+    fun findByIdempotencyKey(idempotencyKey: String): Order?
 }

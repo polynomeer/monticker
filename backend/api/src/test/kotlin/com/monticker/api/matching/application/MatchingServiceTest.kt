@@ -52,6 +52,71 @@ class MatchingServiceTest {
         verify { sagaOrchestrator.execute(userId, req) }
     }
 
+    private fun orderDto(id: Long) = OrderDto(
+        id = id, stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10,
+        limitPrice = null, filledQty = 10, avgFillPrice = java.math.BigDecimal("1000"),
+        status = "FILLED", rejectReason = null, createdAt = java.time.Instant.EPOCH,
+    )
+
+    // ADR-051 — 멱등 재제출. 아웃박스 at-least-once 재전달로 같은 이벤트가 두 번 와도 체결은 한 번이어야 한다.
+
+    @Test
+    fun `submitMarket with a seen idempotency key replays the first fill without a new order`() {
+        val key = "WR:7:42"
+        val existing = Order(
+            id = 55L, userId = userId, stockId = stockId,
+            side = OrderSide.BUY, orderType = OrderType.MARKET,
+            quantity = 10, status = OrderStatus.FILLED, idempotencyKey = key,
+        )
+        every { orderRepo.findByIdempotencyKey(key) } returns existing
+        every { fillQueryService.findByOrderId(55L, userId) } returns listOf(
+            FillDto(
+                id = 77L, orderId = 55L, stockId = stockId, side = "BUY", quantity = 10,
+                fillPrice = java.math.BigDecimal("1000"), amount = java.math.BigDecimal("10000"),
+                fee = java.math.BigDecimal.ZERO, filledAt = java.time.Instant.EPOCH,
+            )
+        )
+
+        val result = service.submitMarket(userId, stockId, "BUY", 10, key)
+
+        assertThat(result.orderId).isEqualTo(55L)
+        assertThat(result.fillId).isEqualTo(77L)
+        verify(exactly = 0) { sagaOrchestrator.execute(any(), any()) }
+    }
+
+    @Test
+    fun `submitMarket with an unseen idempotency key passes it to the saga`() {
+        val key = "WR:7:43"
+        every { orderRepo.findByIdempotencyKey(key) } returns null
+        val fill = FillDto(
+            id = 78L, orderId = 56L, stockId = stockId, side = "BUY", quantity = 10,
+            fillPrice = java.math.BigDecimal("1000"), amount = java.math.BigDecimal("10000"),
+            fee = java.math.BigDecimal.ZERO, filledAt = java.time.Instant.EPOCH,
+        )
+        every { sagaOrchestrator.execute(userId, any()) } returns
+            SubmitOrderResponse(order = orderDto(56L), fills = listOf(fill), message = "주문 체결 완료")
+
+        val result = service.submitMarket(userId, stockId, "BUY", 10, key)
+
+        assertThat(result.orderId).isEqualTo(56L)
+        verify { sagaOrchestrator.execute(userId, match { it.idempotencyKey == key }) }
+    }
+
+    @Test
+    fun `submitMarket without a key never consults the idempotency index`() {
+        val fill = FillDto(
+            id = 79L, orderId = 57L, stockId = stockId, side = "BUY", quantity = 10,
+            fillPrice = java.math.BigDecimal("1000"), amount = java.math.BigDecimal("10000"),
+            fee = java.math.BigDecimal.ZERO, filledAt = java.time.Instant.EPOCH,
+        )
+        every { sagaOrchestrator.execute(userId, any()) } returns
+            SubmitOrderResponse(order = orderDto(57L), fills = listOf(fill), message = "주문 체결 완료")
+
+        service.submitMarket(userId, stockId, "BUY", 10)
+
+        verify(exactly = 0) { orderRepo.findByIdempotencyKey(any()) }
+    }
+
     @Test
     fun `cancelOrder succeeds for a user's own pending order`() {
         val order = Order(

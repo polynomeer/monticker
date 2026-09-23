@@ -50,6 +50,14 @@ class Order(
     @Column(name = "reject_reason")
     var rejectReason: String? = null,
 
+    /**
+     * ADR-051 — 서버 내부에서 발행된 주문의 멱등 키(예: watch rule은 "WR:{ruleId}:{eventId}").
+     * 부분 유니크 인덱스(V48)가 걸려 있어 같은 키로 두 번 INSERT 되지 않는다. 사용자가 화면에서
+     * 직접 낸 주문은 null이며 ADR-007의 `X-Idempotency-Key` 필터가 대신 보호한다.
+     */
+    @Column(name = "idempotency_key", length = 100)
+    val idempotencyKey: String? = null,
+
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant = Instant.now(),
 

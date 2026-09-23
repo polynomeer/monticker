@@ -28,6 +28,8 @@ data class SubmitOrderRequest(
     val orderType: String,
     val quantity: Int,
     val limitPrice: BigDecimal? = null,
+    /** ADR-051 — 서버 내부 발행 주문의 멱등 키. 컨트롤러 경로는 항상 null이다(사용자 입력으로 받지 않는다). */
+    val idempotencyKey: String? = null,
 )
 
 data class FillDto(
@@ -79,11 +81,38 @@ class MatchingService(
      * quantity)으로 판정 입력을 뽑으므로 여기 직접 건다. MARKET 주문은 즉시 체결 아니면 예외다 — 이 경로에 미체결은 없다.
      */
     @RiskChecked
-    override fun submitMarket(userId: Long, stockId: Long, side: String, quantity: Int): MarketOrderResult {
-        val res = submitOrder(userId, SubmitOrderRequest(stockId = stockId, side = side, orderType = "MARKET", quantity = quantity))
+    override fun submitMarket(
+        userId: Long,
+        stockId: Long,
+        side: String,
+        quantity: Int,
+        idempotencyKey: String?,
+    ): MarketOrderResult {
+        // ADR-051 — 멱등 재제출. 아웃박스 재전달·컨슈머 리밸런싱으로 같은 이벤트가 두 번 와도 체결은 한 번이다.
+        // 리스크 게이트(@RiskChecked)보다 뒤에 있는 것은 의도적이다 — 게이트는 부작용이 없고,
+        // 여기서 먼저 빠져나가면 "이미 체결된 주문"이 한도 변화로 거부되는 모순이 생긴다.
+        idempotencyKey?.let { key ->
+            orderRepo.findByIdempotencyKey(key)?.let { return replayOf(it, key) }
+        }
+        val res = submitOrder(userId, SubmitOrderRequest(
+            stockId = stockId, side = side, orderType = "MARKET", quantity = quantity, idempotencyKey = idempotencyKey,
+        ))
         val fill = res.fills.singleOrNull() ?: throw IllegalStateException("시장가 주문이 체결되지 않았습니다: orderId=${res.order.id}")
         return MarketOrderResult(
             orderId = res.order.id, fillId = fill.id, stockId = fill.stockId, side = fill.side,
+            quantity = fill.quantity, fillPrice = fill.fillPrice, amount = fill.amount, filledAt = fill.filledAt,
+        )
+    }
+
+    /**
+     * 이미 처리된 멱등 키의 결과를 체결 기록에서 그대로 복원한다. 새 주문도, 새 체결도 만들지 않는다.
+     * 체결이 없으면(주문은 만들어졌지만 체결 전에 죽은 경우) 예외 — 호출자가 "미확정"으로 다루게 한다.
+     */
+    private fun replayOf(order: Order, key: String): MarketOrderResult {
+        val fill = fillQueryService.findByOrderId(order.id, order.userId).singleOrNull()
+            ?: throw IllegalStateException("멱등 재제출: 주문은 있으나 체결이 없습니다 key=$key orderId=${order.id}")
+        return MarketOrderResult(
+            orderId = order.id, fillId = fill.id, stockId = fill.stockId, side = fill.side,
             quantity = fill.quantity, fillPrice = fill.fillPrice, amount = fill.amount, filledAt = fill.filledAt,
         )
     }
