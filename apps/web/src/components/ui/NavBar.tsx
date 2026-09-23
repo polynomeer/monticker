@@ -20,6 +20,7 @@ const NAV_GROUPS = [
       { href: "/quant-lab", label: "Quant Lab" },
       { href: "/backtest",  label: "백테스팅" },
       { href: "/matching",  label: "체결엔진" },
+      { href: "/watch-rules", label: "자동 주문" },
       { href: "/risk",      label: "리스크" },
       { href: "/analytics", label: "Analytics" },
     ],
