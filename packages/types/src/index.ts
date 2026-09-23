@@ -6,3 +6,4 @@ export * from "./creator-earnings";
 export * from "./brokerage";
 export * from "./community";
 export * from "./ai";
+export * from "./watchrule";
