@@ -214,6 +214,25 @@ class WatchRuleExecutorTest {
         verify { submitter.submitMarket(userId, stockId, "BUY", 10, "WR:2:$eventId") }
     }
 
+    // 장애 시나리오 8 — 주문은 체결됐는데 기록 직전에 프로세스가 죽었다. 재전달되면 멱등 키 덕분에
+    // 주문은 새로 나가지 않고(submitMarket 이 첫 체결을 replay 한다) 기록만 채워진다.
+    @Test
+    fun `a crash between fill and record leaves the replayed fill recorded once`() {
+        givenRules(rule())
+        // 재기동 후: 기록이 없으니 사전 조회는 통과하고, 주문 제출은 첫 체결을 그대로 돌려준다.
+        every { execRepo.existsByWatchRuleIdAndStockEventId(1L, eventId) } returns false
+        every { submitter.submitMarket(userId, stockId, "BUY", 10, "WR:1:$eventId") } returns fill(orderId = 900L)
+
+        executor.onEvent(event())
+
+        val execution = savedExecution()
+        assertThat(execution.status).isEqualTo(WatchRuleExecutionStatus.EXECUTED)
+        assertThat(execution.orderId).isEqualTo(900L)
+        // 주문 제출은 한 번만 호출된다 — 중복 체결 여부는 제출 쪽 멱등 키가 책임진다
+        // (MatchingServiceTest 의 replay 테스트와 WatchRuleIdempotencyIntegrationTest 가 증명).
+        verify(exactly = 1) { submitter.submitMarket(any(), any(), any(), any(), any()) }
+    }
+
     @Test
     fun `an event with no matching rule touches nothing`() {
         givenRules()
