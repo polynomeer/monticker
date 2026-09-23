@@ -37,12 +37,14 @@ class KafkaTopicConfig(private val props: KafkaTopicProperties) {
         const val TICK_PROCESSED_ATTEMPTS = 3        // worker AlertKafkaConsumer
         const val NOTIFY_ATTEMPTS = 3                // worker NotifyKafkaConsumer (ADR-044)
         const val SEARCH_INDEX_ATTEMPTS = 1          // api SearchIndexConsumer (ADR-042) — 배치 리스너라 블로킹 재시도 + -dlt만
+        const val EVENT_DETECTED_ATTEMPTS = 3        // api WatchRuleConsumer (ADR-051)
 
         val all: Map<String, Int> = mapOf(
             "market.ticks" to MARKET_TICKS_ATTEMPTS,
             "market.tick-processed" to TICK_PROCESSED_ATTEMPTS,
             "notify.commands" to NOTIFY_ATTEMPTS,
             "search.index" to SEARCH_INDEX_ATTEMPTS,
+            "market.event-detected" to EVENT_DETECTED_ATTEMPTS,
         )
 
         /** Spring Kafka SUFFIX_WITH_INDEX_VALUE + dltTopicSuffix "-dlt" 규칙 그대로. */
@@ -69,6 +71,9 @@ class KafkaTopicConfig(private val props: KafkaTopicProperties) {
     // ADR-042 — ES 인덱싱 아웃박스. 키 = "{index}:{docId}" 라 같은 문서의 색인/삭제 순서가 보장된다. 7일 = 재색인 되감기 창.
     @Bean fun searchIndexTopic()      = topic("search.index",           props.partitions.searchIndex, Duration.ofDays(7))
     @Bean fun orderCancelledTopic()   = topic("trading.order-cancelled", props.partitions.trading, Duration.ofDays(30), minIsrIfReplicated())
+    // ADR-051 — 탐지 이벤트 아웃박스(worker 발행 → api watch rule 소비). 키 = stockId 라 한 종목의 순서가
+    // 보장된다. 주문이 걸린 경로라 유실 불가 — trading.* 와 같은 수준으로 둔다.
+    @Bean fun eventDetectedTopic()    = topic("market.event-detected",   props.partitions.marketEvents, Duration.ofDays(7), minIsrIfReplicated())
 
     // KafkaAdmin은 NewTopic 빈과 NewTopics(묶음) 빈만 수집한다 — List<NewTopic>은 무시된다.
     @Bean
