@@ -45,7 +45,8 @@ class StockEventWriterTest {
     fun `같은 종목-이벤트타입 중복이 없으면 INSERT하고 true를 반환한다`() {
         every { jdbcTemplate.queryForObject(match<String> { it.contains("COUNT") }, Int::class.java, *anyVararg()) } returns 0
         every { jdbcTemplate.query(match<String> { it.contains("INSERT INTO stock_events") }, any<RowMapper<Long>>(), *anyVararg()) } returns listOf(500L)
-        val published = slot<Any>()
+        // 한 트랜잭션에서 두 개를 발행한다 — ES 색인(ADR-042)과 watch rule(ADR-051).
+        val published = mutableListOf<Any>()
         every { events.publishEvent(capture(published)) } returns Unit
 
         val result = writer.write(makeEvent())
@@ -53,11 +54,29 @@ class StockEventWriterTest {
         assertThat(result).isTrue()
         verify(exactly = 1) { jdbcTemplate.query(match<String> { it.contains("INSERT INTO stock_events") }, any<RowMapper<Long>>(), *anyVararg()) }
         // ADR-042: ES 직접 쓰기 대신 색인 이벤트 — id는 INSERT RETURNING, 날짜는 epoch millis
-        val ev = published.captured as com.monticker.worker.search.SearchIndexEvent
+        val ev = published.filterIsInstance<com.monticker.worker.search.SearchIndexEvent>().single()
         assertThat(ev.index).isEqualTo("stock_events")
         assertThat(ev.docId).isEqualTo("500")
         assertThat(ev.payload!!["eventType"]).isEqualTo("VOLUME_SURGE")
         assertThat(ev.payload!!["eventTime"]).isEqualTo(Instant.parse("2026-08-20T09:30:15Z").toEpochMilli())
+    }
+
+    // ADR-051 — watch rule 소비자용 아웃박스. stock_events.id 가 실려야 소비자가 멱등 키를 만들 수 있다.
+    @Test
+    fun `INSERT된 이벤트는 watch rule 아웃박스로도 발행된다`() {
+        every { jdbcTemplate.queryForObject(match<String> { it.contains("COUNT") }, Int::class.java, *anyVararg()) } returns 0
+        every { jdbcTemplate.query(match<String> { it.contains("INSERT INTO stock_events") }, any<RowMapper<Long>>(), *anyVararg()) } returns listOf(500L)
+        val published = mutableListOf<Any>()
+        every { events.publishEvent(capture(published)) } returns Unit
+
+        writer.write(makeEvent())
+
+        val detected = published.filterIsInstance<StockEventDetectedEvent>().single()
+        assertThat(detected.eventId).isEqualTo(500L)
+        assertThat(detected.stockId).isEqualTo(1L)
+        assertThat(detected.eventType).isEqualTo("VOLUME_SURGE")
+        assertThat(detected.importanceScore).isEqualTo(60)
+        assertThat(detected.eventTime()).isEqualTo(Instant.parse("2026-08-20T09:30:15Z"))
     }
 
     @Test

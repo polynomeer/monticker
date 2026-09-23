@@ -85,6 +85,9 @@ class StockEventWriter(
                     description = event.description, eventTime = event.eventTime,
                     importanceScore = event.importanceScore, sourceType = "SYSTEM",
                 )))
+                // ADR-051 — watch rule(모의 자동주문) 소비자용 아웃박스. 색인 이벤트와 같은 트랜잭션에 둔다:
+                // stock_events 행과 두 발행 기록이 한 커밋에 묶여야 "행은 있는데 아무도 모르는" 이벤트가 없다.
+                events.publishEvent(StockEventDetectedEvent.of(id, event))
             }
             id
         }
