@@ -88,6 +88,8 @@ await shot("wallet-timeline", "/wallet", { wait: 3000, height: 1000, before: asy
 await shot("wallet-score", "/wallet", { wait: 3000, height: 1000, before: async () => { await clickText("투자 점수"); await page.waitForTimeout(1500); } });
 await shot("matching", "/matching", { wait: 3000, height: 1000 });
 await shot("risk", "/risk", { wait: 3000, height: 1000 });
+await shot("watch-rules", "/watch-rules", { wait: 3000, height: 1000 });
+await shot("watch-rules-history", "/watch-rules", { wait: 3000, height: 1000, before: async () => { await clickText("발동 이력"); await page.waitForTimeout(1500); } });
 await shot("analytics", "/analytics", { wait: 3000, height: 1100, before: async () => { await clickText("최적 비중 계산"); await page.waitForTimeout(4000); } });
 await shot("analytics-regime", "/analytics", { wait: 3000, height: 1000, before: async () => { await clickText("시장 국면"); await page.waitForTimeout(3000); } });
 await shot("brokerage", "/brokerage", { wait: 3500, height: 1000 });

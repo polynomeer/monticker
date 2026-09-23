@@ -85,6 +85,10 @@ monticker는 8개의 기능 축으로 구성됩니다. 모두 구현되어 있�
 |---|---|
 | ![체결엔진](docs/images/matching.png) | ![리스크](docs/images/risk.png) |
 
+| 자동 주문 규칙 — 이벤트 → 모의 주문 | 발동 이력 — 체결·거부·건너뜀을 이유와 함께 |
+|---|---|
+| ![자동 주문 규칙](docs/images/watch-rules.png) | ![발동 이력](docs/images/watch-rules-history.png) |
+
 ### 6. 투자 지갑 (Investment Wallet)
 모든 잔고 변경을 append-only 원장 이벤트로 기록하고, 잔고는 이벤트 replay로 계산합니다. 돈의 이동 지도(현금/예약금/평가액/정산대기), 투자 영수증, 주문 시점 감정 태그 × 수익률 분석, 하루 주문 리플레이, 투자 행동/생존 점수를 제공합니다. 원장 정합성은 야간 대조 작업으로 검증합니다 ([ADR-043](docs/decisions/043-ledger-pagination-and-reconciliation.md)).
 
