@@ -1,6 +1,7 @@
 package com.monticker.api.quant.application
 
 import com.monticker.api.quant.domain.ForwardTestStatus
+import com.monticker.api.quant.domain.RuleSetDocument
 import com.monticker.api.quant.domain.QuantForwardTest
 import com.monticker.api.quant.domain.QuantForwardTestEquityPoint
 import com.monticker.api.quant.domain.QuantSignal
@@ -94,6 +95,11 @@ class ForwardTestService(
         val doc = ruleSetRepository.findById(ft.ruleSetId).orElse(null)
         if (doc == null) {
             log.warn("포워드 테스트 대상 룰셋을 찾을 수 없음: forwardTestId={} ruleSetId={}", ft.id, ft.ruleSetId)
+            return
+        }
+
+        if (!ruleSetService.verifyFingerprint(doc)) {
+            log.error("룰셋 무결성 검증 실패: forwardTestId={} ruleSetId={} — 평가를 건너뜁니다", ft.id, ft.ruleSetId)
             return
         }
 

@@ -95,6 +95,10 @@ class RuleSetService(
         val candles = loadDailyCandles(req.stockId, req.startDate, req.endDate)
         require(candles.isNotEmpty()) { "No candle data found for stock ${req.stockId}" }
 
+        require(verifyFingerprint(doc)) {
+            "룰셋 무결성 검증 실패: ruleSetId=$id — ruleDefinition이 변조됐거나 fingerprint가 누락됐습니다"
+        }
+
         val ruleDef = parseRuleDefinition(doc.ruleDefinition)
 
         val result = QuantBacktestEngine.run(
@@ -213,6 +217,9 @@ class RuleSetService(
             positionSizing = parseSizing(def["positionSizing"] as Map<*, *>),
         )
     }
+
+    internal fun verifyFingerprint(doc: RuleSetDocument): Boolean =
+        sha256(objectMapper.writeValueAsString(doc.ruleDefinition)) == doc.ruleSetFingerprint
 
     private fun sha256(input: String): String {
         val bytes = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))

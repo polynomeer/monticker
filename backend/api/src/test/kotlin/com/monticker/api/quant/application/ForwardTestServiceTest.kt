@@ -112,6 +112,7 @@ class ForwardTestServiceTest {
             initialCapital = BigDecimal(1_000_000), cash = BigDecimal(1_000_000))
         val today = LocalDate.of(2026, 1, 5)
         every { ruleSetRepository.findById("rs1") } returns Optional.of(doc())
+        every { ruleSetService.verifyFingerprint(any()) } returns true
         every { ruleSetService.parseRuleDefinition(any()) } returns alwaysTrueEntry()
         every { ruleSetService.loadDailyCandles(5, any(), today) } returns listOf(candle(today.minusDays(1), 100.0))
 
@@ -127,6 +128,7 @@ class ForwardTestServiceTest {
         val ft = QuantForwardTest(id = 1, ruleSetId = "rs1", ruleSetVersion = 1, stockId = 5,
             initialCapital = BigDecimal(1_000_000), cash = BigDecimal(1_000_000))
         every { ruleSetRepository.findById("rs1") } returns Optional.of(doc())
+        every { ruleSetService.verifyFingerprint(any()) } returns true
         every { ruleSetService.parseRuleDefinition(any()) } returns alwaysTrueEntry()
         every { ruleSetService.loadDailyCandles(5, any(), today) } returns listOf(candle(today, 100.0))
         every { equityRepository.findAllByForwardTestIdOrderByEvalDateAsc(1) } returns emptyList()
@@ -151,6 +153,7 @@ class ForwardTestServiceTest {
             initialCapital = BigDecimal(1_000_000), cash = BigDecimal(500_000))
         ft.openPosition(qty = 10, price = BigDecimal(100), date = today.minusDays(3))
         every { ruleSetRepository.findById("rs1") } returns Optional.of(doc())
+        every { ruleSetService.verifyFingerprint(any()) } returns true
         every { ruleSetService.parseRuleDefinition(any()) } returns alwaysTrueExit()
         every { ruleSetService.loadDailyCandles(5, any(), today) } returns listOf(candle(today, 120.0))
         every { equityRepository.findAllByForwardTestIdOrderByEvalDateAsc(1) } returns emptyList()
@@ -176,6 +179,7 @@ class ForwardTestServiceTest {
             positionSizing = PositionSizing("FIXED_RATIO", 10.0),
         )
         every { ruleSetRepository.findById("rs1") } returns Optional.of(doc())
+        every { ruleSetService.verifyFingerprint(any()) } returns true
         every { ruleSetService.parseRuleDefinition(any()) } returns neverEntry
         every { ruleSetService.loadDailyCandles(5, any(), today) } returns listOf(candle(today, 100.0))
         every { equityRepository.findAllByForwardTestIdOrderByEvalDateAsc(1) } returns emptyList()
