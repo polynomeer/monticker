@@ -407,7 +407,8 @@ CI는 PR마다 `backend-ci`(api·worker 매트릭스, unit + integration), `web-
 | 실시간 시세 실데이터 라이브 검증 | 🟡 코드 완료, 플랫폼 앱키 발급 대기 |
 | 실계좌 E2E 검증 (KIS 모의투자 / Toss 실거래) | 🟡 앱키·실명 인증 대기 |
 | 법무 자문 (자본시장법·유사투자자문업·전자금융거래법·약관) | ⏳ 변호사 검토 대기 — [legal-review-brief.md](docs/legal-review-brief.md) |
-| 결제(토스페이먼츠) 실연동 | ⏳ 스텁 — 유료 구독은 UI에서 "준비 중" |
+| 결제(토스페이먼츠) | 🟡 실연동 코드 완료 — 라이브 결제 미검증(`PG_MOCK_ENABLED` 기본 `true`), 상점 등록·라이브 키 대기 |
+| 제작자 수익 출금 | 🟡 적립·요청·승인까지 — **실제 송금은 코드 밖**(관리자 수동 이체 전제) |
 | 퍼블릭 출시 | ⏳ 위 게이트 통과 후 ([launch-plan.md](docs/launch-plan.md) Phase 7) |
 
 ---

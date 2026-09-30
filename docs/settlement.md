@@ -8,12 +8,16 @@
 
 monticker의 정산 시스템은 4개의 독립 도메인으로 구성된다.
 
-| # | 도메인 | 목적 | 실거래 여부 |
-|---|--------|------|------------|
-| ① | **페이퍼트레이딩 정산** | 모의투자 체결 건의 T+2 결제·원장 반영 | 모의 (실머니 없음) |
-| ② | **전략 마켓 수익 분배** | 전략 구독 수익을 제작자 계정에 적립·출금 | 서비스 내 포인트 |
-| ③ | **구독료 정산** | 플랜별 월 이용료 PG 결제 및 청구서 관리 | PG 연동 (Mock) |
-| ④ | **실거래 증권사 정산** | 실제 주식 매매를 증권사 API에 위임·정산 수신 | 증권사 연동 (Mock) |
+| # | 도메인 | 목적 | 실거래 여부 | 구현 상태 |
+|---|--------|------|------------|-----------|
+| ① | **페이퍼트레이딩 정산** | 모의투자 체결 건의 T+2 결제·원장 반영 | 모의 (실머니 없음) | ✅ 동작 중 (배치 평일 16:30) |
+| ② | **전략 마켓 수익 분배** | 전략 구독 수익을 제작자 계정에 적립·출금 | 서비스 내 포인트 | 🟡 적립·출금 요청·승인까지. **실제 송금은 코드 밖** |
+| ③ | **구독료 정산** | 플랜별 월 이용료 PG 결제 및 청구서 관리 | 실 PG (토스페이먼츠) | 🟡 실연동 코드 완료. **라이브 결제 미검증** (`PG_MOCK_ENABLED` 기본 true) |
+| ④ | **실거래 증권사 정산** | 실제 주식 매매를 증권사 API에 위임·정산 수신 | 실 증권사 (KIS·토스증권) | 🟡 실연동 코드 완료. **실계좌 미검증** (`BROKERAGE_MOCK_ENABLED` 기본 true) |
+
+> **"코드 완료 / 미검증"의 뜻**: 외부 API를 실제로 호출하는 구현이 있고 단위·통합 테스트를 통과하지만,
+> 실제 키·실계좌로 한 번도 돌려본 적이 없다는 의미다. 남은 것은 코드가 아니라 실명·사업자 인증과
+> 법무 검토다 — [human-action-items.md](human-action-items.md), [launch-plan.md](launch-plan.md) 참고.
 
 각 도메인은 `settlement/` 패키지 하위에 독립 모듈로 배치되며, 다른 도메인의 Repository를 직접 호출하지 않고 도메인 이벤트를 통해서만 통신한다.
 
@@ -116,8 +120,12 @@ PaperSettlementJob
 제작자 출금 요청
   → creator_payouts 생성 (status=REQUESTED)
   → 관리자 검토 → APPROVED | REJECTED
-  → APPROVED: 외부 지급 처리 후 PAID
+  → APPROVED: PAID 로 전환 + AVAILABLE earnings 를 선입선출로 PAID_OUT 처리 + 원장 기록
 ```
+
+> ⚠️ **실제 송금은 코드에 없다.** `CreatorEarningsService.approvePayout()`은 상태를 `PAID`로 바꾸고
+> 원장에 기록할 뿐, 계좌 이체를 수행하지 않는다 — 관리자가 별도로 이체한 뒤 승인을 누르는 것을
+> 전제한 설계다. 자동 지급을 붙이려면 지급대행(페이아웃) 연동과 세무 처리(원천징수)가 선행돼야 한다.
 
 ### 수익 배분 구조
 
@@ -175,7 +183,12 @@ CREATE INDEX idx_creator_payouts_creator ON creator_payouts (creator_id, status)
 
 ### 개념
 
-monticker는 3단계 구독 플랜을 제공한다. 월 구독료는 PG(Payment Gateway)를 통해 결제되며, 결제 성공 시 구독이 활성화된다. 로컬 개발 환경에서는 PG Mock이 항상 결제 성공을 반환한다.
+monticker는 3단계 구독 플랜을 제공한다. 월 구독료는 토스페이먼츠를 통해 결제되며, 결제 성공 시 구독이 활성화된다.
+로컬 개발 환경(`PG_MOCK_ENABLED=true`, 기본값)에서는 `MockPgClient`가 항상 결제 성공을 반환한다.
+
+**토스페이먼츠는 "프론트에서 결제하고 백엔드가 확정"하는 구조라, 서버가 먼저 결제를 요청하는 플로우가 없다.**
+그래서 `PgClient.requestPayment()`는 Mock에서만 의미가 있고 `TossPgClient`에서는 실패를 반환한다 —
+실 PG 경로에서는 아래 confirm 플로우와 빌링키 자동결제 둘 중 하나를 탄다.
 
 ### 구독 플랜
 
@@ -187,19 +200,51 @@ monticker는 3단계 구독 플랜을 제공한다. 월 구독료는 PG(Payment 
 
 ### 결제 플로우
 
-```
-사용자 플랜 선택
-  → POST /api/subscription/subscribe
-  → PgClient.requestPayment() (실제: 토스페이먼츠/아임포트 / Mock: 즉시 SUCCESS)
-  → payment_records 저장 (status=SUCCESS | FAILED)
-  → SUCCESS: user_subscriptions 갱신, 구독 활성화 이벤트 발행
-  → FAILED:  결제 실패 응답
+**(a) 첫 결제 — 토스 SDK + confirm** (실 PG 경로)
 
-월 갱신 (배치, 매월 1일)
-  → 만료 예정 구독 조회
-  → PgClient.requestPayment() 재시도
-  → 실패 3회: 구독 FREE 다운그레이드
 ```
+프론트: 토스 SDK 결제 위젯 → 사용자 승인 → {paymentKey, orderId, amount}
+  → POST /api/subscription/payment/confirm
+  → TossPgClient.confirmPayment()  POST /v1/payments/confirm
+  → payment_records 저장 (status=SUCCESS | FAILED)
+  → SUCCESS: user_subscriptions 갱신, 구독 활성화
+```
+
+**(b) 첫 결제 — Mock 경로** (`PG_MOCK_ENABLED=true`)
+
+```
+POST /api/subscription/subscribe
+  → PgClient.requestPayment()  (MockPgClient: 즉시 SUCCESS)
+  → 위와 동일하게 활성화
+```
+무료 플랜(`FREE`)은 두 경로 모두 PG를 거치지 않고 즉시 적용된다.
+
+**(c) 정기결제 카드 등록 → 월 갱신**
+
+```
+프론트: 토스 SDK requestBillingAuth() → successUrl 리다이렉트 {authKey, customerKey}
+  → POST /api/subscription/billing/register
+  → TossPgClient.issueBillingKey()  POST /v1/billing/authorizations/issue
+  → user_billing_keys 저장 (카드사·끝 4자리만 보관)
+
+월 갱신 (Spring Batch, 매월 1일 01:00 KST — BatchJobScheduler.runSubscriptionRenewal)
+  → 만료 예정 구독 조회
+  → TossPgClient.chargeBilling()  POST /v1/billing/{billingKey}
+  → 실패 누적 3회: 구독 FREE 다운그레이드
+```
+
+**(d) 웹훅 — 트리거로만 쓰고 값은 믿지 않는다**
+
+```
+토스 → POST /api/subscription/payment/webhook
+  → 바디의 결제 상태를 신뢰하지 않고 paymentKey 만 꺼낸다
+  → TossPgClient.getPaymentStatus()  GET /v1/payments/{paymentKey}  ← 이 값을 신뢰
+  → 확인된 상태로 payment_records 갱신
+```
+
+> 토스페이먼츠의 일반 결제 상태 웹훅에는 **서명이 없다**(`tosspayments-webhook-signature`는
+> `payout.changed`·`seller.changed` 에만 붙는다, 2026-09 개발자센터 확인). 웹훅 바디는 위조할 수 있지만
+> 우리 시크릿 키로 인증되는 조회 API는 위조할 수 없다 — 그래서 웹훅은 "다시 물어보라"는 신호로만 쓴다.
 
 ### DB 스키마
 
@@ -249,26 +294,30 @@ CREATE INDEX idx_payment_records_user ON payment_records (user_id, created_at DE
 
 ```kotlin
 interface PgClient {
-    fun requestPayment(request: PaymentRequest): PaymentResult
+    fun requestPayment(request: PaymentRequest): PaymentResult          // Mock 전용 경로
     fun requestRefund(pgTransactionId: String, amount: BigDecimal): RefundResult
+    fun issueBillingKey(authKey: String, customerKey: String): BillingKeyResult
+    fun chargeBilling(billingKey: String, customerKey: String,
+                      amount: BigDecimal, orderId: String, orderName: String): PaymentResult
+    fun getPaymentStatus(paymentKey: String): PaymentStatusResult       // 웹훅 검증용
 }
 
-// 로컬 개발용 Mock (SOCIAL_MOCK_ENABLED=true 와 동일한 방식)
+// 로컬 개발용 Mock — 기본값이다 (PG_MOCK_ENABLED=true)
 @ConditionalOnProperty("app.pg.mock.enabled", havingValue = "true")
 @Primary
-class MockPgClient : PgClient {
-    override fun requestPayment(request: PaymentRequest) =
-        PaymentResult(success = true, pgTransactionId = "mock_${UUID.randomUUID()}")
-    override fun requestRefund(pgTransactionId: String, amount: BigDecimal) =
-        RefundResult(success = true)
-}
+class MockPgClient : PgClient { /* 항상 성공 */ }
 
-// 실제 PG 연동 (토스페이먼츠 예시)
-@ConditionalOnProperty("app.pg.mock.enabled", havingValue = "false", matchIfMissing = true)
+// 실 PG — PG_MOCK_ENABLED=false 일 때만 뜬다
+@ConditionalOnProperty("app.pg.mock.enabled", havingValue = "false")
 class TossPgClient(
-    @Value("\${pg.toss.secret-key}") private val secretKey: String,
-) : PgClient { ... }
+    @Value("\${app.pg.toss.secret-key}") private val secretKey: String,
+) : PgClient { /* /v1/payments/confirm, /v1/billing/... 실제 호출 */ }
 ```
+
+> 프로퍼티 경로는 **`app.pg.toss.secret-key`** 다. 과거 `app.toss.secret-key`로 잘못 참조돼 있어
+> `PG_MOCK_ENABLED=false`로 부팅하면 `PlaceholderResolutionException`으로 항상 죽었다(실제 재현). 외부
+> 호출에는 결제용 타임아웃(`HttpTimeouts.PAYMENT_READ`)이 걸려 있다 — 카드사 경유라 브로커보다 느리지만
+> 무제한은 아니다(resilience-plan P0-2).
 
 ### API
 
@@ -276,17 +325,34 @@ class TossPgClient(
 |--------|------|------|
 | `GET` | `/api/subscription/plans` | 플랜 목록 조회 |
 | `GET` | `/api/subscription/me` | 내 구독 현황 |
-| `POST` | `/api/subscription/subscribe` | 플랜 구독 (결제) |
+| `POST` | `/api/subscription/subscribe` | 플랜 구독 — 무료 플랜과 Mock 경로 전용 |
 | `POST` | `/api/subscription/cancel` | 구독 해지 |
 | `GET` | `/api/subscription/payments` | 결제 이력 |
+| `POST` | `/api/subscription/payment/confirm` | 토스 SDK 결제 확정 (실 PG 첫 결제) |
+| `POST` | `/api/subscription/payment/webhook` | 토스 웹훅 수신 — 트리거로만 사용 |
+| `GET` | `/api/subscription/billing/customer-key` | 정기결제용 customerKey 발급·조회 |
+| `POST` | `/api/subscription/billing/register` | authKey → billingKey 발급·저장 |
+| `GET` | `/api/subscription/billing` | 등록된 자동결제 카드 상태 |
+| `DELETE` | `/api/subscription/billing` | 자동결제 카드 해지 |
 
 ---
 
-## ④ 실거래 증권사 정산 (Mock)
+## ④ 실거래 증권사 정산
 
 ### 개념
 
-실제 주식 매매는 증권사 API(한국투자증권 KIS Open API 기준)를 통해 위임한다. 실계좌와 모의계좌를 함께 지원하며, 체결 후 T+2 영업일에 증권사로부터 정산 내역을 수신한다. 로컬 개발 환경에서는 KIS API 응답 구조를 그대로 모사한 Mock 서버를 사용한다.
+실제 주식 매매는 증권사 Open API를 통해 위임한다. **한국투자증권(KIS)과 토스증권 두 곳을 지원하며**
+([ADR-026](decisions/026-toss-brokerage-integration.md)), 사용자가 연동한 증권사에 따라
+`BrokerageClientRegistry`가 구현체를 고른다. 실계좌와 모의계좌를 함께 지원하고, 체결 후 T+2 영업일에
+증권사로부터 정산 내역을 수신한다.
+
+**monticker는 자체 브로커 라이선스를 보유하지 않는다** — 실주문은 항상 사용자 본인 명의 계좌의 API 키로
+실행되는 BYOK 모델이다([ADR-023](decisions/023-commercialization-pivot.md)). 자격증명은 AES-256-GCM으로
+암호화 저장하고, 실주문도 모의투자와 **같은 사전 리스크 게이트**를 통과한다
+([ADR-025](decisions/025-real-brokerage-order-safety-gate.md)).
+
+기본값은 `BROKERAGE_MOCK_ENABLED=true`로 `MockBrokerageClient`가 뜬다 — 실계좌 연동 코드는 완성됐지만
+실제 앱키로 검증된 적은 없다.
 
 ### KIS API 기반 플로우
 
@@ -303,7 +369,7 @@ class TossPgClient(
   → status=FILLED, 체결 단가·수량 갱신
 
 정산 수신 (T+2)
-  → KIS 정산 API 폴링 (매일 16:30 KST)
+  → 증권사 정산 API 폴링 (Spring Batch, 평일 17:00 KST — BatchJobScheduler.runBrokerageSettlement)
   → brokerage_settlements 저장
   → 원장 이벤트 발행 (BROKERAGE_SETTLEMENT)
 ```
@@ -315,25 +381,23 @@ KIS API를 호출하는 `BrokerageClient` 인터페이스를 정의하고, Mock 
 ```kotlin
 interface BrokerageClient {
     fun issueToken(appKey: String, appSecret: String): BrokerageToken
-    fun submitOrder(token: BrokerageToken, req: BrokerageOrderRequest): BrokerageOrderResult
-    fun getOrderStatus(token: BrokerageToken, orderId: String): BrokerageOrderStatus
-    fun getSettlements(token: BrokerageToken, date: LocalDate): List<BrokerageSettlement>
-    fun getBalance(token: BrokerageToken): BrokerageBalance
+    fun resolveAccountRef(token: BrokerageToken, accountNumber: String): String? = null
+    fun submitOrder(credentials: BrokerageCredentials, request: BrokerageOrderRequest): BrokerageOrderResult
+    fun cancelOrder(credentials: BrokerageCredentials, pgOrderId: String, brokerOrderRef: String?): BrokerageCancelResult
+    fun getOrderStatus(credentials: BrokerageCredentials, pgOrderId: String): BrokerageOrderStatus
+    fun getSettlements(credentials: BrokerageCredentials, date: LocalDate): List<BrokerageSettlementItem>
+    fun getBalance(credentials: BrokerageCredentials): BrokerageBalance
 }
 
-@ConditionalOnProperty("app.brokerage.mock.enabled", havingValue = "true")
-@Primary
-class MockBrokerageClient : BrokerageClient {
-    // 시장가는 현재가 ±0.05% 슬리피지 적용 후 즉시 체결
-    // 지정가는 현재가 도달 시 체결 (인메모리 OrderBook 시뮬레이션)
-    // T+2 정산은 현재일+2 날짜로 settlement 레코드 생성
-}
-
-@ConditionalOnProperty("app.brokerage.mock.enabled", havingValue = "false", matchIfMissing = true)
-class KisBrokerageClient(
-    @Value("\${kis.base-url:https://openapi.koreainvestment.com:9443}") private val baseUrl: String,
-) : BrokerageClient { ... }
+// 구현체 3종 — BrokerageClientRegistry 가 사용자의 연동 증권사로 라우팅한다.
+MockBrokerageClient   // BROKERAGE_MOCK_ENABLED=true (기본값). 즉시 체결 + T+2 정산 레코드 생성
+KisBrokerageClient    // 한국투자증권. 서킷브레이커 "kis"
+TossBrokerageClient   // 토스증권 (ADR-026). 같은 패턴의 브레이커
 ```
+
+> 취소도 실제 브로커에 전달된다([ADR-028](decisions/028-brokerage-order-cancellation.md)).
+> 조건부 주문(OCO)은 브로커 네이티브 기능을 쓰지 않고 monticker가 감시하다가 리스크 게이트를 거쳐
+> 제출한다 — 네이티브 조건주문은 게이트를 우회하기 때문이다([ADR-032](decisions/032-conditional-orders.md)).
 
 ### DB 스키마
 
