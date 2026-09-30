@@ -194,6 +194,18 @@ See [ADR-005](decisions/005-kafka-go-gateway-netty-broadcast.md) and [kafka-tick
 | VWAP | Computed from candles_1m | Done |
 | Latency Tracking | Micrometer Timer, `/api/latency` | Done |
 | **Watch Rule** | `watch_rules`, `watch_rule_executions` | Done ([ADR-051](decisions/051-event-triggered-paper-orders.md)) — 탐지 이벤트 → 모의 자동 주문, 모의계좌 전용 |
+| Paper Settlement | `paper_settlements` | Done — T+2 배치 ([ADR-014](decisions/014-t2-paper-settlement-scheduler.md)) |
+| Backtest | `backtest_results` | Done — 내장 전략 3종, `backtestExecutor` bulkhead |
+| Disclosure | `disclosures` (DART 수집) | Done |
+| Device | `device_tokens` | Done — Expo 푸시 토큰 |
+| Investor Flow | `investor_flow` | Done ([ADR-017](decisions/017-investor-flow-kis-integration.md)) — 국내 종목 한정 |
+| Stock Score | `stock_fundamentals` | Done ([ADR-020](decisions/020-stock-valuation-score.md)) — 국내 종목 한정 |
+| AI | `order_proposals` | Done ([ADR-036](decisions/036-ai-order-proposal.md)) — 방향·근거만 제안, 제출은 사용자 |
+| Community | `stock_comments`, `stock_comment_reports` | Done ([ADR-037](decisions/037-stock-community-comments.md)) — 매수·매도 권유 fail-closed 차단 |
+| **Brokerage (BYOK)** | `brokerage_accounts`, `brokerage_orders`, `brokerage_settlements`, `conditional_orders`, `rebalance_*` | 🟡 코드 완료 / 실계좌 미검증 — KIS·토스증권·Mock ([ADR-023](decisions/023-commercialization-pivot.md), [ADR-025](decisions/025-real-brokerage-order-safety-gate.md)) |
+| **Subscription** | `subscription_plans`, `user_subscriptions`, `payment_records`, `user_billing_keys` | 🟡 코드 완료 / 라이브 결제 미검증 — 토스페이먼츠 ([settlement.md](settlement.md)) |
+| **Settlement (Creator)** | `creator_earnings`, `creator_payouts` | 🟡 적립·승인까지 — 실제 송금은 코드 밖 |
+| Batch | Spring Batch 메타테이블 | Done — 정산·갱신·대조·백필 잡 (`batch/BatchJobScheduler`) |
 
 ### Implemented Modules (Quant Lab — V13)
 
@@ -370,89 +382,131 @@ GET /api/strategies/{id}/signal   (subscriber endpoint)
 
 ## API Endpoints
 
-### REST (implemented)
+### REST
+
+> **정본은 컨트롤러다.** 이 목록은 2026-09-30 기준으로 `*Controller.kt`에서 기계적으로 추출한 것이며,
+> 경로가 의심스러우면 `backend/api/src/main/kotlin/com/monticker/api/**/api/`를 본다.
+> 과거 이 표가 수기 관리되다가 실제로는 없는 경로 16개를 담고 있었다(`/api/paper/orders`,
+> `/api/wallet/timeline`, `/api/stocks/{id}/patterns` 등) — 손으로 덧붙이지 말 것.
 
 ```http
-GET    /api/stocks/search?query=
+# 인증 · 계정
+POST   /api/auth/signup | login | logout | refresh
+POST   /api/auth/verify-email | resend-verification | forgot-password | reset-password
+POST   /api/auth/mock-social                  # SOCIAL_MOCK_ENABLED=true 일 때만
+DELETE /api/auth/account
+GET    /api/users/me/notification-preferences
+PUT    /api/users/me/notification-preferences
+
+# 종목 · 시세
+GET    /api/stocks/search
 GET    /api/stocks/{stockId}
-GET    /api/stocks/{stockId}/price
-GET    /api/stocks/{stockId}/candles?interval=1m&from=&to=
-GET    /api/stocks/{stockId}/events?from=&to=
-GET    /api/stocks/{stockId}/orderbook        ← source: KIS_REALTIME|YAHOO|MOCK
-GET    /api/stocks/{stockId}/vwap
-
-GET    /api/screener?tab=&market=&sort=&page=
-
-GET    /api/watchlists
-POST   /api/watchlists/groups
-POST   /api/watchlists/{groupId}/items
-DELETE /api/watchlists/items/{itemId}
-
-GET    /api/alerts/rules
-POST   /api/alerts/rules
-PATCH  /api/alerts/rules/{ruleId}
-DELETE /api/alerts/rules/{ruleId}
-
-POST   /api/auth/register
-POST   /api/auth/login
-POST   /api/auth/refresh
-
-GET    /api/paper/portfolio
-POST   /api/paper/orders
-GET    /api/paper/orders
-
-GET    /api/backtest/run
+GET    /api/stocks/{stockId}/price | candles | orderbook | vwap | vwap/series
+GET    /api/market/summary
 GET    /api/latency
+GET    /api/screener | /api/screener/quotes | /api/screener/search
 
-# Quant Lab
-POST   /api/quant/rulesets                    # 룰셋 생성
-GET    /api/quant/rulesets/{id}               # 내 룰셋 조회
-PUT    /api/quant/rulesets/{id}               # 수정 (새 버전)
+# 이벤트 · 뉴스 · 공시 · AI 요약
+GET    /api/stocks/{stockId}/events | news | disclosures
+GET    /api/events/recent | /api/events/search | /api/sectors/events
+GET    /api/news/search | /api/disclosures/search | /api/summaries/search
+GET    /api/stocks/{stockId}/summary          # AI 요약
+GET    /api/stocks/{stockId}/score            # 밸류에이션 (국내 한정, ADR-020)
+GET    /api/stocks/{stockId}/investor-flow    # 투자자 동향 (국내 한정, ADR-017)
+
+# 관심종목 · 알림 · 디바이스
+GET    /api/watchlists | /api/watchlists/search
+POST   /api/watchlists/groups | /api/watchlists/groups/{groupId}/items
+DELETE /api/watchlists/items/{itemId}
+GET    /api/alerts/rules | /api/alerts/stats | /api/alerts/history/search
+POST   /api/alerts/rules
+DELETE /api/alerts/rules/{ruleId}
+POST   /api/devices/push-token
+DELETE /api/devices/push-token
+
+# 모의투자 · 체결엔진 · 리스크
+GET    /api/paper/portfolio | history | risk
+POST   /api/paper/buy | sell | reset
+POST   /api/matching/orders                   # 리스크 게이트 → CLOB
+DELETE /api/matching/orders/{id}
+GET    /api/matching/orders | /api/matching/fills | /api/matching/orders/{id}/fills
+GET    /api/risk/limits | /api/risk/exposure
+PUT    /api/risk/limits
+POST   /api/risk/check                        # dry-run
+
+# 투자 지갑 (원장)
+GET    /api/wallet                            # 돈의 이동 지도
+GET    /api/wallet/ledger | replay | score | emotion-analysis
+GET    /api/wallet/{id}/receipt
+GET    /api/wallet/{id}/emotion
+POST   /api/wallet/{id}/emotion
+
+# 자동 주문 규칙 (ADR-051) — 모의계좌 전용
+GET    /api/watch-rules | /api/watch-rules/executions
+POST   /api/watch-rules
+PATCH  /api/watch-rules/{ruleId}
+DELETE /api/watch-rules/{ruleId}
+
+# Quant Lab · 전략 마켓
+GET    /api/quant/rulesets | /{id} | /{id}/versions | /{id}/backtest | /{id}/forward-test
+POST   /api/quant/rulesets | /{id}/backtest | /{id}/forward-test/start | /{id}/forward-test/stop
+PUT    /api/quant/rulesets/{id}
 DELETE /api/quant/rulesets/{id}
-POST   /api/quant/rulesets/{id}/backtest      # 백테스트 실행
-GET    /api/quant/rulesets/{id}/backtest/{runId}
-POST   /api/quant/rulesets/{id}/forward-test/start
-POST   /api/quant/rulesets/{id}/forward-test/stop
-GET    /api/quant/rulesets/{id}/forward-test
+GET    /api/quant/market
+POST   /api/quant/market/share | /api/quant/market/{id}/subscribe
+DELETE /api/quant/market/{id}/subscribe
+GET    /api/backtest/strategies                # 내장 전략 목록
+POST   /api/backtest                           # 내장 전략 실행
 
 # Quant Analytics
-GET    /api/analytics/portfolio/optimize?targetReturn=    # 효율적 프론티어 + 추천 비중
-GET    /api/analytics/portfolio/frontier                  # 효율적 프론티어 전체 곡선
-GET    /api/analytics/tax/harvesting-candidates           # 손익통산 후보
-POST   /api/analytics/tax/simulate                        # 손실 매도 시뮬레이션
-GET    /api/analytics/position-size/kelly?ruleSetId=      # 켈리 비율 계산
-GET    /api/stocks/{id}/patterns                          # 감지된 차트 패턴
-GET    /api/stocks/{id}/regime                            # 현재 시장 국면
+GET    /api/analytics/portfolio/optimize | frontier
+GET    /api/analytics/position-size/kelly      # POST 도 지원
+GET    /api/analytics/tax/harvesting-candidates
+GET    /api/analytics/{stockId}/patterns | regime
 
-# Matching Engine + Risk
-POST   /api/matching/orders                   # 주문 접수 (리스크 체크 → 체결 엔진)
-DELETE /api/matching/orders/{id}              # 주문 취소
-GET    /api/matching/orders                   # 내 미체결 주문
-GET    /api/matching/orders/{id}/fills        # 체결 내역
-GET    /api/risk/limits                       # 내 리스크 한도 조회
-PUT    /api/risk/limits                       # 한도 설정
-POST   /api/risk/check                        # 주문 전 리스크 시뮬레이션 (dry-run)
-GET    /api/risk/exposure                     # 현재 포트폴리오 리스크 노출도
+# AI 주문 제안 (ADR-036) — 방향·근거만, 제출은 사용자
+GET    /api/ai/order-proposals | /{id}
+POST   /api/ai/order-proposals | /{id}/approve | /{id}/reject
 
-# Watch Rule (ADR-051) — 이벤트 트리거 모의 자동주문
-GET    /api/watch-rules                       # 내 룰 목록
-POST   /api/watch-rules                       # 룰 생성 (stockId, eventType, side, quantity, ...)
-PATCH  /api/watch-rules/{ruleId}              # 수량·중요도 하한·쿨다운·활성 여부 수정
-DELETE /api/watch-rules/{ruleId}
-GET    /api/watch-rules/executions            # 발동 이력 (EXECUTED / REJECTED / SKIPPED + 사유)
+# 종목 커뮤니티 (ADR-037)
+GET    /api/stocks/{stockId}/comments
+POST   /api/stocks/{stockId}/comments | /{id}/report
+DELETE /api/stocks/{stockId}/comments/{id}
 
-# Investment Wallet
-GET    /api/wallet                            # 돈의 이동 지도 (현금/예약금/평가액/정산대기)
-GET    /api/wallet/ledger                     # 원장 이벤트 스트림
-GET    /api/wallet/timeline                   # 내 돈 이동 타임라인
-GET    /api/paper/orders/{id}/receipt         # 투자 영수증
-GET    /api/paper/replay?date=                # 주문 리플레이
-GET    /api/wallet/score                      # 투자 행동 점수
-GET    /api/wallet/survival-score             # 투자 생존 점수
-GET    /api/paper/orders/{id}/emotion-tags    # 감정 태그 조회
-POST   /api/paper/orders/{id}/emotion-tags    # 감정 태그 저장
-GET    /api/wallet/emotion-analysis           # 감정 태그 × 수익률 분석
+# 실전투자 (BYOK) — 기본 Mock, BROKERAGE_MOCK_ENABLED
+POST   /api/brokerage/connect
+GET    /api/brokerage/account | account/balance
+POST   /api/brokerage/orders
+GET    /api/brokerage/orders | orders/active | orders/{id}/sync
+DELETE /api/brokerage/orders/{id}
+GET    /api/brokerage/settlements | settlements/pending
+GET    /api/brokerage/conditional-orders
+POST   /api/brokerage/conditional-orders | conditional-orders/oco
+DELETE /api/brokerage/conditional-orders/{id}
+GET    /api/rebalance/target | preview | executions
+POST   /api/rebalance/target | execute
+
+# 정산 · 구독 · 제작자 수익
+GET    /api/settlement/paper | paper/pending | paper/trade/{tradeId}
+GET    /api/settlement/strategy/earnings | earnings/summary | payouts
+POST   /api/settlement/strategy/payout
+GET    /api/subscription/plans | me | payments
+POST   /api/subscription/subscribe | cancel
+POST   /api/subscription/payment/confirm | payment/webhook
+GET    /api/subscription/billing | billing/customer-key
+POST   /api/subscription/billing/register
+DELETE /api/subscription/billing
+
+# 운영 (관리자)
+POST   /api/admin/batch/behavior-score | candle-backfill | ledger-reconciliation | regime
+GET    /api/admin/search/indices
+POST   /api/admin/search/reindex/{index}
+GET    /health
 ```
+
+**설계만 있고 구현되지 않은 것**: `GET /api/strategies/{id}/signal`(구독자용 신호 조회)은
+[Strategy Protection](#strategy-protection) 절에 설계가 적혀 있지만 컨트롤러가 없다 — 지금 신호는
+STOMP `/topic/rulesets/{id}/signals`로만 나간다([ADR-035](decisions/035-strategy-market-signal-access-control.md)).
 
 ### WebSocket (STOMP)
 
@@ -482,7 +536,7 @@ BrokerageClient  (interface — broker-agnostic DTOs: order/status/settlement/ba
 ```
 
 - **Provider selection is config-driven** (`app.brokerage.mock.enabled`, per-user provider choice), never hardcoded — `BrokerageService` never knows which broker it's talking to.
-- **Every implementation must register a named resilience4j circuit breaker** (see [Circuit Breaker](#circuit-breaker) below) the way `TradingServiceClient`/`YahooFinanceOrderBookProvider` do. `KisBrokerageClient` now does (breaker name `"kis"`, registered in `CircuitBreakerConfiguration`) — `TossBrokerageClient` should reuse the same pattern under `"toss"`.
+- **Every implementation must register a named resilience4j circuit breaker** (see [Circuit Breaker](#circuit-breaker) below) the way `YahooFinanceOrderBookProvider` does. `KisBrokerageClient` (`"kis"`) and `TossBrokerageClient` (`"toss"`) are both registered in `common/resilience/CircuitBreakerConfiguration`; a new provider must add its own.
 - **User-supplied broker credentials (appKey/appSecret) are encrypted at rest** via `EncryptedStringConverter` (AES-256-GCM, `common/security/`) applied to `BrokerageAccount.accessToken`. Key comes from `app.security.credential-encryption-key` — production must override the dev default.
 - **Cash reservation is safe under concurrency.** `OrderSagaOrchestrator.reserveCash` does the balance check and the debit in one atomic `UPDATE ... WHERE cash >= ?` instead of a separate SELECT-then-UPDATE — proven under real concurrent load in `CashReservationConcurrencyIntegrationTest` (Testcontainers Postgres, 10 concurrent threads against a shared account).
 
@@ -865,11 +919,17 @@ LedgerEvent types:
 ## Redis Key Schema
 
 ```
-stock:price:{market}:{symbol}      # latest price JSON (STRING)
-orderbook:{symbol}                 # KIS realtime orderbook (STRING, TTL 30s)
-alert:cooldown:{ruleId}            # cooldown flag (STRING, TTL 600s)
-wallet:snapshot:{userId}           # 최신 wallet 스냅샷 캐시 (TTL 30s)
+stock:price:{market}:{symbol}      # 최신 시세 JSON (STRING)
+orderbook:{symbol}                 # KIS 실시간 호가 (STRING, TTL 30s)
+alert:cooldown:{ruleId}            # 알림 쿨다운 플래그 (STRING, TTL 600s)
+alert:rules:changed                # 알림 룰 인메모리 인덱스 무효화 신호 (ADR-044)
+ratelimit:{prefix}:{userId}        # @RateLimited 카운터 (TTL = window)
+idempotency:{userId}:{key}         # X-Idempotency-Key 응답 캐시 (TTL 24h)
 ```
+
+Redis 실패 시 동작은 용도별로 다르다 — 레이트리밋·캐시는 **fail-open**, 멱등성은 **fail-closed**(503).
+`RedisGuard`가 이 정책을 강제하고 `redis_command_failed_total{op,policy}`로 관측한다
+([resilience-plan P0-1](resilience-plan.md), [runbooks/redis-down.md](runbooks/redis-down.md)).
 
 ---
 
@@ -931,9 +991,11 @@ make up-full
 
 | Topic | Producer | Consumer |
 |-------|----------|----------|
-| `market.ticks` | `worker-market`, `market-gateway` (Go) | `worker-event`, `backend/api` (`monticker-api-broadcast` group, ADR-029 — STOMP push + ADR-032 conditional-order evaluation) |
+| `market.ticks` | `worker-market`, `market-gateway` (Go) | `worker-event`(그룹 `monticker-worker`), `backend/api` **컨슈머 그룹 없이 전 파티션 수동 할당**([ADR-038](decisions/038-broadcast-consumer-partition-assignment.md)) — STOMP push + [ADR-032](decisions/032-conditional-orders.md) 조건부 주문 평가 |
 | `market.tick-processed` | `worker-event` | `worker-alert` |
-| `market.events` | `worker-event` | — |
+| `market.events` | `worker-event` (`ingestion.source=kafka` 일 때만) | **없음** — [ADR-033](decisions/033-remove-netty-broadcast-gateway.md)으로 Netty 게이트웨이가 사라진 뒤 주인이 없다. 자동 주문은 아래 `market.event-detected`를 쓴다([ADR-051](decisions/051-event-triggered-paper-orders.md) 참고) |
+| `market.summary` | `worker` `MarketSummaryPublisher` | `backend/api` `MarketSummaryBroadcastConsumer` (틱과 같은 수동 할당 방식) |
+| `notify.commands` | `worker-event` `NotifyKafkaProducer` ([ADR-044](decisions/044-alert-rule-in-memory-index.md)) | `worker-alert` — 평가와 발송을 분리해 발송 지연이 틱 파이프라인을 막지 않게 한다 |
 | `trading.order-filled` | `backend/api` (Modulith `@Externalized`, Outbox) | (현재 없음 — quant live-tracking 도입 시. api 안에서는 `OrderFilledStrategyListener`가 같은 이벤트를 받는다) |
 | `trading.order-cancelled` | `backend/api` (Modulith `@Externalized`, Outbox) | — |
 | `search.index` | `backend/api`, `worker` (Modulith `@Externalized`, [ADR-042](decisions/042-outbox-based-es-indexing.md)) | `backend/api` `SearchIndexConsumer` |
@@ -953,7 +1015,7 @@ make up-full
 Resilience4j Circuit Breaker를 외부 HTTP 호출 지점마다 적용한다.
 OPEN 상태에서는 즉시 `null`을 반환해 **로컬 폴백** 경로로 전환되므로 타임아웃 누적으로 인한 쓰레드 풀 고갈을 막는다.
 
-### Worker — `CircuitBreakerConfiguration` (worker 모듈)
+### Worker — `resilience/CircuitBreakerRegistry` (worker 모듈)
 
 | CB 이름 | 대상 | 실패율 임계 | 창 | OPEN 대기 | 폴백 |
 |---------|------|-----------|-----|---------|------|
@@ -962,17 +1024,21 @@ OPEN 상태에서는 즉시 `null`을 반환해 **로컬 폴백** 경로로 전�
 | `naverNews` | `NaverNewsClient` (뉴스 API) | 50% | 4회 | 5분 | `MockNewsGenerator` |
 | `dartApi` | `DartClient` (DART 공시 API) | 50% | 4회 | **10분** | 빈 리스트 반환 |
 
-### API — `CircuitBreakerConfiguration` (api 모듈)
+### API — `common/resilience/CircuitBreakerConfiguration` (api 모듈)
 
-api 모듈에 `resilience4j-circuitbreaker:2.2.0` 의존성을 추가하고 별도 Bean을 등록했다.
+| CB 이름 | 대상 | 실패율 | slow-call | 창 | OPEN 대기 | 폴백 |
+|---------|------|-------|-----------|-----|---------|------|
+| `yahooFinance` | `YahooFinanceOrderBookProvider`, `YahooCandleReader` | 60% | 50% / 3초 | 5회 | 2분 | `null` → 다음 프로바이더 |
+| `kis` | `KisBrokerageClient` (실주문·잔고·정산) | 50% | 50% / 3초 | 6회 | 30초 | 예외 → 503 (실주문은 조용히 실패시키지 않는다) |
+| `toss` | `TossBrokerageClient` ([ADR-026](decisions/026-toss-brokerage-integration.md)) | 50% | 50% / 3초 | 6회 | 30초 | 위와 동일 |
 
-| CB 이름 | 대상 | 실패율 임계 | 창 | OPEN 대기 | 폴백 |
-|---------|------|-----------|-----|---------|------|
-| `tradingService` | `TradingServiceClient` (MSA 프록시) | 50% | 6회 | 20초 | `null` → 로컬 `MatchingService` 직접 호출 |
-| `quantEngine` | `QuantEngineClient` (MSA 프록시) | 50% | 4회 | 30초 | `null` → 로컬 quant 서비스 직접 호출 |
-| `yahooFinance` | `YahooFinanceOrderBookProvider`, `YahooCandleReader` | 60% | 5회 | 2분 | 호가: `null`, 캔들: `MockCandleGenerator` |
+> **모든 브레이커에 `slowCallRateThreshold`가 걸려 있다**(resilience-plan §B1 / P0-2). 실패율만 보면
+> 외부가 "죽었을 때"만 열린다 — 죽지 않고 느려지는 쪽이 스레드 풀에는 더 위험하다.
+> `slowCallDurationThreshold`는 `HttpTimeouts`의 read 타임아웃보다 짧게 둔다.
 
-> **MSA 프록시 CB 설계 의도**: `TradingServiceClient`/`QuantEngineClient`는 strangler-fig 패턴으로 URL이 설정되지 않으면 로컬 서비스로 폴백한다. CB가 OPEN이 되면 URL이 설정되어 있어도 같은 경로로 빠지므로 api 쓰레드 풀이 보호된다.
+> 과거 여기에 `tradingService`·`quantEngine` 브레이커가 있었다. 두 MSA 프록시가
+> [ADR-048](decisions/048-retire-trading-service.md)/[ADR-049](decisions/049-retire-quant-engine.md)로
+> 폐기되면서 함께 제거됐다.
 
 ---
 
