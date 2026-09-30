@@ -19,7 +19,7 @@ monticker의 모든 문서를 **독자별 · 주제별**로 정리한 색인입�
 
 1. [../README.md](../README.md) — 기능·아키텍처·엔지니어링 하이라이트
 2. [portfolio.md](portfolio.md) — 문제 정의와 핵심 기술 결정 요약
-3. [decisions/](decisions/) — ADR 50건. 특히 [023 상용화 전환](decisions/023-commercialization-pivot.md), [025 실주문 안전 게이트](decisions/025-real-brokerage-order-safety-gate.md), [036 AI 주문 제안](decisions/036-ai-order-proposal.md), [048](decisions/048-retire-trading-service.md)/[049](decisions/049-retire-quant-engine.md) MSA 폐기 결정
+3. [decisions/](decisions/) — ADR 52건. 특히 [023 상용화 전환](decisions/023-commercialization-pivot.md), [025 실주문 안전 게이트](decisions/025-real-brokerage-order-safety-gate.md), [036 AI 주문 제안](decisions/036-ai-order-proposal.md), [048](decisions/048-retire-trading-service.md)/[049](decisions/049-retire-quant-engine.md) MSA 폐기 결정
 4. [technical/troubleshooting-casebook.md](technical/troubleshooting-casebook.md) — 실제로 겪은 문제 47건
 5. [resilience-plan.md](resilience-plan.md), [security-review.md](security-review.md) — 스스로 찾아낸 결함과 대응
 

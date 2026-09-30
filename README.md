@@ -48,7 +48,7 @@
 
 | 방문 목적 | 이렇게 읽으세요 |
 |-----------|----------------|
-| **채용담당자 / 리뷰어** — 이 프로젝트가 무엇이고 기술적으로 어디까지 갔는지 10분 안에 파악하고 싶다 | 이 README의 [주요 기능](#주요-기능) → [아키텍처](#아키텍처-한눈에-보기) → [엔지니어링 하이라이트](#엔지니어링-하이라이트) 순으로 읽고, 더 깊이 보려면 [docs/portfolio.md](docs/portfolio.md)(기술 결정 요약)와 [docs/decisions/](docs/decisions/)(ADR 50건)를 펼쳐보세요. [docs/technical/troubleshooting-casebook.md](docs/technical/troubleshooting-casebook.md)는 실제로 겪은 문제 47건의 증상·원인·해결 기록입니다. |
+| **채용담당자 / 리뷰어** — 이 프로젝트가 무엇이고 기술적으로 어디까지 갔는지 10분 안에 파악하고 싶다 | 이 README의 [주요 기능](#주요-기능) → [아키텍처](#아키텍처-한눈에-보기) → [엔지니어링 하이라이트](#엔지니어링-하이라이트) 순으로 읽고, 더 깊이 보려면 [docs/portfolio.md](docs/portfolio.md)(기술 결정 요약)와 [docs/decisions/](docs/decisions/)(ADR 52건)를 펼쳐보세요. [docs/technical/troubleshooting-casebook.md](docs/technical/troubleshooting-casebook.md)는 실제로 겪은 문제 47건의 증상·원인·해결 기록입니다. |
 | **개발자** — 로컬에서 띄우고 코드를 읽거나 기여하고 싶다 | [빠른 시작](#빠른-시작) → [프로젝트 구조](#프로젝트-구조) → [CONTRIBUTING.md](CONTRIBUTING.md). 설계 배경은 [docs/architecture.md](docs/architecture.md), 구현 심층은 [docs/technical/](docs/technical/README.md), 증권 도메인이 낯설면 [docs/domain/glossary-and-domain-knowledge.md](docs/domain/glossary-and-domain-knowledge.md)부터. |
 | **일반 사용자** — 화면을 어떻게 쓰는지 알고 싶다 | [docs/manual/user-guide.md](docs/manual/user-guide.md)(화면별 사용 설명서)와 [docs/stock-knowledge/](docs/stock-knowledge/README.md)(주식·퀀트 용어 백과 24장). 실제 돈이 오가는 기능에 대한 주의사항은 [면책 고지](#면책-고지)를 꼭 읽어주세요. |
 
@@ -381,7 +381,7 @@ CI는 PR마다 `backend-ci`(api·worker 매트릭스, unit + integration), `web-
 | 제품이 무엇이고 어디까지 됐나 | [docs/product.md](docs/product.md) |
 | 시스템 구조·모듈 경계·API 목록 | [docs/architecture.md](docs/architecture.md) |
 | DB 스키마 전체 | [docs/data-model.md](docs/data-model.md) |
-| 왜 이렇게 결정했나 (ADR 50건) | [docs/decisions/](docs/decisions/) |
+| 왜 이렇게 결정했나 (ADR 52건) | [docs/decisions/](docs/decisions/) |
 | 구현 심층 (32편) — EMA 탐지, CLOB, Saga, Outbox, 원장, 서킷브레이커… | [docs/technical/README.md](docs/technical/README.md) |
 | 제품·비즈니스 판단의 근거 | [docs/domain/README.md](docs/domain/README.md) |
 | 화면별 사용법 | [docs/manual/user-guide.md](docs/manual/user-guide.md) |
@@ -432,9 +432,9 @@ CI는 PR마다 `backend-ci`(api·worker 매트릭스, unit + integration), `web-
 | **복원력** | 외부 호출마다 Resilience4j CB + 로컬 폴백, Kafka DLT, 백테스트 bulkhead, 분산 락, graceful shutdown, Redis fail-open/fail-closed 구분. 알람 하나당 런북 하나 | [resilience-patterns.md](docs/technical/resilience-patterns.md), [resilience-plan.md](docs/resilience-plan.md), [runbooks/](docs/runbooks/README.md) |
 | **보안** | JWT 15분 + refresh 7일 로테이션, 2-tier 레이트리밋(IP + userId), 룰셋 서버사이드 평가·클라이언트 비노출, STOMP 구독 인가, 하드코딩 시크릿 기동 차단(`ALLOW_INSECURE_DEV_SECRETS`) | [jwt-authentication.md](docs/technical/jwt-authentication.md), [security-review.md](docs/security-review.md), [ADR-035](docs/decisions/035-strategy-market-signal-access-control.md) |
 | **관측·운영** | OpenTelemetry → Jaeger, Prometheus 알람 룰 + Alertmanager Slack, Grafana 대시보드, Pinpoint APM, pg_dump CronJob + 복구 리허설 스크립트 | [opentelemetry-tracing.md](docs/technical/opentelemetry-tracing.md), [db-failover.md](docs/runbooks/db-failover.md) |
-| **문서화** | ADR 50건, 기술 심층 문서 32편, 트러블슈팅 사례집 47건, 도메인 문서 5편, 런북 7종, 용어 백과 24장 — 결정을 번복할 때는 새 ADR로 기존 ADR을 Supersede | [docs/README.md](docs/README.md) |
+| **문서화** | ADR 52건, 기술 심층 문서 32편, 트러블슈팅 사례집 47건, 도메인 문서 5편, 런북 7종, 용어 백과 24장 — 결정을 번복할 때는 새 ADR로 기존 ADR을 Supersede | [docs/README.md](docs/README.md) |
 
-규모: 커밋 700+, Flyway 마이그레이션 47개, 백엔드 모듈 26개, 웹 라우트 37개, 테스트 580+ (2026-01 시작).
+규모: 커밋 739, Flyway 마이그레이션 49개, 백엔드 모듈 27개, 웹 라우트 38개, 테스트 756 (api 604 · worker 102 · web 50). 2026-01 시작.
 
 ---
 

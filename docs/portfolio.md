@@ -7,7 +7,7 @@
 주가가 **왜** 움직였는지를 이벤트 타임라인으로 보여주고, 코딩 없이 만든 투자 규칙을 백테스트·포워드 테스트로 검증하며, 돈의 이동을 원장 기반으로 추적하는 이벤트 중심 주식 관찰 플랫폼. 모의투자에서 출발해 사용자 본인 명의 증권사 계좌(BYOK)로 실주문까지 확장했다.
 
 - **기간**: 2026-01 ~ (진행 중, MVP 완료 → 상용화 단계)
-- **규모**: 커밋 700+ · ADR 50건 · Flyway 마이그레이션 47개 · 백엔드 모듈 26개 · 웹 라우트 37개 · 테스트 580+ (api 469 · worker 80 · web 37, 2026-09-09 기준)
+- **규모**: 커밋 739 · ADR 52건 · Flyway 마이그레이션 49개 · 백엔드 모듈 27개 · 웹 라우트 38개 · 테스트 756 (api 604 · worker 102 · web 50, 2026-09-30 기준)
 - **스택**: Kotlin 2.0 / Spring Boot 3.5 / Spring Modulith · Next.js 15 / React 19 · Expo 52 · Go 1.22 · PostgreSQL 16 + TimescaleDB · Redis 7 · MongoDB 7 · Elasticsearch · Kafka · Docker Compose / Kubernetes · Prometheus / Grafana / Jaeger / Pinpoint
 - **개발 방식**: 1인 개발 + Claude Code(서브에이전트 6종, 자동 리뷰 워크플로). 주차별 수직 슬라이스로 항상 동작하는 상태 유지.
 
