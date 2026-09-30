@@ -67,8 +67,31 @@ class CircuitBreakerConfiguration {
                 .build()
         )
 
+        // 토스페이먼츠 PG (ADR-053) — 브로커와 같은 부류다(외부 HTTP, 돈이 움직임, 재시도가 위험).
+        // 그런데 오래도록 타임아웃 하나만 달고 있었다: PG가 느려지면 PAYMENT_READ(10s)짜리
+        // 요청이 Tomcat 스레드를 하나씩 물고 쌓이는데도 브레이커가 없어 아무도 못 막았다.
+        //
+        // 브로커(3s)보다 느린 5s를 slow 임계로 잡는다 — 카드사 경유 승인은 실제로 브로커보다
+        // 느리다. 그래도 PAYMENT_READ(10s)보다는 짧아야 타임아웃으로 스레드가 고갈되기 전에
+        // 브레이커가 먼저 열린다.
+        //
+        // waitDurationInOpenState가 브로커(30s)보다 긴 60s인 이유: 결제는 주문과 달리
+        // 사용자가 초 단위로 재시도하지 않는다. 반쯤 죽은 PG를 성급히 찔러 불확정 상태
+        // (INDETERMINATE)를 늘리는 것이, 1분 더 기다리는 것보다 훨씬 비싸다.
+        registry.circuitBreaker("tossPg",
+            CircuitBreakerConfig.custom()
+                .failureRateThreshold(50f)
+                .slowCallRateThreshold(50f)
+                .slowCallDurationThreshold(Duration.ofSeconds(5))
+                .slidingWindowSize(6)
+                .waitDurationInOpenState(Duration.ofSeconds(60))
+                .permittedNumberOfCallsInHalfOpenState(1)
+                .recordExceptions(Exception::class.java)
+                .build()
+        )
+
         // 상태 전이 이벤트 로깅
-        listOf("yahooFinance", "kis", "toss").forEach { name ->
+        listOf("yahooFinance", "kis", "toss", "tossPg").forEach { name ->
             registry.circuitBreaker(name).eventPublisher
                 .onStateTransition { e ->
                     log.warn("[CircuitBreaker:{}] {} → {}",

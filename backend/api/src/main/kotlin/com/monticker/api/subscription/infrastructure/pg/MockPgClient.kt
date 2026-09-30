@@ -25,7 +25,14 @@ class MockPgClient : PgClient {
     }
 
     override fun getPaymentStatus(paymentKey: String): PaymentStatusResult =
-        PaymentStatusResult(found = true, status = "DONE", totalAmount = BigDecimal.ZERO)
+        PaymentStatusResult(found = true, status = "DONE", totalAmount = BigDecimal.ZERO, paymentKey = paymentKey)
+
+    /**
+     * Mock은 청구 이력을 들고 있지 않다 — 여기서 found=true를 돌려주면 "이미 결제됨"으로
+     * 읽혀 정상 갱신이 전부 건너뛰어진다. 권위 있는 "없음"을 준다.
+     */
+    override fun findPaymentByOrderId(orderId: String): PaymentStatusResult =
+        PaymentStatusResult(found = false)
 
     override fun issueBillingKey(authKey: String, customerKey: String): BillingKeyResult {
         val fakeBillingKey = "mock_billing_${UUID.randomUUID()}"

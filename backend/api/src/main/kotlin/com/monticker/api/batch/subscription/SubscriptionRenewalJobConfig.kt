@@ -66,6 +66,9 @@ class SubscriptionRenewalJobConfig(
             log.info("갱신 처리: userId={} result={}", subscription.userId, result::class.simpleName)
             when (result) {
                 is RenewResult.Downgraded -> log.warn("FREE 다운그레이드: userId={}", subscription.userId)
+                // ADR-053 — PG 장애·불확정. 다음 배치가 같은 orderId로 이어서 시도한다.
+                // 이 줄이 계속 쌓이면 PG를 의심해야지 고객 카드를 의심할 일이 아니다.
+                is RenewResult.Deferred -> log.warn("갱신 보류 (PG 장애/불확정): userId={}", subscription.userId)
                 else -> {}
             }
             subscription
