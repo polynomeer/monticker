@@ -20,6 +20,9 @@
  *   k6 run --env RUN=$(date +%s) --env VUS=50 --env DURATION=60s \
  *          --env BASE_URL=http://localhost:58080 bench/scenarios/subscription-burst.js
  *   python3 bench/consistency/verify.py "sub-<RUN>-%@bench.local"
+ *
+ *   # 운영 PG 모드(PG_MOCK_ENABLED=false, 스텁 PG)에서는 결제 경로가 다르다:
+ *   k6 run --env PAY_MODE=confirm ... bench/scenarios/subscription-burst.js
  */
 import http from "k6/http";
 import { sleep } from "k6";
@@ -30,6 +33,11 @@ const VUS = Number(__ENV.VUS || 50);
 const DURATION = __ENV.DURATION || "60s";
 const BASE = __ENV.BASE_URL || "http://localhost:8080";
 const PLAN = __ENV.PLAN || "PRO";
+// mock PG(기본 로컬 설정)에서는 /subscribe 가 유료 구독을 만든다.
+// PG_MOCK_ENABLED=false 에서는 TossPgClient.requestPayment() 가 "웹훅을 쓰라"는 스텁이라 항상
+// 실패하므로(SubscriptionService 주석), 실제 결제가 도는 경로인 /payment/confirm 을 타야 한다.
+// 이걸 맞추지 않으면 부하의 본체가 422 가 되어 아무것도 검증하지 못한다.
+const PAY_MODE = __ENV.PAY_MODE || "subscribe";   // subscribe | confirm
 const SLEEP = Number(__ENV.SLEEP || 3);
 
 const billingOk = new Counter("billing_registered");
@@ -87,8 +95,16 @@ export default function () {
   }
 
   // 2) 구독 → 해지 왕복. 결제 기록과 원장이 같이 늘어나야 한다.
-  const sub = http.post(`${BASE}/api/subscription/subscribe`,
-    JSON.stringify({ planCode: PLAN }), { headers: headers(t), tags: { name: "subscribe" } });
+  const sub = PAY_MODE === "confirm"
+    ? http.post(`${BASE}/api/subscription/payment/confirm`,
+        JSON.stringify({
+          paymentKey: `bench_pk_${RUN}_${__VU}_${__ITER}`,
+          orderId: `bench_order_${RUN}_${__VU}_${__ITER}`,
+          amount: 9900, planCode: PLAN,
+        }),
+        { headers: headers(t, { "X-Idempotency-Key": `sub-${RUN}-${__VU}-${__ITER}` }), tags: { name: "confirm" } })
+    : http.post(`${BASE}/api/subscription/subscribe`,
+        JSON.stringify({ planCode: PLAN }), { headers: headers(t), tags: { name: "subscribe" } });
   if (count(sub)) subscribed.add(1);
 
   const cancel = http.post(`${BASE}/api/subscription/cancel`, null, { headers: headers(t), tags: { name: "cancel" } });

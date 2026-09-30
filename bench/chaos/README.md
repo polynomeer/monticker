@@ -13,6 +13,8 @@
 | `ch05-kafka-down.sh` | Kafka 브로커 정지 (Outbox 실증) | 2026-09-13 | **PASS** (수정 3건 후) — Outbox가 한 번도 발행한 적 없던 것, 리스너 스레드 누수를 발견 |
 | `ch07-sigkill.sh` | API 프로세스 SIGKILL 중 주문 | 2026-09-13 | **PASS** — 미완료 0, 12명 대사 불일치 0, 재기동 15s |
 | `ch09-rebalance-storm.sh` | 틱 스톰 중 워커 재시작 10회 | 2026-09-13 | **PASS** — 그룹 LAG 0, DLT 0. 랙은 브로커 쪽으로 볼 것 |
+| `ch13-pg-down.sh` + `toss-pg-stub.py` | 결제 PG 전면 정지 | 2026-09-30 | **PASS** (수정 3건 후) — **정기결제 갱신이 한 번도 동작한 적 없던 것**을 발견 |
+| `ch14-pg-latency.sh` + `toss-pg-stub.py` | 결제 PG 6초 지연 → 불확정(타임아웃) | 2026-09-30 | **PASS** (수정 3건 후) — 배치 4회 실행에 청구 정확히 1회 |
 
 ## 원칙
 
@@ -41,6 +43,27 @@ DELAY_MS=0 PORT=59443 python3 bench/chaos/kis-stub.py &
 # API를 추가로 BROKERAGE_MOCK_ENABLED=false KIS_BASE_URL=http://localhost:59443 로 기동
 API=http://localhost:58080 STUB=http://localhost:59443 bench/chaos/ch06-broker-latency.sh
 ```
+
+## CH-13 / 14 (결제 PG 스텁 필요)
+
+```bash
+MODE=delay DELAY_MS=0 PORT=59444 python3 bench/chaos/toss-pg-stub.py &
+
+# api를 운영 PG 모드로 띄운다. jar 로 띄우는 편이 낫다 — 두 실험이 각각 3~5분 걸려
+# gradle bootRun 은 중간에 끊기는 일이 있었다.
+(cd backend/api && ./gradlew bootJar -x test)
+DB_URL=jdbc:postgresql://localhost:5432/monticker REDIS_PORT=6380 … PG_MOCK_ENABLED=false TOSS_SECRET_KEY=test_sk_stub TOSS_PG_BASE_URL=http://localhost:59444 SERVER_PORT=58080 java -jar backend/api/build/libs/api-0.0.1-SNAPSHOT.jar &
+
+API=http://localhost:58080 STUB=http://localhost:59444 bench/chaos/ch13-pg-down.sh
+API=http://localhost:58080 STUB=http://localhost:59444 bench/chaos/ch14-pg-latency.sh
+```
+
+스텁의 `GET /_stats` 가 **청구 횟수와 orderId 목록**을 돌려준다. 이중청구는 "같은 orderId 로 두 번
+왔는가"로만 증명되고, 그건 PG 쪽에서 세야 보인다 — 우리 DB 만 봐서는 청구가 나갔는지 알 수 없다.
+
+두 실험 모두 브레이커의 `waitDurationInOpenState`(60s)를 기다리는 구간이 있어 **CH-13 약 2분,
+CH-14 약 4분**이 걸린다. resilience4j 는 타이머가 아니라 "다음 호출 시점"에 OPEN→HALF_OPEN 으로
+전이하므로, 상태를 폴링해서 기다리면 영원히 OPEN 으로 보인다(그렇게 짰다가 헛돌았다).
 
 ## CH-05 / 07 / 09 (Kafka + 워커 필요)
 

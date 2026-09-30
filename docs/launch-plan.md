@@ -9,6 +9,7 @@
 각 Phase는 순서대로 완료하는 목록이 아니라 **게이트**다. 특히:
 
 - **Phase 0을 완료하지 않고 `BROKERAGE_MOCK_ENABLED=false`로 전환 금지.** 현금 동시성 버그·평문 크리덴셜 상태로 실계좌를 연결하면 기술 부채가 아니라 금전 사고가 된다.
+- **Phase 4의 "남은 결제 갭"을 완료하지 않고 `PG_MOCK_ENABLED=false`로 전환 금지.** 같은 이유다 — 이중청구와 오강등은 기술 부채가 아니라 금전 사고다.
 - **Phase 1(법무)을 완료하지 않고 Phase 7(퍼블릭 출시) 진행 금지.** 특히 `/privacy`가 실제로 존재하는 페이지가 되기 전까지는 회원가입 자체가 법적으로 문제가 될 수 있다.
 
 법률/컴플라이언스 항목(Phase 1)은 실제 법률 자문이 필요한 영역을 **가리키는 것**이지, 법률적 결론을 내리는 것이 아니다. "필요할 가능성이 높다"는 표현은 전문가 확인 전까지 확정으로 읽지 않는다.
@@ -134,6 +135,20 @@
   - 실제로 부팅해서 회원가입→customer-key 발급→카드 등록(mock)→DB 조회로 암호화 저장 확인→해지까지 curl로 검증. 검증 중 `deregister()`가 `@Transactional` 없이 `deleteByUserId`를 호출해 500이 나는 버그를 발견·수정("파생 delete 쿼리는 `deleteById()`와 달리 리포지토리 프록시가 자체 트랜잭션을 안 열어준다").
   - **프론트엔드(`apps/web`) 위젯 연동 완료.** `@tosspayments/tosspayments-sdk`(공식 V2 JS SDK) 도입, `next.config.ts` CSP에 `js.tosspayments.com`(script) / `*.tosspayments.com`(iframe, connect) 허용 추가. `/subscription` 페이지에 "정기결제 카드" 섹션 신설 — 등록 시 `getOrCreateCustomerKey()` → `loadTossPayments(clientKey).payment({customerKey}).requestBillingAuth({method:"CARD", successUrl, failUrl})`로 토스 호스팅 카드 등록 위젯을 띄우고, `/subscription/billing/callback` 페이지가 성공(`authKey`/`customerKey`) · 실패(`code`/`message`) 리다이렉트를 구분해 처리한다. 브라우저에서 회원가입 → 위젯 오픈(CSP 위반 없음 확인) → mock 콜백으로 등록/해지까지 실제 렌더링으로 검증 완료. 토스 호스팅 카드입력 iframe 자체(PCI 격리 영역)는 이 세션의 브라우저 자동화 도구가 중첩 크로스오리진 iframe에 합성 입력을 전달하지 못해 직접 타이핑 검증은 못 했다 — 우리 코드가 책임지는 경계(SDK 호출, CSP, 콜백 처리)까지는 전부 라이브로 확인됨.
   - **검증 중 무관한 기존 버그 발견·수정**: `SubscriptionController.PlanResponse.features`가 엔티티의 `jsonb` 컬럼(실제로는 JSON 배열 문자열)을 파싱 없이 그대로 `String`으로 내려보내고 있어, `GET /api/subscription/plans` 응답이 `"features": "[\"a\", \"b\"]"` 형태의 문자열이었다. 프론트 `PlanCard`는 `plan.features.map(...)`으로 배열을 기대하므로 `/subscription` 페이지 전체가 `TypeError: ...map is not a function`으로 죽어 있었다(이 정기결제 카드 UI 검증 전부터 있던 버그, 정기결제 기능과 무관). `jacksonObjectMapper().readValue<List<String>>(features)`로 파싱해 `PlanResponse.features: List<String>`으로 수정.
+- [x] **결제 경로 장애 검증 — 검증을 붙이자마자 "정기결제 갱신이 한 번도 동작한 적 없었다"가 나왔다** ([ADR-053](decisions/053-payment-idempotency-and-failure-classification.md)). 주문 체결에는 카오스 8종·부하·정합성 검증기가 있었는데 결제에는 하나도 없었다 — 돈이 오가는 두 경로 중 하나만 보고 있었던 셈. CH-13/CH-14를 만들어 돌린 첫 실행에서 나온 것들:
+  - **갱신 배치가 매 실행 FAILED였다** — `RepositoryItemReader`는 리포지토리 메서드를 `(…, Pageable) -> Slice`로 리플렉션 호출하는데 `findExpiringBefore`는 `(Instant) -> List`였다. `NoSuchMethodException` → skip limit 초과 → 갱신 0건. 메서드 이름이 문자열이라 컴파일러가 잡지 못한다.
+  - **수동 실행 엔드포인트가 FAILED에도 200을 돌려주고 있었다** — 위 결함이 응답만 봐서는 전혀 보이지 않은 이유. 이제 실패한 잡은 500이다.
+  - **갱신 orderId에 `System.currentTimeMillis()`가 들어 있었다** — 토스는 orderId로 중복을 걸러내므로, 재시도마다 값이 바뀌면 그 방어가 통째로 무력해진다. 배치 재실행·타임아웃 재시도가 곧 이중청구였다. (구독, 청구주기)에서 결정적으로 유도하고 `payment_records.pg_order_id` 부분 유니크 인덱스(V50)로 DB가 막게 했다.
+  - **PG 장애가 카드 거절로 읽히고 있었다** — `success=false` 하나에 "거절/PG 죽음/응답 못 받음"이 전부 합쳐져 있어, PG가 30분 죽으면 돈 내는 고객이 3회 누적으로 FREE 강등되는 경로가 열려 있었다. `DECLINED / UNAVAILABLE / INDETERMINATE`로 분리.
+  - **결제 경로에 서킷브레이커가 없었다** — P0-2가 모든 외부 호출에 걸게 한 `slowCallRateThreshold`가 결제만 빠져 있었고 방어는 10초 타임아웃 하나였다. `tossPg` 추가.
+  - 실측(2026-09-30, 로컬 + 스텁 PG): PG 전면 정지 중 갱신 배치 3회 → **PENDING 1건, PG 청구 0, FAILED 0, 강등 0**. 10초 타임아웃을 끼고 배치 4회 → **청구 정확히 1회**(우리 쪽은 원래 응답을 끝내 못 받았는데도). 6초 지연에서 `failure_rate 0% / slow_call_rate 50%`로 브레이커 OPEN, 동시 10건이 632ms.
+  - `TossPgClient` 단위 테스트 10건(이전 0건), 결제 멱등성 통합 테스트 6건(10스레드 경합), L-08 부하 시나리오와 `verify.py` 결제 불변식 3종 추가.
+- [ ] **라이브 키 전환 전 블로킹 — 남은 결제 갭** ([ADR-053](decisions/053-payment-idempotency-and-failure-classification.md) Consequences):
+  - [ ] **CH-13/CH-14를 토스 실제 테스트 키로 재실행.** 지금 통과는 우리 스텁 기준이다. 우리 쪽 동작(브레이커·분류·멱등성)은 검증됐지만 토스가 같은 응답을 주는지는 검증하지 못했다 — 특히 `GET /v1/payments/orders/{orderId}`의 404 동작은 문서 근거의 **가정**이다.
+  - [ ] **일회성 결제(confirm)에 서버 생성 orderId 도입.** 정기결제만 DB 멱등성이 있다. confirm을 두 번 호출하면 토스가 2회차를 4xx로 거절하는데 우리는 그걸 "결제 실패"로 읽고 400을 돌려준다 — 실제로는 성공한 결제인데도.
+  - [ ] **갱신 실패·보류 건 재시도 스케줄.** 배치가 월 1회뿐이라, PG 장애로 보류된 건이 최대 한 달 밀린다. 지금은 수동 트리거밖에 없다.
+  - [ ] **PENDING 결제 적체 청소 배치.** 구독이 그 사이 해지되면 PENDING이 영원히 남는다.
+  - [ ] **`payment_records.status='FAILED'` 급증 알림.** 4xx를 브레이커 집계에서 뺐으므로(그래야 404 하나가 복구를 막지 않는다), PG가 400만 계속 뱉는 오작동은 브레이커가 아니라 알림으로 잡아야 한다.
 - [ ] `BROKERAGE_MOCK_ENABLED=false` 전환은 **Phase 0(완료) + Phase 1(법률 검토, 아직 미완료) 완료 후에만** — 순서를 건너뛰지 않는다.
 - [ ] Creator 수익 정산([ADR-016](decisions/016-subscription-creator-revenue-sharing.md))의 실제 세무 처리(원천징수 등) — 세무사 상담 필요, Claude가 대신할 수 없는 영역.
 
@@ -180,7 +195,7 @@ General Availability
 | 2 | ✅ 보안 강화 완료 (2026-09-05) — 시크릿 관리 전환만 실제 클라우드 프로비저닝 대기 | Phase 7의 Closed beta 진행 허용 |
 | 2.1 | ✅ 보안/입력검증 2차 점검 완료 (2026-09-21) — 코드 수정은 끝났고, TLS Secret 프로비저닝·Redis/ES 인증 토폴로지 확인만 실제 배포 시 대기 | Phase 7의 Closed beta 진행 허용 |
 | 3 | 🟡 부분 완료 (2026-09-06) — 백업/모니터링/부하테스트/이미지 빌드·푸시 실증 완료, 도메인·실클러스터 배포는 미완료 | Phase 7의 모든 단계 진행 허용 |
-| 4 | 🟡 부분 완료 (2026-09-06) — 웹훅/결제 버그 6건 + 정기결제 백엔드·프론트엔드 위젯 연동 완료, 라이브 키 발급·세무 처리는 미완료 | 실제 유료 결제·구독 오픈 허용 (라이브 키 발급 전까지는 mock 유지) |
+| 4 | 🟡 부분 완료 (2026-09-30) — 웹훅/결제 버그 6건 + 정기결제 연동 + **결제 장애 검증(CH-13/14)·멱등성 완료**. 라이브 키 발급, 실키 재검증, confirm 멱등성, 갱신 재시도 스케줄은 미완료 | 실제 유료 결제·구독 오픈 허용 (라이브 키 발급 전까지는 mock 유지) |
 | 6 | E2E + 펜테스트 완료 | Phase 7의 GA 진행 허용 |
 
 이 요약표에서 어느 한 줄이라도 미완료면, 그 줄이 막는 다음 단계로 넘어가지 않는다.

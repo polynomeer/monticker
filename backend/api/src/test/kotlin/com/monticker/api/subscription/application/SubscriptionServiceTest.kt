@@ -1,5 +1,6 @@
 package com.monticker.api.subscription.application
 
+import com.monticker.api.common.exception.BusinessRuleException
 import com.monticker.api.subscription.domain.*
 import com.monticker.api.subscription.infrastructure.PaymentRecordRepository
 import com.monticker.api.subscription.infrastructure.SubscriptionPlanRepository
@@ -385,6 +386,16 @@ class SubscriptionServiceTest {
 
         assertThat(sub.status).isEqualTo(SubscriptionStatus.CANCELLED)
         assertThat(sub.cancelledAt).isNotNull()
+    }
+
+    @Test
+    fun `구독이 없는데 해지하면 500이 아니라 409가 되는 예외를 던진다`() {
+        // 해지 버튼을 두 번 누른 사용자가 500을 받고 있었다. GlobalExceptionHandler의
+        // 키워드 휴리스틱에 "없습니다"는 없고 "없음"만 있어서 IllegalStateException이
+        // 그대로 500으로 샜다 — L-08 부하 시나리오에서 반복마다 하나씩 찍혀 드러났다.
+        every { subscriptionRepo.findByUserId(1L) } returns Optional.empty()
+
+        assertThrows<BusinessRuleException> { service.cancel(userId = 1L) }
     }
 
     @Test

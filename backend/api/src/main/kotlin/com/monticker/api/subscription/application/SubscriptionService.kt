@@ -1,5 +1,6 @@
 package com.monticker.api.subscription.application
 
+import com.monticker.api.common.exception.BusinessRuleException
 import com.monticker.api.subscription.domain.*
 import com.monticker.api.subscription.infrastructure.PaymentRecordRepository
 import com.monticker.api.subscription.infrastructure.SubscriptionPlanRepository
@@ -105,10 +106,18 @@ class SubscriptionService(
         return SubscribeResult.success(plan.code, paymentId = record.id)
     }
 
+    /**
+     * 구독 해지.
+     *
+     * 구독이 없을 때 `IllegalStateException`을 던지면 500이 된다 — GlobalExceptionHandler의
+     * 키워드 휴리스틱에 "없습니다"는 없고 "없음"만 있다(BusinessRuleException 주석이 경고하는
+     * 바로 그 함정). 해지 버튼을 두 번 누른 사용자가 500을 받는다. L-08 부하 시나리오에서
+     * 반복마다 500이 하나씩 찍히는 것으로 드러났다.
+     */
     @Transactional
     fun cancel(userId: Long) {
         val subscription = subscriptionRepo.findByUserId(userId).orElseThrow {
-            IllegalStateException("구독 정보가 없습니다.")
+            BusinessRuleException("구독 정보가 없습니다.")
         }
         require(subscription.status == SubscriptionStatus.ACTIVE) { "활성 구독이 없습니다." }
         subscription.cancel()
