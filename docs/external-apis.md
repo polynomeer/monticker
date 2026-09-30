@@ -86,7 +86,7 @@ EOD / history:   KRX 정보데이터시스템
 - Coverage: KR + US stocks in one API — 현재가/호가/체결/캔들, 보유자산, 주문(정정·취소 포함), 조건주문(SINGLE/OCO/OTO), 환율, 시장 캘린더, 투자자별 매매동향, 공매도·신용·대차.
 - Realtime: WebSocket(`wss://openapi-ws.tossinvest.com/ws/v1`)의 `trade:kr`/`trade:us` 채널을 `backend/worker`가 실제로 구독한다(ADR-031, KIS가 커버하지 않는 미국 전체 + 국내 나머지). 플랫폼 앱키 발급 절차는 [platform-api-keys.md](platform-api-keys.md) 참고 — 라이브 검증은 앱키가 발급되기 전까지 보류 상태다.
 - Auth: per-user API key, plus a `clientOrderId`-style idempotency mechanism for order submission — reuse the existing `X-Idempotency-Key` / `IdempotencyFilter` pattern (`common/idempotency/`) rather than inventing a second one.
-- Rate limiting: per-endpoint-group limits, current usage returned in response headers — wrap `TossBrokerageClient` with a token bucket / backoff and register a named resilience4j circuit breaker (`"toss"`) in `CircuitBreakerConfiguration`, the way `TradingServiceClient`/`YahooFinanceOrderBookProvider` already do. Do not copy `KisBrokerageClient`'s current lack of one.
+- Rate limiting: per-endpoint-group limits, current usage returned in response headers — wrap `TossBrokerageClient` with a token bucket / backoff. The named circuit breakers are already in place — `"kis"`, `"toss"` and `"yahooFinance"` are registered in `common/resilience/CircuitBreakerConfiguration`, all with a `slowCallRateThreshold` (resilience-plan P0-2).
 - Implementation shape: implement the existing `BrokerageClient` interface (`brokerage/infrastructure/BrokerageClient.kt`) — `BrokerageService` depends on the interface only, so no other code changes. Conditional-order (OCO/OTO) support needs new interface methods since `BrokerageClient` currently has none for it.
 
 ### **Recommendation**

@@ -32,7 +32,7 @@
 ```
   [Worker 서비스]                     [API 서버]
   ┌───────────────────────────┐       ┌──────────────────────────────────────┐
-  │  MarketDataCollector      │       │  PriceBroadcaster                    │
+  │  MarketTickScheduler      │       │  PriceBroadcaster                    │
   │  @Scheduled(1초)          │       │  (SimpMessagingTemplate)             │
   │                           │       │                                      │
   │  MockPriceGenerator       │       │  /topic/stocks/{id}  ─── 종목 개별   │
@@ -267,4 +267,4 @@ Spring은 `enableStompBrokerRelay`를 통해 외부 STOMP 브로커(RabbitMQ, Ac
 
 **WebSocket 인증 없음**: 현재 `/ws` 엔드포인트는 `setAllowedOriginPatterns("*")`로 열려 있으며 JWT 검증이 없다. 사용자 인증이 도입될 경우 STOMP `CONNECT` 프레임의 `Authorization` 헤더 처리가 추가되어야 한다.
 
-**Mock 데이터**: `MarketDataCollector`가 `MockPriceGenerator`를 사용하므로 실제 시장 데이터와 연동되어 있지 않다. 실시간성의 의미가 "시스템 내부 파이프라인"에 한정되며, 실제 거래소 연동 시 Worker 수집 로직 교체가 필요하다.
+**Mock 데이터**: 기본 모드에서 `MarketTickScheduler`가 `MockPriceGenerator`를 사용하므로 실제 시장 데이터와 연동되어 있지 않다. 실시간성의 의미가 "시스템 내부 파이프라인"에 한정되며, 실제 거래소 연동 시 Worker 수집 로직 교체가 필요하다.

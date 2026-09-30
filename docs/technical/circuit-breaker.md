@@ -66,10 +66,10 @@ permittedNumberOfCallsInHalfOpenState: 3
 ```
 
 **폴백 동작**: `KisPriceProvider.fetchTicks()`가 빈 목록을 반환하면
-`MarketDataCollector`가 `MockPriceGenerator`로 자동 전환한다.
+`MarketTickScheduler`가 `MockPriceGenerator`로 자동 전환한다. (인라인 수집을 하던 `MarketDataCollector`는 Stage 4에서 제거됐다 — 모든 틱이 Kafka를 경유한다.)
 
 ```kotlin
-// MarketDataCollector.collect()
+// MarketTickScheduler.tick()
 val kisTicks = kisPriceProvider.fetchTicks()
 val ticks = if (kisTicks.isNotEmpty()) kisTicks else generator.generate()
 ```

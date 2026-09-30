@@ -197,7 +197,7 @@ Redis HSET ema:{stockId} volume {value} price {value}
 
 ## 관련 파일
 
-- [`MarketDataCollector.kt`](../../backend/worker/src/main/kotlin/com/monticker/worker/marketdata/MarketDataCollector.kt)
+- `MarketDataCollector.kt` — Stage 4에서 제거됐다(모든 틱이 Kafka를 경유한다). 현재 대응 컴포넌트는 [`MarketTickScheduler.kt`](../../backend/worker/src/main/kotlin/com/monticker/worker/marketdata/MarketTickScheduler.kt)
 - [`StockEventWriter.kt`](../../backend/worker/src/main/kotlin/com/monticker/worker/detector/StockEventWriter.kt)
 - [`VolumeSurgeDetector.kt`](../../backend/worker/src/main/kotlin/com/monticker/worker/detector/VolumeSurgeDetector.kt)
 - [`application.yml`](../../backend/worker/src/main/resources/application.yml)

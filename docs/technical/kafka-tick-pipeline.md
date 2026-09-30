@@ -155,7 +155,7 @@ ingestion:
   source: internal   # internal(기존 MockPriceGenerator) | kafka(Go 게이트웨이 경유)
 ```
 
-`ingestion.source=kafka`가 아니면 `MarketDataCollector`는 기존처럼 동작한다. Kafka·Go market-gateway는 `docker-compose.yml`의 `kafka` profile로 묶여 있어, `docker compose --profile kafka up`을 명시적으로 실행해야만 뜬다 — 평소 `dev.sh` 흐름에는 영향을 주지 않는다.
+`ingestion.source=kafka`가 아니면 `MarketTickScheduler`가 `MockPriceGenerator` 틱을 `market.ticks`로 발행한다(인라인 처리를 하던 `MarketDataCollector`는 Stage 4에서 제거됐다 — 두 모드 모두 Kafka를 경유한다). Kafka·Go market-gateway는 `docker-compose.yml`의 `kafka` profile로 묶여 있어, `docker compose --profile kafka up`을 명시적으로 실행해야만 뜬다 — 평소 `dev.sh` 흐름에는 영향을 주지 않는다.
 
 ---
 
