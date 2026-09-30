@@ -119,4 +119,64 @@ class CircuitBreakerTest {
 
         assertThat(cb.state).isEqualTo(CircuitBreaker.State.OPEN)
     }
+
+    // ── 실제 설정 (ADR-053) ───────────────────────────────────────────────────
+    //
+    // 위 테스트들은 합성 설정으로 resilience4j 자체의 동작을 본다. 아래는 운영에 실제로
+    // 올라가는 CircuitBreakerConfiguration 의 값을 검사한다 — 값이 틀리면 동작이 맞아도
+    // 소용없다.
+
+    private val real = CircuitBreakerConfiguration().circuitBreakerRegistry()
+
+    @Test
+    fun `결제 PG에도 서킷브레이커가 등록되어 있다`() {
+        // 오랫동안 yahooFinance·kis·toss 셋뿐이었다 — 돈이 오가는 경로 중 결제만 빠져
+        // 있었고, 방어는 10초 타임아웃 하나였다.
+        assertThat(real.allCircuitBreakers.map { it.name })
+            .contains("yahooFinance", "kis", "toss", "tossPg")
+    }
+
+    @Test
+    fun `tossPg는 느린 호출에도 반응한다 — 임계는 read 타임아웃보다 짧다`() {
+        val cfg = real.circuitBreaker("tossPg").circuitBreakerConfig
+
+        assertThat(cfg.slowCallRateThreshold).isLessThan(100f)
+        // PAYMENT_READ(10s)보다 짧아야 타임아웃으로 스레드가 고갈되기 전에 브레이커가 먼저 열린다.
+        assertThat(cfg.slowCallDurationThreshold)
+            .isLessThan(com.monticker.api.common.http.HttpTimeouts.PAYMENT_READ)
+    }
+
+    @Test
+    fun `tossPg의 half-open 프로브는 2회 이상이다 — 조회와 청구가 둘 다 통과해야 한다`() {
+        // 갱신 한 건이 복구되려면 호출이 두 번 필요하다: orderId로 "이미 청구됐나"를 묻고,
+        // 아니면 그제서야 청구한다. 1이면 조회가 유일한 프로브를 소진하고 청구는 막혀,
+        // 갱신이 다음 배치 주기(월 1회 = 한 달)까지 밀린다. CH-14에서 실제로 관측했다.
+        assertThat(real.circuitBreaker("tossPg").circuitBreakerConfig.permittedNumberOfCallsInHalfOpenState)
+            .isGreaterThanOrEqualTo(2)
+    }
+
+    @Test
+    fun `tossPg는 4xx를 장애로 세지 않는다`() {
+        // 복구 경로의 첫 동작은 "이 orderId로 청구된 적 있나" 조회이고, 정상 답이 404다.
+        // 그걸 실패로 세면 복구가 자기 브레이커를 스스로 열어버린다(CH-14에서 관측).
+        val cb = real.circuitBreaker("tossPg")
+        val notFound = org.springframework.web.client.HttpClientErrorException
+            .create(org.springframework.http.HttpStatus.NOT_FOUND, "Not Found", org.springframework.http.HttpHeaders(), ByteArray(0), null)
+
+        repeat(6) { cb.onError(0, java.util.concurrent.TimeUnit.MILLISECONDS, notFound) }
+
+        assertThat(cb.state).isEqualTo(CircuitBreaker.State.CLOSED)
+        assertThat(cb.metrics.numberOfFailedCalls).isZero()
+    }
+
+    @Test
+    fun `tossPg는 5xx와 타임아웃은 장애로 센다`() {
+        val cb = real.circuitBreaker("tossPg")
+        val serverError = org.springframework.web.client.HttpServerErrorException
+            .create(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR, "boom", org.springframework.http.HttpHeaders(), ByteArray(0), null)
+
+        repeat(6) { cb.onError(0, java.util.concurrent.TimeUnit.MILLISECONDS, serverError) }
+
+        assertThat(cb.state).isEqualTo(CircuitBreaker.State.OPEN)
+    }
 }

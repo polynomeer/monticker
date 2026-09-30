@@ -6,6 +6,7 @@
   잔고 : 계정마다 cash + reserved == 10,000,000 + Σ ledger.amount[CASH_EVENT_TYPES]  (드리프트 0)
   주문 : orders.filled_qty == SUM(fills.quantity) per order, 중복 fill 0
   Saga : order_sagas STARTED/COMPENSATING 잔류 0
+  결제 : pg_order_id 중복 0, 성공 결제 == SUBSCRIPTION_PAYMENT 원장, 사용자당 활성구독 1건 (ADR-053)
 사용: verify.py <email_like>   예: verify.py 'burst-%@bench.local'   (환경: PG_CONTAINER, PG_USER, PG_DB)
 종료코드: 위반 있으면 1.
 """
@@ -88,6 +89,45 @@ saga_residue = sum(int(s[1]) for s in saga)
 saga_all = q(f"SELECT status, COUNT(*) FROM order_sagas WHERE user_id IN ({uids}) GROUP BY status ORDER BY status")
 print(f"\n[Saga] 전체: {dict((s[0],int(s[1])) for s in saga_all)}  미완료(STARTED/COMPENSATING) 잔류: {saga_residue}")
 
-violations = len(bad_balance) + len(mismatch) + len(dup_fills) + saga_residue
-print(f"\n{'PASS ✅' if violations==0 else f'FAIL ❌ (위반 {violations})'} — 잔고 오차 {len(bad_balance)}, 체결 불일치 {len(mismatch)}, 중복 fill {len(dup_fills)}, Saga 잔류 {saga_residue}")
+# 4) 결제 정합성 (ADR-053) — 주문 쪽과 같은 자세로 결제를 본다.
+#    L-08 subscription-burst 를 돌린 뒤 여기서 대조한다. 주문만 검증하고 결제는 검증하지
+#    않던 기간이 길었다 — 돈이 오가는 두 경로 중 하나만 보고 있었던 셈이다.
+
+# 4-1) 같은 청구주기를 두 번 청구하지 않았는가. 유니크 인덱스(V50)가 막지만, 인덱스가
+#      실수로 빠진 채 배포되는 회귀를 여기서 잡는다.
+dup_orders = q(f"""SELECT pg_order_id, COUNT(*) FROM payment_records
+                   WHERE user_id IN ({uids}) AND pg_order_id IS NOT NULL
+                   GROUP BY pg_order_id HAVING COUNT(*) > 1""")
+
+# 4-2) 성공한 결제 1건 == SUBSCRIPTION_PAYMENT 원장 1건. 결제는 됐는데 원장이 없으면
+#      회계가 비고, 원장만 있으면 받지 않은 돈을 받았다고 기록한 것이다.
+pay_rows = q(f"""
+WITH paid AS (SELECT user_id, COUNT(*) n, COALESCE(SUM(amount),0) amt
+              FROM payment_records WHERE user_id IN ({uids}) AND status='SUCCESS' GROUP BY user_id),
+     led  AS (SELECT user_id, COUNT(*) n, COALESCE(SUM(-amount),0) amt
+              FROM ledger_events WHERE user_id IN ({uids}) AND event_type='SUBSCRIPTION_PAYMENT' GROUP BY user_id)
+SELECT u.id, COALESCE(paid.n,0), COALESCE(led.n,0), COALESCE(paid.amt,0), COALESCE(led.amt,0),
+       COALESCE(paid.amt,0) - COALESCE(led.amt,0) AS drift
+FROM users u LEFT JOIN paid ON paid.user_id=u.id LEFT JOIN led ON led.user_id=u.id
+WHERE u.id IN ({uids}) AND (COALESCE(paid.n,0) > 0 OR COALESCE(led.n,0) > 0)""")
+pay_drift = [r for r in pay_rows if int(r[1]) != int(r[2]) or abs(float(r[5])) > 0.0001]
+
+# 4-3) 사용자당 활성 구독은 하나뿐이어야 한다(user_subscriptions.user_id UNIQUE).
+dup_subs = q(f"""SELECT user_id, COUNT(*) FROM user_subscriptions
+                 WHERE user_id IN ({uids}) GROUP BY user_id HAVING COUNT(*) > 1""")
+
+# 4-4) PENDING 결제는 "불확정으로 판단을 미룬" 흔적이다 — 위반은 아니지만 남기면 안 된다.
+pending = q(f"SELECT COUNT(*) FROM payment_records WHERE user_id IN ({uids}) AND status='PENDING'")
+pending_n = int(pending[0][0]) if pending else 0
+pay_counts = q(f"SELECT status, COUNT(*) FROM payment_records WHERE user_id IN ({uids}) GROUP BY status ORDER BY status")
+print(f"\n[결제] 상태: {dict((c[0],int(c[1])) for c in pay_counts)}  (PENDING {pending_n}건 = 불확정 보류)")
+print(f"  중복 orderId: {len(dup_orders)}건, 결제↔원장 불일치: {len(pay_drift)}명, 중복 구독행: {len(dup_subs)}명")
+for r in dup_orders[:10]: print(f"    orderId={r[0]} 건수={r[1]}")
+for r in pay_drift[:10]:
+    print(f"    user={r[0]} 성공결제={r[1]}건/{r[3]} 원장={r[2]}건/{r[4]} drift={r[5]}")
+
+pay_violations = len(dup_orders) + len(pay_drift) + len(dup_subs)
+
+violations = len(bad_balance) + len(mismatch) + len(dup_fills) + saga_residue + pay_violations
+print(f"\n{'PASS ✅' if violations==0 else f'FAIL ❌ (위반 {violations})'} — 잔고 오차 {len(bad_balance)}, 체결 불일치 {len(mismatch)}, 중복 fill {len(dup_fills)}, Saga 잔류 {saga_residue}, 결제 {pay_violations}")
 sys.exit(1 if violations else 0)

@@ -9,6 +9,7 @@ import org.springframework.batch.core.Job
 import org.springframework.batch.core.Step
 import org.springframework.batch.core.job.builder.JobBuilder
 import org.springframework.batch.core.repository.JobRepository
+import org.springframework.batch.core.configuration.annotation.StepScope
 import org.springframework.batch.core.step.builder.StepBuilder
 import org.springframework.batch.item.ItemProcessor
 import org.springframework.batch.item.ItemWriter
@@ -48,7 +49,13 @@ class SubscriptionRenewalJobConfig(
             .skipLimit(50)
             .build()
 
+    /**
+     * @StepScope가 꼭 필요하다 — 싱글턴 빈이면 `Instant.now()`가 **애플리케이션 기동 시각**으로
+     * 한 번 굳어, 몇 주째 떠 있는 인스턴스는 영원히 기동일 기준으로 만료 예정을 찾는다.
+     * 스텝 스코프면 실행할 때마다 다시 계산된다.
+     */
     @Bean
+    @StepScope
     fun expiringSubscriptionReader(): RepositoryItemReader<UserSubscription> =
         RepositoryItemReaderBuilder<UserSubscription>()
             .name("expiringSubscriptionReader")

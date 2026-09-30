@@ -24,6 +24,7 @@ class BatchJobController(
     @Qualifier("behaviorScoreJob")        private val scoreJob: Job,
     @Qualifier("candleBackfillJob")       private val backfillJob: Job,
     @Qualifier("ledgerReconciliationJob") private val ledgerReconciliationJob: Job,
+    @Qualifier("subscriptionRenewalJob")  private val subscriptionRenewalJob: Job,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -66,6 +67,36 @@ class BatchJobController(
             "usersChecked" to (step?.writeCount ?: 0L),
             "skipped" to (step?.skipCount ?: 0L),
         ))
+    }
+
+    /**
+     * 정기결제 갱신 수동 실행 — 매월 1일 스케줄(BatchJobScheduler)을 기다리지 않고 돌린다.
+     *
+     * 카오스 실험 CH-13/CH-14가 이 경로를 쓴다. PG 장애 중에 갱신을 반복 실행했을 때
+     * 이중청구도 오강등도 일어나지 않는지는 실제로 배치를 여러 번 돌려봐야만 알 수 있다
+     * (ADR-053). 기존 엔드포인트들과 같은 ADMIN 전용·감사 대상이다.
+     *
+     * 재실행이 안전한 것이 이 잡의 설계다 — orderId가 (구독, 청구주기)에서 결정적으로
+     * 유도되므로 같은 주기를 몇 번 돌려도 청구는 한 번뿐이다.
+     */
+    @PostMapping("/subscription-renewal")
+    fun triggerSubscriptionRenewal(): ResponseEntity<Map<String, Any>> {
+        val execution = jobLauncher.run(subscriptionRenewalJob, JobParametersBuilder()
+            .addString("date", LocalDate.now().toString())
+            .addLong("runId", System.currentTimeMillis())
+            .toJobParameters())
+        val step = execution.stepExecutions.firstOrNull()
+        val body = mapOf(
+            "jobName" to "subscriptionRenewalJob",
+            "status" to execution.status.name,
+            "processed" to (step?.writeCount ?: 0L),
+            "skipped" to (step?.skipCount ?: 0L),
+        )
+        // 실패한 잡에 200을 돌려주면 안 된다. CH-13을 처음 돌렸을 때 이 엔드포인트가 200을
+        // 내주는 바람에, 배치가 매번 NoSuchMethodException으로 죽고 있다는 사실이 응답만
+        // 봐서는 전혀 보이지 않았다(ADR-053).
+        return if (execution.status.isUnsuccessful) ResponseEntity.internalServerError().body(body)
+               else ResponseEntity.ok(body)
     }
 
     /**

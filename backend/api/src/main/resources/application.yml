@@ -232,6 +232,8 @@ app:
       enabled: ${PG_MOCK_ENABLED:true}        # 로컬 개발 전용 — 프로덕션은 반드시 false
     toss:
       secret-key: ${TOSS_SECRET_KEY:}         # 프로덕션 필수 — 로컬에서는 mock 사용
+      # 하드코딩돼 있던 값. 카오스 실험(CH-13/CH-14)이 PG 자리에 스텁을 세우려면 필요하다.
+      base-url: ${TOSS_PG_BASE_URL:https://api.tosspayments.com}
   brokerage:
     mock:
       enabled: ${BROKERAGE_MOCK_ENABLED:true} # 로컬 개발 전용 — 프로덕션은 반드시 false

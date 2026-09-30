@@ -7,6 +7,7 @@ import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.web.client.HttpClientErrorException
 import java.time.Duration
 
 /**
@@ -78,6 +79,12 @@ class CircuitBreakerConfiguration {
         // waitDurationInOpenState가 브로커(30s)보다 긴 60s인 이유: 결제는 주문과 달리
         // 사용자가 초 단위로 재시도하지 않는다. 반쯤 죽은 PG를 성급히 찔러 불확정 상태
         // (INDETERMINATE)를 늘리는 것이, 1분 더 기다리는 것보다 훨씬 비싸다.
+        //
+        // permittedNumberOfCallsInHalfOpenState는 반드시 2 이상이어야 한다. 갱신 한 건이
+        // 복구되려면 호출이 **두 번** 필요하다 — 먼저 orderId로 "이미 청구됐나"를 묻고,
+        // 아니면 그제서야 청구한다. 1로 두면 조회가 유일한 프로브를 소진하고 청구는
+        // CallNotPermitted로 막혀, 갱신이 다음 배치 주기까지 밀린다. 갱신 배치는 월 1회라
+        // 그 "다음 주기"가 한 달이다. CH-14에서 실제로 그렇게 동작하는 것을 보고 고쳤다.
         registry.circuitBreaker("tossPg",
             CircuitBreakerConfig.custom()
                 .failureRateThreshold(50f)
@@ -85,8 +92,18 @@ class CircuitBreakerConfiguration {
                 .slowCallDurationThreshold(Duration.ofSeconds(5))
                 .slidingWindowSize(6)
                 .waitDurationInOpenState(Duration.ofSeconds(60))
-                .permittedNumberOfCallsInHalfOpenState(1)
+                .permittedNumberOfCallsInHalfOpenState(2)
                 .recordExceptions(Exception::class.java)
+                // 4xx는 장애가 아니다 — PG가 살아서 빠르게 답한 것이다(카드 거절, 없는 orderId 404 등).
+                // 이걸 실패로 집계하면 두 가지가 동시에 깨진다:
+                //   1) 불확정 복구가 자기 브레이커를 스스로 오염시킨다. 복구 경로의 첫 동작은
+                //      "이 orderId로 청구된 적 있나" 조회이고, 정상 답이 404다. CH-14에서
+                //      그 404 하나가 HALF_OPEN을 즉시 OPEN으로 되돌려, 뒤따르던 갱신들이
+                //      전부 CallNotPermitted로 밀리는 것을 관측했다.
+                //   2) 카드가 무더기로 거절되는 날(한도 초과 등) 브레이커가 열려 멀쩡한
+                //      결제까지 막는다. 브레이커는 가용성을 보는 장치지 비즈니스 결과를
+                //      보는 장치가 아니다.
+                .ignoreExceptions(HttpClientErrorException::class.java)
                 .build()
         )
 
