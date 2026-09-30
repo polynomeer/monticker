@@ -28,7 +28,7 @@ T1에서 이미 성립하지 않는다.
 
 **실제 구독자는 두 곳이고, 둘의 요구가 서로 다르다:**
 
-1. [`useMarketPricesWs.ts:28`](../../apps/web/src/hooks/useMarketPricesWs.ts#L28) —
+1. `useMarketPricesWs.ts:28` (이 결정으로 제거된 파일) —
    받은 틱을 `Record<stockId, MarketPrice>`에 누적한다.
    유일한 사용처는 [`MarketSummary.tsx:8`](../../apps/web/src/components/home/MarketSummary.tsx#L8)
    (홈 대시보드 위젯)이고, **누적된 종목을 최근 12개로 잘라서 쓴다.**

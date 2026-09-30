@@ -28,7 +28,7 @@ chunk pruning 없음, 압축 없음, 보존 정책 없음. `V10__create_candle_a
 
 `price_ticks`를 다시 들여다보다가 더 근본적인 사실을 발견했다.
 
-- [`PriceTickDbWriter`](../../backend/worker/src/main/kotlin/com/monticker/worker/marketdata/PriceTickDbWriter.kt)는
+- `PriceTickDbWriter` (이 결정으로 제거된 파일)는
   `@Component`로 등록돼 있지만 **호출부가 0건이다.**
   `TickKafkaConsumer`도, Spring Integration 파이프라인(`TickPipelineConfig`)도 이걸 쓰지
   않는다(`redisTickWriter` / `candleAggregator` / `eventDetector`만 호출한다).

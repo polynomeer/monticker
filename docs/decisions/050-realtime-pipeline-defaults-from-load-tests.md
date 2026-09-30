@@ -13,8 +13,8 @@ Accepted
 설정·상수의 선택 문제였다. 그래서 ADR 기준("비기능 요건이 설계에 영향")에 해당해 여기에 결정을 모은다. 배경 수치는
 보고서에, 여기서는 **무엇을 왜 그 값으로 정했는가**만 남긴다.
 
-관련 기존 결정: [ADR-005](005-go-market-gateway-kafka.md)(Go 게이트웨이·키=stockId), [ADR-038](038-per-stock-topic-broadcast.md)
-(브로드캐스트 컨슈머·conflation), [ADR-040](040-kafka-topics-as-code.md)(토픽·파티션). 이들을 번복하지 않고 그 위의 기본값을 채운다.
+관련 기존 결정: [ADR-005](005-kafka-go-gateway-netty-broadcast.md)(Go 게이트웨이·키=stockId), [ADR-038](038-broadcast-consumer-partition-assignment.md)
+(브로드캐스트 컨슈머·conflation), [ADR-040](040-kafka-topic-declaration.md)(토픽·파티션). 이들을 번복하지 않고 그 위의 기본값을 채운다.
 
 ## Decision
 

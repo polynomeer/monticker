@@ -41,7 +41,7 @@ qfex는 Hyperliquid의 레이아웃을 그대로 따르는 클론에 가깝다. 
 - 계산된 값(수수료, 예상 포지션 등)을 "회색 라벨 — 흰 값" 행으로 나열하는 패턴 — 입력값과 시스템이 계산한 값을 시각적으로 구분
 - **Positions/Open Orders/Order History/Trade History를 별도 카드가 아니라 탭 하나로 통합** — 화면 공간을 크게 절약
 - qfex의 심볼 검색 모달: 카테고리 필터 탭(All/관심종목/Equities/...) + 종목당 미니 스파크라인 + 1D 변동률 + 즐겨찾기 별표를 한 줄에.
-  카테고리 탭 + 1D 변동률은 [SearchAutocomplete](apps/web/src/components/stock/SearchAutocomplete.tsx)에 적용 완료 — `/api/screener/search`가 이미 가격·등락률을 한 번에 조인해서 반환해서 백엔드 변경 없이 됐다.
+  카테고리 탭 + 1D 변동률은 [SearchAutocomplete](../apps/web/src/components/stock/SearchAutocomplete.tsx)에 적용 완료 — `/api/screener/search`가 이미 가격·등락률을 한 번에 조인해서 반환해서 백엔드 변경 없이 됐다.
   **스파크라인은 보류**: 결과당 캔들 시리즈를 따로 조회해야 하는데, 키 입력마다 최대 20개 종목 × 캔들 API 호출은 배치 엔드포인트 없이는 N+1이 됨 — 배치 캔들 조회 API가 생기면 재검토.
 
 **적합하지 않은 것**
@@ -52,7 +52,7 @@ qfex는 Hyperliquid의 레이아웃을 그대로 따르는 클론에 가깝다. 
 Hyperliquid류와 같은 골격이지만 정보 밀도가 훨씬 높다: 차트에 이동평균선·거래량 오실레이터가 기본 오버레이되어 있고, 상단에 여러 종목의 실시간 변동률이 흐르는 워치리스트 스트립이 있다.
 
 **채택할 만한 것**
-- 상단 워치리스트 스트립(관심종목 등락률을 한 줄로 계속 흘려보내기) — 홈 화면 헤더에 적용 완료 ([WatchlistTicker](apps/web/src/components/home/WatchlistTicker.tsx), `/api/screener/quotes` 신규 엔드포인트로 뒷받침)
+- 상단 워치리스트 스트립(관심종목 등락률을 한 줄로 계속 흘려보내기) — 홈 화면 헤더에 적용 완료 ([WatchlistTicker](../apps/web/src/components/home/WatchlistTicker.tsx), `/api/screener/quotes` 신규 엔드포인트로 뒷받침)
 - 주문 패널의 "BBO"(최우선 호가로 즉시 채우기) 버튼처럼, 가격 입력 옆에 원클릭 단축 버튼을 붙이는 방식
 
 **적합하지 않은 것**
@@ -64,8 +64,8 @@ Hyperliquid류와 같은 골격이지만 정보 밀도가 훨씬 높다: 차트�
 
 **채택할 만한 것**
 - **로그인 게이트 패턴**: 호가창처럼 로그인이 필요한 위젯은 깨진 화면 대신 위젯 내부에 "호가를 보려면 로그인이 필요해요" + CTA 버튼만 표시 — 페이지 전체를 막지 않고 위젯 단위로 처리
-- **개인·외국인·기관 순매수 위젯**: 수평 바 차트 + 일별 테이블 — 한국 시장 특유의 수급 데이터라 crypto 레퍼런스엔 없던 것. [리스크](apps/web/src/app/risk/page.tsx)나 [Analytics](apps/web/src/app/analytics/page.tsx) 페이지에 참고
-- 주문 패널의 수량 퀵버튼(10%/25%) — [TradeModal](apps/web/src/components/paper/TradeModal.tsx)에 없는 디테일
+- **개인·외국인·기관 순매수 위젯**: 수평 바 차트 + 일별 테이블 — 한국 시장 특유의 수급 데이터라 crypto 레퍼런스엔 없던 것. [리스크](../apps/web/src/app/risk/page.tsx)나 [Analytics](../apps/web/src/app/analytics/page.tsx) 페이지에 참고
+- 주문 패널의 수량 퀵버튼(10%/25%) — [TradeModal](../apps/web/src/components/paper/TradeModal.tsx)에 없는 디테일
 - 종목 상세 페이지에 커뮤니티(소셜) 피드가 그대로 붙어있는 구조 — monticker의 "이벤트 중심" 포지셔닝과 결이 비슷한 지점. 댓글/피드 자체를 만들자는 게 아니라, **뉴스·공시·이벤트가 종목 페이지의 1급 시민으로 붙어있어야 한다**는 원칙의 참고 사례
 
 **적합하지 않은 것**
@@ -73,7 +73,7 @@ Hyperliquid류와 같은 골격이지만 정보 밀도가 훨씬 높다: 차트�
 
 ### Finviz — 다차원 스크리너
 
-monticker [스크리너](apps/web/src/app/page.tsx)는 지금 pill 토글(전체/국내/해외, 거래대금순/거래량순/급상승/급하락) 위주다. Finviz는 완전히 다른 밀도:
+monticker [스크리너](../apps/web/src/app/page.tsx)는 지금 pill 토글(전체/국내/해외, 거래대금순/거래량순/급상승/급하락) 위주다. Finviz는 완전히 다른 밀도:
 
 - **필터 카테고리 탭**(Descriptive/Fundamental/News/ETF) 아래 **5×5 드롭다운 그리드** — Exchange, Market Cap, Earnings Date, Price, Theme 등 수십 개 조건을 동시에 조합
 - **결과 컬럼셋 탭**(Overview/Valuation/Financial/Ownership/Performance/Technical...) — 필터 조건과 "표시할 컬럼"을 분리한 설계가 핵심. 같은 필터 결과를 다른 관점(밸류에이션 관점, 기술적 지표 관점)으로 바로 전환
@@ -81,7 +81,7 @@ monticker [스크리너](apps/web/src/app/page.tsx)는 지금 pill 토글(전체
 
 **채택할 만한 것**
 - **필터 ≠ 표시 컬럼 분리** 원칙은 monticker 스크리너에 그대로 적용 가능 — 지금은 정렬 기준이 바뀌면 컬럼도 같이 바뀌는데, "무엇으로 거를지"와 "무엇을 볼지"를 나누면 훨씬 유연해짐
-- 스크리닝 결과에서 바로 "관심종목 추가" / "알림 만들기"로 이어지는 동선 — [ScreenerRow](apps/web/src/components/screener/ScreenerRow.tsx)에 적용 완료 (행 호버 시 별표/종 아이콘 노출, 별표는 즉시 토글, 종은 종목 상세의 알림 설정 섹션으로 스크롤 이동)
+- 스크리닝 결과에서 바로 "관심종목 추가" / "알림 만들기"로 이어지는 동선 — [ScreenerRow](../apps/web/src/components/screener/ScreenerRow.tsx)에 적용 완료 (행 호버 시 별표/종 아이콘 노출, 별표는 즉시 토글, 종은 종목 상세의 알림 설정 섹션으로 스크롤 이동)
 
 **적합하지 않은 것**
 - 5×5 그리드 수준의 다차원 필터(Analyst Recom, Short Float, IPO Date 등)는 미국 주식 펀더멘털 데이터 의존도가 높음. monticker의 실시간성·이벤트 중심 포지셔닝과는 다른 축이라 전면 도입보다는 **점진적으로 필터 축 2~3개만 추가**하는 쪽이 맞음
@@ -91,11 +91,11 @@ monticker [스크리너](apps/web/src/app/page.tsx)는 지금 pill 토글(전체
 ### TradingView — 차트 · 전략 스크립팅 · 소셜
 
 - 차트에 **매수/매도 가격 티켓이 현재가 축에 떠 있는** 패턴(SELL 317.85 / BUY 317.89, 스프레드 표시) — 차트를 보다가 바로 주문할 수 있는 동선
-- **Pine Editor**: 코드로 전략을 짜는 스크립팅 IDE. monticker의 [Quant Lab 빌더](apps/web/src/app/quant-lab/builder/page.tsx)는 반대로 **코드 없이 조건 블록을 조합**하는 방식 — 이건 참고해서 바꿀 게 아니라, **지금 방식이 TradingView 대비 진입장벽이 낮다는 확인**으로 읽는 게 맞다. [quant-lab-positioning.md](domain/quant-lab-positioning.md)의 논조와도 일치.
+- **Pine Editor**: 코드로 전략을 짜는 스크립팅 IDE. monticker의 [Quant Lab 빌더](../apps/web/src/app/quant-lab/builder/page.tsx)는 반대로 **코드 없이 조건 블록을 조합**하는 방식 — 이건 참고해서 바꿀 게 아니라, **지금 방식이 TradingView 대비 진입장벽이 낮다는 확인**으로 읽는 게 맞다. [quant-lab-positioning.md](domain/quant-lab-positioning.md)의 논조와도 일치.
 - Products 메뉴에서 Screener/Portfolio/Calendar/Options를 아이콘 하나로 빠르게 전환 — 사이드바보다 가벼운 전환 UX
 
 **채택할 만한 것**
-- 차트 위에 뜨는 현재가 기준 매수/매도 퀵 버튼 — [StockChart](apps/web/src/components/stock/chart/StockChart.tsx) 또는 종목 상세 페이지에서 참고할 만함
+- 차트 위에 뜨는 현재가 기준 매수/매도 퀵 버튼 — [StockChart](../apps/web/src/components/stock/chart/StockChart.tsx) 또는 종목 상세 페이지에서 참고할 만함
 
 **적합하지 않은 것**
 - Pine Editor류 코드 에디터 — 위에서 설명한 이유로 명시적으로 배제
@@ -109,8 +109,8 @@ monticker [스크리너](apps/web/src/app/page.tsx)는 지금 pill 토글(전체
 - 회사 프로필 카드(CEO/본사/설립연도/직원수)
 
 **채택할 만한 것 → 실제로는 이미 있었음**
-- 조사 당시엔 몰랐지만, [SummaryPanel](apps/web/src/components/stock/SummaryPanel.tsx) + [StockSummaryService](backend/api/src/main/kotlin/com/monticker/api/ai/StockSummaryService.kt)로 이 기능이 이미 종목 상세 페이지에 붙어 있었다. 다만 기존 프롬프트는 이벤트·뉴스 제목만 넣고 있어서 Robinhood 스니펫의 핵심인 "오늘 저점 대비 +0.4%" 같은 가격 기반 문장을 만들 수 없었음 — 가격 데이터(당일 시가·고가·저가, 전일 대비 등락률)를 프롬프트에 추가해 실제로 Robinhood 톤에 맞게 보강함
-- 겸사겸사 발견한 것: [NewsPanel](apps/web/src/components/stock/NewsPanel.tsx)이 "뉴스 수집 예정" 스텁이었는데, AI 요약은 이미 같은 뉴스 데이터를 읽고 있었음(`/api/stocks/{id}/news`가 이미 살아있었음) — 이것도 같이 연결함
+- 조사 당시엔 몰랐지만, [SummaryPanel](../apps/web/src/components/stock/SummaryPanel.tsx) + [StockSummaryService](../backend/api/src/main/kotlin/com/monticker/api/ai/StockSummaryService.kt)로 이 기능이 이미 종목 상세 페이지에 붙어 있었다. 다만 기존 프롬프트는 이벤트·뉴스 제목만 넣고 있어서 Robinhood 스니펫의 핵심인 "오늘 저점 대비 +0.4%" 같은 가격 기반 문장을 만들 수 없었음 — 가격 데이터(당일 시가·고가·저가, 전일 대비 등락률)를 프롬프트에 추가해 실제로 Robinhood 톤에 맞게 보강함
+- 겸사겸사 발견한 것: [NewsPanel](../apps/web/src/components/stock/NewsPanel.tsx)이 "뉴스 수집 예정" 스텁이었는데, AI 요약은 이미 같은 뉴스 데이터를 읽고 있었음(`/api/stocks/{id}/news`가 이미 살아있었음) — 이것도 같이 연결함
 
 **적합하지 않은 것**
 - 극단적 화이트스페이스 미니멀리즘 자체는 Dracula 다크 테마 우선 기조와 안 맞음 — 여백을 넉넉히 쓴다는 태도만 참고
@@ -121,17 +121,17 @@ monticker [스크리너](apps/web/src/app/page.tsx)는 지금 pill 토글(전체
 
 | monticker 페이지 | 참고 서비스 | 적용할 것 | 우선순위 |
 |---|---|---|---|
-| [체결엔진](apps/web/src/app/matching/page.tsx) | qfex/Hyperliquid | 오더북 heatmap 바, 미체결/체결 내역 탭 통합, 매수/매도 스플릿 버튼 | ✅ 완료 |
-| [Stock Detail](apps/web/src/app/stocks/%5Bsymbol%5D/page.tsx) | Robinhood | AI 요약에 가격 동향(당일 등락률·거래범위) 반영, NewsPanel 실데이터 연결 | ✅ 완료 |
-| [SearchAutocomplete](apps/web/src/components/stock/SearchAutocomplete.tsx) | qfex | 카테고리 탭 + 1D 변동률 | ✅ 완료 (스파크라인만 보류) |
-| [스크리너 (홈)](apps/web/src/app/page.tsx) | Finviz | 필터/표시컬럼 분리, 관심종목·알림 바로가기 동선 | ✅ 완료 ([ADR-018](decisions/018-stock-fundamentals-kis-reuse.md)) |
-| [TradeModal](apps/web/src/components/paper/TradeModal.tsx) | 토스증권 | 수량 퀵버튼(25%/50%/75%/100%) | ✅ 완료 |
+| [체결엔진](../apps/web/src/app/matching/page.tsx) | qfex/Hyperliquid | 오더북 heatmap 바, 미체결/체결 내역 탭 통합, 매수/매도 스플릿 버튼 | ✅ 완료 |
+| [Stock Detail](../apps/web/src/app/stocks/[symbol]/page.tsx) | Robinhood | AI 요약에 가격 동향(당일 등락률·거래범위) 반영, NewsPanel 실데이터 연결 | ✅ 완료 |
+| [SearchAutocomplete](../apps/web/src/components/stock/SearchAutocomplete.tsx) | qfex | 카테고리 탭 + 1D 변동률 | ✅ 완료 (스파크라인만 보류) |
+| [스크리너 (홈)](../apps/web/src/app/page.tsx) | Finviz | 필터/표시컬럼 분리, 관심종목·알림 바로가기 동선 | ✅ 완료 ([ADR-018](decisions/018-stock-fundamentals-kis-reuse.md)) |
+| [TradeModal](../apps/web/src/components/paper/TradeModal.tsx) | 토스증권 | 수량 퀵버튼(25%/50%/75%/100%) | ✅ 완료 |
 | 종목 상세 (전반) | TradingView | 차트 위 현재가 기준 매수/매도 퀵 버튼 | ✅ 완료 |
-| [Stock Detail](apps/web/src/components/stock/InvestorFlowPanel.tsx) | 토스증권 | 개인·외국인·기관 순매수 시각화 | ✅ 완료 ([ADR-017](decisions/017-investor-flow-kis-integration.md)) |
+| [Stock Detail](../apps/web/src/components/stock/InvestorFlowPanel.tsx) | 토스증권 | 개인·외국인·기관 순매수 시각화 | ✅ 완료 ([ADR-017](decisions/017-investor-flow-kis-integration.md)) |
 
 ### 개인·외국인·기관 순매수 — 완료
 
-[ADR-017](decisions/017-investor-flow-kis-integration.md)에서 데이터 소스를 결정했다: 신규 벤더 대신 이미 연동된 KIS API의 `inquire-investor` 엔드포인트를 확장. `KisClient.fetchInvestorTrend` → `InvestorTrendCollector`(일일 배치, KOSPI/KOSDAQ만) → `investor_flow` 테이블(V29) → `GET /api/stocks/{id}/investor-flow` → [InvestorFlowPanel](apps/web/src/components/stock/InvestorFlowPanel.tsx). 당초 리스크/Analytics 후보였으나 종목 자체의 시장 데이터라 종목 상세 페이지(OrderBook 옆)로 배치를 바꿨다 — 이유는 ADR-017 참고. KIS 미설정/무응답 시 모의 데이터로 폴백하되 `is_mocked` 플래그로 프론트에 "모의 데이터" 배지를 띄워 실데이터처럼 보이지 않게 했다.
+[ADR-017](decisions/017-investor-flow-kis-integration.md)에서 데이터 소스를 결정했다: 신규 벤더 대신 이미 연동된 KIS API의 `inquire-investor` 엔드포인트를 확장. `KisClient.fetchInvestorTrend` → `InvestorTrendCollector`(일일 배치, KOSPI/KOSDAQ만) → `investor_flow` 테이블(V29) → `GET /api/stocks/{id}/investor-flow` → [InvestorFlowPanel](../apps/web/src/components/stock/InvestorFlowPanel.tsx). 당초 리스크/Analytics 후보였으나 종목 자체의 시장 데이터라 종목 상세 페이지(OrderBook 옆)로 배치를 바꿨다 — 이유는 ADR-017 참고. KIS 미설정/무응답 시 모의 데이터로 폴백하되 `is_mocked` 플래그로 프론트에 "모의 데이터" 배지를 띄워 실데이터처럼 보이지 않게 했다.
 
 ## 명시적으로 채택하지 않기로 한 것
 
