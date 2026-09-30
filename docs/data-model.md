@@ -2,6 +2,13 @@
 
 > Read this when: writing a Flyway migration, designing a query, or adding a new entity.
 
+> **정본은 마이그레이션이다.** 이 문서는 핵심 도메인의 스키마와 **설계 의도**를 설명하고,
+> 컬럼 단위의 최신 사실은 `backend/api/src/main/resources/db/migration/V*.sql`(현재 V1–V49)이 갖는다.
+> 두 곳이 다르면 마이그레이션이 옳다 — 문서는 뒤처질 수 있다.
+>
+> 아래에 DDL이 실려 있지 않은 테이블은 **[테이블 인덱스](#테이블-인덱스)** 에서 어느 마이그레이션이
+> 만들었는지 찾을 수 있다.
+
 ## Storage Assignment
 
 | Store | What goes here |
@@ -903,15 +910,22 @@ CREATE TABLE strategy_badges (
 ## Redis Key Schema
 
 ```
-stock:price:{market}:{symbol}           → latest price JSON (STRING)
-orderbook:{symbol}                      → KIS realtime orderbook JSON (STRING, TTL 30s)
-alert:cooldown:{ruleId}                 → cooldown flag (STRING, TTL 600s)
-signal:forward:{ruleSetId}:{date}       → daily forward test signal set
-wallet:snapshot:{userId}                → 최신 wallet 스냅샷 캐시 (TTL 30s)
-news:dedup:{urlHash}                    → dedup flag (STRING, TTL 7d)
-stream:market:ticks                     → Redis Stream for tick events
-stream:events:detected                  → Redis Stream for detected stock_events
+stock:price:{market}:{symbol}           → 최신 시세 JSON (STRING)
+orderbook:{symbol}                      → KIS 실시간 호가 JSON (STRING, TTL 30s)
+alert:cooldown:{ruleId}                 → 알림 쿨다운 플래그 (STRING, TTL 600s)
+alert:rules:changed                     → 알림 룰 인메모리 인덱스 무효화 신호 (ADR-044)
+ratelimit:{prefix}:{userId}             → @RateLimited 카운터 (TTL = window)
+idempotency:{userId}:{key}              → X-Idempotency-Key 응답 캐시 (TTL 24h)
 ```
+
+한때 여기 적혀 있었으나 **코드에 존재한 적이 없거나 폐기된** 키들:
+
+| 키 | 왜 없는가 |
+|---|---|
+| `stream:market:ticks`, `stream:events:detected` | Redis Streams 대신 Kafka를 택했다([ADR-004](decisions/004-redis-streams-over-kafka.md)) |
+| `news:dedup:{urlHash}` | Bloom Filter로 대체([ADR-010](decisions/010-bloom-filter-news-deduplication.md)) |
+| `signal:forward:{ruleSetId}:{date}` | 포워드 테스트 신호는 `quant_signals` 테이블에 쓴다([ADR-024](decisions/024-quant-lab-forward-test.md)) |
+| `wallet:snapshot:{userId}` | 지갑 스냅샷 캐시는 도입되지 않았다 — 원장 replay + `ledger_snapshots`(V43)가 그 역할 |
 
 ---
 
@@ -950,3 +964,73 @@ stocks
   │                 ◄── quant_signals
   └── candles_* (TimescaleDB hypertable, V42)
 ```
+
+---
+
+## 테이블 인덱스
+
+전체 테이블과 그것을 만든 마이그레이션. **DDL 열이 '—' 인 것은 이 문서에 스키마가 없다** — 해당 마이그레이션 파일을 본다.
+(Spring Batch 메타테이블 6종은 프레임워크가 만들므로 제외)
+
+| 테이블 | 생성 | 이 문서에 DDL |
+|---|---|---|
+| `alert_histories` | V6 | ✅ |
+| `alert_rules` | V6 | ✅ |
+| `brokerage_accounts` | V27 | — |
+| `brokerage_orders` | V27 | — |
+| `brokerage_settlements` | V27 | — |
+| `candles_1d` | V4 | — |
+| `candles_1m` | V4 | ✅ |
+| `conditional_orders` | V38 | — |
+| `creator_earnings` | V27 | — |
+| `creator_payouts` | V27 | — |
+| `detected_patterns` | V16 | ✅ |
+| `device_tokens` | V9 | — |
+| `event_publication` | V18 | — |
+| `fills` | V15 | ✅ |
+| `investment_behavior_scores` | V14 | ✅ |
+| `investor_flow` | V29 | — |
+| `ledger_events` | V14 | ✅ |
+| `ledger_snapshots` | V43 | ✅ |
+| `news_articles` | V8 | ✅ |
+| `order_emotion_tags` | V14 | ✅ |
+| `order_proposals` | V40 | — |
+| `order_sagas` | V20 | — |
+| `orders` | V15 | ✅ |
+| `paper_accounts` | V11 | — |
+| `paper_settlements` | V27 | — |
+| `paper_trades` | V11 | — |
+| `payment_records` | V27 | — |
+| `portfolio_optimizations` | V16 | ✅ |
+| `portfolio_positions` | V21 | ✅ |
+| `price_ticks` | V4 | — |
+| `quant_backtest_results` | V13 | — |
+| `quant_forward_test_equity` | V33 | — |
+| `quant_forward_tests` | V33 | — |
+| `quant_signals` | V13 | ✅ |
+| `rebalance_execution_legs` | V39 | — |
+| `rebalance_executions` | V39 | — |
+| `rebalance_targets` | V39 | — |
+| `refresh_tokens` | V7 | — |
+| `regime_history` | V16 | ✅ |
+| `risk_check_logs` | V15 | ✅ |
+| `risk_limits` | V15 | ✅ |
+| `rule_set_versions` | V13 | ✅ |
+| `rule_sets` | V13 | ✅ |
+| `stock_aliases` | V1 | ✅ |
+| `stock_comment_reports` | V41 | — |
+| `stock_comments` | V41 | — |
+| `stock_events` | V5 | ✅ |
+| `stock_fundamentals` | V30 | — |
+| `stocks` | V1 | ✅ |
+| `strategy_market` | V24 | — |
+| `strategy_subscriptions` | V24 | ✅ |
+| `subscription_plans` | V27 | — |
+| `tax_harvesting_logs` | V16 | ✅ |
+| `user_billing_keys` | V32 | — |
+| `user_subscriptions` | V27 | — |
+| `users` | V2 | ✅ |
+| `watch_rule_executions` | V49 | ✅ |
+| `watch_rules` | V49 | ✅ |
+| `watchlist_groups` | V3 | ✅ |
+| `watchlist_items` | V3 | ✅ |
