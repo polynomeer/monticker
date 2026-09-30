@@ -172,19 +172,32 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
   const changeRate = changeAmount != null && prevClose ? (changeAmount / prevClose) * 100 : null;
   const isUp = (changeAmount ?? 0) >= 0;
 
+  // 24h 스탯 (헤더 스트립용)
+  const dayHigh   = latestDaily?.high   ?? null;
+  const dayLow    = latestDaily?.low    ?? null;
+  const dayVolume = latestDaily?.volume ?? null;
+  const dayOpen   = latestDaily?.open   ?? null;
+
   return (
-    <div className="flex h-[calc(100vh-64px)] min-h-0 flex-col animate-fade-up">
-      {/* ── 종목 헤더 스트립 ─────────────────────────────────── */}
-      <div className="flex flex-0 items-center gap-5 border-b border-gray-100 dark:border-white/5 px-5 py-3">
-        <div className="flex items-center gap-3">
+    <div className="flex h-[calc(100vh-56px)] min-h-0 flex-col animate-fade-up">
+
+      {/* ── 종목 헤더 스트립 (Binance 스타일) ──────────────────────── */}
+      <div className="flex-none flex items-center gap-4 border-b border-gray-100 dark:border-white/5
+                      bg-white dark:bg-dracula-bg px-4 py-2.5 overflow-x-auto [scrollbar-width:none]">
+
+        {/* 종목명 + 현재가 + 등락 */}
+        <div className="flex items-center gap-3 shrink-0">
           <div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-base font-extrabold tracking-tight text-gray-900 dark:text-dracula-fg">{stockName}</span>
-              <span className="text-[11px] text-gray-400 dark:text-dracula-comment">{symbol}</span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-sm font-extrabold tracking-tight text-gray-900 dark:text-dracula-fg">{stockName}</span>
+              <span className="text-[10px] text-gray-400 dark:text-dracula-comment">{symbol}</span>
             </div>
+            <span className="text-[10px] text-gray-400 dark:text-dracula-comment">{market}</span>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="font-mono text-lg font-extrabold tabular-nums text-gray-900 dark:text-dracula-fg">₩{fmt(currentPrice)}</span>
+            <span className="font-mono text-xl font-extrabold tabular-nums text-gray-900 dark:text-dracula-fg">
+              ₩{fmt(currentPrice)}
+            </span>
             {changeAmount != null && changeRate != null && (
               <span className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums ${
                 isUp ? "bg-market-up/15 text-market-up" : "bg-market-down/15 text-market-down"
@@ -196,33 +209,86 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
           <WatchlistAddButton stockId={stockId} />
         </div>
 
-        <div className="flex flex-1 justify-center">
-          <div className="flex items-center gap-0.5 rounded-lg border border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-dracula-surface p-1">
-            {INTERVALS.map(i => (
-              <button key={i.value} onClick={() => setInterval(i.value)}
-                className={`rounded-md px-2.5 py-1 text-xs transition-all duration-150 active:scale-95 ${pill(interval === i.value)}`}>
-                {i.label}
-              </button>
-            ))}
-          </div>
+        {/* 구분선 */}
+        <div className="w-px h-8 bg-gray-200 dark:bg-dracula-line shrink-0" />
+
+        {/* 24H 스탯 칩들 */}
+        <div className="flex items-center gap-5 shrink-0">
+          {dayOpen != null && (
+            <div>
+              <p className="text-[9px] font-medium text-gray-400 dark:text-dracula-comment uppercase tracking-wide">시가</p>
+              <p className="font-mono text-xs font-semibold tabular-nums text-gray-700 dark:text-dracula-fg">₩{fmt(dayOpen)}</p>
+            </div>
+          )}
+          {dayHigh != null && (
+            <div>
+              <p className="text-[9px] font-medium text-gray-400 dark:text-dracula-comment uppercase tracking-wide">고가</p>
+              <p className="font-mono text-xs font-semibold tabular-nums text-market-up">₩{fmt(dayHigh)}</p>
+            </div>
+          )}
+          {dayLow != null && (
+            <div>
+              <p className="text-[9px] font-medium text-gray-400 dark:text-dracula-comment uppercase tracking-wide">저가</p>
+              <p className="font-mono text-xs font-semibold tabular-nums text-market-down">₩{fmt(dayLow)}</p>
+            </div>
+          )}
+          {dayVolume != null && (
+            <div>
+              <p className="text-[9px] font-medium text-gray-400 dark:text-dracula-comment uppercase tracking-wide">거래량</p>
+              <p className="font-mono text-xs font-semibold tabular-nums text-gray-700 dark:text-dracula-fg">
+                {dayVolume >= 10_000 ? `${(dayVolume / 10_000).toFixed(1)}만` : dayVolume.toLocaleString()}
+              </p>
+            </div>
+          )}
         </div>
 
-        <span className="text-[11px] text-gray-400 dark:text-dracula-comment">
-          {loading ? "로딩 중..." : `총 ${candles.length}개 캔들`}
+        {/* 구분선 */}
+        <div className="w-px h-8 bg-gray-200 dark:bg-dracula-line shrink-0" />
+
+        {/* 봉 간격 선택 */}
+        <div className="flex items-center gap-0.5 rounded-lg border border-gray-100 dark:border-white/5
+                        bg-gray-50 dark:bg-dracula-surface p-0.5 shrink-0">
+          {INTERVALS.map(i => (
+            <button key={i.value} onClick={() => setInterval(i.value)}
+              className={`rounded-md px-2.5 py-1 text-xs transition-all duration-150 active:scale-95 ${pill(interval === i.value)}`}>
+              {i.label}
+            </button>
+          ))}
+        </div>
+
+        <span className="ml-auto text-[10px] text-gray-400 dark:text-dracula-comment shrink-0">
+          {loading ? "로딩 중..." : `${candles.length}개 캔들`}
         </span>
       </div>
 
-      {/* ── 3컬럼 메인 그리드 ────────────────────────────────── */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3.5 overflow-hidden p-3.5 lg:grid-cols-[1.55fr_1.05fr_0.85fr]">
+      {/* ── 4패널 메인 그리드: [호가창 | 차트+탭 | 우측 패널] ───────── */}
+      {/* 모바일: 단일 컬럼 스택 | 데스크톱: 3분할 */}
+      <div className="grid min-h-0 flex-1 overflow-hidden
+                      grid-cols-1
+                      lg:grid-cols-[200px_1fr_260px]
+                      lg:divide-x dark:lg:divide-white/5">
 
-        {/* ===== 좌측: 차트 ===== */}
-        <div className="flex min-h-0 flex-col gap-3.5">
-          <Card outerClassName="flex flex-[1.35] min-h-0" className="flex flex-1 min-w-0 flex-col min-h-0 overflow-hidden p-0">
-            <div className="flex flex-0 items-center gap-1.5 border-b border-gray-100 dark:border-white/5 px-3.5 py-2">
-              <span className="text-xs font-bold text-gray-900 dark:text-dracula-fg">차트</span>
-              <div className="flex-1" />
+        {/* ===== 패널 1: 호가창 (좌측 고정) ===== */}
+        <div className="hidden lg:flex min-h-0 flex-col overflow-hidden dark:bg-[#1e202a]">
+          <div className="flex-none flex items-center justify-between px-3 py-2
+                          border-b border-gray-100 dark:border-white/5">
+            <span className="text-[11px] font-bold text-gray-900 dark:text-dracula-fg">호가창</span>
+            <span className="text-[9px] text-gray-400 dark:text-dracula-comment">{symbol}</span>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <OrderBook stockId={stockId} />
+          </div>
+        </div>
 
-              {/* 드로잉 도구 — 추세선/수평선은 토글, 다시 누르면 해제 */}
+        {/* ===== 패널 2: 차트 + 하단 정보 탭 (중앙 메인) ===== */}
+        <div className="flex min-h-0 flex-col overflow-hidden">
+
+          {/* 차트 영역 (flex-[1.4]) */}
+          <div className="flex-[1.4] min-h-0 flex flex-col overflow-hidden">
+            {/* 차트 도구 바 */}
+            <div className="flex-none flex items-center gap-1.5 border-b border-gray-100 dark:border-white/5 px-3.5 py-2">
+              <span className="text-xs font-bold text-gray-900 dark:text-dracula-fg mr-1">차트</span>
+
               <button
                 onClick={() => setActiveDrawingTool(t => t === "TREND_LINE" ? null : "TREND_LINE")}
                 title="차트를 두 번 클릭해 추세선을 그립니다"
@@ -230,8 +296,8 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
                   activeDrawingTool === "TREND_LINE"
                     ? "border-dracula-orange text-dracula-orange bg-dracula-orange/10"
                     : "border-gray-200 dark:border-dracula-line text-gray-500 dark:text-dracula-comment hover:border-gray-300 dark:hover:border-dracula-comment"
-                }`}
-              >추세선</button>
+                }`}>추세선</button>
+
               <button
                 onClick={() => setActiveDrawingTool(t => t === "HORIZONTAL_LINE" ? null : "HORIZONTAL_LINE")}
                 title="차트를 클릭해 수평선을 그립니다"
@@ -239,17 +305,15 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
                   activeDrawingTool === "HORIZONTAL_LINE"
                     ? "border-dracula-orange text-dracula-orange bg-dracula-orange/10"
                     : "border-gray-200 dark:border-dracula-line text-gray-500 dark:text-dracula-comment hover:border-gray-300 dark:hover:border-dracula-comment"
-                }`}
-              >수평선</button>
+                }`}>수평선</button>
+
               {drawings.length > 0 && (
                 <button
                   onClick={() => persistDrawings([])}
-                  title="이 종목·봉 간격의 드로잉을 모두 지웁니다"
-                  className="rounded-md border px-2 py-0.5 text-[11px] font-semibold border-gray-200 dark:border-dracula-line text-gray-500 dark:text-dracula-comment hover:border-gray-300 dark:hover:border-dracula-comment hover:text-dracula-red transition-colors"
+                  className="rounded-md border px-2 py-0.5 text-[11px] font-semibold border-gray-200 dark:border-dracula-line text-gray-500 dark:text-dracula-comment hover:text-dracula-red transition-colors"
                 >지우기</button>
               )}
 
-              {/* 자유 지표 */}
               <div className="relative">
                 <button
                   onClick={() => setShowIndicatorMenu(v => !v)}
@@ -257,18 +321,12 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
                     showIndicatorMenu
                       ? "border-dracula-purple text-dracula-purple bg-dracula-purple/10"
                       : "border-gray-200 dark:border-dracula-line text-gray-500 dark:text-dracula-comment hover:border-gray-300 dark:hover:border-dracula-comment"
-                  }`}
-                >지표</button>
+                  }`}>지표</button>
                 {showIndicatorMenu && (
-                  <div className="absolute right-0 top-full mt-1 z-20 w-32 rounded-lg border border-gray-200 dark:border-dracula-line bg-white dark:bg-dracula-surface shadow-lg py-1">
+                  <div className="absolute left-0 top-full mt-1 z-20 w-32 rounded-lg border border-gray-200 dark:border-dracula-line bg-white dark:bg-dracula-surface shadow-lg py-1">
                     {INDICATOR_OPTIONS.map(opt => (
                       <label key={opt.key} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-700 dark:text-dracula-fg hover:bg-gray-50 dark:hover:bg-dracula-line/30 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={enabledIndicators.includes(opt.key)}
-                          onChange={() => toggleIndicator(opt.key)}
-                          className="accent-dracula-purple"
-                        />
+                        <input type="checkbox" checked={enabledIndicators.includes(opt.key)} onChange={() => toggleIndicator(opt.key)} className="accent-dracula-purple" />
                         {opt.label}
                       </label>
                     ))}
@@ -282,60 +340,62 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
                   showVwap
                     ? "border-dracula-purple text-dracula-purple bg-dracula-purple/10"
                     : "border-gray-200 dark:border-dracula-line text-gray-500 dark:text-dracula-comment hover:border-gray-300 dark:hover:border-dracula-comment"
-                }`}
-              >VWAP</button>
-            </div>
+                }`}>VWAP</button>
 
-            <div className="flex flex-1 min-h-0 flex-col">
-              <div ref={chartAreaRef} className="min-h-0 flex-1 px-2 pt-2">
-                {loading ? (
-                  <div className="flex h-full items-center justify-center text-sm text-gray-400 dark:text-dracula-comment animate-pulse">
-                    차트 로딩 중...
-                  </div>
-                ) : (
-                  <StockChart
-                    candles={candles}
-                    events={events}
-                    height={chartHeight}
-                    vwapData={showVwap ? vwapData : undefined}
-                    onEventClick={handleEventMarkerClick}
-                    enabledIndicators={enabledIndicators}
-                    orderLines={orderLines}
-                    onCancelOrderLine={handleCancelOrderLine}
-                    activeDrawingTool={activeDrawingTool}
-                    drawings={drawings}
-                    onDrawingsChange={persistDrawings}
-                  />
-                )}
-              </div>
-
-              <div className="flex flex-0 items-center gap-1 px-3.5 pt-1.5">
-                {SUB_TABS.map(t => (
-                  <button key={t.value} onClick={() => setSubTab(t.value)}
-                    className={`rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${pill(subTab === t.value)}`}>
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-              <div className="flex-0 px-2 pb-2 pt-1" style={{ height: 110 }}>
-                {!loading && subTab === "volume" && candles.length > 0 && (
-                  <VolumeChart candles={candles} height={110} />
-                )}
-                {!loading && subTab === "rsi" && candles.length > 0 && (
-                  <IndicatorChart candles={candles} showRSI />
-                )}
-                {!loading && subTab === "macd" && candles.length > 0 && (
-                  <IndicatorChart candles={candles} showMACD />
-                )}
+              {/* 모바일에서 호가창 숨겨지므로 인라인으로 노출 */}
+              <div className="lg:hidden ml-auto">
+                <OrderBook stockId={stockId} />
               </div>
             </div>
-          </Card>
 
-          <Card outerClassName="flex flex-1 min-h-0" className="flex flex-1 min-w-0 flex-col min-h-0 overflow-hidden p-0">
-            <div className="flex flex-0 items-center gap-1 px-3.5 pt-2.5">
+            {/* 캔들 차트 */}
+            <div ref={chartAreaRef} className="min-h-0 flex-1 px-2 pt-2">
+              {loading ? (
+                <div className="flex h-full items-center justify-center text-sm text-gray-400 dark:text-dracula-comment animate-pulse">
+                  차트 로딩 중...
+                </div>
+              ) : (
+                <StockChart
+                  candles={candles}
+                  events={events}
+                  height={chartHeight}
+                  vwapData={showVwap ? vwapData : undefined}
+                  onEventClick={handleEventMarkerClick}
+                  enabledIndicators={enabledIndicators}
+                  orderLines={orderLines}
+                  onCancelOrderLine={handleCancelOrderLine}
+                  activeDrawingTool={activeDrawingTool}
+                  drawings={drawings}
+                  onDrawingsChange={persistDrawings}
+                />
+              )}
+            </div>
+
+            {/* 서브 지표 탭 (거래량/RSI/MACD) */}
+            <div className="flex-none flex items-center gap-1 px-3.5 pt-1">
+              {SUB_TABS.map(t => (
+                <button key={t.value} onClick={() => setSubTab(t.value)}
+                  className={`rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${pill(subTab === t.value)}`}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex-none px-2 pb-2 pt-1" style={{ height: 100 }}>
+              {!loading && subTab === "volume" && candles.length > 0 && <VolumeChart candles={candles} height={100} />}
+              {!loading && subTab === "rsi"    && candles.length > 0 && <IndicatorChart candles={candles} showRSI />}
+              {!loading && subTab === "macd"   && candles.length > 0 && <IndicatorChart candles={candles} showMACD />}
+            </div>
+          </div>
+
+          {/* 구분선 */}
+          <div className="flex-none h-px bg-gray-100 dark:bg-white/5" />
+
+          {/* 하단 정보 탭: AI요약 / 뉴스 / 이벤트 / 커뮤니티 */}
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <div className="flex-none flex items-center gap-1 px-3.5 pt-2">
               {LEFT_TABS.map(t => (
                 <button key={t.value} onClick={() => setLeftTab(t.value)}
-                  className={`-mb-px border-b-2 px-1 pb-2 text-[13px] font-bold transition-colors ${
+                  className={`-mb-px border-b-2 px-1.5 pb-2 text-[12px] font-bold transition-colors ${
                     leftTab === t.value
                       ? "border-dracula-purple text-gray-900 dark:text-dracula-fg"
                       : "border-transparent text-gray-400 dark:text-dracula-comment hover:text-gray-700 dark:hover:text-dracula-fg"
@@ -344,61 +404,51 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
                 </button>
               ))}
             </div>
-            <div className="mx-3.5 h-px bg-gray-100 dark:border-white/5 dark:bg-white/5" />
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              {leftTab === "summary" && <SummaryPanel stockId={stockId} symbol={symbol} bare onNavigate={setLeftTab} />}
-              {leftTab === "news" && <NewsPanel stockId={stockId} bare />}
-              {leftTab === "events" && (
-                <EventTimeline
-                  stockId={stockId}
-                  bare
-                  highlightEventId={highlightEventId}
-                  onViewNews={() => setLeftTab("news")}
-                />
+            <div className="mx-3.5 h-px bg-gray-100 dark:bg-white/5" />
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 [scrollbar-width:thin]">
+              {leftTab === "summary"   && <SummaryPanel stockId={stockId} symbol={symbol} bare onNavigate={setLeftTab} />}
+              {leftTab === "news"      && <NewsPanel stockId={stockId} bare />}
+              {leftTab === "events"    && (
+                <EventTimeline stockId={stockId} bare highlightEventId={highlightEventId} onViewNews={() => setLeftTab("news")} />
               )}
               {leftTab === "community" && <StockCommentPanel stockId={stockId} bare />}
             </div>
-          </Card>
+          </div>
         </div>
 
-        {/* ===== 가운데: 호가 · 모의투자 · 수급 ===== */}
-        <div className="flex min-h-0 flex-col gap-3.5">
-          <div className="flex-[1.1] min-h-0 overflow-y-auto">
-            <OrderBook stockId={stockId} />
-          </div>
+        {/* ===== 패널 3: 모의투자 + 수급 + 스코어 + 알림 (우측) ===== */}
+        <div className="flex min-h-0 flex-col overflow-y-auto dark:bg-[#1e202a]
+                        [scrollbar-width:thin] divide-y dark:divide-white/5">
 
-          <Card className="flex flex-[0.92] min-h-0 flex-col overflow-hidden p-0">
-            <div className="flex flex-0 items-center gap-2 border-b border-gray-100 dark:border-white/5 px-3.5 py-2.5">
-              <span className="text-xs font-bold text-gray-900 dark:text-dracula-fg">모의투자</span>
-              <span className="rounded bg-gray-100 dark:bg-dracula-line px-1.5 py-0.5 text-[10px] font-semibold text-gray-500 dark:text-dracula-comment">Paper</span>
+          {/* 모의투자 주문 패널 */}
+          <div className="flex-none">
+            <div className="flex items-center gap-2 px-3.5 py-2 border-b border-gray-100 dark:border-white/5">
+              <span className="text-[11px] font-bold text-gray-900 dark:text-dracula-fg">모의투자</span>
+              <span className="rounded bg-gray-100 dark:bg-dracula-line px-1.5 py-0.5 text-[9px] font-semibold text-gray-500 dark:text-dracula-comment">Paper</span>
             </div>
             <TradePanel stock={{ id: stockId, symbol, name: stockName }} currentPrice={currentPrice} />
-          </Card>
+          </div>
 
-          <div className="flex-[0.55] min-h-0 overflow-y-auto">
+          {/* 수급 동향 */}
+          <div className="flex-none">
             <InvestorFlowPanel stockId={stockId} />
           </div>
-        </div>
 
-        {/* ===== 우측: 스코어 · 알림 ===== */}
-        <div className="flex min-h-0 flex-col gap-3.5">
-          <div className="flex-[0.85] min-h-0 overflow-y-auto">
+          {/* 종목 스코어 */}
+          <div className="flex-none">
             <StockScoreCard stockId={stockId} />
           </div>
 
-          <Card
-            className={`flex flex-1 min-h-0 flex-col overflow-hidden p-0 transition-shadow duration-300 ${
-              alertHighlight ? "ring-2 ring-dracula-purple" : ""
-            }`}
-          >
-            <div className="flex flex-0 items-center gap-1.5 border-b border-gray-100 dark:border-white/5 px-3.5 py-2.5">
-              <span className="text-xs font-bold text-gray-900 dark:text-dracula-fg">가격 알림</span>
-              <span className="text-[11px] text-gray-400 dark:text-dracula-comment">({symbol})</span>
+          {/* 가격 알림 */}
+          <div className={`flex-none transition-shadow duration-300 ${alertHighlight ? "ring-2 ring-inset ring-dracula-purple" : ""}`}>
+            <div className="flex items-center gap-1.5 px-3.5 py-2 border-b border-gray-100 dark:border-white/5">
+              <span className="text-[11px] font-bold text-gray-900 dark:text-dracula-fg">가격 알림</span>
+              <span className="text-[10px] text-gray-400 dark:text-dracula-comment">({symbol})</span>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3.5">
+            <div className="p-3.5">
               <AlertPanel stockId={stockId} symbol={symbol} bare />
             </div>
-          </Card>
+          </div>
         </div>
       </div>
     </div>
