@@ -141,17 +141,19 @@ export default function StrategyMarketPage() {
   });
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 sm:py-8 animate-fade-up">
-      <div className="flex items-center gap-3 mb-8">
-        <Link href="/quant-lab" className="text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg text-sm transition-colors">← Quant Lab</Link>
-        <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-dracula-fg">전략 마켓</h1>
-        <span className="ml-auto text-xs text-gray-500 dark:text-dracula-comment">커뮤니티 공유 전략</span>
+    <div className="animate-fade-up">
+      <div className="flex items-center gap-3 px-4 sm:px-6 py-4 border-b border-gray-100 dark:border-white/5 bg-white dark:bg-dracula-bg">
+        <Link href="/quant-lab" className="text-gray-400 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg text-xs transition-colors shrink-0">← Quant Lab</Link>
+        <div className="w-px h-5 bg-gray-200 dark:bg-dracula-line" />
+        <h1 className="text-sm font-bold text-gray-900 dark:text-dracula-fg">전략 마켓</h1>
+        <span className="text-xs text-gray-400 dark:text-dracula-comment">커뮤니티 공유 전략</span>
       </div>
 
+      <div className="px-4 sm:px-6 py-5">
       {isLoading ? (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-24 rounded-xl bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15 bg-[length:200%_100%] animate-shimmer" />
+            <div key={i} className="h-28 rounded-xl bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15 bg-[length:200%_100%] animate-shimmer" />
           ))}
         </div>
       ) : (strategies ?? []).length === 0 ? (
@@ -168,7 +170,7 @@ export default function StrategyMarketPage() {
         </div>
       ) : (
         <>
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {(strategies ?? []).map((s: MarketStrategy) => <StrategyCard key={s.id} strategy={s} />)}
           </div>
           <div className="flex justify-center gap-3 mt-8">
@@ -191,6 +193,7 @@ export default function StrategyMarketPage() {
           </div>
         </>
       )}
+      </div>
     </div>
   );
 }

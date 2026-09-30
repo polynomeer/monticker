@@ -282,8 +282,18 @@ export default function QuantLabDetailPage() {
   const universeMarketCapTier = universe.marketCapTier ?? "all";
   const canShare = ruleSet.status === "BACKTESTED" || ruleSet.status === "RUNNING";
 
+  const STATUS_LABEL_MAP: Record<string, { label: string; color: string }> = {
+    DRAFT:      { label: "작성 중",        color: "text-gray-500 dark:text-dracula-comment bg-gray-100 dark:bg-dracula-line" },
+    BACKTESTED: { label: "백테스트 완료",  color: "text-dracula-green bg-dracula-green/10" },
+    RUNNING:    { label: "운용 중",         color: "text-dracula-purple bg-dracula-purple/10" },
+    ARCHIVED:   { label: "보관됨",          color: "text-gray-500 dark:text-dracula-comment bg-gray-100 dark:bg-dracula-line" },
+  };
+  const st = STATUS_LABEL_MAP[ruleSet.status] ?? STATUS_LABEL_MAP.DRAFT;
+
+  const inputCls = "w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg px-3 py-2 text-xs transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50";
+
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 animate-fade-up">
+    <div className="flex flex-col animate-fade-up">
       {showShareModal && (
         <ShareModal
           onClose={() => setShowShareModal(false)}
@@ -292,293 +302,323 @@ export default function QuantLabDetailPage() {
         />
       )}
 
-      {/* 헤더 */}
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <button onClick={() => router.push("/quant-lab")} className="text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg text-sm mb-2 block transition-colors">← 보관함</button>
-          <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-dracula-fg">{ruleSet.name}</h1>
-          {ruleSet.description && <p className="text-sm text-gray-500 dark:text-dracula-comment mt-1">{ruleSet.description}</p>}
-        </div>
+      {/* ── 상단 헤더 바 ─────────────────────────────────────────── */}
+      <div className="flex items-center gap-4 border-b border-gray-100 dark:border-white/5
+                      px-4 py-3 bg-white dark:bg-dracula-bg overflow-x-auto [scrollbar-width:none]">
+        <button
+          onClick={() => router.push("/quant-lab")}
+          className="text-gray-400 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg text-xs transition-colors shrink-0"
+        >
+          ← Quant Lab
+        </button>
+        <div className="w-px h-5 bg-gray-200 dark:bg-dracula-line shrink-0" />
         <div className="flex items-center gap-2 shrink-0">
+          <span className="font-bold text-sm text-gray-900 dark:text-dracula-fg">{ruleSet.name}</span>
+          {ruleSet.description && (
+            <span className="text-xs text-gray-500 dark:text-dracula-comment hidden sm:block">{ruleSet.description}</span>
+          )}
+          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${st.color}`}>{st.label}</span>
+          <span className="text-[10px] text-gray-400 dark:text-dracula-line">v{ruleSet.version}</span>
+        </div>
+        <div className="ml-auto flex items-center gap-2 shrink-0">
           {canShare && (
             <button
               onClick={() => setShowShareModal(true)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium border border-dracula-purple/40 text-blue-600 dark:text-dracula-purple hover:bg-blue-50 dark:hover:bg-dracula-purple/10 active:scale-95 transition-all duration-150"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-dracula-purple/40 text-blue-600 dark:text-dracula-purple hover:bg-blue-50 dark:hover:bg-dracula-purple/10 active:scale-95 transition-all duration-150"
             >
-              <ShareNetwork size={14} weight="bold" aria-hidden /> 전략 공유
+              <ShareNetwork size={13} weight="bold" aria-hidden /> 전략 공유
             </button>
           )}
           <button
             onClick={() => router.push(`/quant-lab/builder?edit=${id}`)}
-            className="px-4 py-2 rounded-lg text-xs font-medium bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg hover:bg-gray-200 dark:hover:bg-dracula-comment active:scale-95 transition-all duration-150"
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg hover:bg-gray-200 dark:hover:bg-dracula-comment active:scale-95 transition-all duration-150"
           >
             룰셋 수정
           </button>
         </div>
       </div>
 
-      {/* 백테스트 실행 패널 */}
-      <Card className="p-5" outerClassName="mb-8">
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-dracula-fg mb-4">백테스트 실행</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-          <div>
-            <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">종목</label>
-            <StockPicker market={universeMarket} marketCapTier={universeMarketCapTier} value={stockId} onChange={setStockId} />
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">시작일</label>
-            <input
-              type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-              className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg px-3 py-2 text-xs transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">종료일</label>
-            <input
-              type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
-              className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg px-3 py-2 text-xs transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">초기 자본 (원)</label>
-            <input
-              type="number" value={capital} onChange={e => setCapital(+e.target.value)}
-              className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg px-3 py-2 text-xs transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
-            />
-          </div>
-        </div>
-        <button
-          onClick={() => runMutation.mutate()}
-          disabled={runMutation.isPending}
-          className="w-full py-2.5 rounded-xl bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100 inline-flex items-center justify-center gap-1.5"
-        >
-          {runMutation.isPending
-            ? <><HourglassMedium size={14} weight="bold" aria-hidden /> 백테스트 실행 중...</>
-            : <><Play size={14} weight="fill" aria-hidden /> 백테스트 실행</>}
-        </button>
-        <p className="mt-2 text-xs text-gray-500 dark:text-dracula-comment text-center">
-          수수료 0.015% + 슬리피지 0.1% 반영 · 과거 성과가 미래 수익을 보장하지 않습니다
-        </p>
-      </Card>
+      {/* ── 2컬럼 메인 레이아웃: [설정 사이드바 | 결과 메인] ─────── */}
+      <div className="flex flex-col lg:flex-row lg:min-h-[calc(100vh-108px)]
+                      lg:divide-x dark:lg:divide-white/5">
 
-      {/* 최신 결과 */}
-      {latestResult && (
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-4">
-            <h2 className="text-sm font-semibold text-gray-900 dark:text-dracula-fg">최신 백테스트 결과</h2>
-            {latestResult.reliabilityScore && (
-              <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${RELIABILITY_COLOR[latestResult.reliabilityScore] ?? ""}`}>
-                신뢰도 {latestResult.reliabilityScore}
-              </span>
-            )}
-            <span className="text-xs text-gray-500 dark:text-dracula-comment ml-auto">
-              {latestResult.startDate} ~ {latestResult.endDate}
-            </span>
-          </div>
+        {/* ===== 좌측 패널: 백테스트 설정 + 포워드 테스트 ===== */}
+        <aside className="w-full lg:w-[300px] lg:flex-none lg:overflow-y-auto
+                          px-4 py-4 space-y-5
+                          dark:bg-[#1e202a]
+                          [scrollbar-width:thin]">
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-            <MetricCard label="총 수익률" value={fmt(latestResult.totalReturn)} highlight />
-            <MetricCard label="연환산 수익률" value={fmt(latestResult.annualReturn)} />
-            <MetricCard label="최대 낙폭 (MDD)" value={fmt(latestResult.mdd)} />
-            <MetricCard label="벤치마크 대비" value={fmt(latestResult.excessReturn)} />
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-            <MetricCard label="승률" value={fmt(latestResult.winRate)} />
-            <MetricCard label="손익비" value={latestResult.profitFactor?.toFixed(2) ?? "—"} />
-            <MetricCard label="거래 횟수" value={`${latestResult.tradeCount ?? "—"}회`} />
-            <MetricCard label="평균 보유" value={`${latestResult.avgHoldingDays?.toFixed(1) ?? "—"}일`} />
-          </div>
-
-          {/* 신뢰도 설명 */}
-          {latestResult.reliabilityScore && (
-            <div className={`p-3 rounded-lg border text-xs ${RELIABILITY_COLOR[latestResult.reliabilityScore]}`}>
-              <strong>신뢰도 {latestResult.reliabilityScore}</strong>
-              {latestResult.reliabilityScore === "A" && " — 충분한 거래 횟수와 검증 기간을 갖춘 신뢰할 수 있는 결과입니다."}
-              {latestResult.reliabilityScore === "B" && " — 전반적으로 신뢰할 수 있으나 더 긴 검증 기간이 필요합니다."}
-              {latestResult.reliabilityScore === "C" && " — 거래 횟수가 적어 통계적 신뢰도가 제한적입니다. 더 긴 기간으로 테스트하세요."}
-              {latestResult.reliabilityScore === "D" && " — 거래 횟수가 매우 적습니다. 과최적화 위험이 높습니다."}
-            </div>
-          )}
-
-          {/* 자산 곡선 */}
-          {latestResult.equityCurve.length > 0 && (
-            <Card className="overflow-hidden mt-4">
-              <div className="px-4 pt-3 text-xs font-medium text-gray-500 dark:text-dracula-comment">자산 곡선</div>
-              <EquityCurveChart equityCurve={latestResult.equityCurve} isDark={resolvedTheme === "dark"} />
-            </Card>
-          )}
-
-          {/* 거래 내역 */}
-          {latestResult.trades.length > 0 && (
-            <Card className="overflow-hidden mt-4">
-              <div className="px-4 py-3 border-b border-gray-200 dark:border-dracula-line bg-gray-50 dark:bg-transparent">
-                <span className="text-sm font-semibold text-gray-900 dark:text-dracula-fg">거래 내역</span>
-                <span className="ml-2 text-xs text-gray-500 dark:text-dracula-comment">{latestResult.trades.length}건</span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-gray-200 dark:border-dracula-line text-gray-500 dark:text-dracula-comment">
-                      {["매수일", "매도일", "매수가", "매도가", "수량", "손익", "수익률", "사유"].map(h => (
-                        <th key={h} className="px-3 py-2 text-left">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {latestResult.trades.map((t, i) => (
-                      <tr key={i} className="border-b border-gray-100 dark:border-dracula-line/40 hover:bg-gray-50 dark:hover:bg-dracula-line/10 transition-colors">
-                        <td className="px-3 py-2 text-gray-500 dark:text-dracula-comment tabular-nums">{t.entryDate}</td>
-                        <td className="px-3 py-2 text-gray-500 dark:text-dracula-comment tabular-nums">{t.exitDate}</td>
-                        <td className="px-3 py-2 font-mono tabular-nums text-gray-900 dark:text-dracula-fg">{won(t.entryPrice)}</td>
-                        <td className="px-3 py-2 font-mono tabular-nums text-gray-900 dark:text-dracula-fg">{won(t.exitPrice)}</td>
-                        <td className="px-3 py-2 font-mono tabular-nums text-gray-500 dark:text-dracula-comment">{t.quantity}</td>
-                        <td className={`px-3 py-2 font-mono tabular-nums font-bold ${t.pnl >= 0 ? "text-dracula-green" : "text-dracula-red"}`}>
-                          {t.pnl >= 0 ? "+" : ""}{won(t.pnl)}
-                        </td>
-                        <td className={`px-3 py-2 font-mono tabular-nums font-bold ${t.pnlPct >= 0 ? "text-dracula-green" : "text-dracula-red"}`}>
-                          {fmt(t.pnlPct)}
-                        </td>
-                        <td className="px-3 py-2">
-                          <span className="px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-500 dark:bg-dracula-line dark:text-dracula-comment">
-                            {EXIT_REASON_LABEL[t.exitReason] ?? t.exitReason}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          )}
-        </div>
-      )}
-
-      {/* 이전 결과 목록 */}
-      {results.length > 1 && (
-        <div>
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-dracula-fg mb-3">이전 백테스트 이력</h2>
-          <div className="space-y-2">
-            {results.slice(1).map((r: BacktestResult) => (
-              <div key={r.id} className="flex items-center justify-between p-3 rounded-lg bg-white dark:bg-dracula-surface border border-gray-200 dark:border-dracula-line text-xs">
-                <span className="text-gray-500 dark:text-dracula-comment tabular-nums">{r.startDate} ~ {r.endDate}</span>
-                <span className={`font-bold tabular-nums ${(r.totalReturn ?? 0) >= 0 ? "text-dracula-green" : "text-dracula-red"}`}>
-                  {fmt(r.totalReturn)}
-                </span>
-                <span className="text-gray-500 dark:text-dracula-comment tabular-nums">MDD {fmt(r.mdd)}</span>
-                {r.reliabilityScore && (
-                  <span className={`font-bold ${RELIABILITY_COLOR[r.reliabilityScore]}`}>
-                    {r.reliabilityScore}
-                  </span>
-                )}
-                <span className="text-gray-400 dark:text-dracula-line tabular-nums">{new Date(r.createdAt).toLocaleDateString("ko-KR")}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {results.length === 0 && !resultsLoading && (
-        <div className="text-center py-12 text-gray-500 dark:text-dracula-comment text-sm border border-dashed border-gray-300 dark:border-dracula-line rounded-xl">
-          아직 백테스트 결과가 없습니다. 위에서 실행해보세요.
-        </div>
-      )}
-
-      {/* 포워드 테스트 */}
-      <div className="mt-8">
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-dracula-fg mb-3 flex items-center gap-1.5">
-          <Broadcast size={16} weight="bold" aria-hidden /> 포워드 테스트
-        </h2>
-
-        {forwardTest?.status === "RUNNING" ? (
-          <div className="space-y-4">
-            <Card className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full bg-dracula-green/10 text-dracula-green">
-                  <span className="w-1.5 h-1.5 rounded-full bg-dracula-green animate-pulse" /> 운용 중
-                </span>
-                <button
-                  onClick={() => stopFwMutation.mutate()}
-                  disabled={stopFwMutation.isPending}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border border-dracula-red/40 text-dracula-red hover:bg-dracula-red/10 active:scale-95 transition-all duration-150 disabled:opacity-40"
-                >
-                  <Stop size={12} weight="fill" aria-hidden /> {stopFwMutation.isPending ? "중지 중..." : "중지"}
-                </button>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <MetricCard label="현재 자산" value={`${won(forwardTest.currentEquity)}원`} highlight />
-                <MetricCard label="초기 자본" value={`${won(forwardTest.initialCapital)}원`} />
-                <MetricCard
-                  label="포지션"
-                  value={forwardTest.holdingQty > 0 ? `보유 ${forwardTest.holdingQty}주` : "미보유"}
-                />
-                <MetricCard label="시작일" value={new Date(forwardTest.startedAt).toLocaleDateString("ko-KR")} />
-              </div>
-              <p className="mt-3 text-xs text-gray-500 dark:text-dracula-comment text-center">
-                매일 장 마감 후(KST 16:00) 자동으로 평가되며, 신호 발생 시 실시간으로 알려드립니다.
-              </p>
-            </Card>
-
-            {forwardTest.equityCurve.length > 0 && (
-              <Card className="overflow-hidden">
-                <div className="px-4 pt-3 text-xs font-medium text-gray-500 dark:text-dracula-comment">자산 곡선</div>
-                <EquityCurveChart equityCurve={forwardTest.equityCurve} isDark={resolvedTheme === "dark"} />
-              </Card>
-            )}
-
-            <Card className="overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-200 dark:border-dracula-line bg-gray-50 dark:bg-transparent">
-                <span className="text-sm font-semibold text-gray-900 dark:text-dracula-fg">신호 이력</span>
-                <span className="ml-2 text-xs text-gray-500 dark:text-dracula-comment">{forwardTest.signals.length}건</span>
-              </div>
-              {forwardTest.signals.length === 0 ? (
-                <div className="text-center py-8 text-xs text-gray-500 dark:text-dracula-comment">
-                  아직 발생한 신호가 없습니다.
-                </div>
-              ) : (
-                <div className="divide-y divide-gray-100 dark:divide-dracula-line/40">
-                  {forwardTest.signals.map((s, i) => (
-                    <div key={i} className="flex items-center justify-between px-4 py-2.5 text-xs">
-                      <span className={`font-bold px-2 py-0.5 rounded ${s.direction === "BUY" ? "bg-dracula-green/10 text-dracula-green" : "bg-dracula-red/10 text-dracula-red"}`}>
-                        {SIGNAL_DIRECTION_LABEL[s.direction] ?? s.direction}
-                      </span>
-                      <span className="text-gray-500 dark:text-dracula-comment tabular-nums">{s.evalDate ?? new Date(s.signalTime).toLocaleDateString("ko-KR")}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Card>
-          </div>
-        ) : ruleSet.status === "BACKTESTED" ? (
-          <Card className="p-5">
-            <div className="grid grid-cols-2 gap-3 mb-4">
+          {/* 백테스트 설정 */}
+          <section>
+            <h2 className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-dracula-comment mb-3">
+              백테스트 설정
+            </h2>
+            <div className="space-y-3">
               <div>
                 <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">종목</label>
-                <StockPicker market={universeMarket} marketCapTier={universeMarketCapTier} value={fwStockId} onChange={setFwStockId} />
+                <StockPicker market={universeMarket} marketCapTier={universeMarketCapTier} value={stockId} onChange={setStockId} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">시작일</label>
+                  <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inputCls} />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">종료일</label>
+                  <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputCls} />
+                </div>
               </div>
               <div>
                 <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">초기 자본 (원)</label>
-                <input
-                  type="number" value={fwCapital} onChange={e => setFwCapital(+e.target.value)}
-                  className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg px-3 py-2 text-xs transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
-                />
+                <input type="number" value={capital} onChange={e => setCapital(+e.target.value)} className={inputCls} />
               </div>
+              <button
+                onClick={() => runMutation.mutate()}
+                disabled={runMutation.isPending}
+                className="w-full py-2.5 rounded-xl bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100 inline-flex items-center justify-center gap-1.5"
+              >
+                {runMutation.isPending
+                  ? <><HourglassMedium size={13} weight="bold" aria-hidden /> 실행 중...</>
+                  : <><Play size={13} weight="fill" aria-hidden /> 백테스트 실행</>}
+              </button>
+              <p className="text-[10px] text-gray-400 dark:text-dracula-comment text-center leading-tight">
+                수수료 0.015% + 슬리피지 0.1% 반영
+              </p>
             </div>
-            <button
-              onClick={() => startFwMutation.mutate()}
-              disabled={startFwMutation.isPending}
-              className="w-full py-2.5 rounded-xl bg-dracula-green text-dracula-bg font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100 inline-flex items-center justify-center gap-1.5"
-            >
-              <Broadcast size={14} weight="bold" aria-hidden /> {startFwMutation.isPending ? "시작 중..." : "포워드 테스트 시작"}
-            </button>
-            <p className="mt-2 text-xs text-gray-500 dark:text-dracula-comment text-center">
-              시작하면 룰셋 수정이 잠기고, 매일 장 마감 후 자동으로 신호를 평가합니다.
-            </p>
-          </Card>
-        ) : (
-          <div className="text-center py-8 text-gray-500 dark:text-dracula-comment text-sm border border-dashed border-gray-300 dark:border-dracula-line rounded-xl">
-            백테스트를 먼저 완료해야 포워드 테스트를 시작할 수 있습니다.
-          </div>
-        )}
+          </section>
+
+          {/* 구분선 */}
+          <div className="border-t dark:border-dracula-line/60" />
+
+          {/* 포워드 테스트 */}
+          <section>
+            <h2 className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-dracula-comment mb-3 flex items-center gap-1.5">
+              <Broadcast size={12} weight="bold" aria-hidden /> 포워드 테스트
+            </h2>
+
+            {forwardTest?.status === "RUNNING" ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-1 rounded-full bg-dracula-green/10 text-dracula-green">
+                    <span className="w-1.5 h-1.5 rounded-full bg-dracula-green animate-pulse" /> 운용 중
+                  </span>
+                  <button
+                    onClick={() => stopFwMutation.mutate()}
+                    disabled={stopFwMutation.isPending}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border border-dracula-red/40 text-dracula-red hover:bg-dracula-red/10 active:scale-95 transition-all duration-150 disabled:opacity-40"
+                  >
+                    <Stop size={11} weight="fill" aria-hidden /> {stopFwMutation.isPending ? "중지 중..." : "중지"}
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <MetricCard label="현재 자산" value={`${won(forwardTest.currentEquity)}원`} highlight />
+                  <MetricCard label="초기 자본" value={`${won(forwardTest.initialCapital)}원`} />
+                  <MetricCard label="포지션" value={forwardTest.holdingQty > 0 ? `보유 ${forwardTest.holdingQty}주` : "미보유"} />
+                  <MetricCard label="시작일" value={new Date(forwardTest.startedAt).toLocaleDateString("ko-KR")} />
+                </div>
+                {forwardTest.equityCurve.length > 0 && (
+                  <div className="rounded-lg overflow-hidden border border-gray-200 dark:border-dracula-line">
+                    <div className="px-3 pt-2 text-[10px] font-medium text-gray-500 dark:text-dracula-comment">운용 자산 곡선</div>
+                    <EquityCurveChart equityCurve={forwardTest.equityCurve} isDark={resolvedTheme === "dark"} />
+                  </div>
+                )}
+                {/* 신호 이력 */}
+                <div className="rounded-lg border border-gray-200 dark:border-dracula-line overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-dracula-line/50">
+                    <span className="text-[11px] font-semibold text-gray-900 dark:text-dracula-fg">신호 이력</span>
+                    <span className="text-[10px] text-gray-400 dark:text-dracula-comment">{forwardTest.signals.length}건</span>
+                  </div>
+                  {forwardTest.signals.length === 0 ? (
+                    <p className="text-center py-4 text-[10px] text-gray-400 dark:text-dracula-comment">아직 신호 없음</p>
+                  ) : (
+                    <div className="divide-y divide-gray-100 dark:divide-dracula-line/30">
+                      {forwardTest.signals.map((s, i) => (
+                        <div key={i} className="flex items-center justify-between px-3 py-2 text-[11px]">
+                          <span className={`font-bold px-1.5 py-0.5 rounded ${s.direction === "BUY" ? "bg-dracula-green/10 text-dracula-green" : "bg-dracula-red/10 text-dracula-red"}`}>
+                            {SIGNAL_DIRECTION_LABEL[s.direction] ?? s.direction}
+                          </span>
+                          <span className="text-gray-400 dark:text-dracula-comment tabular-nums">
+                            {s.evalDate ?? new Date(s.signalTime).toLocaleDateString("ko-KR")}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p className="text-[10px] text-gray-400 dark:text-dracula-comment text-center">
+                  매일 장 마감 후(KST 16:00) 자동 평가
+                </p>
+              </div>
+            ) : ruleSet.status === "BACKTESTED" ? (
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">종목</label>
+                  <StockPicker market={universeMarket} marketCapTier={universeMarketCapTier} value={fwStockId} onChange={setFwStockId} />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">초기 자본 (원)</label>
+                  <input type="number" value={fwCapital} onChange={e => setFwCapital(+e.target.value)} className={inputCls} />
+                </div>
+                <button
+                  onClick={() => startFwMutation.mutate()}
+                  disabled={startFwMutation.isPending}
+                  className="w-full py-2.5 rounded-xl bg-dracula-green text-dracula-bg font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 inline-flex items-center justify-center gap-1.5"
+                >
+                  <Broadcast size={13} weight="bold" aria-hidden />
+                  {startFwMutation.isPending ? "시작 중..." : "포워드 테스트 시작"}
+                </button>
+                <p className="text-[10px] text-gray-400 dark:text-dracula-comment text-center leading-tight">
+                  시작하면 룰셋 수정이 잠기고, 매일 장 마감 후 자동 평가합니다.
+                </p>
+              </div>
+            ) : (
+              <div className="text-center py-6 text-[11px] text-gray-400 dark:text-dracula-comment border border-dashed border-gray-200 dark:border-dracula-line rounded-lg">
+                백테스트를 먼저 완료해야<br />포워드 테스트를 시작할 수 있습니다.
+              </div>
+            )}
+          </section>
+
+          {/* 이전 이력 */}
+          {results.length > 1 && (
+            <>
+              <div className="border-t dark:border-dracula-line/60" />
+              <section>
+                <h2 className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-dracula-comment mb-2">
+                  이전 이력
+                </h2>
+                <div className="space-y-1.5">
+                  {results.slice(1).map((r: BacktestResult) => (
+                    <div key={r.id} className="flex items-center justify-between p-2 rounded-lg border border-gray-100 dark:border-dracula-line/40 text-[11px]">
+                      <span className="text-gray-400 dark:text-dracula-comment tabular-nums">{r.startDate?.slice(0, 7)} ~</span>
+                      <span className={`font-bold tabular-nums ${(r.totalReturn ?? 0) >= 0 ? "text-dracula-green" : "text-dracula-red"}`}>
+                        {fmt(r.totalReturn)}
+                      </span>
+                      {r.reliabilityScore && (
+                        <span className={`font-bold border rounded px-1 py-0.5 text-[10px] ${RELIABILITY_COLOR[r.reliabilityScore]}`}>
+                          {r.reliabilityScore}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </>
+          )}
+
+          <p className="text-[9px] text-gray-300 dark:text-dracula-line text-center pb-2">
+            과거 성과가 미래 수익을 보장하지 않습니다
+          </p>
+        </aside>
+
+        {/* ===== 우측 메인: 성과 지표 + 자산 곡선 + 거래 내역 ===== */}
+        <main className="flex-1 min-w-0 px-4 py-4 overflow-y-auto space-y-4">
+
+          {/* 결과 없는 빈 상태 */}
+          {results.length === 0 && !resultsLoading && (
+            <div className="flex flex-col items-center justify-center h-80 text-gray-400 dark:text-dracula-comment text-sm border border-dashed border-gray-200 dark:border-dracula-line rounded-xl">
+              <p className="mb-1">아직 백테스트 결과가 없습니다.</p>
+              <p className="text-xs">왼쪽 패널에서 설정 후 실행하세요.</p>
+            </div>
+          )}
+
+          {latestResult && (
+            <>
+              {/* 결과 헤더 */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <h2 className="text-sm font-bold text-gray-900 dark:text-dracula-fg">최신 백테스트 결과</h2>
+                {latestResult.reliabilityScore && (
+                  <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${RELIABILITY_COLOR[latestResult.reliabilityScore] ?? ""}`}>
+                    신뢰도 {latestResult.reliabilityScore}
+                  </span>
+                )}
+                <span className="text-xs text-gray-400 dark:text-dracula-comment ml-auto tabular-nums">
+                  {latestResult.startDate} ~ {latestResult.endDate}
+                </span>
+              </div>
+
+              {/* 신뢰도 설명 배너 */}
+              {latestResult.reliabilityScore && (
+                <div className={`p-2.5 rounded-lg border text-xs ${RELIABILITY_COLOR[latestResult.reliabilityScore]}`}>
+                  <strong>신뢰도 {latestResult.reliabilityScore}</strong>
+                  {latestResult.reliabilityScore === "A" && " — 충분한 거래 횟수와 검증 기간을 갖춘 신뢰할 수 있는 결과입니다."}
+                  {latestResult.reliabilityScore === "B" && " — 전반적으로 신뢰할 수 있으나 더 긴 검증 기간이 필요합니다."}
+                  {latestResult.reliabilityScore === "C" && " — 거래 횟수가 적어 통계적 신뢰도가 제한적입니다. 더 긴 기간으로 테스트하세요."}
+                  {latestResult.reliabilityScore === "D" && " — 거래 횟수가 매우 적습니다. 과최적화 위험이 높습니다."}
+                </div>
+              )}
+
+              {/* 성과 지표 2행 그리드 */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <MetricCard label="총 수익률"       value={fmt(latestResult.totalReturn)}                 highlight />
+                <MetricCard label="연환산 수익률"    value={fmt(latestResult.annualReturn)} />
+                <MetricCard label="최대 낙폭 (MDD)"  value={fmt(latestResult.mdd)} />
+                <MetricCard label="벤치마크 대비"    value={fmt(latestResult.excessReturn)} />
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <MetricCard label="승률"       value={fmt(latestResult.winRate)} />
+                <MetricCard label="손익비"     value={latestResult.profitFactor?.toFixed(2) ?? "—"} />
+                <MetricCard label="거래 횟수"  value={`${latestResult.tradeCount ?? "—"}회`} />
+                <MetricCard label="평균 보유"  value={`${latestResult.avgHoldingDays?.toFixed(1) ?? "—"}일`} />
+              </div>
+
+              {/* 자산 곡선 */}
+              {latestResult.equityCurve.length > 0 && (
+                <Card className="overflow-hidden">
+                  <div className="px-4 pt-3 pb-1 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-gray-700 dark:text-dracula-fg">자산 곡선</span>
+                    <span className="text-[10px] text-gray-400 dark:text-dracula-comment tabular-nums">
+                      {latestResult.equityCurve.length}개 데이터 포인트
+                    </span>
+                  </div>
+                  <EquityCurveChart equityCurve={latestResult.equityCurve} isDark={resolvedTheme === "dark"} />
+                </Card>
+              )}
+
+              {/* 거래 내역 테이블 */}
+              {latestResult.trades.length > 0 && (
+                <Card className="overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-dracula-line bg-gray-50 dark:bg-transparent">
+                    <span className="text-sm font-semibold text-gray-900 dark:text-dracula-fg">거래 내역</span>
+                    <span className="text-xs text-gray-400 dark:text-dracula-comment">{latestResult.trades.length}건</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-gray-200 dark:border-dracula-line text-gray-400 dark:text-dracula-comment bg-gray-50/50 dark:bg-transparent">
+                          {["매수일", "매도일", "매수가", "매도가", "수량", "손익", "수익률", "사유"].map(h => (
+                            <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {latestResult.trades.map((t, i) => (
+                          <tr key={i} className="border-b border-gray-100 dark:border-dracula-line/30 hover:bg-gray-50 dark:hover:bg-dracula-line/10 transition-colors">
+                            <td className="px-3 py-2 text-gray-400 dark:text-dracula-comment tabular-nums">{t.entryDate}</td>
+                            <td className="px-3 py-2 text-gray-400 dark:text-dracula-comment tabular-nums">{t.exitDate}</td>
+                            <td className="px-3 py-2 font-mono tabular-nums text-gray-900 dark:text-dracula-fg">{won(t.entryPrice)}</td>
+                            <td className="px-3 py-2 font-mono tabular-nums text-gray-900 dark:text-dracula-fg">{won(t.exitPrice)}</td>
+                            <td className="px-3 py-2 font-mono tabular-nums text-gray-500 dark:text-dracula-comment">{t.quantity}</td>
+                            <td className={`px-3 py-2 font-mono tabular-nums font-bold ${t.pnl >= 0 ? "text-dracula-green" : "text-dracula-red"}`}>
+                              {t.pnl >= 0 ? "+" : ""}{won(t.pnl)}
+                            </td>
+                            <td className={`px-3 py-2 font-mono tabular-nums font-bold ${t.pnlPct >= 0 ? "text-dracula-green" : "text-dracula-red"}`}>
+                              {fmt(t.pnlPct)}
+                            </td>
+                            <td className="px-3 py-2">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-500 dark:bg-dracula-line dark:text-dracula-comment">
+                                {EXIT_REASON_LABEL[t.exitReason] ?? t.exitReason}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              )}
+            </>
+          )}
+        </main>
       </div>
     </div>
   );
