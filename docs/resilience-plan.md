@@ -32,6 +32,9 @@
 | **C7** | **백업이 스케줄에 연결돼 있지 않다** | 복구 불가 | `infra/db/backup.sh`를 호출하는 곳이 0건 |
 | **C8** | **replicas ≥ 2에서 시세가 일부 사용자에게 안 간다** | 이미 발생 중 | [ADR-038](decisions/038-broadcast-consumer-partition-assignment.md) |
 
+위 C1~C8은 **이 문서를 처음 쓸 때의 판정**이다. 각각의 실행·검증 기록은 §3.1(P0)·§3.2(P1)에
+있고, 관측 스택의 현재 상태는 §4.1에 있다 — 이 표만 읽고 "지금도 전부 그렇다"로 받아들이면 틀린다.
+
 ### 0.2 시나리오 카테고리별 판정
 
 | 카테고리 | 대응 가능 | 부분 대응 | 대응 불가 |
@@ -358,7 +361,7 @@ Phase 0의 ADR-038~045는 이 목록과 **직교한다** — 저쪽은 규모, �
 `redis_command_duration_seconds`(Lettuce 타임아웃으로 대신함), `external_http_*`(resilience4j
 `slow_call_rate`로 대신함), `tick_pipeline_latency`(기존 `tick.latency.*` 타이머가 이미 노출).
 **§4.6 대시보드 5종은 아직 기존 2종뿐이다** — 새 메트릭이 실제로 흐르는 걸 본 뒤 만든다.
-메트릭 없이 만든 대시보드는 빈 패널이다.
+메트릭 없이 만든 대시보드는 빈 패널이다. *(2026-09-14 `fea09a9`로 5종 전부 구현됐다 — §4.6 참고.)*
 
 ### 3.3 ADR-043 실행 기록 (2026-09-13) — E2
 
@@ -387,16 +390,28 @@ Redis를 실제로 죽여보는 CH-01을 지금 할 수 있다 — 다음 단계
 
 ### 4.1 현재 상태
 
-| 항목 | 로컬(docker-compose) | 운영(K8s) |
-|------|:-------------------:|:---------:|
-| Prometheus | ✅ (static_configs) | ❌ **없음** |
-| Grafana | ✅ 대시보드 2개 | ❌ 없음 |
-| Alertmanager | ✅ 단 receiver 빈 껍데기 | ❌ 없음 |
-| Jaeger | ✅ all-in-one | ✅ all-in-one (인메모리) |
-| 로그 수집 | ❌ stdout | ❌ stdout |
+> **이 표는 P0-3·P1-1 완료 후 갱신됐다 (2026-10-01).** 아래의 "최초 판정"은 이 문서를 처음
+> 쓸 때의 상태이고, 그게 P1-1을 블로킹 항목으로 올린 근거였다. 지금 상태는 그 옆 칸이다.
 
-`prometheus.yml`이 `static_configs`로 docker-compose 호스트명(`api:8080`)을 가리킨다 —
-K8s에서는 동작하지 않는다. **운영 환경에 관측 스택 자체가 없다.**
+| 항목 | 로컬(docker-compose) | 운영(K8s) | 최초 판정 (2026-09-11) |
+|------|:-------------------:|:---------:|:---------------------:|
+| Prometheus | ✅ `static_configs` (job 6개) | ✅ pod 어노테이션 SD | 운영 ❌ 없음 |
+| Grafana | ✅ 대시보드 **5개** | ✅ `/grafana` 로 노출 | 운영 ❌ 없음 |
+| Alertmanager | ✅ 규칙 **27개**, `SLACK_WEBHOOK_URL` 있으면 Slack | ✅ 같은 방식 (entrypoint 렌더링) | 운영 ❌ 없음 / 로컬 receiver 빈 껍데기 |
+| Jaeger (분산 추적) | ✅ all-in-one | ✅ all-in-one (**인메모리** — 재시작 시 유실) | — |
+| **Pinpoint (APM)** | ✅ `--profile pinpoint`, 에이전트는 `PINPOINT_ENABLE=true` 일 때만 주입 | ❌ **없음** — configmap에 플래그만 있고 collector/HBase 매니페스트가 없다 | — |
+| 로그 수집 | ❌ stdout | ❌ stdout | ❌ stdout |
+
+**규칙·대시보드·Alertmanager 템플릿은 compose와 K8s가 같은 파일을 본다** —
+`infra/monitoring/` 이 kustomize 루트이고 `infra/k8s/base/kustomization.yaml` 이 그걸 리소스로
+포함한다(`configMapGenerator`). 복사본을 두면 반드시 어긋나기 때문이다.
+
+남아 있는 갭은 셋이다:
+
+- **로그 수집이 없다.** 양쪽 다 stdout이다. 장애 조사에서 pod가 재시작되면 그 전 로그는 사라진다.
+- **Jaeger가 인메모리다.** 트레이스도 pod 재시작과 함께 사라진다. 사후 분석용으로는 쓸 수 없다.
+- **Pinpoint는 K8s에 없다.** 로컬 프로파일링 전용이다
+  ([ADR-054](decisions/054-pinpoint-apm-alongside-jaeger.md)에서 그게 의도된 범위임을 기록했다).
 
 ### 4.2 계층 구조
 
@@ -468,6 +483,7 @@ E7 같은 사고를 막는 유일한 구조적 방법이다.
 | **`LedgerMismatch`** | `ledger_reconciliation_mismatch_total` 증가 | 즉시 |
 | `OrderPathDown` | 주문 엔드포인트 5xx > 5% | 2m |
 | `BrokerCircuitOpen` | `resilience4j_circuitbreaker_state{name=~"kis\|toss",state="open"}` | 30s |
+| **`PaymentCircuitOpen`** | `resilience4j_circuitbreaker_state{name="tossPg",state="open"}` | 30s |
 | `AllReplicasDown` | `up{job=~"monticker-.*"}` 전부 0 | 1m |
 | `TickPipelineStalled` | `kafka_consumer_lag > 60s` 또는 틱 유입 0 (장중) | 3m |
 

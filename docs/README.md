@@ -74,7 +74,7 @@ monticker의 모든 문서를 **독자별 · 주제별**로 정리한 색인입�
 | [data-model.md](data-model.md) | PostgreSQL/TimescaleDB 전체 스키마, Redis 키 규칙 |
 | [elasticsearch.md](elasticsearch.md) | ES 인덱스 6개·도메인 8개 적용 현황, 파이프라인, DB 폴백 |
 | [external-apis.md](external-apis.md) | 시세·뉴스·공시·AI 외부 API 후보와 설정 |
-| [decisions/](decisions/) | ADR 001~053. 형식과 작성 규칙은 [../CLAUDE.md](../CLAUDE.md#architecture-decision-records-adrs) |
+| [decisions/](decisions/) | ADR 001~054. 형식과 작성 규칙은 [../CLAUDE.md](../CLAUDE.md#architecture-decision-records-adrs) |
 
 **ADR 빠른 지도**
 
@@ -86,7 +86,7 @@ monticker의 모든 문서를 **독자별 · 주제별**로 정리한 색인입�
 | 주문·자금 | [052 현금 예약 락 전략 실측](decisions/052-cash-reservation-lock-strategy.md) · [007 멱등성 키](decisions/007-idempotency-key-filter.md) · [011 주문 Saga](decisions/011-order-saga-orchestration.md) · [012 CQRS 포지션 읽기모델](decisions/012-cqrs-portfolio-positions-read-model.md) · [013 append-only 원장](decisions/013-append-only-ledger-wallet.md) · [014 T+2 정산](decisions/014-t2-paper-settlement-scheduler.md) · [043 원장 페이지네이션·대조](decisions/043-ledger-pagination-and-reconciliation.md) · [047 단일 체결 경로](decisions/047-single-execution-path-for-paper-account.md) |
 | 실전투자(BYOK) | [015 Mock/Real 클라이언트](decisions/015-conditional-mock-real-client.md) · [017 투자자 동향 KIS](decisions/017-investor-flow-kis-integration.md) · [018 펀더멘털 KIS 재사용](decisions/018-stock-fundamentals-kis-reuse.md) · [023 상용화 전환](decisions/023-commercialization-pivot.md) · [025 안전 게이트](decisions/025-real-brokerage-order-safety-gate.md) · [026 Toss 연동](decisions/026-toss-brokerage-integration.md) · [027 자격증명 갱신](decisions/027-brokerage-credential-refresh.md) · [028 주문 취소](decisions/028-brokerage-order-cancellation.md) · [032 조건부 주문](decisions/032-conditional-orders.md) · [034 리밸런싱 실행](decisions/034-rebalancing-execution.md) |
 | Quant Lab·AI·커뮤니티 | [053 결제 멱등성·실패 분류](decisions/053-payment-idempotency-and-failure-classification.md) · [016 구독·제작자 수익](decisions/016-subscription-creator-revenue-sharing.md) · [020 밸류에이션 스코어](decisions/020-stock-valuation-score.md) · [024 포워드 테스트](decisions/024-quant-lab-forward-test.md) · [035 신호 접근 제어](decisions/035-strategy-market-signal-access-control.md) · [036 AI 주문 제안](decisions/036-ai-order-proposal.md) · [037 종목 커뮤니티](decisions/037-stock-community-comments.md) |
-| 탐지·성능 | [051 이벤트 트리거 모의주문](decisions/051-event-triggered-paper-orders.md) · [010 Bloom Filter 뉴스 중복 제거](decisions/010-bloom-filter-news-deduplication.md) · [022 틱 컨슈머 역할 게이팅](decisions/022-tick-consumer-msa-role-gating.md) · [044 알림 룰 인메모리 인덱스](decisions/044-alert-rule-in-memory-index.md) · [045 성능 SLO·검증 하네스](decisions/045-performance-slo-and-verification-harness.md) · [046 탐지기 인메모리 상태](decisions/046-detector-state-in-memory.md) |
+| 탐지·성능·관측 | [054 Pinpoint APM과 Jaeger 공존](decisions/054-pinpoint-apm-alongside-jaeger.md) · [051 이벤트 트리거 모의주문](decisions/051-event-triggered-paper-orders.md) · [010 Bloom Filter 뉴스 중복 제거](decisions/010-bloom-filter-news-deduplication.md) · [022 틱 컨슈머 역할 게이팅](decisions/022-tick-consumer-msa-role-gating.md) · [044 알림 룰 인메모리 인덱스](decisions/044-alert-rule-in-memory-index.md) · [045 성능 SLO·검증 하네스](decisions/045-performance-slo-and-verification-harness.md) · [046 탐지기 인메모리 상태](decisions/046-detector-state-in-memory.md) |
 
 ### 구현·운영
 

@@ -102,9 +102,9 @@ trading = dashboard("monticker-trading", "monticker — Trading", ["trading"], [
     stat("Outbox 미완료", f'max(outbox_pending{{{API}}})', thresholds=[(100, "orange")], desc="OutboxBacklog: > 100 또는 가장 오래된 것 > 10분"),
     stat("Outbox 최고령 (s)", f'max(outbox_oldest_age_seconds{{{API}}})', unit="s", thresholds=[(600, "orange")]),
     row("브로커 (KIS · Toss) — 실거래"),
-    ts("서킷브레이커 상태 (1=CLOSED 2=OPEN 3=HALF_OPEN)", [(f'max by (name) (resilience4j_circuitbreaker_state{{{API}, name=~"kis|toss"}} * on() group_left() 1)', "{{name}}")], desc="BrokerCircuitOpen page — runbook broker-cb-open. 잔고 조회는 OPEN 중 503(0원이 아니다)"),
-    ts("브로커 느린 호출 / 실패 비율 (%)", [(f'max by (name) (resilience4j_circuitbreaker_slow_call_rate{{{API}, name=~"kis|toss"}})', "slow {{name}}"), (f'max by (name) (resilience4j_circuitbreaker_failure_rate{{{API}, name=~"kis|toss"}})', "failure {{name}}")], unit="percent", max_=100, thresholds=[(50, "red")], desc="P0-2: slow-call(5초) 50% 또는 실패율 50%면 OPEN. -1은 창이 아직 안 찬 것"),
-    ts("브로커 호출 결과 (건/min)", [(f'sum by (name, kind) (rate(resilience4j_circuitbreaker_calls_seconds_count{{{API}, name=~"kis|toss"}}[1m])) * 60', "{{name}} {{kind}}"), (f'sum by (name) (rate(resilience4j_circuitbreaker_not_permitted_calls_total{{{API}, name=~"kis|toss"}}[1m])) * 60', "{{name}} not permitted (OPEN)")], stack=True),
+    ts("서킷브레이커 상태 (1=CLOSED 2=OPEN 3=HALF_OPEN)", [(f'max by (name) (resilience4j_circuitbreaker_state{{{API}, name=~"kis|toss|tossPg"}} * on() group_left() 1)', "{{name}}")], desc="BrokerCircuitOpen / PaymentCircuitOpen page — runbook broker-cb-open. 폴백이 없는 브레이커 셋(kis/toss/tossPg)만 본다. 잔고 조회는 OPEN 중 503(0원이 아니다)"),
+    ts("브로커·PG 느린 호출 / 실패 비율 (%)", [(f'max by (name) (resilience4j_circuitbreaker_slow_call_rate{{{API}, name=~"kis|toss|tossPg"}})', "slow {{name}}"), (f'max by (name) (resilience4j_circuitbreaker_failure_rate{{{API}, name=~"kis|toss|tossPg"}})', "failure {{name}}")], unit="percent", max_=100, thresholds=[(50, "red")], desc="P0-2: slow-call 50% 또는 실패율 50%면 OPEN(브로커 3초/tossPg 5초). -1은 창이 아직 안 찬 것. tossPg는 4xx를 집계하지 않는다(ADR-053)"),
+    ts("브로커·PG 호출 결과 (건/min)", [(f'sum by (name, kind) (rate(resilience4j_circuitbreaker_calls_seconds_count{{{API}, name=~"kis|toss|tossPg"}}[1m])) * 60', "{{name}} {{kind}}"), (f'sum by (name) (rate(resilience4j_circuitbreaker_not_permitted_calls_total{{{API}, name=~"kis|toss|tossPg"}}[1m])) * 60', "{{name}} not permitted (OPEN)")], stack=True),
 ])
 
 realtime = dashboard("monticker-realtime-pipeline", "monticker — Realtime Pipeline", ["realtime"], [
