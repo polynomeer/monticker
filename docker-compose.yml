@@ -111,6 +111,14 @@ services:
       PINPOINT_COLLECTOR_IP: pinpoint-collector
       PINPOINT_AGENT_ID: ${PINPOINT_API_AGENT_ID:-monticker-api-1}
       PINPOINT_APP_NAME: monticker-api
+      # 샘플링 10% (ADR-054 — root config 가 1 로 고정하므로 ENTRYPOINT 가 -D 로 넘긴다)
+      PINPOINT_SAMPLING_RATE: ${PINPOINT_SAMPLING_RATE:-10}
+    volumes:
+      # Pinpoint 플러그인·계측 토글. 에이전트 이미지 안의 tarball 기본 profile 을 덮는다 —
+      # 빌드 컨텍스트가 backend/{api,worker} 라서 Dockerfile 에서는 이 파일에 닿지 못한다.
+      # 마운트하지 않으면 tarball 기본값이 그대로 쓰여 OTel 이중 계측 방지도, SQL 바인딩 값
+      # 수집 차단도 적용되지 않는다(ADR-054에서 실측으로 확인).
+      - ./infra/pinpoint/profiles/release/pinpoint.config:/pinpoint-agent/profiles/release/pinpoint.config:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -148,6 +156,14 @@ services:
       PINPOINT_COLLECTOR_IP: pinpoint-collector
       PINPOINT_AGENT_ID: ${PINPOINT_WORKER_AGENT_ID:-monticker-worker-1}
       PINPOINT_APP_NAME: monticker-worker
+      # 샘플링 10% (ADR-054 — root config 가 1 로 고정하므로 ENTRYPOINT 가 -D 로 넘긴다)
+      PINPOINT_SAMPLING_RATE: ${PINPOINT_SAMPLING_RATE:-10}
+    volumes:
+      # Pinpoint 플러그인·계측 토글. 에이전트 이미지 안의 tarball 기본 profile 을 덮는다 —
+      # 빌드 컨텍스트가 backend/{api,worker} 라서 Dockerfile 에서는 이 파일에 닿지 못한다.
+      # 마운트하지 않으면 tarball 기본값이 그대로 쓰여 OTel 이중 계측 방지도, SQL 바인딩 값
+      # 수집 차단도 적용되지 않는다(ADR-054에서 실측으로 확인).
+      - ./infra/pinpoint/profiles/release/pinpoint.config:/pinpoint-agent/profiles/release/pinpoint.config:ro
     depends_on:
       postgres:
         condition: service_healthy

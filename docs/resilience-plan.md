@@ -399,7 +399,7 @@ Redis를 실제로 죽여보는 CH-01을 지금 할 수 있다 — 다음 단계
 | Grafana | ✅ 대시보드 **5개** | ✅ `/grafana` 로 노출 | 운영 ❌ 없음 |
 | Alertmanager | ✅ 규칙 **27개**, `SLACK_WEBHOOK_URL` 있으면 Slack | ✅ 같은 방식 (entrypoint 렌더링) | 운영 ❌ 없음 / 로컬 receiver 빈 껍데기 |
 | Jaeger (분산 추적) | ✅ all-in-one | ✅ all-in-one (**인메모리** — 재시작 시 유실) | — |
-| **Pinpoint (APM)** | ✅ `--profile pinpoint`, 에이전트는 `PINPOINT_ENABLE=true` 일 때만 주입 | ❌ **없음** — configmap에 플래그만 있고 collector/HBase 매니페스트가 없다 | — |
+| **Pinpoint (APM)** | 🟡 `--profile pinpoint`, 에이전트는 `PINPOINT_ENABLE=true` 일 때만 주입. **UI에 트랜잭션이 찍히는 것까지 확인한 적은 없다** | ❌ **없음** — configmap에 플래그만 있고 collector/HBase 매니페스트가 없다 | — |
 | 로그 수집 | ❌ stdout | ❌ stdout | ❌ stdout |
 
 **규칙·대시보드·Alertmanager 템플릿은 compose와 K8s가 같은 파일을 본다** —
@@ -412,6 +412,9 @@ Redis를 실제로 죽여보는 CH-01을 지금 할 수 있다 — 다음 단계
 - **Jaeger가 인메모리다.** 트레이스도 pod 재시작과 함께 사라진다. 사후 분석용으로는 쓸 수 없다.
 - **Pinpoint는 K8s에 없다.** 로컬 프로파일링 전용이다
   ([ADR-054](decisions/054-pinpoint-apm-alongside-jaeger.md)에서 그게 의도된 범위임을 기록했다).
+  로컬에서도 **end-to-end로 돌려본 적이 없다** — ADR-054를 쓰다가 리포의 에이전트 설정이 한 번도
+  적용되지 않고 있었다는 것(collector 주소가 `127.0.0.1`)을 발견해 고쳤지만, HBase·collector·web을
+  전부 올려 UI에서 트랜잭션을 본 것은 아니다.
 
 ### 4.2 계층 구조
 

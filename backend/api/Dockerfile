@@ -37,6 +37,11 @@ USER monticker
 EXPOSE 8080
 
 # PINPOINT_ENABLE=true 일 때만 에이전트 주입 (기본값 false — 로컬/CI 기동 속도 우선).
+#
+# collector 주소와 샘플링을 -D 로 넘기는 이유: tarball 의 root config 가 이 키들을
+# 127.0.0.1 / rate=1 로 이미 정의하고 있고 root 가 profile 보다 우선한다. 환경변수
+# 플레이스홀더(${...})도 에이전트가 해석하지 않는다. 시스템 프로퍼티만 root 를 이긴다 —
+# 에이전트를 실제로 띄워 배너의 GrpcTransportConfig 로 확인했다(ADR-054).
 # OTel → Jaeger 트레이싱은 -javaagent 없이도 micrometer-tracing-bridge-otel 이 담당.
 # 두 트레이싱 시스템은 독립 계층(Pinpoint=APM, Jaeger=분산추적)으로 공존한다.
 ENTRYPOINT ["sh", "-c", "\
@@ -48,7 +53,9 @@ ENTRYPOINT ["sh", "-c", "\
     AGENT_OPTS=\"${AGENT_JAR:+-javaagent:$AGENT_JAR} \
       -Dpinpoint.agentId=${PINPOINT_AGENT_ID:-monticker-api-1} \
       -Dpinpoint.applicationName=${PINPOINT_APP_NAME:-monticker-api} \
-      -Dpinpoint.config=/pinpoint-agent/pinpoint-root.config\"; \
+      -Dpinpoint.config=/pinpoint-agent/pinpoint-root.config \
+      -Dprofiler.transport.grpc.collector.ip=${PINPOINT_COLLECTOR_IP:-pinpoint-collector} \
+      -Dprofiler.sampling.counting.sampling-rate=${PINPOINT_SAMPLING_RATE:-10}\"; \
   fi; \
   exec java ${AGENT_OPTS} ${JAVA_OPTS} -jar app.jar \
 "]

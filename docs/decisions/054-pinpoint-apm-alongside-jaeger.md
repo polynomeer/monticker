@@ -79,6 +79,55 @@ tarball을 실제로 받아 내용을 확인해보니 루트에 **버전 없는 
 사실을 stderr에 찍고 에이전트 없이 기동한다. 네 경우(둘 다 있음 / 버전 jar만 / 없음 / 비활성)를
 셸에서 직접 실행해 확인했다.
 
+### `infra/pinpoint/` 의 설정이 **한 번도 적용된 적이 없었다**
+
+에이전트 스테이지를 실제로 빌드해 이미지 안을 들여다보니, 적용 중인 설정은 tarball 기본값
+(377줄)이었다. 리포의 `infra/pinpoint/`는 Dockerfile이 `COPY`하지도, compose가 마운트하지도
+않아 **아무 곳에서도 읽히지 않는 파일**이었다. 즉 Pinpoint는 켜더라도 다음 상태였다:
+
+| 키 | 리포 의도 | 실제 (tarball 기본값) |
+|---|---|---|
+| `profiler.transport.grpc.collector.ip` | `pinpoint-collector` | **`127.0.0.1`** |
+| `profiler.sampling.counting.sampling-rate` | 10 | 1 |
+| `profiler.opentelemetry.sdk.api.trace.enable` | `false` (이중 계측 방지) | (미설정) |
+| `profiler.jdbc.postgresql.tracesqlbindvalue` | `false` (민감정보) | **`true`** |
+| `profiler.kafka.{producer,consumer}.enable` | `true` | `false` |
+| `profiler.resttemplate.enable` | `true` | `false` |
+| `profiler.logback.logging.transactioninfo` | `true` | `false` |
+
+첫 줄이 치명적이다. **컨테이너 안의 127.0.0.1에는 collector가 없다** — Pinpoint는 단 한 번도
+데이터를 받은 적이 없다. CH-05(아웃박스가 한 번도 발행한 적 없음), 정기결제 갱신 배치와 같은
+계열이다. 넷째 줄도 가볍지 않다. 리포 설정이 일부러 끈 SQL 바인딩 값 수집이 기본값에서는 켜져
+있어서, 켜는 순간 쿼리 파라미터가 APM으로 흘러간다.
+
+그리고 리포 설정을 그냥 마운트해도 collector 주소는 고쳐지지 않았다. 에이전트를 직접 띄워가며
+배너의 `GrpcTransportConfig`로 확인한 메커니즘은 이렇다:
+
+1. **root config가 profile보다 우선한다.** `profiler.transport.grpc.collector.ip`·샘플링 7개 키는
+   tarball root가 이미 정의하므로, profile에 써도 무시된다.
+2. **`${PINPOINT_COLLECTOR_IP:pinpoint-collector}` 플레이스홀더는 해석되지 않는다.** 배너에
+   치환되지 않은 문자열이 그대로 찍힌다. compose가 넘기던 `PINPOINT_COLLECTOR_IP`는 죽은 변수였다.
+3. **리포의 `pinpoint-root.config`(11줄)로 root를 덮으면 더 나빠진다.** tarball root가 들고 있던
+   `profiler.transport.grpc.{agent,stat,span}.collector.ip=${profiler.transport.grpc.collector.ip}`
+   간접 참조가 사라져, 어떤 값을 줘도 채널별 코드 기본값(127.0.0.1)으로 떨어진다.
+4. **시스템 프로퍼티(`-D`)만 root를 이긴다.**
+
+그래서 고친 방식:
+
+- 리포의 `pinpoint-root.config`를 **삭제**했다 — 그 파일이 문제의 원인이었다. tarball의 root를
+  그대로 쓴다.
+- collector 주소와 샘플링은 ENTRYPOINT가 `-D`로 넘긴다(`PINPOINT_COLLECTOR_IP`,
+  `PINPOINT_SAMPLING_RATE` 환경변수 → 시스템 프로퍼티). 이제 compose의 그 변수가 실제로 작동한다.
+- 나머지 26개 키(플러그인·OTel·SQL 바인딩)는 profile에서 정상 적용되므로, compose가
+  `profiles/release/pinpoint.config`를 bind mount로 덮는다. Pinpoint는 로컬 전용이라 compose가
+  유일한 적용 지점이고, 빌드 컨텍스트가 `backend/{api,worker}`여서 Dockerfile에서는 닿지 못한다.
+- profile 파일 상단에 "여기에 써도 무시되는 키" 목록을 적어, 다음 사람이 같은 함정에 빠지지
+  않게 했다.
+
+마지막으로 에이전트를 띄워 전부 확인했다: collector `pinpoint-collector:9991~9993`,
+샘플링 10, OTel 이중 계측 off, SQL 바인딩 off, Kafka·RestTemplate·logback txId on,
+`pinpoint agent started normally`.
+
 같은 맥락에서 하나 더 나왔다. 결제 PG 브레이커(`tossPg`,
 [ADR-053](053-payment-idempotency-and-failure-classification.md))가 알람 분류에서
 `NonBrokerCircuitOpen`(warning, 5분)에 섞여 있었다. 그 알람의 전제는 **"폴백이 있어 사용자가
@@ -110,8 +159,15 @@ OTLP 생태계를 잃는다. Jaeger로 통일하면 "원인을 모를 때 들여
 지연·처리량 영향은 재본 적이 없다. Pinpoint 문서가 말하는 수 % 수준을 그대로 믿고 있는 상태다.
 운영 도입을 검토할 때는 L-01/L-05를 에이전트 on/off로 돌려 실측해야 한다.
 
-**로컬에서만 쓰는 도구는 녹슨다.** `--profile pinpoint`를 몇 달 안 돌리면 이미지 태그·HBase
-초기화·스키마가 조용히 깨진다. 지금은 그걸 잡는 CI가 없다.
+**로컬에서만 쓰는 도구는 녹슨다.** 위의 설정 미적용이 바로 그 증거다 — 아무도 켜보지 않았으니
+아무도 몰랐다. `--profile pinpoint`를 몇 달 안 돌리면 이미지 태그·HBase 초기화·스키마도 같은
+식으로 조용히 깨진다. 지금은 그걸 잡는 CI가 없고, **설정이 실제로 적용되는지 확인하는 테스트도
+없다**(에이전트를 띄워 배너를 대조하는 것 말고는 방법이 마땅치 않다).
+
+**end-to-end로는 아직 확인하지 않았다.** 위 검증은 에이전트가 **어디로 보내려 하는지**까지다.
+`--profile pinpoint`로 HBase·collector·web을 전부 올려 UI에 트랜잭션이 찍히는 것을 본 적은
+없다(HBase 초기화 2~3분 + api 이미지 전체 빌드). 그걸 보기 전까지 "Pinpoint가 동작한다"고
+말하지 않는다.
 
 **Go 게이트웨이는 세 계층 어디에도 없다.** Pinpoint는 Java 전용이라 당연하지만, **OTel 계측도
 들어가 있지 않다** — `services/market-gateway`에 추적 코드가 0줄이다. 즉 틱 파이프라인의

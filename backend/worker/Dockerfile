@@ -37,7 +37,9 @@ ENTRYPOINT ["sh", "-c", "\
     AGENT_OPTS=\"${AGENT_JAR:+-javaagent:$AGENT_JAR} \
       -Dpinpoint.agentId=${PINPOINT_AGENT_ID:-monticker-worker-1} \
       -Dpinpoint.applicationName=${PINPOINT_APP_NAME:-monticker-worker} \
-      -Dpinpoint.config=/pinpoint-agent/pinpoint-root.config\"; \
+      -Dpinpoint.config=/pinpoint-agent/pinpoint-root.config \
+      -Dprofiler.transport.grpc.collector.ip=${PINPOINT_COLLECTOR_IP:-pinpoint-collector} \
+      -Dprofiler.sampling.counting.sampling-rate=${PINPOINT_SAMPLING_RATE:-10}\"; \
   fi; \
   exec java ${AGENT_OPTS} ${JAVA_OPTS} -jar app.jar \
 "]
