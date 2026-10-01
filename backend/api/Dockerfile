@@ -10,7 +10,7 @@ RUN ./gradlew bootJar --no-daemon -x test -q
 
 # ── Pinpoint agent stage ────────────────────────────────────────
 # 별도 스테이지에서 다운로드 → 레이어 캐시로 재빌드 비용 최소화.
-FROM alpine:3.19 AS pinpoint-agent
+FROM alpine:3.24 AS pinpoint-agent
 # 버전은 여기 한 곳에서만 정한다. 런타임 ENTRYPOINT는 tarball이 함께 넣어주는
 # **버전 없는** pinpoint-bootstrap.jar 을 쓴다(버전 붙은 jar 과 같은 파일이다 — tar 목록으로 확인).
 # 예전에는 거기에 `pinpoint-bootstrap-3.1.0.jar`가 리터럴로 박혀 있어서, 이 ARG만 올리면
