@@ -133,26 +133,29 @@ class MatchingService(
         sagaOrchestrator.execute(userId, req)
 
     fun cancelOrder(userId: Long, orderId: Long): OrderDto {
-        val order = orderRepo.findById(orderId).orElseThrow { NoSuchElementException("주문 없음: $orderId") }
+        // 행 락으로 읽는다 — 같은 주문의 동시 취소가 둘 다 PENDING을 보고 둘 다 환불하지 않도록.
+        val order = orderRepo.findWithLockById(orderId) ?: throw NoSuchElementException("주문 없음: $orderId")
         require(order.userId == userId) { "본인의 주문만 취소할 수 있습니다" }
 
-        orderBookService.cancel(order.stockId, orderId, order.side)
-
+        // 검증을 부수효과(호가창 제거·환불)보다 먼저 한다. 예전엔 환불 후 검증이 실패해 롤백에 기댔다.
+        val previous = OrderStates.valueOf(order.status.name)
         val refundAmount = if (order.side == OrderSide.BUY) {
             order.limitPrice?.toMoney(order.remainingQty) ?: Money.ZERO
         } else Money.ZERO
+        order.cancel()
+        stateMachineService.transition(
+            orderId      = order.id,
+            currentState = previous,
+            event        = OrderEvents.CANCEL,
+        )
+
+        orderBookService.cancel(order.stockId, orderId, order.side)
 
         if (refundAmount > Money.ZERO) {
             jdbc.update("UPDATE paper_accounts SET cash = cash + ?, updated_at = now() WHERE user_id = ?",
                 refundAmount.amount, userId)
         }
 
-        stateMachineService.transition(
-            orderId      = order.id,
-            currentState = OrderStates.valueOf(order.status.name),
-            event        = OrderEvents.CANCEL,
-        )
-        order.cancel()
         val saved = orderRepo.save(order)
 
         eventPublisher.publishEvent(

@@ -17,7 +17,6 @@ import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.jdbc.core.JdbcTemplate
-import java.util.Optional
 
 class MatchingServiceTest {
 
@@ -125,7 +124,7 @@ class MatchingServiceTest {
             quantity = 10, limitPrice = Price.of("900"),
             status = OrderStatus.PENDING,
         )
-        every { orderRepo.findById(1L) } returns Optional.of(order)
+        every { orderRepo.findWithLockById(1L) } returns order
         every { orderBookService.cancel(stockId, 1L, OrderSide.BUY) } returns true
         every { orderRepo.save(any()) } answers { firstArg() }
 
@@ -143,7 +142,7 @@ class MatchingServiceTest {
             quantity = 10, limitPrice = Price.of("900"),
             status = OrderStatus.PENDING,
         )
-        every { orderRepo.findById(1L) } returns Optional.of(order)
+        every { orderRepo.findWithLockById(1L) } returns order
 
         assertThatThrownBy { service.cancelOrder(userId, 1L) }
             .isInstanceOf(IllegalArgumentException::class.java)
@@ -157,7 +156,7 @@ class MatchingServiceTest {
             quantity = 10, limitPrice = Price.of("900"),
             status = OrderStatus.FILLED,
         )
-        every { orderRepo.findById(1L) } returns Optional.of(order)
+        every { orderRepo.findWithLockById(1L) } returns order
 
         assertThatThrownBy { service.cancelOrder(userId, 1L) }
             .isInstanceOf(IllegalArgumentException::class.java)
@@ -165,9 +164,25 @@ class MatchingServiceTest {
 
     @Test
     fun `cancelOrder throws when order does not exist`() {
-        every { orderRepo.findById(404L) } returns Optional.empty()
+        every { orderRepo.findWithLockById(404L) } returns null
 
         assertThatThrownBy { service.cancelOrder(userId, 404L) }
             .isInstanceOf(NoSuchElementException::class.java)
+    }
+
+    @Test
+    fun `이미 취소된 주문을 다시 취소하면 환불하지 않고 거부한다 — 검증이 부수효과보다 먼저다`() {
+        val order = Order(
+            id = 1L, userId = userId, stockId = stockId,
+            side = OrderSide.BUY, orderType = OrderType.LIMIT,
+            quantity = 10, limitPrice = Price.of("900"),
+            status = OrderStatus.CANCELLED,
+        )
+        every { orderRepo.findWithLockById(1L) } returns order
+
+        assertThatThrownBy { service.cancelOrder(userId, 1L) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+        verify(exactly = 0) { jdbc.update(match<String> { it.contains("paper_accounts") }, *anyVararg()) }
+        verify(exactly = 0) { orderBookService.cancel(any(), any(), any()) }
     }
 }
