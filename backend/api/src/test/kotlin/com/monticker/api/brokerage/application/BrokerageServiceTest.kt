@@ -639,6 +639,7 @@ class BrokerageServiceTest {
         val (svc, fakeClient) = fakeClientService(BrokerageOrderResult.accepted("ODNO-NEW"), orderSlot)
         val open = makeOrder(status = BrokerageOrderStatus.SUBMITTED, pgOrderId = "ODNO-OPEN")
         every { orderRepo.findAllByAccountIdAndStockIdAndSideAndStatusAndSubmittedAtAfter(1L, 1L, OrderSide.BUY, BrokerageOrderStatus.SUBMITTED, any()) } returns listOf(open)
+        every { orderRepo.findWithLockById(open.id) } returns open   // ADR-061 — 잠그고 다시 읽는다
         every { fakeClient.getOrderStatus(any(), "ODNO-OPEN") } returns
             com.monticker.api.brokerage.infrastructure.BrokerageOrderStatus("ODNO-OPEN", "FILLED", 10, BigDecimal("70000"))
         every { settlementRepo.save(any()) } answers { firstArg() }
@@ -736,5 +737,47 @@ class BrokerageServiceTest {
         val svc = serviceWithFakeClient(stubManual(unknown, emptyList()))
         assertThrows<IllegalArgumentException> { svc.resolveManually(unknown.id, 9L, "A", true, "x") }
         assertThrows<IllegalArgumentException> { svc.resolveManually(unknown.id, 9L, null, false, "x") }
+    }
+
+    // ── ADR-061 — 접수 주문 상태 동기화 ──────────────────────────────────────────────────
+
+    private fun stubSync(order: BrokerageOrder, locked: Boolean = true): BrokerageClient {
+        val account = makeAccount()
+        val fakeClient = mockk<BrokerageClient>()
+        every { jdbc.queryForList(match<String> { it.contains("status = 'SUBMITTED' FOR UPDATE SKIP LOCKED") }, eq(Long::class.java), any()) } returns
+            if (locked) listOf(order.id) else emptyList()
+        every { orderRepo.findById(order.id) } returns Optional.of(order)
+        every { orderRepo.save(any()) } answers { firstArg() }
+        every { accountRepo.findById(account.id) } returns Optional.of(account)
+        every { settlementRepo.save(any()) } answers { firstArg() }
+        return fakeClient
+    }
+
+    @Test
+    fun `동기화 — 증권사에서 체결됐으면 FILLED와 정산 기록을 남기고 확인 시각을 갱신한다`() {
+        val order = makeSellOrder(BrokerageOrderStatus.SUBMITTED).apply { pgOrderId = "ODNO-S" }
+        val client = stubSync(order)
+        every { client.getOrderStatus(any(), "ODNO-S") } returns
+            com.monticker.api.brokerage.infrastructure.BrokerageOrderStatus("ODNO-S", "FILLED", 10, BigDecimal("70000"))
+        val now = Instant.now()
+
+        assertThat(serviceWithFakeClient(client).syncSubmittedOrder(order.id, now)).isEqualTo(BrokerageService.StatusSyncResult.FILLED)
+        assertThat(order.status).isEqualTo(BrokerageOrderStatus.FILLED)
+        assertThat(order.statusSyncedAt).isEqualTo(now)
+        verify(exactly = 1) { settlementRepo.save(any()) }
+    }
+
+    @Test
+    fun `동기화 — 다른 경로가 행을 잡고 있으면 건너뛰고, 조회 실패는 아무것도 바꾸지 않는다`() {
+        val order = makeSellOrder(BrokerageOrderStatus.SUBMITTED).apply { pgOrderId = "ODNO-S" }
+        val skipped = stubSync(order, locked = false)
+        assertThat(serviceWithFakeClient(skipped).syncSubmittedOrder(order.id)).isEqualTo(BrokerageService.StatusSyncResult.SKIPPED)
+        verify(exactly = 0) { skipped.getOrderStatus(any(), any()) }
+
+        val failing = stubSync(order)
+        every { failing.getOrderStatus(any(), any()) } throws RuntimeException("broker down")
+        assertThat(serviceWithFakeClient(failing).syncSubmittedOrder(order.id)).isEqualTo(BrokerageService.StatusSyncResult.LOOKUP_FAILED)
+        assertThat(order.status).isEqualTo(BrokerageOrderStatus.SUBMITTED)
+        assertThat(order.statusSyncedAt).isNotNull()
     }
 }

@@ -302,4 +302,43 @@ class BrokerageOrderUnknownOutcomeFlowIntegrationTest {
             pool.shutdownNow()
         }
     }
+
+    // ── ADR-061 — 지정가 체결 자동 동기화, 정산은 하나 ──────────────────────────────────────
+
+    @Test
+    fun `지정가가 증권사에서 체결되면 동기화 잡이 FILLED와 정산을 남긴다 — 여러 경로가 동시에 반영해도 정산은 하나`() {
+        val svc = service()
+        val userId = seedUser()
+        // 전용 종목 — 공유 종목에 낮은 캔들을 넣으면 같은 클래스의 다른 테스트의 지정가가 즉시 체결된다(실제로 그랬다)
+        val syncSymbol = "SYNC01"
+        jdbc.update("INSERT INTO stocks (symbol, name, market, exchange) VALUES (?, ?, 'KOSPI', 'KRX') ON CONFLICT DO NOTHING", syncSymbol, syncSymbol)
+        fun candle(price: Int, minutesAhead: Int) = jdbc.update(
+            """
+            INSERT INTO candles_1m (stock_id, open, high, low, close, volume, candle_time)
+            SELECT id, ?, ?, ?, ?, 1, date_trunc('minute', now()) + make_interval(mins => ?) FROM stocks WHERE symbol = ?
+            ON CONFLICT DO NOTHING
+            """.trimIndent(), price, price, price, price, minutesAhead, syncSymbol,
+        )
+        candle(70000, 0)
+        val resting = svc.submitOrder(userId, BrokerageOrderRequest(syncSymbol, "BUY", "LIMIT", 5, BigDecimal("69000")))
+        assertThat(resting.status).isEqualTo(BrokerageOrderStatus.SUBMITTED)
+
+        // 시세가 지정가 아래로 내려왔다 — Mock 증권사는 다음 상태 조회 때 체결시킨다
+        candle(68000, 1)
+
+        // 동기화 잡 2개(레플리카) + 사용자의 "다시 확인"이 동시에
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(3)
+        try {
+            val start = java.util.concurrent.CountDownLatch(1)
+            val tasks = listOf(
+                { svc.syncSubmittedOrder(resting.id) }, { svc.syncSubmittedOrder(resting.id) }, { svc.syncOrderStatus(userId, resting.id) },
+            ).map { task -> pool.submit<Any?> { start.await(); runCatching { task() }.getOrNull() } }
+            start.countDown()
+            tasks.forEach { it.get(30, java.util.concurrent.TimeUnit.SECONDS) }
+        } finally { pool.shutdownNow() }
+
+        assertThat(row(resting.id)["status"]).isEqualTo("FILLED")
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM brokerage_settlements WHERE order_id = ?", Long::class.java, resting.id))
+            .isEqualTo(1L)
+    }
 }

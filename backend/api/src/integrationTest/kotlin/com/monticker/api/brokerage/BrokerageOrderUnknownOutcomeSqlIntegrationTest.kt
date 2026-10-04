@@ -149,4 +149,16 @@ class BrokerageOrderUnknownOutcomeSqlIntegrationTest : PostgresIntegrationTest()
         assertThatThrownBy { jdbcTemplate.update("UPDATE brokerage_orders SET resolved_by = 'GUESS' WHERE id = ?", id) }
             .isInstanceOf(DataIntegrityViolationException::class.java)
     }
+
+    @Test
+    fun `V55 — 한 주문에 정산 기록은 하나뿐이다(같은 대금의 이중 입출금을 DB가 막는다)`() {
+        val (u, a) = fixture()
+        val orderId = insertOrder(u, a, "FILLED", null)
+        val insert = """
+            INSERT INTO brokerage_settlements (user_id, account_id, order_id, symbol, side, quantity, fill_price, gross_amount, fee, tax, net_amount, settle_date)
+            VALUES (?, ?, ?, '005930', 'SELL', 10, 70000, 700000, 105, 1260, 698635, current_date + 2)
+        """.trimIndent()
+        jdbcTemplate.update(insert, u, a, orderId)
+        assertThatThrownBy { jdbcTemplate.update(insert, u, a, orderId) }.isInstanceOf(DataIntegrityViolationException::class.java)
+    }
 }

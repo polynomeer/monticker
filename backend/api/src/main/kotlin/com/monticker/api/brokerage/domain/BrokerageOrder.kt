@@ -104,6 +104,10 @@ class BrokerageOrder(
 
     @Column(name = "resolution_note")
     var resolutionNote: String? = null,
+
+    // ADR-061 — 동기화 잡이 마지막으로 증권사에 상태를 물어본 시각.
+    @Column(name = "status_synced_at")
+    var statusSyncedAt: Instant? = null,
 ) {
     fun markSubmitted(pgOrderId: String, brokerOrderRef: String?) {
         this.pgOrderId      = pgOrderId

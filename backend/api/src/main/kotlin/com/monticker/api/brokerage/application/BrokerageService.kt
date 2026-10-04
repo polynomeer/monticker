@@ -288,7 +288,8 @@ class BrokerageService(
     }
 
     private fun syncSubmitted(userId: Long, orderId: Long): BrokerageOrder {
-        val order   = orderRepo.findById(orderId).orElseThrow()
+        // ADR-061 — 체결을 반영하는 모든 경로가 행 락 아래서 상태를 다시 읽는다(정산 이중 생성 방지).
+        val order   = orderRepo.findWithLockById(orderId) ?: throw NoSuchElementException("주문 없음: $orderId")
         val account = getAccount(userId)
         val credentials = requireCredentials(account)
         val status  = clientRegistry.get(account.provider).getOrderStatus(credentials, order.pgOrderId ?: return order)
@@ -340,6 +341,37 @@ class BrokerageService(
     /** 운영 화면용 — 아직 결과를 모르는 주문(수동 검토가 필요한 것 먼저). */
     fun unresolvedOrders(): List<BrokerageOrder> =
         orderRepo.findAllByStatusInOrderByNeedsReviewDescSubmittedAtAsc(UNRESOLVED_STATUSES)
+
+    enum class StatusSyncResult { SKIPPED, LOOKUP_FAILED, UNCHANGED, FILLED, CANCELLED, REJECTED }
+
+    /**
+     * ADR-061 — 접수된(SUBMITTED) 주문 하나의 상태를 증권사에 물어 반영한다. 동기화 잡이 부른다. 레플리카·다른 경로가 잡고 있으면 건너뛴다.
+     */
+    fun syncSubmittedOrder(orderId: Long, now: Instant = Instant.now()): StatusSyncResult =
+        requiresNew.execute {
+            val locked = jdbc.queryForList(
+                "SELECT id FROM brokerage_orders WHERE id = ? AND status = 'SUBMITTED' FOR UPDATE SKIP LOCKED", Long::class.java, orderId,
+            )
+            if (locked.isEmpty()) return@execute StatusSyncResult.SKIPPED
+            val order = orderRepo.findById(orderId).orElseThrow()
+            val pgOrderId = order.pgOrderId ?: return@execute StatusSyncResult.SKIPPED
+            val account = accountRepo.findById(order.accountId).orElseThrow()
+            order.statusSyncedAt = now
+            val status = runCatching { clientRegistry.get(account.provider).getOrderStatus(requireCredentials(account), pgOrderId) }
+                .getOrElse {
+                    log.warn("주문 상태 동기화 조회 실패: orderId={} reason={}", orderId, it.message)
+                    orderRepo.save(order)
+                    return@execute StatusSyncResult.LOOKUP_FAILED
+                }
+            applyBrokerStatus(account, order, status.status, status.filledQty, status.avgFillPrice)
+            orderRepo.save(order)
+            when (order.status) {
+                BrokerageOrderStatus.FILLED -> StatusSyncResult.FILLED
+                BrokerageOrderStatus.CANCELLED -> StatusSyncResult.CANCELLED
+                BrokerageOrderStatus.REJECTED -> StatusSyncResult.REJECTED
+                else -> StatusSyncResult.UNCHANGED
+            }
+        }!!.also { meterRegistry.counter("brokerage_order_status_sync_total", "result", it.name.lowercase()).increment() }
 
     enum class ReconcileResult { SKIPPED, LOOKUP_FAILED, WAITING, MATCHED, NOT_FOUND, AMBIGUOUS }
 
@@ -577,7 +609,9 @@ class BrokerageService(
     private fun refreshOpenBuys(account: BrokerageAccount, stockId: Long, client: BrokerageClient, credentials: BrokerageCredentials) {
         orderRepo.findAllByAccountIdAndStockIdAndSideAndStatusAndSubmittedAtAfter(
             account.id, stockId, OrderSide.BUY, BrokerageOrderStatus.SUBMITTED, Instant.now().minus(PendingBuyQuery.OPEN_ORDER_WINDOW),
-        ).forEach { order ->
+        ).forEach { candidate ->
+            // ADR-061 — 동기화 잡·사용자 동기화와 같은 행을 동시에 반영하지 않게 잠그고 다시 읽는다.
+            val order = orderRepo.findWithLockById(candidate.id)?.takeIf { it.status == BrokerageOrderStatus.SUBMITTED } ?: return@forEach
             val pgOrderId = order.pgOrderId ?: return@forEach
             runCatching { client.getOrderStatus(credentials, pgOrderId) }.onSuccess { status ->
                 applyBrokerStatus(account, order, status.status, status.filledQty, status.avgFillPrice)
