@@ -15,6 +15,8 @@ interface StockHit { id: number; symbol: string; name: string; }
 function fmt(n: number) { return n.toLocaleString("ko-KR", { maximumFractionDigits: 0 }); }
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
+  PENDING_SUBMIT:   { label: "제출 중",  color: "text-dracula-orange" },
+  UNKNOWN:          { label: "확인 중",  color: "text-amber-700 dark:text-dracula-yellow" },
   SUBMITTED:        { label: "접수됨",   color: "text-dracula-orange" },
   FILLED:           { label: "체결 완료", color: "text-dracula-green" },
   PARTIALLY_FILLED: { label: "부분 체결", color: "text-dracula-cyan" },

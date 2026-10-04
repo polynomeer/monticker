@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ShieldWarning, CheckCircle, XCircle, ArrowsClockwise, Sparkle } from "@phosphor-icons/react";
+import { ShieldWarning, CheckCircle, XCircle, ArrowsClockwise, Sparkle, Question } from "@phosphor-icons/react";
 import { getAccessToken } from "@/services/auth";
 import {
   useBrokerageAccount,
@@ -413,11 +413,15 @@ export default function RebalancePage() {
               <div key={leg.symbol} className="flex items-center gap-2 text-xs py-1.5">
                 {leg.status === "EXECUTED"
                   ? <CheckCircle size={16} weight="bold" className="text-dracula-green shrink-0" aria-hidden />
-                  : <XCircle size={16} weight="bold" className="text-dracula-red shrink-0" aria-hidden />}
+                  : leg.status === "UNKNOWN"
+                    ? <Question size={16} weight="bold" className="text-amber-700 dark:text-dracula-yellow shrink-0" aria-hidden />
+                    : <XCircle size={16} weight="bold" className="text-dracula-red shrink-0" aria-hidden />}
                 <span className={leg.side === "BUY" ? "text-dracula-red" : "text-dracula-cyan"}>{leg.side === "BUY" ? "매수" : "매도"}</span>
                 <span className="text-gray-900 dark:text-dracula-fg font-semibold">{leg.symbol}</span>
                 <span className="text-gray-500 dark:text-dracula-comment">{leg.quantity}주</span>
-                {leg.failReason && <span className="text-dracula-red ml-auto">{leg.failReason}</span>}
+                {leg.status === "UNKNOWN"
+                  ? <span className="text-amber-700 dark:text-dracula-yellow ml-auto">체결 여부 확인 중 — 주문 내역에서 확인</span>
+                  : leg.failReason && <span className="text-dracula-red ml-auto">{leg.failReason}</span>}
               </div>
             ))}
           </div>

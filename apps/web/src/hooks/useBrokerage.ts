@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
+  BrokerageOrderStatus,
   ConnectBrokerageRequest,
   CreateConditionalOrderRequest,
   CreateOcoOrderRequest,
@@ -25,7 +26,11 @@ import {
   previewRebalance,
   saveRebalanceTarget,
   submitBrokerageOrder,
+  syncBrokerageOrder,
 } from "@/services/brokerage";
+
+/** ADR-056 — 증권사에서의 상태를 아직 모른다. 같은 종목·방향 주문이 서버에서 막히고, 목록은 자동 갱신한다. */
+export const isUnresolvedOrderStatus = (s: BrokerageOrderStatus) => s === "PENDING_SUBMIT" || s === "UNKNOWN";
 
 export function useBrokerageAccount() {
   return useQuery({
@@ -48,6 +53,9 @@ export function useBrokerageOrders(page: number, enabled: boolean) {
     queryKey: ["brokerage", "orders", page],
     queryFn: () => getBrokerageOrders(page),
     enabled,
+    // ADR-056 — 결과 확인 중인 주문이 있는 동안만 15초마다 다시 읽는다(서버 대조 잡 주기 30초).
+    refetchInterval: (query) =>
+      query.state.data?.content.some((o) => isUnresolvedOrderStatus(o.status)) ? 15_000 : false,
   });
 }
 
@@ -85,6 +93,17 @@ export function useSubmitBrokerageOrder() {
     mutationFn: (req: SubmitBrokerageOrderRequest) => submitBrokerageOrder(req),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["brokerage", "balance"] });
+      qc.invalidateQueries({ queryKey: ["brokerage", "orders"] });
+    },
+  });
+}
+
+/** ADR-056 — 결과 불명 주문은 서버가 즉시 증권사와 한 번 대조한다. */
+export function useSyncBrokerageOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => syncBrokerageOrder(id),
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["brokerage", "orders"] });
     },
   });
