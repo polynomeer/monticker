@@ -11,7 +11,7 @@
 # 메트릭 출처: Spring Boot Actuator(Micrometer) + resilience4j-micrometer + 이 저장소가 직접 등록한
 # 카운터(redis_command_failed_total, search_fallback_total, candle_flush_failed_total,
 # alert_rule_eval_failed_total, dlt_messages_total, ws_active_connections, outbox_pending,
-# saga_incomplete, brokerage_order_unresolved). 규칙을 추가할 때는 그 메트릭이 실제로 노출되는지 먼저 확인할 것 —
+# saga_incomplete, brokerage_order_unresolved, trading_halt_active). 규칙을 추가할 때는 그 메트릭이 실제로 노출되는지 먼저 확인할 것 —
 # 존재하지 않는 메트릭에 건 알람은 영원히 조용하다. 실제로 그랬다: 게이지를 `_total`로 등록하면 Micrometer가
 # 접미사를 떼고 노출해 OutboxBacklog·SagaIncomplete가 빈 시계열을 보고 있었다(2026-09-14, 대시보드 작업 중 발견).
 # 검증: infra/monitoring/check-metrics.py 가 규칙·대시보드의 메트릭 이름을 실제 /actuator/prometheus 출력과 대조한다.
@@ -159,6 +159,17 @@ groups:
   # ───────────────────────────── Ticket ─────────────────────────────
   - name: monticker-ticket
     rules:
+      - alert: TradingHaltActive
+        # ADR-057 — 전역·증권사 킬 스위치가 30분 넘게 켜져 있다. 의도된 정지라 Page가 아니지만, 잊힌 스위치는 조용한 장애다
+        # (사용자 주문이 계속 423으로 막힌다). 사용자 범위 스위치는 조사 중 오래 유지될 수 있어 여기서 제외한다.
+        expr: |
+          max by (scope) (trading_halt_active{scope=~"GLOBAL|PROVIDER"}) > 0
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: "실거래 킬 스위치({{ $labels.scope }})가 30분 넘게 켜져 있음"
+          description: "trading_halts에 활성 {{ $labels.scope }} 스위치가 있습니다. 아직 필요한지 확인하고, 해제 전에 활성 조건부 주문 수를 볼 것 — 해제 직후 첫 틱에 함께 발동할 수 있습니다 (runbook: trading-halt)."
+
       - alert: RedisFailOpenSustained
         # 레이트리밋·캐시가 fail-open으로 5분 넘게 돌고 있다 — 남용 방어가 꺼진 채 운영 중.
         expr: sum by (op) (increase(redis_command_failed_total{policy="open"}[5m])) > 10
