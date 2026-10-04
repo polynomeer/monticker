@@ -3,6 +3,7 @@ package com.monticker.worker.kis
 import com.monticker.worker.kafka.TickKafkaProducer
 import com.monticker.worker.marketdata.GeneratedTick
 import com.monticker.worker.marketdata.MarketSchedule
+import com.monticker.worker.marketdata.TickSource
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.time.Instant
@@ -57,6 +58,7 @@ class KisExecutionTickHandler(
                 volume = volume,
                 tradeTime = parseTradeTime(fields[1]),
                 marketStatus = MarketSchedule.getTickConfig(target.symbol, target.market).status.name,
+                source = TickSource.KIS,
             )
         )
     }

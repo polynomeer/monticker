@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.worker.kafka.TickKafkaProducer
 import com.monticker.worker.kis.KisCoverageProvider
 import com.monticker.worker.marketdata.GeneratedTick
+import com.monticker.worker.marketdata.TickSource
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -60,6 +61,8 @@ class TossExecutionTickHandlerTest {
         assertThat(tick.market).isEqualTo("NASDAQ")
         assertThat(tick.price).isEqualByComparingTo(BigDecimal("243.26"))
         assertThat(tick.volume).isEqualTo(8L)
+        // ADR-055 — 실시세 생산자는 출처를 명시해야 api의 조건부 주문이 이 틱으로 발동할 수 있다
+        assertThat(tick.source).isEqualTo(TickSource.TOSS)
     }
 
     @Test

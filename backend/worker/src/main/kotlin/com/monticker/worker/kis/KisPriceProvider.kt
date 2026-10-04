@@ -1,6 +1,8 @@
 package com.monticker.worker.kis
 
 import com.monticker.worker.marketdata.GeneratedTick
+import com.monticker.worker.marketdata.MarketSchedule
+import com.monticker.worker.marketdata.TickSource
 import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
@@ -28,6 +30,8 @@ class KisPriceProvider(
                     price     = price.price,
                     volume    = price.volume,
                     tradeTime = Instant.now(),
+                    marketStatus = MarketSchedule.getTickConfig(symbol, "KOSPI").status.name,
+                    source    = TickSource.KIS,
                 )
             } catch (e: Exception) {
                 log.warn("KIS tick fetch failed for {}: {}", symbol, e.message)
