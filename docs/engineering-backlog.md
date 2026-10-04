@@ -50,6 +50,9 @@
 - [ ] **동일 계좌의 타 채널(HTS 등) 거래와의 조율** — 지금 조건부 주문은 순수 monticker 내부 상태라 사용자가 HTS로 직접 거래하면 인지하지 못한다. 실시간 잔고/포지션 동기화 설계 필요.
 - [x] **500/409 버그 수정** — ✅ 완료(2026-09-08, `485767e`). `GET /api/brokerage/account`가 미연동 신규 사용자에게 500을 반환하던 문제 — `GlobalExceptionHandler`의 409 키워드 매칭이 "없음"만 잡고 실제 예외 메시지의 "없습니다"는 놓쳤던 게 원인. 신규 가입 테스트 사용자로 라이브 확인.
 
+- [ ] **🔴 실거래 P0 묶음 — [design-review-2026-10.md §5](design-review-2026-10.md#5-남은-것--우선순위)** — 실거래 공개 전 필수. (1) 브로커 주문 결과 불명(`UNKNOWN`) 상태 + 사전 저장한 결정적 클라이언트 주문 ID + 브로커 대조 잡 — 지금은 타임아웃이 `REJECTED`로 기록돼 재주문 시 이중 주문. (2) `TRIGGERED` 리퍼. (3) 전역·사용자별 킬 스위치. (4) 사용자별 실주문 직렬화(리스크 게이트 TOCTOU). 새 ADR 필요(ADR-053의 결제 실패 분류를 주문으로 확장).
+- [ ] **조건부 주문 생성 시 시세 커버리지 확인** — [ADR-055](decisions/055-price-provenance-gate-for-real-orders.md) 이후 KIS/Toss 미커버 종목의 조건부 주문은 합성 틱으로 발동하지 않지만 **조용히** 발동하지 않는다(사용자는 스탑로스가 걸려 있다고 믿는다). worker의 커버리지 집합을 Redis에 게시하고 생성 시 거부/경고.
+
 ## 3. 리밸런싱 실행 자동화
 
 - [x] **실브로커리지 한정, 수동 실행** — ✅ 완료(2026-09-09, [ADR-034](decisions/034-rebalancing-execution.md)). 목표 비중 저장(`rebalance_targets`) → 실행 시점마다 `BrokerageService.getBalance()`로 diff 재계산 → 임계값 초과 종목만 SELL 먼저·BUY 나중 순서로 `submitOrder()`에 순차 위임(리스크 게이트 그대로 적용, 우회 없음). 라이브 검증: 리스크 한도 초과 leg는 정상 거부(`ConcentrationRule`), 정상 범위 leg는 실제 FILLED 주문까지 확인.

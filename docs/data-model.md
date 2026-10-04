@@ -1003,7 +1003,7 @@ stocks
 | `payment_records` | V27 | — |
 | `portfolio_optimizations` | V16 | ✅ |
 | `portfolio_positions` | V21 | ✅ |
-| `price_ticks` | V4 | — |
+| ~~`price_ticks`~~ | V4 → V42 제거 | 원시 틱은 Postgres에 저장하지 않는다 (ADR-041) |
 | `quant_backtest_results` | V13 | — |
 | `quant_forward_test_equity` | V33 | — |
 | `quant_forward_tests` | V33 | — |

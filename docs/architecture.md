@@ -44,7 +44,7 @@ Market Data Event
   → Execution Event → Strategy Performance Update
 ```
 
-Start as **Modular Monolith + async workers + Redis + TimescaleDB**. Microservices are enabled via `docker compose --profile msa up` (see [MSA Architecture](#msa-architecture) below).
+Start as **Modular Monolith + async workers + Redis + TimescaleDB**. `docker compose --profile msa up` splits the worker into three role-based processes (see [MSA Architecture](#msa-architecture) below) — the separate quant-engine/trading-service microservices were retired ([ADR-048](decisions/048-retire-trading-service.md)/[ADR-049](decisions/049-retire-quant-engine.md)).
 
 ---
 
@@ -118,7 +118,7 @@ Framework:   Spring Boot 3.5
 Pattern:     Modular Monolith
 API:         REST + WebSocket (STOMP over SockJS)
 ORM:         Spring Data JPA
-Migration:   Flyway (V1–V12)
+Migration:   Flyway (V1–V50)
 Batch:       Spring @Scheduled
 Resilience:  Resilience4j (Circuit Breaker)
 Observability: OpenTelemetry + Jaeger, Micrometer
@@ -148,7 +148,7 @@ Push:        Expo Push Notifications
 
 ```
 Business data:    PostgreSQL 16
-Time-series:      TimescaleDB (price_ticks, candles_1m, candles_1d hypertables)
+Time-series:      TimescaleDB (candles_1m, candles_1d hypertables — raw ticks are not stored, ADR-041)
 Cache / Realtime: Redis 7
 Documents:        MongoDB 7 (rule_sets 문서, alert_histories) — MONGODB_URI
 Search:           Elasticsearch (검색 인덱스, DB 폴백) — see elasticsearch.md
@@ -162,14 +162,14 @@ CI/CD:      GitHub Actions
 Tracing:    Jaeger (all-in-one)
 ```
 
-### Realtime Pipeline (optional — `kafka` profile)
+### Realtime Pipeline
 
 ```
 Ingestion:  Go (goroutine-per-stock tick generator/gateway)
 Bus:        Kafka (KRaft mode, single broker)
 ```
 
-See [ADR-005](decisions/005-kafka-go-gateway-netty-broadcast.md) and [kafka-tick-pipeline.md](technical/kafka-tick-pipeline.md). Disabled by default — the in-process `MockPriceGenerator` path remains the default for local dev. Real-time browser push (STOMP, always on regardless of this profile) is handled separately by `PriceBroadcaster` in `backend/api` — see [ADR-029](decisions/029-price-broadcast-pipeline.md). ADR-005 originally also introduced a Netty-based custom WebSocket broadcast gateway here; it was removed in [ADR-033](decisions/033-remove-netty-broadcast-gateway.md) after never gaining a frontend client.
+See [ADR-005](decisions/005-kafka-go-gateway-netty-broadcast.md) and [kafka-tick-pipeline.md](technical/kafka-tick-pipeline.md). All tick paths go through Kafka: `MockPriceGenerator`(worker), KIS/Toss realtime handlers and the Go gateway all produce to `market.ticks`. Each tick carries its `source` (`KIS`/`TOSS`/`MOCK`) so that real-money consumers can refuse synthetic prices ([ADR-055](decisions/055-price-provenance-gate-for-real-orders.md)). Real-time browser push (STOMP, always on regardless of this profile) is handled separately by `PriceBroadcaster` in `backend/api` — see [ADR-029](decisions/029-price-broadcast-pipeline.md). ADR-005 originally also introduced a Netty-based custom WebSocket broadcast gateway here; it was removed in [ADR-033](decisions/033-remove-netty-broadcast-gateway.md) after never gaining a frontend client.
 
 ---
 
@@ -243,34 +243,29 @@ See [ADR-005](decisions/005-kafka-go-gateway-netty-broadcast.md) and [kafka-tick
 
 ## Worker Pipeline (current)
 
-```
-MockPriceGenerator (@Scheduled 1s)   ← swaps to KisPriceProvider when KIS keys set
-  │
-  ├── RedisTickWriter
-  │     └── SET stock:price:{market}:{symbol}
-  │
-  ├── EventDetector
-  │     ├── PriceSpikeDetector  (EMA α=0.1)
-  │     ├── VolumeSurgeDetector (EMA α=0.1, ≥3× ratio)
-  │     └── INSERT stock_events (dedup by minute window)
-  │
-  └── AlertEvaluator (@Scheduled 30s)
-        ├── PRICE_ABOVE / PRICE_BELOW
-        ├── 10-minute cooldown (Redis key)
-        └── INSERT alert_histories → Expo push
-```
-
-### Kafka Ingestion Path (when `ingestion.source=kafka`, `kafka` profile)
+> 2026-10-04 갱신. 이전 판은 `MockPriceGenerator`가 디텍터를 직접 부르고 `AlertEvaluator`가 30초 스케줄로 도는
+> 구조를 그렸다 — 둘 다 이제 사실이 아니다.
 
 ```
-Go Market Gateway (goroutine per stock, 1s tick loop)
-  └── produce → Kafka topic: market.ticks (key=stockId)
-        └── TickKafkaConsumer (Worker, @KafkaListener)
-              └── RedisTickWriter / CandleAggregator / EventDetector
-                    └── produce → Kafka topic: market.events (on detection)
-```
-
-Replaces the `MockPriceGenerator` polling loop with a push-based Kafka consumer. See [kafka-tick-pipeline.md](technical/kafka-tick-pipeline.md). Browser-facing real-time push is a separate path — `backend/api`'s `MarketTickBroadcastConsumer` consumes `market.ticks` independently (its own consumer group) and forwards via STOMP; see [ADR-029](decisions/029-price-broadcast-pipeline.md).
+틱 생산자 — 모두 Kafka market.ticks (key=stockId) 로 produce, 틱마다 source 태그 (ADR-055)
+  ├── KisExecutionTickHandler   (KIS H0STCNT0 실시간 체결, 커버 종목)      source=KIS
+  ├── TossExecutionTickHandler  (Toss trade 채널, 커버 종목)              source=TOSS
+  ├── MockPriceGenerator        (@Scheduled 1s, KIS/Toss 미커버 종목만)   source=MOCK
+  └── Go market-gateway         (선택, 합성 생성기)                        source=MOCK
+        │
+        ▼
+TickKafkaConsumer (worker role=event)
+  ├── RedisTickWriter        SET stock:price:{market}:{symbol}  (TTL 없음)
+  ├── CandleAggregator       인메모리 1분 버퍼 → candles_1m / candles_1d upsert (ADR-021)
+  ├── EventDetector          PriceSpike / VolumeSurge — 상태는 프로세스 메모리 (ADR-046)
+  │     └── INSERT stock_events (분 버킷 유니크) → @Externalized market.event-detected (ADR-051)
+  └── produce market.tick-processed
+        │
+        ▼
+AlertEvaluator (worker role=alert, @EventListener @Async on TickProcessedEvent)
+  ├── AlertRuleIndex         종목별 인메모리 룰 인덱스, Redis pub/sub 무효화 + 5분 delta sync (ADR-044)
+  └── AlertDispatcher        10분 쿨다운 (Redis alert:cooldown:{ruleId}) → alert_histories → Expo push
+``` See [kafka-tick-pipeline.md](technical/kafka-tick-pipeline.md). Browser-facing real-time push is a separate path — `backend/api`'s `MarketTickBroadcastConsumer` consumes `market.ticks` independently (its own consumer group) and forwards via STOMP; see [ADR-029](decisions/029-price-broadcast-pipeline.md).
 
 ### KIS WebSocket (when KIS_APP_KEY + KIS_APP_SECRET set)
 
@@ -314,13 +309,14 @@ VolumeSurgeDetector:
 ### Rule Engine
 
 ```
-MarketDataEvent (from Redis/WebSocket tick)
-  → IndicatorEngine.compute(stockId, indicators=[MA20, RSI14, ...])
+ForwardTestScheduler (@Scheduled 16:00 KST, MON-FRI — ADR-024, 틱 단위가 아니라 일봉 단위)
+  → ForwardTestService: candles_1d 로드
+  → IndicatorEngine.compute(...)                  (MA, EMA, RSI, MACD, Bollinger, ATR)
   → RuleEvaluator.evaluate(ruleSet, indicators)   ← never sends ruleset to client
-  → Signal: { ruleSetId, stockId, direction, triggeredAt }
-  → SignalEvent published (Redis pub/sub or in-process)
-  → ForwardTestLogger.record(signal)
-  → PaperAutoTrader.execute(signal)  [if strategy in auto-trade mode]
+  → quant_signals INSERT + 포워드 테스트 포지션/자산곡선 갱신
+  → STOMP /topic/rulesets/{id}/signals            (구독자만 — RuleSetSignalAccessInterceptor, ADR-035)
+
+자동 매매(PaperAutoTrader) 경로는 없다. 이벤트 기반 모의 자동주문은 Watch Rule(ADR-051)이 맡는다.
 ```
 
 ### Backtest Engine
@@ -343,11 +339,12 @@ BacktestRequest { ruleSetId, startDate, endDate, universe }
 ### Strategy Protection
 
 ```
-Ruleset stored encrypted in DB: ruleDefinitionEncrypted
-Fingerprint: ruleSetFingerprint = SHA-256(normalize(ruleDefinition))
+Ruleset stored in MongoDB rule_sets (RuleSetDocument.ruleDefinition) — 평문이다. 암호화 저장은 구현되지 않았다.
+Fingerprint: SHA-256(normalize(ruleDefinition)) — 필드는 있으나 구독/신호 경로에서 검증에 쓰이지 않는다
+             (engineering-backlog §5).
 
 GET /api/strategies/{id}/signal   (subscriber endpoint)
-  → server evaluates encrypted ruleset
+  → server evaluates the ruleset (never sent to the client)
   → returns: { hasSignal: true, direction: BUY, stockCount: 3 }
   → never returns: individual condition results or indicator values
 ```
@@ -515,7 +512,7 @@ Connect: `ws://localhost:8080/ws` (SockJS fallback)
 | Topic | Description |
 |-------|-------------|
 | `/topic/stocks/{stockId}` | 종목별 실시간 가격 |
-| `/topic/market` | 전체 시장 요약 |
+| `/topic/market/summary` | 시장 요약, 1초 1회 ([ADR-039](decisions/039-drop-global-market-topic.md) — 전역 `/topic/market`은 폐기) |
 | `/topic/rulesets/{ruleSetId}/signals` | 포워드 테스트 매수/매도 신호 알림 (Quant Lab, ADR-024) |
 
 ---
@@ -980,7 +977,7 @@ make up-full
 
 | Service | Port | Docker Profile | Role |
 |---------|------|---------------|------|
-| `backend/api` | 8080 | `full` / `msa` | API gateway, JWT auth, strangler-fig proxy |
+| `backend/api` | 8080 | `full` / `msa` | API gateway, JWT auth, 모든 도메인 모듈 (strangler-fig proxy는 폐기 — 아래 참고) |
 | `kafka` | 9092 / 29092 | `full` / `kafka` / `msa` | event bus |
 | `postgres` (TimescaleDB) | 5432 | always | shared DB |
 | `redis` | 6379 | always | tick cache, candle, orderbook |
@@ -1382,7 +1379,7 @@ portfolio_positions (
 | [ADR-001](decisions/001-modular-monolith.md) | Start with Modular Monolith, not Microservices | Accepted |
 | [ADR-002](decisions/002-timescaledb.md) | Use TimescaleDB for Time-Series Market Data | Accepted |
 | [ADR-003](decisions/003-stock-events-central.md) | Centralize Stock Event Detection in Worker | Accepted |
-| [ADR-004](decisions/004-redis-streams-over-kafka.md) | Redis Streams over Kafka for MVP | Accepted (superseded by ADR-005) |
+| [ADR-004](decisions/004-redis-streams-over-kafka.md) | Redis Streams over Kafka for MVP | Superseded by ADR-005 |
 | [ADR-005](decisions/005-kafka-go-gateway-netty-broadcast.md) | Introduce Kafka, Go Ingestion Gateway, Netty Broadcast | Accepted (Netty Broadcast portion superseded by ADR-033; Kafka/Go remain) |
 | [ADR-006](decisions/006-kafka-dlt-retry-strategy.md) | @RetryableTopic + Dead Letter Topic for Kafka Fault Isolation | Accepted |
 | [ADR-007](decisions/007-idempotency-key-filter.md) | Idempotency Key Filter for Mutating Order Endpoints | Accepted |
@@ -1415,3 +1412,5 @@ portfolio_positions (
 | [ADR-047](decisions/047-single-execution-path-for-paper-account.md) | 모의투자 계좌의 체결 경로를 매칭 엔진 하나로 통일 (paper는 계좌 기록 모듈) | Accepted |
 | [ADR-048](decisions/048-retire-trading-service.md) | trading-service 폐기 — api가 한 번도 위임한 적 없는 복사본 | Accepted |
 | [ADR-049](decisions/049-retire-quant-engine.md) | quant-engine 폐기 — 위임 미연결, L-06 실측으로 bulkhead 격리 충분 확인 | Accepted |
+| [ADR-050](decisions/050-realtime-pipeline-defaults-from-load-tests.md)–[ADR-054](decisions/054-pinpoint-apm-alongside-jaeger.md) | 부하테스트 기반 기본값 · 이벤트 트리거 모의주문 · 현금 예약 락 · 결제 멱등성 · Pinpoint | Accepted |
+| [ADR-055](decisions/055-price-provenance-gate-for-real-orders.md) | 실주문은 출처가 확인된 실시세로만 발동 — 틱 출처 태깅 | Accepted |
