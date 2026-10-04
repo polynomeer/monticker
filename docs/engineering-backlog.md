@@ -50,11 +50,14 @@
 - [ ] **동일 계좌의 타 채널(HTS 등) 거래와의 조율** — 지금 조건부 주문은 순수 monticker 내부 상태라 사용자가 HTS로 직접 거래하면 인지하지 못한다. 실시간 잔고/포지션 동기화 설계 필요.
 - [x] **500/409 버그 수정** — ✅ 완료(2026-09-08, `485767e`). `GET /api/brokerage/account`가 미연동 신규 사용자에게 500을 반환하던 문제 — `GlobalExceptionHandler`의 409 키워드 매칭이 "없음"만 잡고 실제 예외 메시지의 "없습니다"는 놓쳤던 게 원인. 신규 가입 테스트 사용자로 라이브 확인.
 
-- [x] **실거래 결과 불명 주문 + `TRIGGERED` 리퍼** — ✅ 완료(2026-10-05, [ADR-056](decisions/056-brokerage-order-unknown-outcome.md)). 실계좌 미검증: 모의투자 E2E 때 `bench/chaos/kis-stub.py`로 읽기 타임아웃을 주입해 KIS `ord_tmd`·`ord_gno_brno` 매칭을 확인할 것. 로컬 재현: `app.brokerage.mock.indeterminate-symbols=<종목>`.
+- [x] **실거래 결과 불명 주문 + `TRIGGERED` 리퍼** — ✅ 완료(2026-10-04, [ADR-056](decisions/056-brokerage-order-unknown-outcome.md)). 실계좌 미검증: 모의투자 E2E 때 `bench/chaos/kis-stub.py`로 읽기 타임아웃을 주입해 KIS `ord_tmd`·`ord_gno_brno` 매칭을 확인할 것. 로컬 재현: `app.brokerage.mock.indeterminate-symbols=<종목>`.
 - [ ] **결과 불명 주문 수동 확정(관리자)** — [ADR-056](decisions/056-brokerage-order-unknown-outcome.md) `needs_review=true` 주문(매칭 후보 2건 이상)을 운영자가 증권사 주문번호를 지정하거나 미접수로 확정하는 관리 기능. 지금은 DB 직접 수정뿐이고, 그동안 사용자의 같은 종목·방향 주문이 막힌다.
 - [ ] **스탑로스가 결과 불명 주문 때문에 막히면 알림** — ADR-056 중복 가드에 걸린 조건부 주문은 `FAILED`가 되고 재시도하지 않는다(ADR-032) → 보호가 조용히 사라진다. 최소한 푸시 알림, 가능하면 해소 후 재무장 여부를 사용자에게 묻기.
-- [x] **실거래 킬 스위치** — ✅ 완료(2026-10-05, [ADR-057](decisions/057-real-order-kill-switch.md), 런북 [trading-halt](runbooks/trading-halt.md)). 관리 UI는 없다(API·SQL). 자동 정지 조건은 ADR-057 Revisit When.
-- [ ] **🔴 실거래 P0 잔여 — [design-review-2026-10.md §5](design-review-2026-10.md#5-남은-것--우선순위)** — (4) 리스크 게이트 TOCTOU 잔여분 — 미체결·결과 불명 주문 금액을 잔고 스냅샷에서 차감. (5) 조건부 주문 생성 시 시세 커버리지 확인.
+- [x] **실거래 킬 스위치** — ✅ 완료(2026-10-04, [ADR-057](decisions/057-real-order-kill-switch.md), 런북 [trading-halt](runbooks/trading-halt.md)). 관리 UI는 없다(API·SQL). 자동 정지 조건은 ADR-057 Revisit When.
+- [x] **실거래 리스크 게이트 진행 중 노출** — ✅ 완료(2026-10-04, [ADR-058](decisions/058-risk-gate-in-flight-exposure.md)). "현금 차감"은 틀린 처방이었다(ADR Context). 실계좌로 확인할 것: KIS `tot_evlu_amt`가 D+2 예수금 기준인지(매수 직후 잔고 응답), 체결 반영 지연이 2분 창 안에 드는지.
+- [ ] **지정가 체결이 자동으로 동기화되지 않는다** — `SUBMITTED` 실거래 주문은 제출 직후 1회 조회, 사용자의 "다시 확인", 그리고 [ADR-058](decisions/058-risk-gate-in-flight-exposure.md)의 같은 종목 매수 직전 갱신에서만 바뀐다. 그래서 지정가가 장중에 체결돼도 **T+2 정산 기록(`brokerage_settlements`)과 원장 반영이 사용자가 확인할 때까지 생기지 않는다.** 대조 잡(ADR-056)처럼 당일 `SUBMITTED`를 주기적으로 동기화하는 잡이 필요하다(증권사 호출량·레이트리밋 고려). 2026-10-04 ADR-058 리뷰에서 발견.
+- [ ] **실거래 `dailyPnl`의 `current_date`가 UTC다** — `buildPortfolioSnapshot`의 `filled_at >= current_date`는 DB 세션 타임존 기준이라 KST 00:00~09:00 체결이 전날로 빠진다(KST↔UTC 함정). 위 "dailyPnl도 현금 흐름" 항목과 함께 재정의할 것.
+- [ ] **🔴 실거래 P0 잔여 — [design-review-2026-10.md §5](design-review-2026-10.md#5-남은-것--우선순위)** — (5) 조건부 주문 생성 시 시세 커버리지 확인.
 - [ ] **조건부 주문 생성 시 시세 커버리지 확인** — [ADR-055](decisions/055-price-provenance-gate-for-real-orders.md) 이후 KIS/Toss 미커버 종목의 조건부 주문은 합성 틱으로 발동하지 않지만 **조용히** 발동하지 않는다(사용자는 스탑로스가 걸려 있다고 믿는다). worker의 커버리지 집합을 Redis에 게시하고 생성 시 거부/경고.
 
 ## 3. 리밸런싱 실행 자동화

@@ -264,7 +264,7 @@ val trId = if (request.side == "BUY") "TTTC0802U" else "TTTC0801U"   // "BUY"가
 - (§4 H2) 이 패턴이 반복되지 않도록 39개 중 37개 컨트롤러에 Bean Validation이 없는 시스템적
   공백 자체를 별도 작업으로 닫는다.
 
-### C4 — 관리자 API의 `@PreAuthorize`가 한 번도 적용된 적이 없다 — ✅ 수정(2026-10-05)
+### C4 — 관리자 API의 `@PreAuthorize`가 한 번도 적용된 적이 없다 — ✅ 수정(2026-10-04)
 
 **발견 경위**: [ADR-057](decisions/057-real-order-kill-switch.md) 킬 스위치 관리 API 리뷰 중. 이 문서 작성 시점의 점검에서도 놓쳤다.
 
