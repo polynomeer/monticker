@@ -67,6 +67,13 @@ export interface BrokerageOrderResponse {
   needsReview: boolean;
 }
 
+/** ADR-057 — 이 사용자의 실주문을 막는 킬 스위치. 사용자 범위(USER)는 사유를 숨긴 문구다. */
+export interface TradingStatusResponse {
+  halted: boolean;
+  scope: "GLOBAL" | "PROVIDER" | "USER" | null;
+  message: string | null;
+}
+
 export interface BrokerageSettlementResponse {
   id: number;
   symbol: string;
