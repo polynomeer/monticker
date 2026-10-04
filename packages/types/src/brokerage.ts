@@ -132,6 +132,11 @@ export interface ConditionalOrderResponse {
   createdAt: string;
   triggeredAt: string | null;
   expiresAt: string | null;
+  /**
+   * ADR-060 — ACTIVE일 때만. LIVE: 실시세 연결. STALE: 장중 이 종목 실시세가 끊겼다. NONE: 실시세 대상이 아니다.
+   * STALE·NONE이면 조건을 만족해도 발동하지 않는다.
+   */
+  priceFeed?: "LIVE" | "STALE" | "NONE" | null;
 }
 
 // ADR-034 — 리밸런싱 실행 자동화(실브로커리지, 수동 실행).
