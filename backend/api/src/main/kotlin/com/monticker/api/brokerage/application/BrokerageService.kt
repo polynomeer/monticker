@@ -56,6 +56,7 @@ class BrokerageService(
     private val jdbc: JdbcTemplate,
     transactionManager: PlatformTransactionManager,
     private val meterRegistry: MeterRegistry,
+    private val tradingHaltService: TradingHaltService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -164,6 +165,11 @@ class BrokerageService(
         jdbc.query("SELECT pg_advisory_xact_lock(?, (? % 2147483647)::int)", { _ -> }, ADVISORY_NS_ORDER, userId)
 
         val account = getAccount(userId)
+        // ADR-057 — 킬 스위치. 자격증명 재발급(증권사 호출)·리스크 게이트·의도 기록보다 먼저 본다. 캐시하지 않는다.
+        tradingHaltService.findActive(account.provider, userId)?.let { halt ->
+            meterRegistry.counter("brokerage_order_blocked_by_halt_total", "scope", halt.scope.name).increment()
+            throw halt.toException()
+        }
         val client = clientRegistry.get(account.provider)
         val credentials = requireCredentials(account)
         if (request.orderType == "LIMIT" && request.limitPrice == null) {

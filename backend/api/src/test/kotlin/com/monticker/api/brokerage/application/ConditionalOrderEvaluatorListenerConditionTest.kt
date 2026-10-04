@@ -31,6 +31,7 @@ class ConditionalOrderEvaluatorListenerConditionTest {
             ctx.beanFactory.registerSingleton("jdbc", jdbc)
             ctx.beanFactory.registerSingleton("brokerageService", mockk<BrokerageService>())
             ctx.beanFactory.registerSingleton("meterRegistry", registry)
+            ctx.beanFactory.registerSingleton("tradingHaltService", mockk<TradingHaltService> { every { findActive(any(), any()) } returns null })
             ctx.register(ConditionalOrderEvaluator::class.java)
             ctx.refresh()
             ctx.publishEvent(

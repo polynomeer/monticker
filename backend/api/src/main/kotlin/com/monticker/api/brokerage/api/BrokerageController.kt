@@ -2,6 +2,7 @@ package com.monticker.api.brokerage.api
 
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
 import com.monticker.api.brokerage.application.BrokerageService
+import com.monticker.api.brokerage.application.TradingHaltService
 import com.monticker.api.brokerage.domain.*
 import com.monticker.api.brokerage.infrastructure.BrokerageBalance
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRequest
@@ -73,6 +74,12 @@ data class OrderResponse(
     val needsReview: Boolean = false,
 )
 
+data class TradingStatusResponse(
+    val halted: Boolean,
+    val scope: String?,
+    val message: String?,
+)
+
 data class SettlementResponse(
     val id: Long,
     val symbol: String,
@@ -95,6 +102,7 @@ data class SettlementResponse(
 class BrokerageController(
     private val brokerageService: BrokerageService,
     private val jwtTokenProvider: JwtTokenProvider,
+    private val tradingHaltService: TradingHaltService,
 ) {
     private fun userId(token: String) =
         jwtTokenProvider.getUserId(token.removePrefix("Bearer "))
@@ -109,6 +117,16 @@ class BrokerageController(
         val provider = BrokerageProvider.valueOf(req.provider.uppercase())
         val account = brokerageService.connect(userId(token), provider, req.appKey, req.appSecret, req.accountNumber)
         return ResponseEntity.ok(account.toResponse())
+    }
+
+    // ADR-057 — 이 사용자의 실주문을 막는 킬 스위치가 있는가. 주문 화면 배너용. 사용자 범위 스위치는 사유를 숨긴다.
+    @GetMapping("/trading-status")
+    fun tradingStatus(@RequestHeader("Authorization") token: String): ResponseEntity<TradingStatusResponse> {
+        val userId = userId(token)
+        // 계좌가 없으면 증권사 범위는 해당 없음 — 전역·사용자 범위만 본다(MOCK은 증권사 스위치 대상이 아니다).
+        val provider = runCatching { brokerageService.getAccount(userId).provider }.getOrDefault(BrokerageProvider.MOCK)
+        val halt = tradingHaltService.findActive(provider, userId)
+        return ResponseEntity.ok(TradingStatusResponse(halted = halt != null, scope = halt?.scope?.name, message = halt?.userMessage))
     }
 
     // 연동 계좌 조회

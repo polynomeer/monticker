@@ -1,6 +1,7 @@
 package com.monticker.api.brokerage
 
 import com.monticker.api.brokerage.application.BrokerageService
+import com.monticker.api.brokerage.application.TradingHaltService
 import com.monticker.api.brokerage.domain.BrokerageAccount
 import com.monticker.api.brokerage.domain.BrokerageOrderStatus
 import com.monticker.api.brokerage.domain.BrokerageProvider
@@ -88,7 +89,7 @@ class BrokerageOrderUnknownOutcomeFlowIntegrationTest {
         val target = BrokerageService(
             BrokerageClientRegistry(BrokerageProvider.entries.associateWith { mockBroker }),
             accountRepo, orderRepo, settlementRepo, mockk(relaxed = true), riskChecker, jdbc,
-            txManager, SimpleMeterRegistry(),
+            txManager, SimpleMeterRegistry(), TradingHaltService(jdbc, SimpleMeterRegistry()),
         )
         // 운영처럼 @Transactional 프록시를 씌운다. 직접 생성한 인스턴스는 애노테이션이 무시돼, 예컨대 syncOrderStatus에
         // 바깥 트랜잭션이 생겨 캐시된(해소 전) 엔티티를 돌려주는 회귀를 이 테스트가 잡지 못했다.
@@ -203,5 +204,33 @@ class BrokerageOrderUnknownOutcomeFlowIntegrationTest {
         assertThat(row(orphan)["status"]).isEqualTo("REJECTED")
         assertThat(row(orphan)["resolved_by"]).isEqualTo("NOT_FOUND")
         assertThat(row(orphan)["reconcile_attempts"]).isEqualTo(2)
+    }
+
+    @Test
+    fun `킬 스위치 — 켜면 다음 주문부터 막히고(행도 안 생김), 취소는 계속 되며, 해제하면 다시 주문된다`() {
+        val svc = service()
+        val userId = seedUser()
+        val halts = TradingHaltService(jdbc, SimpleMeterRegistry())
+        // 스위치 전에 낸 미체결 지정가(현재가 70000보다 한참 낮아 체결되지 않는다)
+        val resting = svc.submitOrder(userId, BrokerageOrderRequest(normalSymbol, "BUY", "LIMIT", 1, BigDecimal("1")))
+        assertThat(resting.status).isEqualTo(BrokerageOrderStatus.SUBMITTED)
+
+        val halt = halts.halt(com.monticker.api.brokerage.application.HaltScope.GLOBAL, null, "사고 대응", adminId = null)
+        try {
+            val before = jdbc.queryForObject("SELECT COUNT(*) FROM brokerage_orders WHERE user_id = ?", Long::class.java, userId)
+            assertThatThrownBy { svc.submitOrder(userId, BrokerageOrderRequest(normalSymbol, "BUY", "MARKET", 1)) }
+                .isInstanceOf(com.monticker.api.common.exception.TradingHaltedException::class.java)
+                .hasMessageContaining("사고 대응")
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM brokerage_orders WHERE user_id = ?", Long::class.java, userId))
+                .isEqualTo(before)
+
+            // 위험을 줄이는 방향(취소)은 막지 않는다
+            assertThat(svc.cancelOrder(userId, resting.id).status).isEqualTo(BrokerageOrderStatus.CANCELLED)
+        } finally {
+            halts.lift(halt.id, "복구", adminId = null)
+        }
+
+        assertThat(svc.submitOrder(userId, BrokerageOrderRequest(normalSymbol, "BUY", "MARKET", 1)).status)
+            .isEqualTo(BrokerageOrderStatus.FILLED)
     }
 }

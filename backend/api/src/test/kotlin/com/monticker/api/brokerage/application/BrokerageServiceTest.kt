@@ -52,8 +52,9 @@ class BrokerageServiceTest {
 
     private val txManager      = mockk<PlatformTransactionManager>(relaxed = true)
     private val meterRegistry  = SimpleMeterRegistry()
+    private val haltService    = mockk<TradingHaltService> { every { findActive(any(), any()) } returns null }
 
-    private val service = BrokerageService(clientRegistry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry)
+    private val service = BrokerageService(clientRegistry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService)
 
     private val approvedRisk = RiskCheckResult(approved = true, blockedBy = null, severity = "APPROVED", checks = emptyList())
 
@@ -263,7 +264,7 @@ class BrokerageServiceTest {
 
     private fun serviceWithFakeClient(fakeClient: BrokerageClient): BrokerageService {
         val registry = BrokerageClientRegistry(BrokerageProvider.entries.associateWith { fakeClient })
-        return BrokerageService(registry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry)
+        return BrokerageService(registry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService)
     }
 
     @Test
@@ -597,4 +598,30 @@ class BrokerageServiceTest {
             netAmount = BigDecimal("700105"), settleDate = LocalDate.now().plusDays(2),
             status = status,
         )
+
+    // ── ADR-057 — 킬 스위치 ──────────────────────────────────────────────────────
+
+    @Test
+    fun `킬 스위치가 켜져 있으면 의도 기록도 증권사 호출도 없이 TradingHaltedException`() {
+        val orderSlot = slot<BrokerageOrder>()
+        val (svc, fakeClient) = fakeClientService(BrokerageOrderResult.accepted("ODNO-H"), orderSlot)
+        every { haltService.findActive(any(), 1L) } returns TradingHalt(
+            id = 1, scope = HaltScope.GLOBAL, target = null, reason = "점검", haltedBy = 9, haltedAt = Instant.now(),
+            liftedBy = null, liftedAt = null, liftReason = null,
+        )
+
+        assertThrows<com.monticker.api.common.exception.TradingHaltedException> { svc.submitOrder(1L, req) }
+
+        verify(exactly = 0) { orderRepo.save(any()) }
+        verify(exactly = 0) { fakeClient.submitOrder(any(), any(), any()) }
+        verify(exactly = 0) { fakeClient.issueToken(any(), any()) }   // 자격증명 재발급(증권사 호출)보다 먼저 막힌다
+        assertThat(meterRegistry.find("brokerage_order_blocked_by_halt_total").tag("scope", "GLOBAL").counter()?.count()).isEqualTo(1.0)
+    }
+
+    @Test
+    fun `사용자 범위 스위치는 사용자에게 사유를 숨긴다`() {
+        val halt = TradingHalt(1, HaltScope.USER, "1", "자격증명 유출 의심", 9, Instant.now(), null, null, null)
+        assertThat(halt.userMessage).doesNotContain("유출").contains("고객센터")
+        assertThat(halt.copy(scope = HaltScope.GLOBAL, target = null, reason = "증권사 점검").userMessage).contains("증권사 점검")
+    }
 }

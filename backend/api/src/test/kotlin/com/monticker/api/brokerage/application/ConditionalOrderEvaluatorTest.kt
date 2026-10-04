@@ -28,7 +28,8 @@ class ConditionalOrderEvaluatorTest {
     private val jdbc = mockk<JdbcTemplate>()
     private val brokerageService = mockk<BrokerageService>()
     private val registry = SimpleMeterRegistry()
-    private val evaluator = ConditionalOrderEvaluator(jdbc, brokerageService, registry)
+    private val haltService = mockk<TradingHaltService> { every { findActive(any(), any()) } returns null }
+    private val evaluator = ConditionalOrderEvaluator(jdbc, brokerageService, registry, haltService)
 
     private fun stubActiveRow(
         id: Long = 1L, userId: Long = 1L, symbol: String = "005930", side: String = "SELL",
@@ -50,6 +51,7 @@ class ConditionalOrderEvaluatorTest {
                 every { getBigDecimal("limit_price") } returns limitPrice
                 every { getInt("quantity") } returns quantity
                 every { getString("oco_group_id") } returns ocoGroupId
+                every { getString("provider") } returns "KIS"
             }
             listOf(mapper.mapRow(rs, 0))
         }
@@ -228,5 +230,37 @@ class ConditionalOrderEvaluatorTest {
         evaluator.onTick(tick(stockId = 1L, price = "69000", source = PriceSource.TOSS))
 
         verify(exactly = 1) { brokerageService.submitOrder(1L, any(), any()) }
+    }
+
+    // ── ADR-057 — 킬 스위치 ──────────────────────────────────────────────────────
+
+    private val activeHalt = TradingHalt(1, HaltScope.PROVIDER, "KIS", "점검", 9, Instant.now(), null, null, null)
+
+    @Test
+    fun `스위치가 켜져 있으면 조건을 만족해도 클레임하지 않는다 — ACTIVE로 남아 해제 후 재개`() {
+        stubActiveRow()
+        every { haltService.findActive(com.monticker.api.brokerage.domain.BrokerageProvider.KIS, 1L) } returns activeHalt
+
+        evaluator.onTick(tick(stockId = 1L, price = "69000"))
+
+        verify(exactly = 0) { jdbc.update(match<String> { it.contains("SET status = 'TRIGGERED'") }, *anyVararg()) }
+        verify(exactly = 0) { brokerageService.submitOrder(any(), any(), any()) }
+        assertThat(registry.counter("conditional_order_halted_total").count()).isEqualTo(1.0)
+    }
+
+    @Test
+    fun `평가기 확인 뒤 스위치가 켜져 주문 준비가 막히면 TRIGGERED를 ACTIVE로 되돌린다 — FAILED로 소모하지 않는다`() {
+        val groupId = UUID.randomUUID()
+        stubActiveRow(ocoGroupId = groupId.toString())
+        every { jdbc.update(match<String> { it.contains("SET status = 'TRIGGERED'") }, *anyVararg()) } returns 1
+        every { jdbc.update(match<String> { it.contains("SET status = 'ACTIVE'") }, *anyVararg()) } returns 1
+        every { brokerageService.submitOrder(1L, any(), any()) } throws
+            com.monticker.api.common.exception.TradingHaltedException("실거래 주문이 일시 중단되었습니다", "GLOBAL")
+
+        evaluator.onTick(tick(stockId = 1L, price = "69000"))
+
+        verify { jdbc.update(match<String> { it.contains("SET status = 'ACTIVE', triggered_at = NULL") }, any(), 1L) }
+        verify(exactly = 0) { jdbc.update(match<String> { it.contains("SET status = 'FAILED'") }, *anyVararg()) }
+        verify(exactly = 0) { jdbc.update(match<String> { it.contains("oco_group_id = ?") }, *anyVararg()) }   // OCO 형제도 그대로
     }
 }

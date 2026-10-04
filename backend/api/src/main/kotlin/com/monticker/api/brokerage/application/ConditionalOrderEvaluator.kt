@@ -1,9 +1,11 @@
 package com.monticker.api.brokerage.application
 
 import com.monticker.api.brokerage.domain.BrokerageOrderStatus
+import com.monticker.api.brokerage.domain.BrokerageProvider
 import com.monticker.api.brokerage.domain.ConditionalTriggerType
 import com.monticker.api.brokerage.domain.OrderSide
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRequest
+import com.monticker.api.common.exception.TradingHaltedException
 import com.monticker.api.marketdata.domain.MarketTickReceivedEvent
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
@@ -27,6 +29,7 @@ data class ConditionalOrderRow(
     val limitPrice: BigDecimal?,
     val quantity: Int,
     val ocoGroupId: UUID?,
+    val provider: BrokerageProvider,   // ADR-057 — 증권사 범위 킬 스위치 판정용
 )
 
 /**
@@ -39,6 +42,7 @@ class ConditionalOrderEvaluator(
     private val jdbc: JdbcTemplate,
     private val brokerageService: BrokerageService,
     private val meterRegistry: MeterRegistry,
+    private val tradingHaltService: TradingHaltService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -56,6 +60,11 @@ class ConditionalOrderEvaluator(
         try {
             for (row in fetchActiveForStock(tick.stockId)) {
                 if (row.triggerType.isTriggered(tick.price, row.triggerPrice)) {
+                    // ADR-057 — 킬 스위치 중에는 클레임하지 않는다. ACTIVE로 남아 해제 뒤 다음 실시세 틱부터 다시 평가된다.
+                    if (tradingHaltService.findActive(row.provider, row.userId) != null) {
+                        meterRegistry.counter("conditional_order_halted_total").increment()
+                        continue
+                    }
                     fire(row)
                 }
             }
@@ -67,9 +76,11 @@ class ConditionalOrderEvaluator(
     private fun fetchActiveForStock(stockId: Long): List<ConditionalOrderRow> =
         jdbc.query(
             """
-            SELECT id, user_id, symbol, side, trigger_type, trigger_price, order_type, limit_price, quantity, oco_group_id
-            FROM conditional_orders
-            WHERE stock_id = ? AND status = 'ACTIVE'
+            SELECT co.id, co.user_id, co.symbol, co.side, co.trigger_type, co.trigger_price, co.order_type, co.limit_price,
+                   co.quantity, co.oco_group_id, ba.provider
+            FROM conditional_orders co
+            JOIN brokerage_accounts ba ON ba.id = co.account_id
+            WHERE co.stock_id = ? AND co.status = 'ACTIVE'
             """,
             { rs, _ ->
                 ConditionalOrderRow(
@@ -83,6 +94,7 @@ class ConditionalOrderEvaluator(
                     limitPrice = rs.getBigDecimal("limit_price"),
                     quantity = rs.getInt("quantity"),
                     ocoGroupId = rs.getString("oco_group_id")?.let { UUID.fromString(it) },
+                    provider = BrokerageProvider.valueOf(rs.getString("provider")),
                 )
             },
             stockId,
@@ -127,6 +139,14 @@ class ConditionalOrderEvaluator(
                 }
             }
             row.ocoGroupId?.let { cancelOcoSiblings(it, row.id) }
+        } catch (e: TradingHaltedException) {
+            // ADR-057 — 평가기 확인과 주문 준비 사이에 스위치가 켜졌다. 주문은 나가지 않았다(의도 기록 전). 소모하지 않고 되돌린다.
+            jdbc.update(
+                "UPDATE conditional_orders SET status = 'ACTIVE', triggered_at = NULL, updated_at = ? WHERE id = ? AND status = 'TRIGGERED'",
+                Timestamp.from(Instant.now()), row.id,
+            )
+            meterRegistry.counter("conditional_order_halted_total").increment()
+            log.warn("[ConditionalOrderEvaluator] 킬 스위치로 발동 취소 — ACTIVE로 복귀: id={} userId={}", row.id, row.userId)
         } catch (e: OrderOutcomeUnknownException) {
             // 의도는 커밋됐고 결과를 기록하지 못했다 — 주문이 나갔을 수 있다. FAILED로 단정하지 않는다.
             keepTriggered(row, e.orderId)
