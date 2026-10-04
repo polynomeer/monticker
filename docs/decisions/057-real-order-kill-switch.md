@@ -64,7 +64,9 @@ WHERE lifted_at IS NULL
 LIMIT 1
 ```
 
-걸리면 `TradingHaltedException` → **503**. 의도 행을 만들지 않으므로 증권사 호출도 없다.
+걸리면 `TradingHaltedException` → **423 Locked**(코드 `TRADING_HALTED`). 의도 행을 만들지 않으므로 증권사 호출도 없다.
+5xx를 쓰지 않는 이유: 의도적인 정지가 `OrderPathDown`(주문 경로 5xx 비율, Page)과 `ApiErrorBudgetBurn`을 울린다 — 계획된
+조치가 장애 경보를 오염시키면 정지 중에 일어난 진짜 장애를 놓친다.
 
 - **효력 시점**: 스위치 커밋 이후 tx1에 들어오는 주문부터. 이미 tx1을 통과한 주문(증권사 호출 중, 길어야 수 초)은 나간다.
   "켜는 순간 진행 중인 것까지 회수"는 불가능하다 — 증권사로 이미 나간 주문은 취소로만 되돌린다.
@@ -78,7 +80,7 @@ LIMIT 1
 | 주문 **취소** | 허용 | 위험을 줄이는 방향이다. 사고 중에 미체결 주문을 거둬들일 수 있어야 한다 |
 | 결과 불명 **대조**(ADR-056) | 허용 | 조회만 한다. 멈추면 상태를 모르는 주문이 늘어난다 |
 | 잔고·주문 **조회** | 허용 | |
-| 모의투자 | 무관 | 실제 돈이 아니다 |
+| 모의투자(매칭 엔진, `/api/paper`·`/api/matching`) | 무관 | 실제 돈이 아니다. 단 **증권사 경로의 모의계좌(KIS DEMO)·Mock 증권사 계좌는 전역·사용자 스위치에 막힌다** — 같은 `BrokerageService`를 지나기 때문이다(안전 쪽) |
 
 ### 4. 조건부 주문 — 발동하지 않고 ACTIVE로 남는다
 
@@ -91,15 +93,21 @@ LIMIT 1
 
 ### 5. 리밸런싱
 
-`execute()` 시작 시 스위치를 확인하고 걸리면 실행 기록을 만들지 않고 503. leg마다 실패가 쌓이는 것을 막는다.
+`execute()` 시작 시 스위치를 확인하고 걸리면 실행 기록을 만들지 않고 423. **실행 도중** 켜지면 그 leg부터 남은 leg를
+시도하지 않고 모두 `FAILED`("킬 스위치 — 주문 미전송")로 남긴다 — 매도만 되고 매수가 막혀 현금으로 남았을 수 있음을
+사용자가 볼 수 있게 한다. leg마다 실패가 쌓이는 것을 막는다.
 
 ### 6. 관리·노출
 
 - `POST /api/admin/trading-halts` `{scope, target?, reason}` · `POST /api/admin/trading-halts/{id}/lift` `{reason}` ·
-  `GET /api/admin/trading-halts?active=true` — `@PreAuthorize("hasRole('ADMIN')")` + `@Audited`. 대상 검증: PROVIDER는
+  `GET /api/admin/trading-halts?active=true` — `SecurityConfig`의 `/api/admin/**` → `hasRole("ADMIN")` URL 규칙이 1차 방어선이고,
+  `@EnableMethodSecurity` + 컨트롤러 `@PreAuthorize`가 2차다. **구현 중 발견**: 이 저장소에는 `@EnableMethodSecurity`가 없어
+  모든 `@PreAuthorize`가 무효였다 — 기존 `/api/admin/batch`(정산·결제 갱신 수동 실행)·`/api/admin/search`도 로그인한 일반
+  사용자에게 열려 있었다. 두 층을 함께 넣었고, 각 층을 하나씩 지워도 일반 사용자가 403을 받는 것을 테스트로 확인했다
+  (`TradingHaltAdminSecurityTest`). `@Audited`. 대상 검증: PROVIDER는
   `KIS|TOSS`, USER는 존재하는 사용자. 같은 범위에 이미 활성 스위치가 있으면 409.
 - `GET /api/brokerage/trading-status` — 로그인 사용자 기준 `{halted, scope, message}`. 주문 화면 배너용.
-- 메트릭: `trading_halt_active{scope}` 게이지, `brokerage_order_blocked_by_halt_total{scope}`, `conditional_order_halted_total`.
+- 메트릭: `trading_halt_active{scope}` 게이지(15초 주기 갱신 — 스크레이프 때 DB를 조회하지 않는다), `brokerage_order_blocked_by_halt_total{scope}`, `conditional_order_halted_total`.
 - 알림: `TradingHaltActive`(Ticket) — 전역·증권사 스위치가 30분 넘게 켜져 있다. **잊힌 스위치는 조용한 장애다.**
 
 ## Reasons

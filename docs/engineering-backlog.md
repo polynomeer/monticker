@@ -53,7 +53,8 @@
 - [x] **실거래 결과 불명 주문 + `TRIGGERED` 리퍼** — ✅ 완료(2026-10-05, [ADR-056](decisions/056-brokerage-order-unknown-outcome.md)). 실계좌 미검증: 모의투자 E2E 때 `bench/chaos/kis-stub.py`로 읽기 타임아웃을 주입해 KIS `ord_tmd`·`ord_gno_brno` 매칭을 확인할 것. 로컬 재현: `app.brokerage.mock.indeterminate-symbols=<종목>`.
 - [ ] **결과 불명 주문 수동 확정(관리자)** — [ADR-056](decisions/056-brokerage-order-unknown-outcome.md) `needs_review=true` 주문(매칭 후보 2건 이상)을 운영자가 증권사 주문번호를 지정하거나 미접수로 확정하는 관리 기능. 지금은 DB 직접 수정뿐이고, 그동안 사용자의 같은 종목·방향 주문이 막힌다.
 - [ ] **스탑로스가 결과 불명 주문 때문에 막히면 알림** — ADR-056 중복 가드에 걸린 조건부 주문은 `FAILED`가 되고 재시도하지 않는다(ADR-032) → 보호가 조용히 사라진다. 최소한 푸시 알림, 가능하면 해소 후 재무장 여부를 사용자에게 묻기.
-- [ ] **🔴 실거래 P0 잔여 — [design-review-2026-10.md §5](design-review-2026-10.md#5-남은-것--우선순위)** — (3) 전역·사용자별 킬 스위치. (4) 리스크 게이트 TOCTOU 잔여분 — 미체결·결과 불명 주문 금액을 잔고 스냅샷에서 차감.
+- [x] **실거래 킬 스위치** — ✅ 완료(2026-10-05, [ADR-057](decisions/057-real-order-kill-switch.md), 런북 [trading-halt](runbooks/trading-halt.md)). 관리 UI는 없다(API·SQL). 자동 정지 조건은 ADR-057 Revisit When.
+- [ ] **🔴 실거래 P0 잔여 — [design-review-2026-10.md §5](design-review-2026-10.md#5-남은-것--우선순위)** — (4) 리스크 게이트 TOCTOU 잔여분 — 미체결·결과 불명 주문 금액을 잔고 스냅샷에서 차감. (5) 조건부 주문 생성 시 시세 커버리지 확인.
 - [ ] **조건부 주문 생성 시 시세 커버리지 확인** — [ADR-055](decisions/055-price-provenance-gate-for-real-orders.md) 이후 KIS/Toss 미커버 종목의 조건부 주문은 합성 틱으로 발동하지 않지만 **조용히** 발동하지 않는다(사용자는 스탑로스가 걸려 있다고 믿는다). worker의 커버리지 집합을 Redis에 게시하고 생성 시 거부/경고.
 
 ## 3. 리밸런싱 실행 자동화

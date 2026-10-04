@@ -118,7 +118,7 @@ Framework:   Spring Boot 3.5
 Pattern:     Modular Monolith
 API:         REST + WebSocket (STOMP over SockJS)
 ORM:         Spring Data JPA
-Migration:   Flyway (V1–V51)
+Migration:   Flyway (V1–V52)
 Batch:       Spring @Scheduled
 Resilience:  Resilience4j (Circuit Breaker)
 Observability: OpenTelemetry + Jaeger, Micrometer
@@ -1415,3 +1415,4 @@ portfolio_positions (
 | [ADR-050](decisions/050-realtime-pipeline-defaults-from-load-tests.md)–[ADR-054](decisions/054-pinpoint-apm-alongside-jaeger.md) | 부하테스트 기반 기본값 · 이벤트 트리거 모의주문 · 현금 예약 락 · 결제 멱등성 · Pinpoint | Accepted |
 | [ADR-055](decisions/055-price-provenance-gate-for-real-orders.md) | 실주문은 출처가 확인된 실시세로만 발동 — 틱 출처 태깅 | Accepted |
 | [ADR-056](decisions/056-brokerage-order-unknown-outcome.md) | 실거래 주문 결과 불명을 일급 상태로 — 의도 선기록, 실패 3분류, 당일 목록 대조 | Accepted |
+| [ADR-057](decisions/057-real-order-kill-switch.md) | 실거래 주문 킬 스위치 — Postgres 플래그, 전역·증권사·사용자, 주문 준비 트랜잭션에서 판정 | Accepted |

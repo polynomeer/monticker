@@ -65,7 +65,7 @@ ADR-046(디텍터 상태)·ADR-021(캔들 버퍼)·인메모리 CLOB는 각각 �
 | 3 | 브로커 주문 응답 타임아웃 | ❌→🔧 | `REJECTED`로 기록, 클라이언트 주문 ID 미보존, 브로커 대조 잡 없음 |
 | 4 | `TRIGGERED` 클레임 직후 크래시 | ❌→🔧 | 복구 경로 없음 |
 | 5 | 같은 사용자의 동시 실주문 2건(조건부 + 수동) | ❌ | 리스크 게이트 TOCTOU, 시간당 주문 수는 제출 후에 기록 |
-| 6 | 실주문 전체 즉시 중단 | ❌ | 킬 스위치 없음(부팅 시 빈 교체뿐) |
+| 6 | 실주문 전체 즉시 중단 | ❌→🔧 | 킬 스위치 없음(부팅 시 빈 교체뿐) |
 | 7 | 토큰 만료 시점 동시 요청 2건 | ⚠️ | KIS 발급 1회/분 → 두 번째 실패가 `authFailedAt` 기록 → 5분 잠금 |
 | 8 | 같은 모의 LIMIT 주문 동시 취소 | ❌→🔧 | 이중 환불. 행 락 + 검증 선행 |
 | 9 | 모의 매수 중 kill -9 | ✅ | 단일 트랜잭션 롤백(사가 보상 덕이 아니다 — ADR-011 Note) |
@@ -90,6 +90,7 @@ ADR-046(디텍터 상태)·ADR-021(캔들 버퍼)·인메모리 CLOB는 각각 �
 | `fix(api): let watch-rule infrastructure failures…` | 룰 단위 격리 유지 + 루프 후 재던짐. 이 삼킴이 가리던 테스트 픽스처 결함(9건) 동반 수정 |
 | `fix(api): read settlement due-date…` | 모의·실거래 정산 리더를 `@StepScope` + 잡 파라미터 `date`로 |
 | 브랜치 적대적 리뷰 반영 | worker `GeneratedTick` 관대한 리더(별개 Deployment 배포 순서 사고 방지 — ADR-055 초안의 틀린 서술 정정), 출처 필터를 `@Async` 디스패치 전 리스너 조건으로, 죽은 코드 `KisPriceProvider`의 `KIS` 태깅 철회, 워치룰 DLT 로그 정정. 모든 신규 테스트는 변이(가드 제거)로 실패하는 것을 확인 |
+| 킬 스위치 리뷰 중 발견 | **관리자 API 권한이 무효였다** — `@EnableMethodSecurity` 부재로 `/api/admin/batch`·`search`가 일반 사용자에게 열려 있었다. URL 규칙 + 메서드 보안 이중화, 필터 체인 테스트 ([security-review C4](security-review.md)) |
 | `docs` | ADR-004 Superseded 표기, ADR-011/012/014/029/032 구현 차이 Note, architecture.md 드리프트 12곳, data-model.md |
 
 ## 5. 남은 것 — 우선순위
@@ -99,8 +100,8 @@ ADR-046(디텍터 상태)·ADR-021(캔들 버퍼)·인메모리 CLOB는 각각 �
    (`PENDING_SUBMIT`) → 트랜잭션 밖 호출 → 결과 3분류, `UNKNOWN`은 당일 주문 목록 매칭으로 해소(재주문 없음).
    같은 종목·방향 재주문 차단, `brokerage_order_unresolved` Page 알림.
 2. ✅ **`TRIGGERED` 리퍼** — ADR-056 §5. 결정적 `co-<id>`로 주문 행을 찾고, 행이 없으면 미전송 확정.
-3. **킬 스위치** — 전역 + 사용자별 플래그를 `BrokerageService.submitOrder` 첫 줄과 조건부 주문 평가기에서 확인.
-   평가기에서는 `FAILED`로 소모하지 않고 `ACTIVE`로 남겨야 한다.
+3. ✅ **킬 스위치** — [ADR-057](decisions/057-real-order-kill-switch.md)(2026-10-05). `trading_halts`(전역·증권사·사용자,
+   관리자 전용), 주문 준비 트랜잭션에서 캐시 없이 판정, 423. 조건부 주문은 ACTIVE로 일시정지. 런북 [trading-halt](runbooks/trading-halt.md).
 4. 🟡 **사용자별 실주문 직렬화** — ADR-056이 일부 해결: 주문 준비(tx1)를 `pg_advisory_xact_lock(userId)`로 직렬화하고,
    `PENDING_SUBMIT` 행이 시간당 주문 수에 바로 잡힌다. 남은 것: 락이 브로커 호출 동안은 풀려 있어 **다른 종목** 동시
    주문은 같은 잔고 스냅샷을 볼 수 있다 → 미체결·불명 주문 금액을 스냅샷 현금에서 차감.

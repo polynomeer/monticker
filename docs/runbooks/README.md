@@ -7,6 +7,7 @@
 |------|------------------------|------|
 | [redis-down.md](redis-down.md) | `RedisFailOpenSustained` `IdempotencyStoreDown` | Redis는 fail-open(레이트리밋·캐시)/fail-closed(멱등성 503). 죽어도 API는 산다 — 무엇이 꺼졌는지 알라 |
 | [ledger-mismatch.md](ledger-mismatch.md) | **`LedgerMismatch`** `LedgerMismatchReported` `LedgerReconciliationDidNotRun` | **자동 교정 금지.** 원장 누락인지 잔고 오염인지 사람이 판단한다 |
+| [trading-halt.md](trading-halt.md) | `TradingHaltActive` · **사고 대응 첫 단계** | 실주문 킬 스위치(ADR-057). 원인보다 먼저 피해를 막는다. 앱이 죽어도 SQL 한 줄로 켠다 |
 | [broker-cb-open.md](broker-cb-open.md) | `BrokerCircuitOpen` `ExternalHttpSlow` | 실주문·잔고가 503. 증권사 장애인지 우리 타임아웃인지 구분 |
 | [tick-stalled.md](tick-stalled.md) | `TickPipelineStalled` `DltMessagesGrowing` `CandleFlushFailing` | 장중 시세 정지. 게이트웨이 → Kafka → worker → api 순으로 좁힌다 |
 | [db-failover.md](db-failover.md) | `ApiErrorBudgetBurn` + `HikariPoolNearExhaustion`/`AllReplicasDown` | Postgres 장애·복구·검증. readiness가 pod를 빼는 동안 할 일 |

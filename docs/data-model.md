@@ -1027,6 +1027,7 @@ stocks
 | `strategy_subscriptions` | V24 | ✅ |
 | `subscription_plans` | V27 | — |
 | `tax_harvesting_logs` | V16 | ✅ |
+| `trading_halts` | V52 | — 실거래 킬 스위치·감사 이력, 행 삭제 없음 (ADR-057) |
 | `user_billing_keys` | V32 | — |
 | `user_subscriptions` | V27 | — |
 | `users` | V2 | ✅ |
