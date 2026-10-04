@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { type Icon, Plant, Lightning, Microscope, Check, CreditCard } from "@phosphor-icons/react";
 import { authFetch } from "@/services/api";
 import { getBillingStatus, getOrCreateCustomerKey, deregisterBillingKey, type BillingStatus } from "@/services/billing";
+import { isRealPaymentEnabled, openTossPaymentWindow, preparePayment } from "@/services/payment";
 import { useToast } from "@/hooks/useToast";
 import { Card } from "@/components/ui/Card";
 
@@ -161,16 +162,31 @@ export default function SubscriptionPage() {
   });
 
   const subscribeMutation = useMutation({
-    mutationFn: (planCode: string) =>
-      authFetch("/api/subscription/subscribe", {
+    mutationFn: async (planCode: string) => {
+      const plan = plansData?.find(p => p.code === planCode);
+
+      // 유료 플랜 + 실결제 모드면 prepare → 토스 SDK → 콜백의 confirm 으로 간다 (ADR-059).
+      // 금액과 orderId 는 서버가 정한다 — 이 함수는 그 값을 SDK 에 넘기기만 하고 직접 만들지
+      // 않는다. 무료 플랜과 Mock PG 모드는 결제가 없으니 기존 /subscribe 를 그대로 쓴다
+      // (운영 PG 모드에서 /subscribe 는 TossPgClient.requestPayment 스텁 때문에 항상 실패한다).
+      if (plan && plan.price > 0 && isRealPaymentEnabled()) {
+        const prepared = await preparePayment(planCode);
+        await openTossPaymentWindow(prepared, plan.name);
+        // 결제창이 열리면 브라우저가 토스로 떠난다 — 아래 onSuccess 는 실행되지 않는다.
+        return null;
+      }
+
+      const r = await authFetch("/api/subscription/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ planCode }),
-      }).then(async r => {
-        if (!r.ok) throw new Error(await r.text());
-        return r.json();
-      }),
-    onSuccess: () => {
+      });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    },
+    onSuccess: (result) => {
+      // 토스 결제창으로 떠나는 경로는 여기 오지 않는다(리다이렉트). 와도 토스트는 띄우지 않는다.
+      if (result === null) return;
       qc.invalidateQueries({ queryKey: ["subscription"] });
       toast({ type: "success", title: "구독 완료", message: "플랜이 변경되었습니다." });
     },
