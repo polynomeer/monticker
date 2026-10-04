@@ -1,5 +1,6 @@
 package com.monticker.worker.marketdata
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.monticker.worker.kis.KisCoverageProvider
 import com.monticker.worker.toss.TossCoverageProvider
 import jakarta.annotation.PostConstruct
@@ -12,6 +13,9 @@ import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.random.Random
 
+// ADR-055 — 관대한 리더. worker-market·market-gateway(생산자)와 worker-event(소비자)는 별개 Deployment라
+// 생산자가 먼저 롤아웃되면 새 필드를 모르는 소비자가 틱마다 실패해 전부 DLT로 간다(아래 seq 주석의 사고).
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class GeneratedTick(
     val stockId: Long,
     val symbol: String,
