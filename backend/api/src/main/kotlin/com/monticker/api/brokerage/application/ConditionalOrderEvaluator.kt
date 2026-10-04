@@ -42,12 +42,13 @@ class ConditionalOrderEvaluator(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    @EventListener
+    // ADR-055 — 실시세 틱만 비동기 큐에 넣는다. condition은 @Async 디스패치 전에 평가되므로 합성(Mock) 틱
+    // 폭주가 conditionalOrderExecutor 큐(200)를 채워 실시세 틱을 밀어내지 않는다.
+    @EventListener(condition = "#event.provenance.source.real")
     @Async("conditionalOrderExecutor")
     fun onTick(event: MarketTickReceivedEvent) {
         val tick = event.tick
-        // ADR-055 — 실시세·정규장·신선한 틱으로만 실주문을 낸다. market.ticks에는 KIS/Toss가 덮지 않는
-        // 종목의 합성(Mock) 틱과 장외 틱이 같이 흐른다. DB 조회 전에 거른다(합성 틱마다 조회하지 않도록).
+        // 실시세라도 정규장·신선한 틱으로만 실주문을 낸다. DB 조회 전에 거른다.
         event.provenance.rejectReasonForRealOrder(Instant.now())?.let { reason ->
             meterRegistry.counter("conditional_order_tick_ignored_total", "reason", reason.substringBefore('=')).increment()
             return
