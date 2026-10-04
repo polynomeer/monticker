@@ -31,4 +31,18 @@ interface PaymentRecordRepository : JpaRepository<PaymentRecord, Long> {
         status: PaymentStatus,
         after: Instant,
     ): Long
+
+    /**
+     * ADR-059 — 적체 청소 배치가 집어갈 PENDING 결제.
+     *
+     * `pg_order_id` 가 있어야만 PG 에 되물을 수 있다(그게 유일한 열쇠다). 방금 만들어진 건은
+     * 아직 확정 중일 수 있으므로 제외한다 — 진행 중인 결제를 배치가 가로채면 안 된다.
+     */
+    fun findAllByStatusAndPgOrderIdIsNotNullAndCreatedAtBeforeOrderByCreatedAtAsc(
+        status: PaymentStatus,
+        before: Instant,
+        pageable: Pageable,
+    ): List<PaymentRecord>
+
+    fun countByStatus(status: PaymentStatus): Long
 }

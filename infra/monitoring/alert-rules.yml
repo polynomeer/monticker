@@ -229,6 +229,38 @@ groups:
           summary: "서킷브레이커 {{ $labels.name }} OPEN 5분 지속"
           description: "{{ $labels.name }}이 폴백으로 동작 중입니다. 외부 API 상태를 확인할 것."
 
+      - alert: PaymentDeclineRateHigh
+        # ADR-059 — 결제 거절 급증. 서킷브레이커로는 절대 잡히지 않는다: ADR-053 에서 4xx 를
+        # 브레이커 집계에서 **일부러 뺐다**(그래야 복구 경로의 정상적인 404 가 브레이커를 열지
+        # 않는다). 즉 "PG 는 멀쩡한데 결제가 전부 거절된다"는 오직 이 카운터로만 보인다.
+        # 흔한 원인: 라이브 키 만료·상점 설정 변경·PG 스펙 변경. 전부 우리가 고쳐야 하는 쪽이다.
+        #
+        # 비율로 본다 — 결제량이 적은 시간대에 한두 건 거절로 깨우지 않기 위해, 15분간
+        # 5건 이상이면서 절반을 넘을 때만.
+        expr: |
+          (
+            sum(increase(payment_result_total{kind="declined"}[15m])) > 5
+            and
+            sum(increase(payment_result_total{kind="declined"}[15m]))
+              / clamp_min(sum(increase(payment_result_total[15m])), 1) > 0.5
+          )
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "결제 거절이 15분간 50% 초과"
+          description: "거절 {{ $value | humanize }}건. PG 장애는 PaymentCircuitOpen 이 따로 받으므로, 이 알람은 PG가 정상 응답하면서 거절하고 있다는 뜻이다 — 키 만료나 상점 설정을 먼저 확인할 것."
+
+      - alert: PaymentIndeterminateGrowing
+        # 응답을 못 받아 청구 여부를 모르는 건. 한 건이라도 쌓이면 사람이 봐야 한다 —
+        # paymentReconciliationJob 이 PG 에 되물어 정리하지만(6시간 주기), 계속 늘면
+        # 그 정리가 따라가지 못하고 있다는 뜻이다.
+        expr: sum(increase(payment_result_total{kind="indeterminate"}[1h])) > 3
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "결제 불확정 1시간간 3건 초과"
+          description: "청구 여부를 알 수 없는 결제가 쌓이고 있습니다. payment_records 의 PENDING 적체와 paymentReconciliationJob 실행 여부를 확인할 것 (ADR-059)."
+
       - alert: DltMessagesGrowing
         expr: sum by (topic) (increase(dlt_messages_total[15m])) > 0
         labels: { severity: warning }

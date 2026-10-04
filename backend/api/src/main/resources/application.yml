@@ -227,6 +227,12 @@ app:
   social:
     mock:
       enabled: ${SOCIAL_MOCK_ENABLED:false}  # 로컬 개발 전용 — 프로덕션은 반드시 false
+  payment:
+    reconcile:
+      # ADR-059 — PENDING 결제 적체 청소. 방금 만들어진 건은 아직 확정 중일 수 있어 건드리지 않고,
+      # PG가 "그런 결제 없다"고 답하는 상태로 abandon-after-hours 가 지나면 실패로 닫는다.
+      stale-after-minutes: ${PAYMENT_RECONCILE_STALE_AFTER_MINUTES:10}
+      abandon-after-hours: ${PAYMENT_RECONCILE_ABANDON_AFTER_HOURS:72}
   pg:
     mock:
       enabled: ${PG_MOCK_ENABLED:true}        # 로컬 개발 전용 — 프로덕션은 반드시 false

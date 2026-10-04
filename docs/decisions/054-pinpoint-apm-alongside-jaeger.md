@@ -128,6 +128,53 @@ tarball을 실제로 받아 내용을 확인해보니 루트에 **버전 없는 
 샘플링 10, OTel 이중 계측 off, SQL 바인딩 off, Kafka·RestTemplate·logback txId on,
 `pinpoint agent started normally`.
 
+### 그리고 스택 자체가 기동할 수 없었다
+
+위 설정 결함을 고친 뒤 `--profile pinpoint`로 실제로 올려보려 했다. **한 단계도 넘어가지 못했다.**
+막힌 지점을 순서대로 적는다 — 전부 compose 파일의 문제였고, 하나하나가 독립적으로 치명적이었다.
+
+| # | 증상 | 원인 |
+|---|---|---|
+| 1 | HBase 가 `KeeperErrorCode = OperationTimeout` 으로 영원히 맴돈다 | 이미지의 `hbase-site.xml` 에 `hbase.cluster.distributed=true` 와 `hbase.zookeeper.quorum=zoo1,zoo2,zoo3` 가 **구워져** 있다. compose 에 zoo1~3 이 없었다 |
+| 2 | HBase 가 영원히 `unhealthy` | healthcheck 가 `hbase zkcli -server localhost:2181` — ZK 가 이 컨테이너 안에 있다는 전제(틀렸다)에, `hbase` 가 비로그인 `sh` 의 PATH 에도 없다 |
+| 3 | 2번을 고쳤는데도 `unhealthy` | compose 가 healthcheck 문자열의 `$HBASE_HOME` 을 **호스트** 환경변수로 치환해 빈 문자열로 만든다 → `/bin/hbase`. `$$` 로 이스케이프해야 한다 |
+| 4 | collector/web 이 2181 에 `Connection refused` | `PINPOINT_ZOOKEEPER_ADDRESS: pinpoint-hbase` — 1번과 같은 오해 |
+| 5 | collector/web 이 부팅을 거부 | **`pinpoint-hbase:2.5.4` 는 HBase 1.2.6 을 담고 collector/web `3.1.0` 은 HBase 2.x 를 요구한다.** `HBase version compatibility violation … supportedVersion=[2.] V2, HBaseServer:1.2.6`. 태그 라인이 어긋나 있었다 |
+| 6 | HBase 마스터가 `hbase:meta is NOT online` 으로 멈춘다 | hbase 볼륨만 지우고 ZooKeeper 를 그대로 뒀다. HBase 상태는 ZK 에도 있다 — 죽은 이전 컨테이너 호스트명이 `/hbase` znode 에 남아 있었다 |
+| 7 | 마스터가 `session … has expired` 뒤 `aborting server` | ZooKeeper 는 세션 타임아웃을 `20 × tickTime`(기본 **40s**)으로 상한을 건다. HBase 는 90s 를 요청하지만 깎인다. 에뮬레이션 환경의 GC·스톨이 40s 를 넘긴다 |
+| 8 | 마스터가 `TraceV2` 리전 생성 중 로그도 없이 사라진다 | 힙 부족. `-XX:OnOutOfMemoryError=kill -9 %p` 라 **아무 기록도 남지 않는다**. 반대로 크게 주면 master+regionserver 두 JVM 합이 Docker VM 을 넘겨 같은 결과가 된다 |
+
+5번이 특히 분명한 증거다. **collector 와 web 은 이 compose 파일로 단 한 번도 부팅한 적이 없다** —
+HBase 버전이 맞지 않아 컨텍스트 생성 단계에서 거부하므로, 누군가 한 번이라도 올려봤다면 즉시 터졌을
+것이다. 이미지 태그 세 개가 서로 맞는지 아무도 확인하지 않았다는 뜻이다.
+
+1~7 은 compose 에서 고쳤다(ZooKeeper 서비스 1대에 `zoo1/zoo2/zoo3` 을 alias 로 붙여 업스트림의
+ZK 3대 대신 쓴다 — 로컬 프로파일링에 ZK 고가용성은 필요 없다). 8 은 환경 문제라 힙 기본값과
+전제조건을 주석으로 남겼다.
+
+**그래도 이 머신에서는 끝까지 못 갔다.** 1~7 을 고친 뒤 HBase 는 ZooKeeper 에 붙고 마스터가
+뜨고 healthcheck 도 통과하지만, 스키마 15개 중 마지막 `TraceV2`(리전 수백 개로 사전 분할된다)를
+만드는 도중 마스터가 **로그 한 줄 없이 사라진다**. 힙을 1.5GB·2.5GB 로 바꿔가며 여러 번 재시도했고,
+한 번은 40초 만에 15개가 다 생겼다가 다시 같은 지점에서 죽었다 — 재현이 불안정하다.
+
+조건: Apple Silicon에서 `linux/amd64` 전용 이미지를 QEMU 에뮬레이션으로 돌리고, Docker VM 7.65GB
+중 약 2.5GB를 다른 프로젝트 컨테이너가 쓰고 있었다. master·regionserver 두 JVM 이 각각 `-Xmx` 를
+받으므로 남은 메모리로는 빠듯하다. **이건 리포의 결함이 아니라 환경 한계로 본다** — 다만 "본
+것"과 "못 본 것"을 섞지 않기 위해 여기 적는다.
+
+따라서 **end-to-end 검증은 여전히 미완이다.** 지금까지 확인된 것과 아직 아닌 것:
+
+| | 상태 |
+|---|---|
+| 에이전트가 설정을 읽고 collector 주소·샘플링·플러그인을 의도대로 해석한다 | ✅ 실측 (배너 `GrpcTransportConfig`) |
+| ZooKeeper·HBase 가 기동하고 Pinpoint 스키마가 만들어진다 | 🟡 한 번 성공(15/15), 재현 불안정 |
+| collector·web 이 부팅한다 | ❌ HBase 스키마가 안정되기 전까지 확인 불가 |
+| 에이전트 → collector → HBase → UI 에 트랜잭션이 찍힌다 | ❌ **미확인** |
+
+다음 시도 전 전제조건: Docker VM 메모리를 8GB 이상으로 올리고, 다른 프로젝트 컨테이너를 내린
+상태에서 `--profile pinpoint` 만 띄운다. 그리고 `TraceV2` 가 생성될 때까지(수 분) 기다린 뒤
+collector/web 을 올린다.
+
 같은 맥락에서 하나 더 나왔다. 결제 PG 브레이커(`tossPg`,
 [ADR-053](053-payment-idempotency-and-failure-classification.md))가 알람 분류에서
 `NonBrokerCircuitOpen`(warning, 5분)에 섞여 있었다. 그 알람의 전제는 **"폴백이 있어 사용자가

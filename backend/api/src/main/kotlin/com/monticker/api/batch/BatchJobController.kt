@@ -25,6 +25,7 @@ class BatchJobController(
     @Qualifier("candleBackfillJob")       private val backfillJob: Job,
     @Qualifier("ledgerReconciliationJob") private val ledgerReconciliationJob: Job,
     @Qualifier("subscriptionRenewalJob")  private val subscriptionRenewalJob: Job,
+    @Qualifier("paymentReconciliationJob") private val paymentReconciliationJob: Job,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -95,6 +96,26 @@ class BatchJobController(
         // 실패한 잡에 200을 돌려주면 안 된다. CH-13을 처음 돌렸을 때 이 엔드포인트가 200을
         // 내주는 바람에, 배치가 매번 NoSuchMethodException으로 죽고 있다는 사실이 응답만
         // 봐서는 전혀 보이지 않았다(ADR-053).
+        return if (execution.status.isUnsuccessful) ResponseEntity.internalServerError().body(body)
+               else ResponseEntity.ok(body)
+    }
+
+    /**
+     * PENDING 결제 적체 정리 수동 실행 (ADR-059) — PG 장애 복구 직후 6시간을 기다리지 않고 돌린다.
+     * 재실행이 안전하다: 판단이 전부 PG 재조회에서 나오고 확정된 건은 더 이상 읽히지 않는다.
+     */
+    @PostMapping("/payment-reconciliation")
+    fun triggerPaymentReconciliation(): ResponseEntity<Map<String, Any>> {
+        val execution = jobLauncher.run(paymentReconciliationJob, JobParametersBuilder()
+            .addLong("runId", System.currentTimeMillis())
+            .toJobParameters())
+        val step = execution.stepExecutions.firstOrNull()
+        val body = mapOf(
+            "jobName" to "paymentReconciliationJob",
+            "status" to execution.status.name,
+            "processed" to (step?.writeCount ?: 0L),
+            "skipped" to (step?.skipCount ?: 0L),
+        )
         return if (execution.status.isUnsuccessful) ResponseEntity.internalServerError().body(body)
                else ResponseEntity.ok(body)
     }

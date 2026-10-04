@@ -1,6 +1,7 @@
 package com.monticker.api.subscription.application
 
 import com.monticker.api.common.exception.BusinessRuleException
+import com.monticker.api.common.metrics.PaymentMetrics
 import com.monticker.api.subscription.domain.*
 import com.monticker.api.subscription.infrastructure.PaymentRecordRepository
 import com.monticker.api.subscription.infrastructure.SubscriptionPlanRepository
@@ -15,6 +16,7 @@ import com.monticker.api.subscription.infrastructure.pg.PaymentStatusResult
 import com.monticker.api.subscription.infrastructure.pg.PgClient
 import com.monticker.api.subscription.infrastructure.pg.RefundResult
 import com.monticker.api.wallet.application.LedgerService
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.*
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -33,8 +35,9 @@ class SubscriptionServiceTest {
     private val pgClient         = MockPgClient()          // 실제 Mock PG 사용
     private val ledgerService    = mockk<LedgerService>(relaxed = true)
     private val billingKeyRepo   = mockk<UserBillingKeyRepository>()
+    private val paymentMetrics   = PaymentMetrics(SimpleMeterRegistry())
 
-    private val service = SubscriptionService(planRepo, subscriptionRepo, paymentRepo, pgClient, ledgerService, billingKeyRepo)
+    private val service = SubscriptionService(planRepo, subscriptionRepo, paymentRepo, pgClient, ledgerService, billingKeyRepo, paymentMetrics)
 
     // ── subscribe ─────────────────────────────────────────────────────────────
 
@@ -91,24 +94,98 @@ class SubscriptionServiceTest {
     @Test
     fun `activateConfirmedSubscription은 pgClient를 다시 호출하지 않고 바로 구독을 활성화한다`() {
         val proPlan = makePlan(PlanCode.PRO, price = BigDecimal("9900"))
-        val record  = makePaymentRecord(proPlan)
+        val record  = makePaymentRecord(proPlan).also { it.status = PaymentStatus.PENDING }
         val sub     = makeSubscription(proPlan)
         val spyPgClient = spyk(pgClient)
-        val serviceWithSpy = SubscriptionService(planRepo, subscriptionRepo, paymentRepo, spyPgClient, ledgerService, billingKeyRepo)
+        val serviceWithSpy = SubscriptionService(planRepo, subscriptionRepo, paymentRepo, spyPgClient, ledgerService, billingKeyRepo, paymentMetrics)
 
-        every { planRepo.findByCode(PlanCode.PRO) } returns Optional.of(proPlan)
-        every { subscriptionRepo.findByUserId(1L) } returns Optional.of(sub)
-        every { paymentRepo.save(any()) }            returns record
-        every { subscriptionRepo.save(any()) }        returns sub
+        every { paymentRepo.findByPgOrderId("sub_1_abc") } returns Optional.of(record)
+        every { subscriptionRepo.findByUserId(1L) }        returns Optional.of(sub)
+        every { paymentRepo.save(any()) }                   returns record
+        every { subscriptionRepo.save(any()) }               returns sub
 
         val result = serviceWithSpy.activateConfirmedSubscription(
-            userId = 1L, planCode = PlanCode.PRO, pgTransactionId = "toss_already_confirmed_tx",
+            userId = 1L, orderId = "sub_1_abc", pgTransactionId = "toss_already_confirmed_tx",
         )
 
         assertThat(result.success).isTrue()
         assertThat(result.paymentId).isEqualTo(record.id)
         verify(exactly = 0) { spyPgClient.requestPayment(any()) }
         verify { ledgerService.recordSubscriptionPayment(1L, "PRO", BigDecimal("9900"), any()) }
+    }
+
+    // ── ADR-059: 일회성 결제도 서버가 orderId·금액을 쥔다 ─────────────────────
+
+    @Test
+    fun `preparePayment는 서버 생성 orderId와 플랜 가격을 PENDING 기록으로 남긴다`() {
+        val proPlan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val saved = slot<PaymentRecord>()
+        every { planRepo.findByCode(PlanCode.PRO) } returns Optional.of(proPlan)
+        every { paymentRepo.save(capture(saved)) }   answers { saved.captured }
+
+        val prepared = service.preparePayment(userId = 1L, planCode = PlanCode.PRO)
+
+        assertThat(prepared.orderId).startsWith("sub_1_")
+        assertThat(prepared.amount).isEqualByComparingTo(BigDecimal("9900"))
+        assertThat(saved.captured.pgOrderId).isEqualTo(prepared.orderId)
+        assertThat(saved.captured.status).isEqualTo(PaymentStatus.PENDING)
+    }
+
+    @Test
+    fun `preparePayment는 같은 사용자가 두 번 호출해도 서로 다른 orderId를 준다`() {
+        // 멱등 키는 요청마다 달라야 한다 — 같으면 두 번째 결제가 DB 유니크에 막힌다.
+        val proPlan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        every { planRepo.findByCode(PlanCode.PRO) } returns Optional.of(proPlan)
+        every { paymentRepo.save(any()) }            answers { firstArg() }
+
+        val a = service.preparePayment(1L, PlanCode.PRO)
+        val b = service.preparePayment(1L, PlanCode.PRO)
+
+        assertThat(a.orderId).isNotEqualTo(b.orderId)
+    }
+
+    @Test
+    fun `무료 플랜은 결제를 준비하지 않는다`() {
+        val freePlan = makePlan(PlanCode.FREE, BigDecimal.ZERO)
+        every { planRepo.findByCode(PlanCode.FREE) } returns Optional.of(freePlan)
+
+        assertThrows<IllegalArgumentException> { service.preparePayment(1L, PlanCode.FREE) }
+        verify(exactly = 0) { paymentRepo.save(any()) }
+    }
+
+    @Test
+    fun `이미 확정된 주문을 다시 활성화하면 구독을 건드리지 않고 그 결과를 돌려준다`() {
+        val proPlan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val paid    = makePaymentRecord(proPlan)   // status = SUCCESS
+        every { paymentRepo.findByPgOrderId("sub_1_abc") } returns Optional.of(paid)
+
+        val result = service.activateConfirmedSubscription(1L, "sub_1_abc", "tx_second")
+
+        assertThat(result.success).isTrue()
+        assertThat(result.paymentId).isEqualTo(paid.id)
+        assertThat(paid.pgTransactionId).isNull()   // 첫 확정의 txId 를 덮어쓰지 않는다
+        verify(exactly = 0) { subscriptionRepo.save(any()) }
+        verify(exactly = 0) { ledgerService.recordSubscriptionPayment(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `남의 orderId로는 확정할 수 없다`() {
+        val proPlan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val other   = makePaymentRecord(proPlan).also { it.status = PaymentStatus.PENDING }
+        every { paymentRepo.findByPgOrderId("sub_1_abc") } returns Optional.of(other)   // userId = 1
+
+        assertThrows<IllegalArgumentException> {
+            service.activateConfirmedSubscription(userId = 999L, orderId = "sub_1_abc", pgTransactionId = "tx")
+        }
+    }
+
+    @Test
+    fun `findPreparedPayment는 다른 사용자의 주문을 돌려주지 않는다`() {
+        val proPlan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        every { paymentRepo.findByPgOrderId("sub_1_abc") } returns Optional.of(makePaymentRecord(proPlan))
+
+        assertThat(service.findPreparedPayment(1L, "sub_1_abc")).isNotNull()
+        assertThat(service.findPreparedPayment(999L, "sub_1_abc")).isNull()
     }
 
     // ── renewSubscription ────────────────────────────────────────────────────
@@ -154,7 +231,7 @@ class SubscriptionServiceTest {
             id = 1L, userId = 1L, customerKey = "cust_1", billingKeyValue = "billing_key_1",
         )
         val spyPgClient = spyk(pgClient)
-        val serviceWithSpy = SubscriptionService(planRepo, subscriptionRepo, paymentRepo, spyPgClient, ledgerService, billingKeyRepo)
+        val serviceWithSpy = SubscriptionService(planRepo, subscriptionRepo, paymentRepo, spyPgClient, ledgerService, billingKeyRepo, paymentMetrics)
 
         every { billingKeyRepo.findByUserId(1L) } returns Optional.of(billingKey)
         stubRenewal(record)
@@ -229,7 +306,7 @@ class SubscriptionServiceTest {
         val sub    = makeSubscription(plan)
         val paid   = makePaymentRecord(plan).also { it.status = PaymentStatus.SUCCESS }
         val spyPg  = spyk(pgClient)
-        val svc    = SubscriptionService(planRepo, subscriptionRepo, paymentRepo, spyPg, ledgerService, billingKeyRepo)
+        val svc    = SubscriptionService(planRepo, subscriptionRepo, paymentRepo, spyPg, ledgerService, billingKeyRepo, paymentMetrics)
 
         every { paymentRepo.findByPgOrderId(any()) } returns Optional.of(paid)
         every { subscriptionRepo.save(any()) }        returns sub
@@ -372,6 +449,109 @@ class SubscriptionServiceTest {
         assertThat(sub.plan.code).isEqualTo(PlanCode.FREE)
     }
 
+    // ── ADR-059: PENDING 적체 정리와 원장 누락 ────────────────────────────────
+
+    @Test
+    fun `갱신 성공도 원장에 기록된다`() {
+        // 오래된 결함: 성공 경로가 세 곳(일회성 확정 / 갱신 성공 / 불확정 복구)에 흩어져 있었고
+        // **원장 기록은 일회성 경로에만** 있었다. 즉 정기결제가 성공해도 SUBSCRIPTION_PAYMENT
+        // 원장 행이 생기지 않았다 — 돈은 움직이고 회계는 비는 상태.
+        // verify.py 의 "성공 결제 수 == 원장 행 수" 불변식이 이걸 잡으려고 있는 것이고,
+        // 갱신 배치가 한 번도 돌지 않았기 때문에 드러나지 않았을 뿐이다.
+        val plan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val sub  = makeSubscription(plan)
+        val rec  = makePaymentRecord(plan).also { it.status = PaymentStatus.PENDING }
+        val svc  = serviceWith(FakePgClient(charge = PaymentResult(true, pgTransactionId = "tx_renew")))
+
+        every { billingKeyRepo.findByUserId(1L) }   returns Optional.of(billingKey())
+        every { subscriptionRepo.findByUserId(1L) } returns Optional.of(sub)
+        every { subscriptionRepo.save(any()) }      returns sub
+        stubRenewal(rec)
+
+        assertThat(svc.renewSubscription(sub)).isEqualTo(RenewResult.Renewed)
+
+        verify { ledgerService.recordSubscriptionPayment(1L, "PRO", BigDecimal("9900"), rec.id) }
+    }
+
+    @Test
+    fun `불확정 복구로 성공 처리된 결제도 원장에 기록된다`() {
+        val plan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val sub  = makeSubscription(plan)
+        val rec  = makePaymentRecord(plan).also { it.status = PaymentStatus.PENDING }
+        val svc  = serviceWith(FakePgClient(
+            lookup = PaymentStatusResult(found = true, status = "DONE", paymentKey = "pay_x")))
+
+        every { paymentRepo.save(any()) }            returns rec
+        every { subscriptionRepo.findByUserId(1L) }  returns Optional.of(sub)
+        every { subscriptionRepo.save(any()) }       returns sub
+
+        assertThat(svc.resolvePendingPayment(rec)).isEqualTo(PaymentResolution.PAID)
+
+        assertThat(rec.status).isEqualTo(PaymentStatus.SUCCESS)
+        verify { ledgerService.recordSubscriptionPayment(1L, "PRO", BigDecimal("9900"), rec.id) }
+    }
+
+    @Test
+    fun `PG가 결제 없음이라 하면 아무것도 확정하지 않는다`() {
+        val plan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val rec  = makePaymentRecord(plan).also { it.status = PaymentStatus.PENDING }
+        val svc  = serviceWith(FakePgClient(lookup = PaymentStatusResult(found = false)))
+
+        assertThat(svc.resolvePendingPayment(rec)).isEqualTo(PaymentResolution.NOT_CHARGED)
+
+        assertThat(rec.status).isEqualTo(PaymentStatus.PENDING)   // 닫지 않는다 — 다시 긁어도 안전
+        verify(exactly = 0) { ledgerService.recordSubscriptionPayment(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `PG 조회가 실패하면 판단을 미룬다`() {
+        val plan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val rec  = makePaymentRecord(plan).also { it.status = PaymentStatus.PENDING }
+        val svc  = serviceWith(FakePgClient(lookup = PaymentStatusResult(found = false, lookupFailed = true)))
+
+        assertThat(svc.resolvePendingPayment(rec)).isEqualTo(PaymentResolution.DEFERRED)
+        assertThat(rec.status).isEqualTo(PaymentStatus.PENDING)
+    }
+
+    @Test
+    fun `PG가 취소라고 답하면 실패로 닫는다`() {
+        val plan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val rec  = makePaymentRecord(plan).also { it.status = PaymentStatus.PENDING }
+        val svc  = serviceWith(FakePgClient(
+            lookup = PaymentStatusResult(found = true, status = "CANCELED")))
+
+        every { paymentRepo.save(any()) } returns rec
+
+        assertThat(svc.resolvePendingPayment(rec)).isEqualTo(PaymentResolution.FAILED)
+        assertThat(rec.status).isEqualTo(PaymentStatus.FAILED)
+        assertThat(rec.failureReason).contains("CANCELED")
+    }
+
+    @Test
+    fun `orderId가 없는 결제는 PG에 되물을 수 없으므로 건드리지 않는다`() {
+        // confirm 플로우 이전의 구식 기록. 열쇠가 없으면 판단할 방법도 없다.
+        val plan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val rec  = PaymentRecord(id = 1L, userId = 1L, plan = plan, amount = plan.price,
+                                 pgOrderId = null, status = PaymentStatus.PENDING)
+        val fake = FakePgClient()
+        val svc  = serviceWith(fake)
+
+        assertThat(svc.resolvePendingPayment(rec)).isEqualTo(PaymentResolution.NOT_CHARGED)
+        assertThat(fake.lookupCalls).isZero()
+    }
+
+    @Test
+    fun `오래된 PENDING은 실패로 닫힌다`() {
+        val plan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val rec  = makePaymentRecord(plan).also { it.status = PaymentStatus.PENDING }
+        every { paymentRepo.save(any()) } returns rec
+
+        service.expirePendingPayment(rec, "72시간 동안 PG에 결제 기록이 없었습니다.")
+
+        assertThat(rec.status).isEqualTo(PaymentStatus.FAILED)
+        assertThat(rec.failureReason).contains("72시간")
+    }
+
     // ── cancel ────────────────────────────────────────────────────────────────
 
     @Test
@@ -422,14 +602,16 @@ class SubscriptionServiceTest {
     private fun makeSubscription(plan: SubscriptionPlan, status: SubscriptionStatus = SubscriptionStatus.ACTIVE) =
         UserSubscription(id = 1L, userId = 1L, plan = plan, status = status)
 
+    /** pgOrderId 를 꼭 준다 — 그게 PG 에 되물을 유일한 열쇠이고, 없으면 판단 자체가 불가능하다. */
     private fun makePaymentRecord(plan: SubscriptionPlan) =
-        PaymentRecord(id = 99L, userId = 1L, plan = plan, amount = plan.price, status = PaymentStatus.SUCCESS)
+        PaymentRecord(id = 99L, userId = 1L, plan = plan, amount = plan.price,
+                      pgOrderId = "sub_1_abc", status = PaymentStatus.SUCCESS)
 
     private fun billingKey() =
         UserBillingKey(id = 1L, userId = 1L, customerKey = "cust_1", billingKeyValue = "billing_key_1")
 
     private fun serviceWith(pg: PgClient) =
-        SubscriptionService(planRepo, subscriptionRepo, paymentRepo, pg, ledgerService, billingKeyRepo)
+        SubscriptionService(planRepo, subscriptionRepo, paymentRepo, pg, ledgerService, billingKeyRepo, paymentMetrics)
 
     /**
      * 청구 결과와 재조회 결과를 미리 정해두는 PG. mockk 대신 쓰는 이유는 호출 횟수가

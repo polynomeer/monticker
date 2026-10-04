@@ -21,6 +21,7 @@ class BatchJobScheduler(
     @Qualifier("subscriptionRenewalJob")  private val subscriptionRenewalJob: Job,
     @Qualifier("brokerageSettlementJob")  private val brokerageSettlementJob: Job,
     @Qualifier("ledgerReconciliationJob") private val ledgerReconciliationJob: Job,
+    @Qualifier("paymentReconciliationJob") private val paymentReconciliationJob: Job,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -46,8 +47,14 @@ class BatchJobScheduler(
             .toJobParameters())
     }
 
-    // 매월 1일 01:00 KST — 만료 예정 구독 갱신 결제 시도
-    @Scheduled(cron = "0 0 1 1 * *", zone = "Asia/Seoul")
+    // **매일** 01:00 KST — 만료 예정(24시간 내) 구독 갱신 결제 시도.
+    //
+    // 예전에는 매월 1일이었다. 그런데 갱신은 PG 장애·불확정이면 FAILED 로 굳히지 않고 PENDING
+    // 으로 남겨 다음 실행에 넘긴다(ADR-053) — 그 "다음 실행"이 한 달 뒤면 보류된 고객의 구독이
+    // 한 달 밀린다. 잡은 (구독, 청구주기)에서 유도한 결정적 orderId 로 멱등하므로 매일 돌려도
+    // 같은 주기를 두 번 청구하지 않는다. 리더는 `expiresAt <= now + 1일` 만 집어가므로
+    // 평소 실행은 대상 0건이다 (ADR-059).
+    @Scheduled(cron = "0 0 1 * * *", zone = "Asia/Seoul")
     fun runSubscriptionRenewal() {
         log.info("Subscription renewal job starting...")
         runJob(subscriptionRenewalJob, JobParametersBuilder()
@@ -70,6 +77,20 @@ class BatchJobScheduler(
         log.info("Paper settlement job starting...")
         runJob(paperSettlementJob, JobParametersBuilder()
             .addString("date", LocalDate.now().toString())
+            .toJobParameters())
+    }
+
+    // 6시간마다 — PENDING 으로 남은 결제를 PG에 되물어 정리한다 (ADR-059).
+    //
+    // PG 장애 중에는 결제가 PENDING 으로 쌓이고, 그 중 일부는 **실제로 청구된** 건이다
+    // (고객은 돈을 냈는데 구독이 없는 상태). 갱신 배치는 만료 예정만 보므로 이걸 대신할 수 없다.
+    // runId 가 매번 달라 같은 시각 두 파드가 돌려도 양쪽 다 실행되지만, 판단이 전부 PG 재조회
+    // 결과에서 나오고 확정된 건은 더 이상 PENDING 이 아니라 읽히지 않으므로 안전하다.
+    @Scheduled(cron = "0 15 */6 * * *", zone = "Asia/Seoul")
+    fun runPaymentReconciliation() {
+        log.info("Payment reconciliation job starting...")
+        runJob(paymentReconciliationJob, JobParametersBuilder()
+            .addLong("runId", System.currentTimeMillis())
             .toJobParameters())
     }
 
