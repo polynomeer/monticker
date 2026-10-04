@@ -412,9 +412,12 @@ Redis를 실제로 죽여보는 CH-01을 지금 할 수 있다 — 다음 단계
 - **Jaeger가 인메모리다.** 트레이스도 pod 재시작과 함께 사라진다. 사후 분석용으로는 쓸 수 없다.
 - **Pinpoint는 K8s에 없다.** 로컬 프로파일링 전용이다
   ([ADR-054](decisions/054-pinpoint-apm-alongside-jaeger.md)에서 그게 의도된 범위임을 기록했다).
-  로컬에서도 **end-to-end로 돌려본 적이 없다** — ADR-054를 쓰다가 리포의 에이전트 설정이 한 번도
-  적용되지 않고 있었다는 것(collector 주소가 `127.0.0.1`)을 발견해 고쳤지만, HBase·collector·web을
-  전부 올려 UI에서 트랜잭션을 본 것은 아니다.
+  로컬에서도 **end-to-end로 돌려본 적이 없다.** ADR-054를 쓰다가 (1) 리포의 에이전트 설정이 한 번도
+  적용되지 않고 있었고(collector 주소가 `127.0.0.1`), (2) **compose 의 Pinpoint 스택 자체가 기동할 수
+  없는 상태**였다는 것을 발견해 고쳤다 — ZooKeeper 서비스 누락, healthcheck 2중 결함, collector 의
+  ZK 주소 오류, **hbase 이미지(HBase 1.2.6)와 collector/web 3.1.0(HBase 2.x 요구) 버전 불일치**.
+  그래도 HBase 스키마 초기화가 이 머신(Apple Silicon + amd64 에뮬레이션, VM 7.6GB 공유)에서 안정되지
+  않아 UI까지는 확인하지 못했다.
 
 ### 4.2 계층 구조
 

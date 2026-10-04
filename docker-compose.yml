@@ -416,22 +416,80 @@ services:
   #   PINPOINT_COLLECTOR_IP: pinpoint-collector
   #   PINPOINT_AGENT_ID: monticker-api-1     (인스턴스마다 고유값)
   #   PINPOINT_APP_NAME: monticker-api
+  # pinpoint-hbase 이미지는 hbase-site.xml 에 hbase.cluster.distributed=true 와
+  # hbase.zookeeper.quorum=zoo1,zoo2,zoo3 이 **구워져** 있다(이미지 안에서 직접 확인).
+  # 그래서 zoo1/zoo2/zoo3 이 없으면 HBase 가 ZooKeeper 에 영원히 붙지 못하고
+  # `KeeperErrorCode = OperationTimeout` 으로 맴돈다 — 이 세 서비스가 compose 에 없던 동안
+  # Pinpoint 스택은 **한 번도 기동한 적이 없다**(ADR-054).
+  #
+  # 업스트림처럼 ZK 3대를 띄우는 대신 1대에 세 이름을 alias 로 붙인다. 로컬 프로파일링용이라
+  # ZK 고가용성이 필요 없고, 7GB 로컬 VM 에 컨테이너 2개를 더 올리지 않아도 된다.
+  # HBase 는 quorum 문자열의 세 항목 중 하나에 붙으면 되므로 같은 노드를 가리켜도 동작한다.
+  pinpoint-zookeeper:
+    image: zookeeper:3.8
+    container_name: monticker-pinpoint-zookeeper
+    environment:
+      ZOO_4LW_COMMANDS_WHITELIST: "ruok,srvr,conf"
+      ZOO_STANDALONE_ENABLED: "true"
+      # ZooKeeper 는 세션 타임아웃을 20 × tickTime(기본 40s)으로 **상한**을 건다. HBase 는 90s 를
+      # 요청하지만 ZK 가 40s 로 깎고, 에뮬레이션 환경에서 리전 수백 개를 만드는 동안의 GC·스톨이
+      # 그걸 쉽게 넘긴다. 그러면 세션이 만료되고 **마스터가 abort** 한다 — 실제로 그렇게 죽었다
+      # (로그: "session … has expired" → "aborting server").
+      ZOO_CFG_EXTRA: "maxSessionTimeout=180000 minSessionTimeout=4000"
+    networks:
+      default:
+        aliases: [zoo1, zoo2, zoo3]
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | nc -w 2 localhost 2181 | grep -q imok"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    profiles:
+      - pinpoint
+
   pinpoint-hbase:
-    image: pinpointdocker/pinpoint-hbase:2.5.4
+    # 태그는 collector/web/agent 와 **반드시 같은 메이저 라인**이어야 한다.
+    # 2.5.4 로 고정돼 있던 동안 이 이미지는 HBase 1.2.6 을 담고 있었고, collector/web 3.1.0 은
+    # HBase 2.x 를 요구해서 둘 다 부팅 자체를 거부했다:
+    #   "HBase version compatibility violation HBaseClient:…supportedVersion=[2.] V2, HBaseServer:1.2.6"
+    # 3.1.0 은 HBase 2.2.6 을 담는다(이미지 안에서 확인).
+    image: pinpointdocker/pinpoint-hbase:3.1.0
     container_name: monticker-pinpoint-hbase
     environment:
       HBASE_MASTER_PORT: 16000
       HBASE_MASTER_INFO_PORT: 16010
       HBASE_REGIONSERVER_PORT: 16020
       HBASE_REGIONSERVER_INFO_PORT: 16030
+      # 이 값은 master·regionserver **각각**에 -Xmx 로 걸린다. 기본 1GB 로는 TraceV2 의 리전을
+      # 만드는 동안 master 가 사라지고(`-XX:OnOutOfMemoryError=kill -9 %p` 이라 로그에 아무것도
+      # 남지 않는다), 너무 크게 주면 두 JVM 합이 Docker VM 을 넘겨 같은 결과가 된다.
+      # Apple Silicon 에서는 amd64 에뮬레이션까지 겹쳐 특히 빠듯하다 —
+      # **Docker VM 메모리를 8GB 이상 주고, 다른 프로젝트 컨테이너를 내린 상태에서** 띄우는 게 낫다.
+      HBASE_HEAPSIZE: ${HBASE_HEAPSIZE:-1536}
+    # 이 이미지는 linux/amd64 전용이다 — Apple Silicon 에서는 QEMU 에뮬레이션으로 돌아가
+    # 스키마 초기화가 수 분 걸린다. 명시해 두면 docker 가 매번 경고를 찍지 않는다.
+    platform: linux/amd64
     volumes:
       - pinpoint_hbase_data:/home/pinpoint/hbase
+    depends_on:
+      pinpoint-zookeeper:
+        condition: service_healthy
+    # 예전 healthcheck 는 `hbase zkcli -server localhost:2181` 이었다. 두 군데가 틀렸다:
+    # (1) ZooKeeper 가 이 컨테이너 안에 있다는 전제인데 이 이미지는 외부 ZK 를 쓴다,
+    # (2) `hbase` 가 비로그인 sh 의 PATH 에 없다($$HBASE_HOME/bin 에만 있다).
+    # 그래서 영원히 unhealthy 였고, depends_on: service_healthy 를 건 collector/web 은
+    # 아예 기동하지 못했다.
+    # 이제 Pinpoint 가 실제로 필요한 것, 즉 **스키마 테이블이 만들어졌는지**를 본다
+    # (초기화 스크립트의 마지막 단계가 check-table.sh 다).
     healthcheck:
-      test: ["CMD-SHELL", "echo ruok | hbase zkcli -server localhost:2181 2>/dev/null | grep -q imok"]
+      # $$ 로 써야 한다 — compose 가 $HBASE_HOME 을 호스트 환경변수로 치환해 빈 문자열로 만든다
+      # (`/bin/hbase` 가 되어 또 영원히 unhealthy 였다. compose config 로 렌더링을 확인했다).
+      test: ["CMD-SHELL", "echo \"exists 'AgentInfo'\" | $$HBASE_HOME/bin/hbase shell -n 2>/dev/null | grep -q 'does exist'"]
       interval: 15s
-      timeout: 10s
-      retries: 20
-      start_period: 90s
+      timeout: 20s
+      retries: 24
+      start_period: 60s
     profiles:
       - pinpoint
 
@@ -444,11 +502,15 @@ services:
       - "9993:9993"   # gRPC span channel
     environment:
       SPRING_PROFILES_ACTIVE: release
-      PINPOINT_ZOOKEEPER_ADDRESS: pinpoint-hbase
+      # ZooKeeper 는 pinpoint-hbase 안에 없다(이 이미지는 외부 ZK 를 쓴다 — pinpoint-zookeeper 주석 참고).
+      # pinpoint-hbase 를 가리키던 동안 collector/web 은 2181 에 Connection refused 로 맴돌았다.
+      PINPOINT_ZOOKEEPER_ADDRESS: pinpoint-zookeeper
       COLLECTOR_RECEIVER_GRPC_AGENT_PORT: 9991
       COLLECTOR_RECEIVER_GRPC_STAT_PORT: 9992
       COLLECTOR_RECEIVER_GRPC_SPAN_PORT: 9993
     depends_on:
+      pinpoint-zookeeper:
+        condition: service_healthy
       pinpoint-hbase:
         condition: service_healthy
     healthcheck:
@@ -467,9 +529,13 @@ services:
       - "18080:8080"   # Pinpoint UI (8080은 api 서비스와 충돌 — 호스트 포트 변경)
     environment:
       SPRING_PROFILES_ACTIVE: release
-      PINPOINT_ZOOKEEPER_ADDRESS: pinpoint-hbase
+      # ZooKeeper 는 pinpoint-hbase 안에 없다(이 이미지는 외부 ZK 를 쓴다 — pinpoint-zookeeper 주석 참고).
+      # pinpoint-hbase 를 가리키던 동안 collector/web 은 2181 에 Connection refused 로 맴돌았다.
+      PINPOINT_ZOOKEEPER_ADDRESS: pinpoint-zookeeper
       CLUSTER_ENABLE: "true"
     depends_on:
+      pinpoint-zookeeper:
+        condition: service_healthy
       pinpoint-hbase:
         condition: service_healthy
     healthcheck:

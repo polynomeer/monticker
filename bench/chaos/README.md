@@ -58,6 +58,11 @@ API=http://localhost:58080 STUB=http://localhost:59444 bench/chaos/ch13-pg-down.
 API=http://localhost:58080 STUB=http://localhost:59444 bench/chaos/ch14-pg-latency.sh
 ```
 
+> **Pinpoint APM 스택(`--profile pinpoint`)은 결제 실험과 무관하다.** 그쪽은
+> ADR-054 참고 — compose 의 Pinpoint 스택은 기동 결함 5건을 고친 뒤에도 Apple Silicon
+> 에뮬레이션 환경에서 HBase 스키마 초기화가 불안정하다. 띄워볼 때는 Docker VM 메모리를
+> 8GB 이상으로 올리고 다른 컨테이너를 내린 상태에서 시도할 것.
+
 스텁의 `GET /_stats` 가 **청구 횟수와 orderId 목록**을 돌려준다. 이중청구는 "같은 orderId 로 두 번
 왔는가"로만 증명되고, 그건 PG 쪽에서 세야 보인다 — 우리 DB 만 봐서는 청구가 나갔는지 알 수 없다.
 
