@@ -139,17 +139,12 @@ class SubscriptionService(
         record: PaymentRecord,
         pgTransactionId: String,
     ): SubscribeResult {
-        record.markSuccess(pgTransactionId)
-        paymentRepo.save(record)
-
+        // 구독 행이 없으면 먼저 만든다 — settlePayment 는 있는 구독만 연장한다.
         val subscription = getOrCreateSubscription(userId, plan)
-        subscription.upgrade(plan, expiresAt = Instant.now().plus(30, ChronoUnit.DAYS))
-        subscriptionRepo.save(subscription)
-
+        // 원장 금액은 기록의 금액이다(plan.price 가 아니라) — 준비 시점에 고정된 값이 과금의
+        // 근거이고, 그 사이 플랜 가격이 바뀌었더라도 고객이 실제로 낸 금액은 기록 쪽이다 (ADR-059).
+        settlePayment(record, pgTransactionId, subscription)
         log.info("구독 활성화: userId={} plan={} txId={}", userId, plan.code, pgTransactionId)
-        // 기록의 금액을 쓴다(plan.price 가 아니라) — 준비 시점에 고정된 값이 과금의 근거이고,
-        // 그 사이 플랜 가격이 바뀌었더라도 고객이 실제로 낸 금액은 기록 쪽이다 (ADR-059).
-        ledgerService.recordSubscriptionPayment(userId, plan.code.name, record.amount, record.id)
         return SubscribeResult.success(plan.code, paymentId = record.id)
     }
 
@@ -235,9 +230,7 @@ class SubscriptionService(
         )
 
         if (result.success) {
-            record.markSuccess(result.pgTransactionId!!)
-            paymentRepo.save(record)
-            extend(subscription, plan)
+            settlePayment(record, result.pgTransactionId!!, subscription)
             log.info("구독 갱신 성공: userId={} plan={}", subscription.userId, plan.code)
             return RenewResult.Renewed
         }
@@ -266,31 +259,13 @@ class SubscriptionService(
      *
      * @return 판정이 났으면 그 결과, 청구된 적이 없어 그냥 진행하면 되면 null.
      */
-    private fun reconcilePending(record: PaymentRecord, orderId: String): RenewResult? {
-        val status = pgClient.findPaymentByOrderId(orderId)
-
-        if (status.lookupFailed) {
-            // 조회조차 실패했다. "결제 안 됨"으로 읽으면 이중청구로 직행한다 — 판단을 미룬다.
-            log.warn("PG 재조회 실패 — 판단 보류: orderId={}", orderId)
-            return RenewResult.Deferred
+    private fun reconcilePending(record: PaymentRecord, orderId: String): RenewResult? =
+        when (resolvePendingPayment(record)) {
+            PaymentResolution.PAID        -> RenewResult.Renewed
+            PaymentResolution.FAILED      -> RenewResult.Failed
+            PaymentResolution.DEFERRED    -> RenewResult.Deferred
+            PaymentResolution.NOT_CHARGED -> null    // 청구해도 안전하다
         }
-        if (!status.found) return null    // 권위 있는 "없음". 청구해도 안전하다.
-
-        if (status.status == "DONE") {
-            log.warn("불확정이었으나 실제로는 청구되어 있었다 — 이중청구를 막았다: orderId={}", orderId)
-            record.markSuccess(status.paymentKey ?: orderId)
-            paymentRepo.save(record)
-            val subscription = subscriptionRepo.findByUserId(record.userId).orElse(null)
-                ?: return RenewResult.Renewed
-            extend(subscription, record.plan)
-            return RenewResult.Renewed
-        }
-
-        // CANCELED / ABORTED / EXPIRED — PG가 확정적으로 실패라고 말한다.
-        record.markFailed("PG 재조회 결과 ${status.status}")
-        paymentRepo.save(record)
-        return RenewResult.Failed
-    }
 
     private fun recordDecline(
         subscription: UserSubscription,
@@ -329,6 +304,71 @@ class SubscriptionService(
         subscriptionRepo.save(subscription)
     }
 
+    /**
+     * 결제 성공을 확정하는 **유일한** 자리 — 기록·원장·구독 연장을 한 번에 한다 (ADR-059).
+     *
+     * 예전에는 세 경로(일회성 확정 / 갱신 성공 / 불확정 복구)가 각자 markSuccess + extend 를
+     * 했고, **원장 기록은 일회성 경로에만 있었다.** 즉 정기결제가 성공해도
+     * `SUBSCRIPTION_PAYMENT` 원장 행이 생기지 않았다 — 돈은 움직이고 회계는 비는 상태다.
+     * `bench/consistency/verify.py` 의 "성공 결제 수 == 원장 행 수" 불변식이 바로 이걸 잡으려고
+     * 있는 것이고, 갱신 배치가 한 번도 돌지 않았기 때문에 드러나지 않았을 뿐이다.
+     */
+    private fun settlePayment(
+        record: PaymentRecord,
+        pgTransactionId: String,
+        /** 호출부가 이미 들고 있으면 넘긴다. 없으면 조회한다(적체 정리 경로). */
+        subscription: UserSubscription? = null,
+    ) {
+        record.markSuccess(pgTransactionId)
+        paymentRepo.save(record)
+        ledgerService.recordSubscriptionPayment(
+            record.userId, record.plan.code.name, record.amount, record.id,
+        )
+        val target = subscription ?: subscriptionRepo.findByUserId(record.userId).orElse(null)
+        target?.let { extend(it, record.plan) }
+    }
+
+    /**
+     * PENDING 으로 남은 결제 하나를 PG 에 물어 정리한다 (ADR-059).
+     *
+     * 갱신의 불확정 복구와 적체 청소 배치가 같은 코드를 쓴다 — 두 곳에 같은 판단을 적어두면
+     * 반드시 어긋난다. 판단 규칙은 하나다: **PG 만이 진실을 알고, 모르겠으면 미룬다.**
+     */
+    @Transactional
+    fun resolvePendingPayment(record: PaymentRecord): PaymentResolution {
+        val orderId = record.pgOrderId ?: return PaymentResolution.NOT_CHARGED
+        val status = pgClient.findPaymentByOrderId(orderId)
+
+        if (status.lookupFailed) {
+            // 조회조차 실패했다. "결제 안 됨"으로 읽으면 이중청구로 직행한다 — 판단을 미룬다.
+            log.warn("PG 재조회 실패 — 판단 보류: orderId={}", orderId)
+            return PaymentResolution.DEFERRED
+        }
+        if (!status.found) return PaymentResolution.NOT_CHARGED   // 권위 있는 "없음"
+
+        if (status.status == "DONE") {
+            log.warn("PENDING 이었으나 실제로는 청구되어 있었다 — 이중청구를 막았다: orderId={}", orderId)
+            settlePayment(record, status.paymentKey ?: orderId)
+            return PaymentResolution.PAID
+        }
+
+        // CANCELED / ABORTED / EXPIRED — PG가 확정적으로 실패라고 말한다.
+        record.markFailed("PG 재조회 결과 ${status.status}")
+        paymentRepo.save(record)
+        return PaymentResolution.FAILED
+    }
+
+    /**
+     * 권위 있는 "결제 없음" 상태로 너무 오래 남은 PENDING 을 닫는다 (ADR-059).
+     * 열어둔 채 두면 적체가 영원히 늘고, 그 사용자의 연속 실패 판정도 흐려진다.
+     */
+    @Transactional
+    fun expirePendingPayment(record: PaymentRecord, reason: String) {
+        record.markFailed(reason)
+        paymentRepo.save(record)
+        log.warn("오래된 PENDING 결제를 실패로 닫았다: id={} orderId={}", record.id, record.pgOrderId)
+    }
+
     companion object {
         const val MAX_RENEWAL_FAILURES = 3L
 
@@ -365,6 +405,18 @@ data class SubscribeResult(
         fun success(planCode: PlanCode, paymentId: Long?) = SubscribeResult(true, planCode, paymentId)
         fun failure(planCode: PlanCode, message: String) = SubscribeResult(false, planCode, null, message)
     }
+}
+
+/** PENDING 결제 하나를 PG 에 물어본 결과 (ADR-059). */
+enum class PaymentResolution {
+    /** PG 가 DONE 이라고 답했다 — 청구됐다. 기록·원장·구독을 확정했다. */
+    PAID,
+    /** PG 가 확정적으로 실패(CANCELED/ABORTED/EXPIRED)라고 답했다. */
+    FAILED,
+    /** 조회 자체가 실패했다. 아무것도 단정하지 않는다. */
+    DEFERRED,
+    /** PG 에 그 orderId 로 된 결제가 없다. 청구해도 안전하다. */
+    NOT_CHARGED,
 }
 
 sealed interface RenewResult {

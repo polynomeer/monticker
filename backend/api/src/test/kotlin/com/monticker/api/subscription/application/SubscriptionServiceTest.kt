@@ -446,6 +446,109 @@ class SubscriptionServiceTest {
         assertThat(sub.plan.code).isEqualTo(PlanCode.FREE)
     }
 
+    // ── ADR-059: PENDING 적체 정리와 원장 누락 ────────────────────────────────
+
+    @Test
+    fun `갱신 성공도 원장에 기록된다`() {
+        // 오래된 결함: 성공 경로가 세 곳(일회성 확정 / 갱신 성공 / 불확정 복구)에 흩어져 있었고
+        // **원장 기록은 일회성 경로에만** 있었다. 즉 정기결제가 성공해도 SUBSCRIPTION_PAYMENT
+        // 원장 행이 생기지 않았다 — 돈은 움직이고 회계는 비는 상태.
+        // verify.py 의 "성공 결제 수 == 원장 행 수" 불변식이 이걸 잡으려고 있는 것이고,
+        // 갱신 배치가 한 번도 돌지 않았기 때문에 드러나지 않았을 뿐이다.
+        val plan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val sub  = makeSubscription(plan)
+        val rec  = makePaymentRecord(plan).also { it.status = PaymentStatus.PENDING }
+        val svc  = serviceWith(FakePgClient(charge = PaymentResult(true, pgTransactionId = "tx_renew")))
+
+        every { billingKeyRepo.findByUserId(1L) }   returns Optional.of(billingKey())
+        every { subscriptionRepo.findByUserId(1L) } returns Optional.of(sub)
+        every { subscriptionRepo.save(any()) }      returns sub
+        stubRenewal(rec)
+
+        assertThat(svc.renewSubscription(sub)).isEqualTo(RenewResult.Renewed)
+
+        verify { ledgerService.recordSubscriptionPayment(1L, "PRO", BigDecimal("9900"), rec.id) }
+    }
+
+    @Test
+    fun `불확정 복구로 성공 처리된 결제도 원장에 기록된다`() {
+        val plan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val sub  = makeSubscription(plan)
+        val rec  = makePaymentRecord(plan).also { it.status = PaymentStatus.PENDING }
+        val svc  = serviceWith(FakePgClient(
+            lookup = PaymentStatusResult(found = true, status = "DONE", paymentKey = "pay_x")))
+
+        every { paymentRepo.save(any()) }            returns rec
+        every { subscriptionRepo.findByUserId(1L) }  returns Optional.of(sub)
+        every { subscriptionRepo.save(any()) }       returns sub
+
+        assertThat(svc.resolvePendingPayment(rec)).isEqualTo(PaymentResolution.PAID)
+
+        assertThat(rec.status).isEqualTo(PaymentStatus.SUCCESS)
+        verify { ledgerService.recordSubscriptionPayment(1L, "PRO", BigDecimal("9900"), rec.id) }
+    }
+
+    @Test
+    fun `PG가 결제 없음이라 하면 아무것도 확정하지 않는다`() {
+        val plan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val rec  = makePaymentRecord(plan).also { it.status = PaymentStatus.PENDING }
+        val svc  = serviceWith(FakePgClient(lookup = PaymentStatusResult(found = false)))
+
+        assertThat(svc.resolvePendingPayment(rec)).isEqualTo(PaymentResolution.NOT_CHARGED)
+
+        assertThat(rec.status).isEqualTo(PaymentStatus.PENDING)   // 닫지 않는다 — 다시 긁어도 안전
+        verify(exactly = 0) { ledgerService.recordSubscriptionPayment(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `PG 조회가 실패하면 판단을 미룬다`() {
+        val plan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val rec  = makePaymentRecord(plan).also { it.status = PaymentStatus.PENDING }
+        val svc  = serviceWith(FakePgClient(lookup = PaymentStatusResult(found = false, lookupFailed = true)))
+
+        assertThat(svc.resolvePendingPayment(rec)).isEqualTo(PaymentResolution.DEFERRED)
+        assertThat(rec.status).isEqualTo(PaymentStatus.PENDING)
+    }
+
+    @Test
+    fun `PG가 취소라고 답하면 실패로 닫는다`() {
+        val plan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val rec  = makePaymentRecord(plan).also { it.status = PaymentStatus.PENDING }
+        val svc  = serviceWith(FakePgClient(
+            lookup = PaymentStatusResult(found = true, status = "CANCELED")))
+
+        every { paymentRepo.save(any()) } returns rec
+
+        assertThat(svc.resolvePendingPayment(rec)).isEqualTo(PaymentResolution.FAILED)
+        assertThat(rec.status).isEqualTo(PaymentStatus.FAILED)
+        assertThat(rec.failureReason).contains("CANCELED")
+    }
+
+    @Test
+    fun `orderId가 없는 결제는 PG에 되물을 수 없으므로 건드리지 않는다`() {
+        // confirm 플로우 이전의 구식 기록. 열쇠가 없으면 판단할 방법도 없다.
+        val plan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val rec  = PaymentRecord(id = 1L, userId = 1L, plan = plan, amount = plan.price,
+                                 pgOrderId = null, status = PaymentStatus.PENDING)
+        val fake = FakePgClient()
+        val svc  = serviceWith(fake)
+
+        assertThat(svc.resolvePendingPayment(rec)).isEqualTo(PaymentResolution.NOT_CHARGED)
+        assertThat(fake.lookupCalls).isZero()
+    }
+
+    @Test
+    fun `오래된 PENDING은 실패로 닫힌다`() {
+        val plan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val rec  = makePaymentRecord(plan).also { it.status = PaymentStatus.PENDING }
+        every { paymentRepo.save(any()) } returns rec
+
+        service.expirePendingPayment(rec, "72시간 동안 PG에 결제 기록이 없었습니다.")
+
+        assertThat(rec.status).isEqualTo(PaymentStatus.FAILED)
+        assertThat(rec.failureReason).contains("72시간")
+    }
+
     // ── cancel ────────────────────────────────────────────────────────────────
 
     @Test
@@ -496,8 +599,10 @@ class SubscriptionServiceTest {
     private fun makeSubscription(plan: SubscriptionPlan, status: SubscriptionStatus = SubscriptionStatus.ACTIVE) =
         UserSubscription(id = 1L, userId = 1L, plan = plan, status = status)
 
+    /** pgOrderId 를 꼭 준다 — 그게 PG 에 되물을 유일한 열쇠이고, 없으면 판단 자체가 불가능하다. */
     private fun makePaymentRecord(plan: SubscriptionPlan) =
-        PaymentRecord(id = 99L, userId = 1L, plan = plan, amount = plan.price, status = PaymentStatus.SUCCESS)
+        PaymentRecord(id = 99L, userId = 1L, plan = plan, amount = plan.price,
+                      pgOrderId = "sub_1_abc", status = PaymentStatus.SUCCESS)
 
     private fun billingKey() =
         UserBillingKey(id = 1L, userId = 1L, customerKey = "cust_1", billingKeyValue = "billing_key_1")
