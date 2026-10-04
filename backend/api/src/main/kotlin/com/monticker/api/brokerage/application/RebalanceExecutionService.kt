@@ -92,14 +92,27 @@ class RebalanceExecutionService(
                 userId,
                 BrokerageOrderRequest(symbol = leg.symbol, side = leg.side.name, orderType = "MARKET", quantity = leg.quantity),
             )
-            if (order.status == BrokerageOrderStatus.REJECTED) {
-                saveLeg(executionId, leg, RebalanceLegStatus.FAILED, order.id, order.rejectReason)
-                log.warn("리밸런싱 leg 거부: executionId={} symbol={} reason={}", executionId, leg.symbol, order.rejectReason)
-                false
-            } else {
-                saveLeg(executionId, leg, RebalanceLegStatus.EXECUTED, order.id, null)
-                true
+            when {
+                order.status == BrokerageOrderStatus.REJECTED -> {
+                    saveLeg(executionId, leg, RebalanceLegStatus.FAILED, order.id, order.rejectReason)
+                    log.warn("리밸런싱 leg 거부: executionId={} symbol={} reason={}", executionId, leg.symbol, order.rejectReason)
+                    false
+                }
+                // ADR-056 — 결과 불명. 실패로 적으면 실제로 체결된 leg가 실패로 보인다. 해소는 주문 행이 따라간다.
+                order.status.isUnresolved -> {
+                    saveLeg(executionId, leg, RebalanceLegStatus.UNKNOWN, order.id, order.rejectReason)
+                    log.warn("리밸런싱 leg 결과 확인 중: executionId={} symbol={} orderId={}", executionId, leg.symbol, order.id)
+                    false
+                }
+                else -> {
+                    saveLeg(executionId, leg, RebalanceLegStatus.EXECUTED, order.id, null)
+                    true
+                }
             }
+        } catch (e: OrderOutcomeUnknownException) {
+            saveLeg(executionId, leg, RebalanceLegStatus.UNKNOWN, e.orderId, e.message)
+            log.warn("리밸런싱 leg 결과 확인 중: executionId={} symbol={} orderId={}", executionId, leg.symbol, e.orderId)
+            false
         } catch (e: Exception) {
             saveLeg(executionId, leg, RebalanceLegStatus.FAILED, null, e.message?.take(500) ?: "알 수 없는 오류")
             log.warn("리밸런싱 leg 실패: executionId={} symbol={} reason={}", executionId, leg.symbol, e.message)

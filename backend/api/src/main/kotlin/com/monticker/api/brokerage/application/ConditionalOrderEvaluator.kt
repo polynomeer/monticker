@@ -109,25 +109,45 @@ class ConditionalOrderEvaluator(
                     quantity = row.quantity,
                     limitPrice = row.limitPrice,
                 ),
+                // ADR-056 — 결정적 식별자. 발동 중 크래시하면 리퍼가 이 값으로 주문 행을 찾는다(없으면 미전송 확정).
+                clientOrderId = clientOrderIdFor(row.id),
             )
-            if (order.status == BrokerageOrderStatus.REJECTED) {
-                markFailed(row.id, order.rejectReason ?: "증권사 거부", order.id)
-                log.warn("[ConditionalOrderEvaluator] 증권사 거부: id={} userId={} reason={}", row.id, row.userId, order.rejectReason)
-            } else {
-                jdbc.update(
-                    "UPDATE conditional_orders SET status = 'EXECUTED', executed_order_id = ?, updated_at = ? WHERE id = ?",
-                    order.id, Timestamp.from(Instant.now()), row.id,
-                )
-                log.info("[ConditionalOrderEvaluator] 발동: id={} userId={} symbol={} orderId={}", row.id, row.userId, row.symbol, order.id)
+            when {
+                order.status == BrokerageOrderStatus.REJECTED -> {
+                    markFailed(row.id, order.rejectReason ?: "증권사 거부", order.id)
+                    log.warn("[ConditionalOrderEvaluator] 증권사 거부: id={} userId={} reason={}", row.id, row.userId, order.rejectReason)
+                }
+                order.status.isUnresolved -> keepTriggered(row, order.id)
+                else -> {
+                    jdbc.update(
+                        "UPDATE conditional_orders SET status = 'EXECUTED', executed_order_id = ?, updated_at = ? WHERE id = ?",
+                        order.id, Timestamp.from(Instant.now()), row.id,
+                    )
+                    log.info("[ConditionalOrderEvaluator] 발동: id={} userId={} symbol={} orderId={}", row.id, row.userId, row.symbol, order.id)
+                }
             }
+            row.ocoGroupId?.let { cancelOcoSiblings(it, row.id) }
+        } catch (e: OrderOutcomeUnknownException) {
+            // 의도는 커밋됐고 결과를 기록하지 못했다 — 주문이 나갔을 수 있다. FAILED로 단정하지 않는다.
+            keepTriggered(row, e.orderId)
             row.ocoGroupId?.let { cancelOcoSiblings(it, row.id) }
         } catch (e: Exception) {
             // ADR-032 — 실패 시 재시도하지 않는다(조건을 계속 만족하는 동안 매 틱마다
             // 재시도하면 같은 실패 요청이 반복 발사될 수 있다). 사용자가 재등록해야 한다.
+            // ADR-056 — OrderOutcomeUnknownException이 아닌 예외는 의도 커밋 전에 났다 → 증권사 호출이 없었다.
             markFailed(row.id, e.message?.take(500) ?: "알 수 없는 오류")
             log.warn("[ConditionalOrderEvaluator] 발동 실패: id={} userId={} reason={}", row.id, row.userId, e.message)
             row.ocoGroupId?.let { cancelOcoSiblings(it, row.id) }
         }
+    }
+
+    /** ADR-056 — 주문 결과를 모른다. TRIGGERED로 두고 주문만 연결한다 — 대조 잡이 주문을 해소하면 리퍼가 따라간다. */
+    private fun keepTriggered(row: ConditionalOrderRow, orderId: Long) {
+        jdbc.update(
+            "UPDATE conditional_orders SET executed_order_id = ?, updated_at = ? WHERE id = ?",
+            orderId, Timestamp.from(Instant.now()), row.id,
+        )
+        log.warn("[ConditionalOrderEvaluator] 발동 — 주문 결과 확인 중: id={} userId={} orderId={}", row.id, row.userId, orderId)
     }
 
     private fun markFailed(id: Long, reason: String, executedOrderId: Long? = null) {
@@ -143,5 +163,10 @@ class ConditionalOrderEvaluator(
             Timestamp.from(Instant.now()), groupId, executedId,
         )
         if (cancelled > 0) log.info("[ConditionalOrderEvaluator] OCO 형제 취소: groupId={} count={}", groupId, cancelled)
+    }
+
+    companion object {
+        /** ADR-056 — 조건부 주문 하나에 증권사 주문은 최대 하나다(client_order_id 유니크 인덱스). */
+        fun clientOrderIdFor(conditionalOrderId: Long) = "co-$conditionalOrderId"
     }
 }

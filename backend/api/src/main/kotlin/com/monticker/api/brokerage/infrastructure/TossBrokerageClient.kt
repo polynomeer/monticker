@@ -15,7 +15,6 @@ import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientException
 import java.math.BigDecimal
 import java.time.LocalDate
-import java.util.UUID
 
 /**
  * 토스증권 Open API 실 구현체.
@@ -125,13 +124,15 @@ class TossBrokerageClient(
 
     // ── 주문 ───────────────────────────────────────────────────────────────────
 
-    override fun submitOrder(credentials: BrokerageCredentials, request: BrokerageOrderRequest): BrokerageOrderResult {
+    override fun submitOrder(credentials: BrokerageCredentials, request: BrokerageOrderRequest, clientOrderId: String): BrokerageOrderResult {
         return try {
             cb.executeCallable {
                 val body = buildMap<String, Any> {
                     // 멱등성 키 — 서버가 자동 생성하지 않는다. 10분간 유효하며, 같은 값으로
-                    // 재요청하면 이전 주문 결과를 그대로 재반환한다.
-                    put("clientOrderId", UUID.randomUUID().toString())
+                    // 재요청하면 이전 주문 결과를 그대로 재반환한다. ADR-056 — 예전엔 호출마다 새 UUID를 만들고
+                    // 버려 멱등성이 무의미했다. 이제 BrokerageService가 주문 행에 먼저 저장한 값을 보낸다.
+                    // (재요청으로 결과를 확정하지는 않는다 — 원주문이 미도달이면 늦은 주문이 새로 나가기 때문.)
+                    put("clientOrderId", clientOrderId)
                     put("symbol", request.symbol)
                     put("side", request.side)
                     put("orderType", request.orderType)
@@ -151,16 +152,20 @@ class TossBrokerageClient(
                     .retrieve()
                     .body(TossOrderCreateEnvelope::class.java)
 
-                val orderId = resp?.result?.orderId ?: throw IllegalStateException("Toss 주문 응답에 orderId가 없습니다.")
-                log.info("[Toss] 주문 접수: orderId={}", orderId)
-                BrokerageOrderResult(pgOrderId = orderId, status = "SUBMITTED")
+                val orderId = resp?.result?.orderId
+                if (orderId.isNullOrBlank()) {
+                    // 2xx인데 orderId가 없다 — 접수됐을 수 있다.
+                    log.error("[Toss] 주문 응답에 orderId 없음: clientOrderId={}", clientOrderId)
+                    BrokerageOrderResult.indeterminate("증권사 응답에 주문번호가 없음 — 접수 여부 확인 중")
+                } else {
+                    log.info("[Toss] 주문 접수: orderId={} clientOrderId={}", orderId, clientOrderId)
+                    BrokerageOrderResult.accepted(orderId)
+                }
             }
-        } catch (e: CallNotPermittedException) {
-            log.warn("[CircuitBreaker:toss] 요청 차단됨 — 주문 제출 건너뜀")
-            BrokerageOrderResult(pgOrderId = "CB_OPEN_${System.currentTimeMillis()}", status = "REJECTED", rejectReason = "Toss API 서킷브레이커 OPEN")
-        } catch (e: RestClientException) {
-            log.error("[Toss] 주문 실패: {}", e.message)
-            BrokerageOrderResult(pgOrderId = "ERR_${System.currentTimeMillis()}", status = "REJECTED", rejectReason = e.message)
+        } catch (e: Exception) {
+            SubmitFailureClassifier.classify(e).also {
+                log.error("[Toss] 주문 제출 예외 → {}: {}", it.outcome, e.message)
+            }
         }
     }
 
@@ -212,13 +217,7 @@ class TossBrokerageClient(
                     .body(TossOrderEnvelope::class.java)
 
                 val order = resp?.result
-                val status = when (order?.status) {
-                    "FILLED"         -> "FILLED"
-                    "PARTIAL_FILLED" -> "PARTIALLY_FILLED"
-                    "CANCELED"       -> "CANCELLED"
-                    "REJECTED"       -> "REJECTED"
-                    else             -> "SUBMITTED"
-                }
+                val status = tossStatus(order?.status)
 
                 BrokerageOrderStatus(
                     pgOrderId    = pgOrderId,
@@ -234,6 +233,67 @@ class TossBrokerageClient(
             log.error("[Toss] 주문 조회 실패: {}", e.message)
             BrokerageOrderStatus(pgOrderId, "SUBMITTED", 0, null)
         }
+    }
+
+    private fun tossStatus(raw: String?): String = when (raw) {
+        "FILLED"         -> "FILLED"
+        "PARTIAL_FILLED" -> "PARTIALLY_FILLED"
+        "CANCELED"       -> "CANCELLED"
+        "REJECTED"       -> "REJECTED"
+        else             -> "SUBMITTED"
+    }
+
+    // ── 당일 주문 목록 (ADR-056 대조용) ───────────────────────────────────────
+    //
+    // Toss `Order`에는 clientOrderId가 없어(스펙 v1.2.19) 키로 찾을 수 없다 — KIS와 같은 목록 매칭을 쓴다.
+    // 진행 중(OPEN, 전량 반환)과 종결(CLOSED, 페이지 100) 두 그룹을 합친다. CLOSED 다음 페이지는 따라가지 않는다.
+
+    override fun findOrders(credentials: BrokerageCredentials, date: LocalDate, symbol: String, side: String): List<BrokerOrderSnapshot>? {
+        return try {
+            cb.executeCallable {
+                listOf("OPEN", "CLOSED").flatMap { group ->
+                    val resp = restClient.get()
+                        .uri { b ->
+                            b.path("/api/v1/orders")
+                                .queryParam("status", group)
+                                .queryParam("symbol", symbol)
+                                .queryParam("from", date.toString())
+                                .queryParam("to", date.toString())
+                                .queryParam("limit", 100)
+                                .build()
+                        }
+                        .headers { h -> authHeaders(credentials).forEach { (k, v) -> h.set(k, v) } }
+                        .retrieve()
+                        .body(TossOrderListEnvelope::class.java)
+                        // 본문이 없으면 조회 실패다 — 빈 목록으로 읽지 않는다.
+                        ?: throw IllegalStateException("Toss 주문 목록 응답 본문 없음")
+                    // 한 건이라도 해석하지 못하면 조회 실패로 던진다 — 빠뜨리면 체결된 주문이 "미접수"로 확정될 수 있다.
+                    (resp.result?.orders ?: emptyList()).map {
+                        it.toSnapshot() ?: throw IllegalStateException("Toss 주문 항목 해석 실패: orderId=${it.orderId} orderedAt=${it.orderedAt}")
+                    }
+                }.filter { it.side == side }
+            }
+        } catch (e: Exception) {
+            log.warn("[Toss] 당일 주문 조회 실패: {}", e.message)
+            null
+        }
+    }
+
+    private fun TossOrder.toSnapshot(): BrokerOrderSnapshot? {
+        val id = orderId?.takeIf { it.isNotBlank() } ?: return null
+        val at = runCatching { java.time.OffsetDateTime.parse(orderedAt).toInstant() }.getOrNull() ?: return null
+        return BrokerOrderSnapshot(
+            brokerOrderId  = id,
+            brokerOrderRef = null,
+            symbol         = symbol ?: "",
+            side           = side ?: "",
+            quantity       = quantity?.toBigDecimalOrNull()?.toInt() ?: 0,
+            price          = price?.toBigDecimalOrNull(),
+            orderedAt      = at,
+            status         = tossStatus(status),
+            filledQty      = execution?.filledQuantity?.toBigDecimalOrNull()?.toInt() ?: 0,
+            avgFillPrice   = execution?.averageFilledPrice?.toBigDecimalOrNull(),
+        )
     }
 
     // ── 정산 내역 조회 ────────────────────────────────────────────────────────
@@ -360,6 +420,10 @@ class TossBrokerageClient(
         val side: String?,
         val status: String?,
         val execution: TossExecution?,
+        // ADR-056 대조용
+        val quantity: String? = null,
+        val price: String? = null,
+        val orderedAt: String? = null,
     )
 
     private data class TossExecution(

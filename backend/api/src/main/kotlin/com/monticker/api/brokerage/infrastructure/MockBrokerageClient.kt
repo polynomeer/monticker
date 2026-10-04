@@ -1,13 +1,16 @@
 package com.monticker.api.brokerage.infrastructure
 
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Primary
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -22,7 +25,12 @@ import java.util.concurrent.ConcurrentHashMap
 @ConditionalOnProperty("app.brokerage.mock.enabled", havingValue = "true", matchIfMissing = true)
 class MockBrokerageClient(
     private val jdbc: JdbcTemplate,
+    // ADR-056 로컬 검증용 — 이 종목들의 주문은 증권사(인메모리)에는 접수되지만 응답이 유실된 것처럼
+    // INDETERMINATE를 돌려준다. 결과 불명 → 대조 잡 매칭 → 해소 흐름을 실제 앱에서 재현하기 위함이다.
+    @Value("\${app.brokerage.mock.indeterminate-symbols:}") indeterminateSymbolsRaw: String = "",
 ) : BrokerageClient {
+
+    private val indeterminateSymbols = indeterminateSymbolsRaw.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
 
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -38,6 +46,7 @@ class MockBrokerageClient(
         var filledQty: Int = 0,
         var avgFillPrice: BigDecimal? = null,
         val settleDate: LocalDate,
+        val orderedAt: Instant = Instant.now(),
     )
 
     override fun issueToken(appKey: String, appSecret: String): BrokerageToken {
@@ -48,8 +57,8 @@ class MockBrokerageClient(
         )
     }
 
-    override fun submitOrder(credentials: BrokerageCredentials, request: BrokerageOrderRequest): BrokerageOrderResult {
-        val pgOrderId = "KIS${System.currentTimeMillis()}"
+    override fun submitOrder(credentials: BrokerageCredentials, request: BrokerageOrderRequest, clientOrderId: String): BrokerageOrderResult {
+        val pgOrderId = "KIS${System.currentTimeMillis()}-${UUID.randomUUID().toString().take(8)}"
         val settleDate = addBusinessDays(LocalDate.now(), 2)
 
         val order = MockOrder(pgOrderId = pgOrderId, status = "SUBMITTED", request = request, settleDate = settleDate)
@@ -57,7 +66,7 @@ class MockBrokerageClient(
         if (request.orderType == "MARKET") {
             // 시장가: 현재가로 즉시 체결
             val currentPrice = getCurrentPrice(request.symbol)
-                ?: return BrokerageOrderResult(pgOrderId, "REJECTED", "현재가 조회 실패")
+                ?: return BrokerageOrderResult.rejected("현재가 조회 실패")
 
             val slippage    = if (request.side == "BUY") BigDecimal("1.0005") else BigDecimal("0.9995")
             val fillPrice   = currentPrice.multiply(slippage).setScale(0, RoundingMode.HALF_UP)
@@ -85,8 +94,30 @@ class MockBrokerageClient(
         }
 
         orderStore[pgOrderId] = order
-        return BrokerageOrderResult(pgOrderId = pgOrderId, status = "SUBMITTED")
+        if (request.symbol in indeterminateSymbols) {
+            log.warn("[MockKIS] 응답 유실 시뮬레이션: {} 접수됐지만 INDETERMINATE 반환 (clientOrderId={})", pgOrderId, clientOrderId)
+            return BrokerageOrderResult.indeterminate("모의 응답 유실")
+        }
+        return BrokerageOrderResult.accepted(pgOrderId)
     }
+
+    override fun findOrders(credentials: BrokerageCredentials, date: LocalDate, symbol: String, side: String): List<BrokerOrderSnapshot> =
+        orderStore.values
+            .filter { it.request.symbol == symbol && it.request.side == side && it.orderedAt.atZone(KST).toLocalDate() == date }
+            .map {
+                BrokerOrderSnapshot(
+                    brokerOrderId  = it.pgOrderId,
+                    brokerOrderRef = null,
+                    symbol         = it.request.symbol,
+                    side           = it.request.side,
+                    quantity       = it.request.quantity,
+                    price          = it.request.limitPrice,
+                    orderedAt      = it.orderedAt,
+                    status         = it.status,
+                    filledQty      = it.filledQty,
+                    avgFillPrice   = it.avgFillPrice,
+                )
+            }
 
     override fun cancelOrder(credentials: BrokerageCredentials, pgOrderId: String, brokerOrderRef: String?): BrokerageCancelResult {
         val order = orderStore[pgOrderId]
@@ -174,5 +205,6 @@ class MockBrokerageClient(
     companion object {
         private val FEE_RATE      = BigDecimal("0.00015")
         private val SELL_TAX_RATE = BigDecimal("0.0018")
+        private val KST           = ZoneId.of("Asia/Seoul")
     }
 }

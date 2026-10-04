@@ -76,7 +76,7 @@ class ConditionalOrderEvaluatorTest {
         every { jdbc.update(match<String> { it.contains("SET status = 'TRIGGERED'") }, *anyVararg()) } returns 1
         every { jdbc.update(match<String> { it.contains("SET status = 'EXECUTED'") }, *anyVararg()) } returns 1
         val orderSlot = slot<BrokerageOrderRequest>()
-        every { brokerageService.submitOrder(1L, capture(orderSlot)) } returns makeOrder(100L, BrokerageOrderStatus.FILLED)
+        every { brokerageService.submitOrder(1L, capture(orderSlot), any()) } returns makeOrder(100L, BrokerageOrderStatus.FILLED)
 
         // 70000 이하 -> STOP_LOSS 발동
         evaluator.onTick(tick(stockId = 1L, price = "69000"))
@@ -94,7 +94,7 @@ class ConditionalOrderEvaluatorTest {
 
         evaluator.onTick(tick(stockId = 1L, price = "71000"))  // 70000 이하가 아님
 
-        verify(exactly = 0) { brokerageService.submitOrder(any(), any()) }
+        verify(exactly = 0) { brokerageService.submitOrder(any(), any(), any()) }
     }
 
     @Test
@@ -105,7 +105,7 @@ class ConditionalOrderEvaluatorTest {
 
         evaluator.onTick(tick(stockId = 1L, price = "69000"))
 
-        verify(exactly = 0) { brokerageService.submitOrder(any(), any()) }
+        verify(exactly = 0) { brokerageService.submitOrder(any(), any(), any()) }
     }
 
     @Test
@@ -115,7 +115,7 @@ class ConditionalOrderEvaluatorTest {
         every { jdbc.update(match<String> { it.contains("SET status = 'TRIGGERED'") }, *anyVararg()) } returns 1
         every { jdbc.update(match<String> { it.contains("SET status = 'FAILED'") }, *anyVararg()) } returns 1
         every { jdbc.update(match<String> { it.contains("oco_group_id = ?") }, *anyVararg()) } returns 1
-        every { brokerageService.submitOrder(1L, any()) } returns makeOrder(100L, BrokerageOrderStatus.REJECTED, "리스크 한도 초과")
+        every { brokerageService.submitOrder(1L, any(), any()) } returns makeOrder(100L, BrokerageOrderStatus.REJECTED, "리스크 한도 초과")
 
         evaluator.onTick(tick(stockId = 1L, price = "69000"))
 
@@ -128,11 +128,51 @@ class ConditionalOrderEvaluatorTest {
         stubActiveRow()
         every { jdbc.update(match<String> { it.contains("SET status = 'TRIGGERED'") }, *anyVararg()) } returns 1
         every { jdbc.update(match<String> { it.contains("SET status = 'FAILED'") }, *anyVararg()) } returns 1
-        every { brokerageService.submitOrder(1L, any()) } throws IllegalStateException("리스크 게이트 거부")
+        every { brokerageService.submitOrder(1L, any(), any()) } throws IllegalStateException("리스크 게이트 거부")
 
         evaluator.onTick(tick(stockId = 1L, price = "69000"))
 
         verify { jdbc.update(match<String> { it.contains("SET status = 'FAILED'") }, "리스크 게이트 거부", null, any(), 1L) }
+    }
+
+    // ── ADR-056 — 결과 불명 ──────────────────────────────────────────────────────
+
+    @Test
+    fun `조건부 주문 하나당 결정적 clientOrderId(co-id)로 제출한다 — 리퍼가 이 값으로 주문 행을 찾는다`() {
+        stubActiveRow(id = 42L)
+        every { jdbc.update(match<String> { it.contains("SET status = 'TRIGGERED'") }, *anyVararg()) } returns 1
+        every { jdbc.update(match<String> { it.contains("SET status = 'EXECUTED'") }, *anyVararg()) } returns 1
+        every { brokerageService.submitOrder(1L, any(), "co-42") } returns makeOrder(100L, BrokerageOrderStatus.FILLED)
+
+        evaluator.onTick(tick(stockId = 1L, price = "69000"))
+
+        verify(exactly = 1) { brokerageService.submitOrder(1L, any(), "co-42") }
+    }
+
+    @Test
+    fun `주문 결과가 불명이면 FAILED·EXECUTED로 단정하지 않고 TRIGGERED로 둔 채 주문만 연결한다`() {
+        stubActiveRow()
+        every { jdbc.update(match<String> { it.contains("SET status = 'TRIGGERED'") }, *anyVararg()) } returns 1
+        every { jdbc.update(match<String> { it.contains("SET executed_order_id = ?") }, *anyVararg()) } returns 1
+        every { brokerageService.submitOrder(1L, any(), any()) } returns makeOrder(100L, BrokerageOrderStatus.UNKNOWN)
+
+        evaluator.onTick(tick(stockId = 1L, price = "69000"))
+
+        verify { jdbc.update(match<String> { it.contains("SET executed_order_id = ?") }, 100L, any(), 1L) }
+        verify(exactly = 0) { jdbc.update(match<String> { it.contains("SET status = 'FAILED'") || it.contains("SET status = 'EXECUTED'") }, *anyVararg()) }
+    }
+
+    @Test
+    fun `결과 기록이 실패해 OrderOutcomeUnknownException이 오면 역시 FAILED로 단정하지 않는다`() {
+        stubActiveRow()
+        every { jdbc.update(match<String> { it.contains("SET status = 'TRIGGERED'") }, *anyVararg()) } returns 1
+        every { jdbc.update(match<String> { it.contains("SET executed_order_id = ?") }, *anyVararg()) } returns 1
+        every { brokerageService.submitOrder(1L, any(), any()) } throws OrderOutcomeUnknownException(77L, RuntimeException("db down"))
+
+        evaluator.onTick(tick(stockId = 1L, price = "69000"))
+
+        verify { jdbc.update(match<String> { it.contains("SET executed_order_id = ?") }, 77L, any(), 1L) }
+        verify(exactly = 0) { jdbc.update(match<String> { it.contains("SET status = 'FAILED'") }, *anyVararg()) }
     }
 
     // ── ADR-055 — 시세 출처 게이트 ──────────────────────────────────────────────
@@ -144,7 +184,7 @@ class ConditionalOrderEvaluatorTest {
         evaluator.onTick(tick(stockId = 1L, price = "1", source = PriceSource.MOCK))
 
         verify(exactly = 0) { jdbc.query(any<String>(), any<RowMapper<Any>>(), *anyVararg()) }
-        verify(exactly = 0) { brokerageService.submitOrder(any(), any()) }
+        verify(exactly = 0) { brokerageService.submitOrder(any(), any(), any()) }
         assertThat(registry.counter("conditional_order_tick_ignored_total", "reason", "source").count()).isEqualTo(1.0)
     }
 
@@ -154,7 +194,7 @@ class ConditionalOrderEvaluatorTest {
 
         evaluator.onTick(tick(stockId = 1L, price = "1", source = PriceSource.UNKNOWN))
 
-        verify(exactly = 0) { brokerageService.submitOrder(any(), any()) }
+        verify(exactly = 0) { brokerageService.submitOrder(any(), any(), any()) }
     }
 
     @Test
@@ -164,7 +204,7 @@ class ConditionalOrderEvaluatorTest {
         evaluator.onTick(tick(stockId = 1L, price = "1", marketStatus = "POST_MARKET"))
         evaluator.onTick(tick(stockId = 1L, price = "1", marketStatus = null))
 
-        verify(exactly = 0) { brokerageService.submitOrder(any(), any()) }
+        verify(exactly = 0) { brokerageService.submitOrder(any(), any(), any()) }
         assertThat(registry.counter("conditional_order_tick_ignored_total", "reason", "marketStatus").count()).isEqualTo(2.0)
     }
 
@@ -174,7 +214,7 @@ class ConditionalOrderEvaluatorTest {
 
         evaluator.onTick(tick(stockId = 1L, price = "1", generatedAt = Instant.now().minusSeconds(30)))
 
-        verify(exactly = 0) { brokerageService.submitOrder(any(), any()) }
+        verify(exactly = 0) { brokerageService.submitOrder(any(), any(), any()) }
         assertThat(registry.counter("conditional_order_tick_ignored_total", "reason", "stale").count()).isEqualTo(1.0)
     }
 
@@ -183,10 +223,10 @@ class ConditionalOrderEvaluatorTest {
         stubActiveRow()
         every { jdbc.update(match<String> { it.contains("SET status = 'TRIGGERED'") }, *anyVararg()) } returns 1
         every { jdbc.update(match<String> { it.contains("SET status = 'EXECUTED'") }, *anyVararg()) } returns 1
-        every { brokerageService.submitOrder(1L, any()) } returns makeOrder(100L, BrokerageOrderStatus.FILLED)
+        every { brokerageService.submitOrder(1L, any(), any()) } returns makeOrder(100L, BrokerageOrderStatus.FILLED)
 
         evaluator.onTick(tick(stockId = 1L, price = "69000", source = PriceSource.TOSS))
 
-        verify(exactly = 1) { brokerageService.submitOrder(1L, any()) }
+        verify(exactly = 1) { brokerageService.submitOrder(1L, any(), any()) }
     }
 }

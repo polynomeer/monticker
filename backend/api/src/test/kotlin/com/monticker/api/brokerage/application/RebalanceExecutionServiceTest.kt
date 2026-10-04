@@ -132,7 +132,7 @@ class RebalanceExecutionServiceTest {
         every { legRepo.save(capture(legSlot)) } answers { firstArg() }
 
         val orderCallOrder = mutableListOf<String>()
-        every { brokerageService.submitOrder(1L, any()) } answers {
+        every { brokerageService.submitOrder(1L, any(), any()) } answers {
             val req = secondArg<BrokerageOrderRequest>()
             orderCallOrder += req.symbol
             makeOrder(id = if (req.symbol == "000660") 200L else 201L, status = BrokerageOrderStatus.FILLED)
@@ -162,8 +162,8 @@ class RebalanceExecutionServiceTest {
         val legSlot = mutableListOf<RebalanceExecutionLeg>()
         every { legRepo.save(capture(legSlot)) } answers { firstArg() }
 
-        every { brokerageService.submitOrder(1L, match { it.symbol == "000660" }) } returns makeOrder(200L, BrokerageOrderStatus.REJECTED, "리스크 한도 초과")
-        every { brokerageService.submitOrder(1L, match { it.symbol == "005930" }) } returns makeOrder(201L, BrokerageOrderStatus.FILLED)
+        every { brokerageService.submitOrder(1L, match { it.symbol == "000660" }, any()) } returns makeOrder(200L, BrokerageOrderStatus.REJECTED, "리스크 한도 초과")
+        every { brokerageService.submitOrder(1L, match { it.symbol == "005930" }, any()) } returns makeOrder(201L, BrokerageOrderStatus.FILLED)
 
         val execution = service.execute(1L)
 
@@ -174,5 +174,23 @@ class RebalanceExecutionServiceTest {
         assertThat(sellLeg.failReason).isEqualTo("리스크 한도 초과")
         val buyLeg = legSlot.first { it.symbol == "005930" }
         assertThat(buyLeg.status).isEqualTo(RebalanceLegStatus.EXECUTED)
+    }
+
+    @Test
+    fun `결과 불명 leg는 FAILED가 아니라 UNKNOWN으로 남고 주문을 가리킨다 — 실제로 체결됐을 수 있다`() {
+        val target = makeTarget(mapOf("005930" to BigDecimal("0.50")))
+        every { targetService.get(1L) } returns target
+        every { brokerageService.getBalance(1L) } returns makeBalance(BigDecimal("1000000"), emptyList())
+        every { jdbc.queryForObject(match<String> { it.contains("candles_1m") }, eq(BigDecimal::class.java), eq("005930")) } returns BigDecimal("50000")
+        stubStockId("005930", 2L)
+        every { executionRepo.save(any<RebalanceExecution>()) } answers { firstArg() }
+        val legSlot = mutableListOf<RebalanceExecutionLeg>()
+        every { legRepo.save(capture(legSlot)) } answers { firstArg() }
+        every { brokerageService.submitOrder(1L, any(), any()) } throws OrderOutcomeUnknownException(301L, RuntimeException("db down"))
+
+        service.execute(1L)
+
+        assertThat(legSlot.single().status).isEqualTo(RebalanceLegStatus.UNKNOWN)
+        assertThat(legSlot.single().executedOrderId).isEqualTo(301L)
     }
 }

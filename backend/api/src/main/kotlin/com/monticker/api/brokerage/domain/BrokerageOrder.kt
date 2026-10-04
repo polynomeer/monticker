@@ -4,7 +4,18 @@ import jakarta.persistence.*
 import java.math.BigDecimal
 import java.time.Instant
 
-enum class BrokerageOrderStatus { SUBMITTED, FILLED, PARTIALLY_FILLED, CANCELLED, REJECTED }
+/**
+ * ADR-056 — PENDING_SUBMIT: 의도를 브로커 호출 전에 커밋했다(호출 결과 미기록).
+ * UNKNOWN: 요청은 나갔는데 확정 응답이 없다 — 증권사에서 체결됐을 수 있다. 둘 다 대조 잡이 해소한다.
+ */
+enum class BrokerageOrderStatus {
+    PENDING_SUBMIT, SUBMITTED, UNKNOWN, FILLED, PARTIALLY_FILLED, CANCELLED, REJECTED;
+
+    /** 증권사에서의 상태를 아직 모른다 — 같은 종목·방향 새 주문을 막고, 대조 잡이 본다. */
+    val isUnresolved: Boolean get() = this == PENDING_SUBMIT || this == UNKNOWN
+}
+
+enum class OrderResolution { BROKER_LOOKUP, NOT_FOUND }
 enum class OrderSide { BUY, SELL }
 enum class OrderType { MARKET, LIMIT }
 
@@ -69,7 +80,37 @@ class BrokerageOrder(
 
     @Column(name = "updated_at", nullable = false)
     var updatedAt: Instant = Instant.now(),
+
+    // ADR-056 — 우리가 만든 주문 식별자(Toss clientOrderId). 조건부 주문은 co-<id>로 결정적이다.
+    @Column(name = "client_order_id")
+    val clientOrderId: String? = null,
+
+    @Column(name = "reconcile_attempts", nullable = false)
+    var reconcileAttempts: Int = 0,
+
+    @Column(name = "needs_review", nullable = false)
+    var needsReview: Boolean = false,
+
+    @Column(name = "resolved_by")
+    @Enumerated(EnumType.STRING)
+    var resolvedBy: OrderResolution? = null,
+
+    @Column(name = "next_reconcile_at")
+    var nextReconcileAt: Instant? = null,
 ) {
+    fun markSubmitted(pgOrderId: String, brokerOrderRef: String?) {
+        this.pgOrderId      = pgOrderId
+        this.brokerOrderRef = brokerOrderRef
+        status              = BrokerageOrderStatus.SUBMITTED
+        updatedAt           = Instant.now()
+    }
+
+    fun markUnknown(reason: String) {
+        status       = BrokerageOrderStatus.UNKNOWN
+        rejectReason = reason   // 불명 사유도 같은 칸에 남긴다 — 해소되면 덮어쓴다
+        updatedAt    = Instant.now()
+    }
+
     fun fill(qty: Int, price: BigDecimal) {
         filledQty      = qty
         avgFillPrice   = price

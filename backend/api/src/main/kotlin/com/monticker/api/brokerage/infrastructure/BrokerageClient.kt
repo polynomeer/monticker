@@ -1,6 +1,7 @@
 package com.monticker.api.brokerage.infrastructure
 
 import java.math.BigDecimal
+import java.time.Instant
 import java.time.LocalDate
 
 // ── 요청/응답 DTO (KIS Open API 구조 기반) ─────────────────────────────────────
@@ -33,13 +34,44 @@ data class BrokerageOrderRequest(
     val limitPrice: BigDecimal? = null,
 )
 
+/**
+ * ADR-056 — 주문 제출 결과의 세 분류. 거부(REJECTED)는 "증권사에 접수되지 않았다"가 확실할 때만 쓴다
+ * (정상 응답의 거절, 또는 요청이 아예 나가지 않음). 요청이 나갔는데 확정 응답이 없으면 INDETERMINATE —
+ * 증권사에서 체결됐을 수 있다. 애매하면 INDETERMINATE로 보낸다(거부로 잘못 읽으면 이중 주문이 난다).
+ */
+enum class SubmitOutcome { ACCEPTED, REJECTED, INDETERMINATE }
+
 data class BrokerageOrderResult(
-    val pgOrderId: String,         // 증권사 주문 번호
-    val status: String,            // SUBMITTED | REJECTED
+    val outcome: SubmitOutcome,
+    val pgOrderId: String? = null, // 증권사 주문 번호 — ACCEPTED일 때만 있다
     val rejectReason: String? = null,
     // KIS의 KRX_FWDG_ORD_ORGNO(지점코드)처럼 주문번호만으로는 취소 호출이 불가능한
     // 프로바이더를 위한 추가 참조값. Toss/Mock은 사용하지 않는다(null).
     val brokerOrderRef: String? = null,
+) {
+    companion object {
+        fun accepted(pgOrderId: String, brokerOrderRef: String? = null) =
+            BrokerageOrderResult(SubmitOutcome.ACCEPTED, pgOrderId, brokerOrderRef = brokerOrderRef)
+        fun rejected(reason: String?) = BrokerageOrderResult(SubmitOutcome.REJECTED, rejectReason = reason)
+        fun indeterminate(reason: String?) = BrokerageOrderResult(SubmitOutcome.INDETERMINATE, rejectReason = reason)
+    }
+}
+
+/**
+ * ADR-056 — 증권사 당일 주문 목록의 한 건. 결과 불명 주문을 (종목, 방향, 수량, 주문시각)으로 매칭하는 데 쓴다 —
+ * 두 증권사 모두 우리가 만든 식별자로 주문을 조회할 수 없다.
+ */
+data class BrokerOrderSnapshot(
+    val brokerOrderId: String,
+    val brokerOrderRef: String?,
+    val symbol: String,
+    val side: String,              // BUY | SELL
+    val quantity: Int,
+    val price: BigDecimal?,        // 지정가. 시장가는 null(또는 0)
+    val orderedAt: Instant,
+    val status: String,            // SUBMITTED | FILLED | PARTIALLY_FILLED | CANCELLED | REJECTED
+    val filledQty: Int,
+    val avgFillPrice: BigDecimal?,
 )
 
 data class BrokerageCancelResult(
@@ -90,12 +122,22 @@ interface BrokerageClient {
      */
     fun resolveAccountRef(token: BrokerageToken, accountNumber: String): String? = null
 
-    fun submitOrder(credentials: BrokerageCredentials, request: BrokerageOrderRequest): BrokerageOrderResult
+    /**
+     * ADR-056 — 예외를 던지지 않고 [SubmitOutcome]으로 알린다. [clientOrderId]는 우리가 만든 식별자로,
+     * 멱등 키를 지원하는 증권사(Toss)에는 그대로 보낸다.
+     */
+    fun submitOrder(credentials: BrokerageCredentials, request: BrokerageOrderRequest, clientOrderId: String): BrokerageOrderResult
 
     /** 증권사에 실제로 취소를 요청한다. brokerOrderRef는 submitOrder()가 돌려준 값을 그대로 넘긴다. */
     fun cancelOrder(credentials: BrokerageCredentials, pgOrderId: String, brokerOrderRef: String?): BrokerageCancelResult
 
     fun getOrderStatus(credentials: BrokerageCredentials, pgOrderId: String): BrokerageOrderStatus
     fun getSettlements(credentials: BrokerageCredentials, date: LocalDate): List<BrokerageSettlementItem>
+
+    /**
+     * ADR-056 — [date](KST) 하루의 해당 종목·방향 주문 목록. **조회 실패는 null, 주문 없음은 빈 리스트** —
+     * 둘을 섞으면 "조회가 안 됐을 뿐"을 "주문이 안 들어갔다"로 읽어 버린다(ADR-053과 같은 함정).
+     */
+    fun findOrders(credentials: BrokerageCredentials, date: LocalDate, symbol: String, side: String): List<BrokerOrderSnapshot>?
     fun getBalance(credentials: BrokerageCredentials): BrokerageBalance
 }

@@ -7,6 +7,7 @@ import com.monticker.api.brokerage.domain.BrokerageProvider
 import com.monticker.api.brokerage.domain.BrokerageSettlement
 import com.monticker.api.brokerage.domain.BrokerageSettlementStatus
 import com.monticker.api.brokerage.domain.OrderSide
+import com.monticker.api.brokerage.domain.OrderResolution
 import com.monticker.api.brokerage.domain.OrderType
 import com.monticker.api.brokerage.infrastructure.BrokerageAccountRepository
 import com.monticker.api.brokerage.infrastructure.BrokerageBalance
@@ -14,7 +15,9 @@ import com.monticker.api.brokerage.infrastructure.BrokerageCancelResult
 import com.monticker.api.brokerage.infrastructure.BrokerageClient
 import com.monticker.api.brokerage.infrastructure.BrokerageClientRegistry
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRepository
+import com.monticker.api.brokerage.infrastructure.BrokerOrderSnapshot
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRequest
+import com.monticker.api.brokerage.infrastructure.BrokerageOrderResult
 import com.monticker.api.brokerage.infrastructure.BrokerageSettlementRepository
 import com.monticker.api.brokerage.infrastructure.BrokerageToken
 import com.monticker.api.brokerage.infrastructure.MockBrokerageClient
@@ -29,6 +32,8 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.transaction.PlatformTransactionManager
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
@@ -45,7 +50,10 @@ class BrokerageServiceTest {
     private val ledgerService  = mockk<LedgerService>(relaxed = true)
     private val riskChecker    = mockk<RiskCheckerService>()
 
-    private val service = BrokerageService(clientRegistry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc)
+    private val txManager      = mockk<PlatformTransactionManager>(relaxed = true)
+    private val meterRegistry  = SimpleMeterRegistry()
+
+    private val service = BrokerageService(clientRegistry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry)
 
     private val approvedRisk = RiskCheckResult(approved = true, blockedBy = null, severity = "APPROVED", checks = emptyList())
 
@@ -57,6 +65,17 @@ class BrokerageServiceTest {
     private fun stubStockLookup(stockId: Long = 1L) {
         every { jdbc.queryForObject("SELECT id FROM stocks WHERE symbol = ?", Long::class.java, any()) } returns stockId
         every { jdbc.queryForObject(any<String>(), eq(Long::class.java), any(), any()) } returns 0L
+    }
+
+    /**
+     * ADR-056 — 제출은 tx1(의도 저장) → 증권사 → tx2(행을 락 걸고 다시 읽어 결과 기록)다. 저장된 엔티티를 그대로
+     * 돌려주는 가짜 저장소로 두 단계가 같은 행을 보게 한다.
+     */
+    private fun stubSubmitPersistence(account: BrokerageAccount, orderSlot: CapturingSlot<BrokerageOrder>) {
+        every { orderRepo.findAllByUserIdAndSymbolAndStatusIn(any(), any(), any()) } returns emptyList()
+        every { orderRepo.save(capture(orderSlot)) } answers { firstArg() }
+        every { orderRepo.findWithLockById(any()) } answers { orderSlot.captured }
+        every { accountRepo.findById(account.id) } returns Optional.of(account)
     }
 
     // ── connect ───────────────────────────────────────────────────────────────
@@ -104,7 +123,7 @@ class BrokerageServiceTest {
         val settlSlot    = slot<BrokerageSettlement>()
 
         every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
-        every { orderRepo.save(capture(orderSlot)) }          returns makeOrder()
+        stubSubmitPersistence(account, orderSlot)
         every { settlementRepo.save(capture(settlSlot)) }     returns makeSettlement()
         stubStockLookup()
         every { riskChecker.checkBrokerageOrder(any(), any(), any(), any(), any(), any()) } returns approvedRisk
@@ -130,7 +149,7 @@ class BrokerageServiceTest {
         val orderSlot = slot<BrokerageOrder>()
 
         every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
-        every { orderRepo.save(capture(orderSlot)) }          returns makeOrder()
+        stubSubmitPersistence(account, orderSlot)
         stubStockLookup()
         every { riskChecker.checkBrokerageOrder(any(), any(), any(), any(), any(), any()) } returns approvedRisk
         // 리스크 스냅샷 조립에 쓰는 brokerage_orders 조회는 정상 응답시키고,
@@ -147,6 +166,7 @@ class BrokerageServiceTest {
     fun `리스크 게이트가 막으면 증권사에 주문을 보내지 않는다`() {
         val account = makeAccount()
         every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
+        every { orderRepo.findAllByUserIdAndSymbolAndStatusIn(any(), any(), any()) } returns emptyList()
         stubStockLookup()
         every { jdbc.queryForObject(any<String>(), eq(BigDecimal::class.java), any()) } returns BigDecimal("70000")
         every { riskChecker.checkBrokerageOrder(any(), any(), any(), any(), any(), any()) } returns
@@ -243,7 +263,7 @@ class BrokerageServiceTest {
 
     private fun serviceWithFakeClient(fakeClient: BrokerageClient): BrokerageService {
         val registry = BrokerageClientRegistry(BrokerageProvider.entries.associateWith { fakeClient })
-        return BrokerageService(registry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc)
+        return BrokerageService(registry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry)
     }
 
     @Test
@@ -314,6 +334,234 @@ class BrokerageServiceTest {
         assertThat(accountSlot.captured.authFailedAt).isNull()
     }
 
+    // ── ADR-056 — 결과 불명 ──────────────────────────────────────────────────────
+
+    private val req = BrokerageOrderRequest("005930", "SELL", "MARKET", 10)
+
+    /** 리스크 게이트·잔고·종목 조회를 통과시키고, 증권사 결과만 테스트가 정하게 한다. */
+    private fun fakeClientService(result: BrokerageOrderResult, orderSlot: CapturingSlot<BrokerageOrder>): Pair<BrokerageService, BrokerageClient> {
+        val account = makeAccount()
+        val fakeClient = mockk<BrokerageClient>()
+        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
+        stubSubmitPersistence(account, orderSlot)
+        stubStockLookup()
+        every { jdbc.queryForObject(any<String>(), eq(BigDecimal::class.java), any()) } returns BigDecimal("70000")
+        every { riskChecker.checkBrokerageOrder(any(), any(), any(), any(), any(), any()) } returns approvedRisk
+        every { fakeClient.getBalance(any()) } returns BrokerageBalance(BigDecimal("10000000"), BigDecimal("10000000"), emptyList())
+        every { fakeClient.submitOrder(any(), any(), any()) } returns result
+        every { fakeClient.getOrderStatus(any(), any()) } answers {
+            com.monticker.api.brokerage.infrastructure.BrokerageOrderStatus(secondArg(), "SUBMITTED", 0, null)
+        }
+        return serviceWithFakeClient(fakeClient) to fakeClient
+    }
+
+    @Test
+    fun `응답 없음(INDETERMINATE)은 거부가 아니라 UNKNOWN으로 기록한다 — 재주문하면 이중 주문이다`() {
+        val orderSlot = slot<BrokerageOrder>()
+        val (svc, _) = fakeClientService(BrokerageOrderResult.indeterminate("read timeout"), orderSlot)
+
+        val order = svc.submitOrder(1L, req)
+
+        assertThat(order.status).isEqualTo(BrokerageOrderStatus.UNKNOWN)
+        assertThat(order.pgOrderId).isNull()
+        assertThat(meterRegistry.find("brokerage_order_submit_total").tag("outcome", "indeterminate").counter()?.count()).isEqualTo(1.0)
+    }
+
+    @Test
+    fun `확정 거부는 REJECTED다`() {
+        val orderSlot = slot<BrokerageOrder>()
+        val (svc, _) = fakeClientService(BrokerageOrderResult.rejected("주문가능수량 초과"), orderSlot)
+
+        assertThat(svc.submitOrder(1L, req).status).isEqualTo(BrokerageOrderStatus.REJECTED)
+    }
+
+    @Test
+    fun `의도(PENDING_SUBMIT)를 증권사 호출보다 먼저 저장하고, 같은 clientOrderId를 증권사에 보낸다`() {
+        val orderSlot = slot<BrokerageOrder>()
+        val (svc, fakeClient) = fakeClientService(BrokerageOrderResult.accepted("ODNO-1"), orderSlot)
+        val savedStatuses = mutableListOf<BrokerageOrderStatus>()
+        val savedClientIds = mutableListOf<String?>()
+        every { orderRepo.save(capture(orderSlot)) } answers {
+            savedStatuses += firstArg<BrokerageOrder>().status
+            savedClientIds += firstArg<BrokerageOrder>().clientOrderId
+            firstArg()
+        }
+        val sentClientId = slot<String>()
+        every { fakeClient.submitOrder(any(), any(), capture(sentClientId)) } answers {
+            // 증권사가 불리는 시점에 의도는 이미 저장돼 있어야 한다
+            assertThat(savedStatuses).containsExactly(BrokerageOrderStatus.PENDING_SUBMIT)
+            BrokerageOrderResult.accepted("ODNO-1")
+        }
+
+        val order = svc.submitOrder(1L, req)
+
+        assertThat(order.status).isEqualTo(BrokerageOrderStatus.SUBMITTED)
+        assertThat(order.pgOrderId).isEqualTo("ODNO-1")
+        assertThat(sentClientId.captured).isEqualTo(savedClientIds.first()).startsWith("mt-")
+        assertThat(sentClientId.captured.length).isLessThanOrEqualTo(36)   // Toss clientOrderId 상한
+    }
+
+    @Test
+    fun `같은 종목·방향의 결과 불명 주문이 있으면 새 주문을 증권사에 보내지 않고 409로 막는다`() {
+        val orderSlot = slot<BrokerageOrder>()
+        val (svc, fakeClient) = fakeClientService(BrokerageOrderResult.accepted("ODNO-2"), orderSlot)
+        every { orderRepo.findAllByUserIdAndSymbolAndStatusIn(1L, "005930", any()) } returns
+            listOf(makeOrder(status = BrokerageOrderStatus.UNKNOWN).apply { /* side=BUY */ }, makeSellOrder(BrokerageOrderStatus.UNKNOWN))
+
+        assertThrows<BusinessRuleException> { svc.submitOrder(1L, req) }
+
+        verify(exactly = 0) { fakeClient.submitOrder(any(), any(), any()) }
+        verify(exactly = 0) { orderRepo.save(any()) }
+    }
+
+    @Test
+    fun `반대 방향의 결과 불명 주문은 막지 않는다`() {
+        val orderSlot = slot<BrokerageOrder>()
+        val (svc, _) = fakeClientService(BrokerageOrderResult.accepted("ODNO-3"), orderSlot)
+        every { orderRepo.findAllByUserIdAndSymbolAndStatusIn(1L, "005930", any()) } returns
+            listOf(makeOrder(status = BrokerageOrderStatus.UNKNOWN))   // BUY
+
+        assertThat(svc.submitOrder(1L, req).status).isEqualTo(BrokerageOrderStatus.SUBMITTED)
+    }
+
+    @Test
+    fun `결과 기록(tx2)이 실패하면 OrderOutcomeUnknownException — 호출자는 주문이 나갔을 수 있음을 안다`() {
+        val orderSlot = slot<BrokerageOrder>()
+        val (svc, _) = fakeClientService(BrokerageOrderResult.accepted("ODNO-4"), orderSlot)
+        every { orderRepo.findWithLockById(any()) } throws RuntimeException("db down")
+
+        val e = assertThrows<OrderOutcomeUnknownException> { svc.submitOrder(1L, req) }
+
+        assertThat(e.orderId).isEqualTo(orderSlot.captured.id)
+    }
+
+    @Test
+    fun `대조 잡이 먼저 해소한 주문은 늦게 도착한 제출 결과로 덮어쓰지 않는다`() {
+        val orderSlot = slot<BrokerageOrder>()
+        val (svc, _) = fakeClientService(BrokerageOrderResult.indeterminate("late"), orderSlot)
+        val resolved = makeSellOrder(BrokerageOrderStatus.FILLED)
+        every { orderRepo.findWithLockById(any()) } returns resolved
+
+        assertThat(svc.submitOrder(1L, req).status).isEqualTo(BrokerageOrderStatus.FILLED)
+    }
+
+    // ── ADR-056 — 대조 ────────────────────────────────────────────────────────
+
+    private fun stubReconcile(order: BrokerageOrder, snapshots: List<BrokerOrderSnapshot>?, locked: Boolean = true): BrokerageClient {
+        val account = makeAccount()
+        val fakeClient = mockk<BrokerageClient>()
+        every { jdbc.queryForList(match<String> { it.contains("SKIP LOCKED") }, eq(Long::class.java), any()) } returns
+            if (locked) listOf(order.id) else emptyList()
+        every { jdbc.queryForList(match<String> { it.contains("SELECT pg_order_id") }, eq(String::class.java), *anyVararg()) } returns emptyList()
+        every { orderRepo.findById(order.id) } returns Optional.of(order)
+        every { orderRepo.save(any()) } answers { firstArg() }
+        every { accountRepo.findById(account.id) } returns Optional.of(account)
+        every { settlementRepo.save(any()) } answers { firstArg() }
+        every { fakeClient.findOrders(any(), any(), "005930", "SELL") } returns snapshots
+        return fakeClient
+    }
+
+    private fun snapshot(id: String, at: Instant, status: String = "FILLED") = BrokerOrderSnapshot(
+        brokerOrderId = id, brokerOrderRef = "06010", symbol = "005930", side = "SELL", quantity = 10,
+        price = null, orderedAt = at, status = status, filledQty = 10, avgFillPrice = BigDecimal("70000"),
+    )
+
+    @Test
+    fun `대조 — 후보가 정확히 1건이면 그 증권사 주문에 연결하고 체결까지 반영한다`() {
+        val order = makeSellOrder(BrokerageOrderStatus.UNKNOWN, submittedAt = Instant.now().minusSeconds(40))
+        val client = stubReconcile(order, listOf(snapshot("ODNO-9", order.submittedAt.plusSeconds(1))))
+
+        val result = serviceWithFakeClient(client).reconcileUnresolved(order.id)
+
+        assertThat(result).isEqualTo(BrokerageService.ReconcileResult.MATCHED)
+        assertThat(order.pgOrderId).isEqualTo("ODNO-9")
+        assertThat(order.brokerOrderRef).isEqualTo("06010")
+        assertThat(order.status).isEqualTo(BrokerageOrderStatus.FILLED)
+        assertThat(order.resolvedBy).isEqualTo(OrderResolution.BROKER_LOOKUP)
+        verify { settlementRepo.save(any()) }
+    }
+
+    @Test
+    fun `대조 — 해소되지 않으면 다음 대조를 뒤로 미룬다(30s, 60s, … 상한 10분) — 고갈 방지`() {
+        val now = Instant.now()
+        val order = makeSellOrder(BrokerageOrderStatus.UNKNOWN, submittedAt = now.minusSeconds(40))
+        val client = stubReconcile(order, snapshots = null)
+        val svc = serviceWithFakeClient(client)
+
+        svc.reconcileUnresolved(order.id, now)
+        assertThat(order.nextReconcileAt).isEqualTo(now.plusSeconds(30))
+        svc.reconcileUnresolved(order.id, now)
+        assertThat(order.nextReconcileAt).isEqualTo(now.plusSeconds(60))
+        repeat(8) { svc.reconcileUnresolved(order.id, now) }
+        assertThat(order.nextReconcileAt).isEqualTo(now.plusSeconds(600))
+    }
+
+    @Test
+    fun `미접수로 확정된 뒤 접수 응답이 도착하면 증권사 응답을 따라 접수로 정정한다`() {
+        val orderSlot = slot<BrokerageOrder>()
+        val (svc, _) = fakeClientService(BrokerageOrderResult.accepted("ODNO-LATE"), orderSlot)
+        val wronglyRejected = makeSellOrder(BrokerageOrderStatus.REJECTED).apply { resolvedBy = OrderResolution.NOT_FOUND }
+        every { orderRepo.findWithLockById(any()) } returns wronglyRejected
+
+        val order = svc.submitOrder(1L, req)
+
+        assertThat(order.status).isEqualTo(BrokerageOrderStatus.SUBMITTED)
+        assertThat(order.pgOrderId).isEqualTo("ODNO-LATE")
+        assertThat(order.resolvedBy).isNull()
+    }
+
+    @Test
+    fun `대조 — 증권사 조회 실패는 "주문 없음"으로 읽지 않는다`() {
+        val order = makeSellOrder(BrokerageOrderStatus.UNKNOWN, submittedAt = Instant.now().minusSeconds(600))
+        val client = stubReconcile(order, snapshots = null)
+
+        val result = serviceWithFakeClient(client).reconcileUnresolved(order.id)
+
+        assertThat(result).isEqualTo(BrokerageService.ReconcileResult.LOOKUP_FAILED)
+        assertThat(order.status).isEqualTo(BrokerageOrderStatus.UNKNOWN)
+        assertThat(order.reconcileAttempts).isEqualTo(1)
+    }
+
+    @Test
+    fun `대조 — 유예가 지나도 후보가 없으면 미접수로 확정한다`() {
+        val order = makeSellOrder(BrokerageOrderStatus.UNKNOWN, submittedAt = Instant.now().minusSeconds(180))
+        val client = stubReconcile(order, emptyList())
+
+        assertThat(serviceWithFakeClient(client).reconcileUnresolved(order.id)).isEqualTo(BrokerageService.ReconcileResult.NOT_FOUND)
+        assertThat(order.status).isEqualTo(BrokerageOrderStatus.REJECTED)
+        assertThat(order.resolvedBy).isEqualTo(OrderResolution.NOT_FOUND)
+    }
+
+    @Test
+    fun `대조 — 후보가 둘이면 고르지 않고 수동 검토로 넘긴다`() {
+        val order = makeSellOrder(BrokerageOrderStatus.UNKNOWN, submittedAt = Instant.now().minusSeconds(40))
+        val client = stubReconcile(order, listOf(
+            snapshot("A", order.submittedAt.plusSeconds(1)), snapshot("B", order.submittedAt.plusSeconds(2)),
+        ))
+
+        assertThat(serviceWithFakeClient(client).reconcileUnresolved(order.id)).isEqualTo(BrokerageService.ReconcileResult.AMBIGUOUS)
+        assertThat(order.status).isEqualTo(BrokerageOrderStatus.UNKNOWN)
+        assertThat(order.needsReview).isTrue()
+    }
+
+    @Test
+    fun `대조 — 다른 레플리카가 행을 잡고 있으면 건너뛴다`() {
+        val order = makeSellOrder(BrokerageOrderStatus.UNKNOWN, submittedAt = Instant.now().minusSeconds(40))
+        val client = stubReconcile(order, emptyList(), locked = false)
+
+        assertThat(serviceWithFakeClient(client).reconcileUnresolved(order.id)).isEqualTo(BrokerageService.ReconcileResult.SKIPPED)
+        verify(exactly = 0) { client.findOrders(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `대조 — 막 기록된 PENDING_SUBMIT은 아직 호출 중일 수 있어 건드리지 않는다`() {
+        val order = makeSellOrder(BrokerageOrderStatus.PENDING_SUBMIT, submittedAt = Instant.now().minusSeconds(5))
+        val client = stubReconcile(order, emptyList())
+
+        assertThat(serviceWithFakeClient(client).reconcileUnresolved(order.id)).isEqualTo(BrokerageService.ReconcileResult.SKIPPED)
+        verify(exactly = 0) { client.findOrders(any(), any(), any(), any()) }
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     private fun makeAccount(
@@ -333,6 +581,12 @@ class BrokerageServiceTest {
         id = 1L, userId = 1L, accountId = 1L, symbol = "005930",
         side = OrderSide.BUY, orderType = OrderType.MARKET, quantity = 10,
         status = status, pgOrderId = pgOrderId, brokerOrderRef = brokerOrderRef,
+    )
+
+    private fun makeSellOrder(status: BrokerageOrderStatus, submittedAt: Instant = Instant.now()) = BrokerageOrder(
+        id = 7L, userId = 1L, accountId = 1L, symbol = "005930",
+        side = OrderSide.SELL, orderType = OrderType.MARKET, quantity = 10,
+        status = status, submittedAt = submittedAt, clientOrderId = "mt-test",
     )
 
     private fun makeSettlement(status: BrokerageSettlementStatus = BrokerageSettlementStatus.PENDING) =

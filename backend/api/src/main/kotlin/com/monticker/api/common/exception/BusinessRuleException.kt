@@ -7,4 +7,4 @@ package com.monticker.api.common.exception
  * (ReconnectRequiredException.kt가 이 휴리스틱이 실제로 오작동했던 사고를 기록한 전례와 같은
  * 종류). 메시지 내용과 무관하게 항상 409로 매핑돼야 하는 비즈니스 규칙 위반은 이 타입을 쓴다.
  */
-class BusinessRuleException(message: String) : RuntimeException(message)
+open class BusinessRuleException(message: String) : RuntimeException(message)

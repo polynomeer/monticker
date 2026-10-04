@@ -34,6 +34,16 @@ import java.math.BigDecimal
 import java.sql.Timestamp
 import java.time.Instant
 import java.time.LocalDate
+import com.monticker.api.brokerage.domain.OrderResolution
+import com.monticker.api.brokerage.infrastructure.BrokerageOrderResult
+import com.monticker.api.brokerage.infrastructure.SubmitOutcome
+import io.micrometer.core.instrument.MeterRegistry
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
+import org.springframework.transaction.support.TransactionTemplate
+import java.time.Duration
+import java.time.ZoneId
+import java.util.UUID
 
 @Service
 class BrokerageService(
@@ -44,8 +54,23 @@ class BrokerageService(
     private val ledgerService: LedgerService,
     private val riskChecker: RiskCheckerService,
     private val jdbc: JdbcTemplate,
+    transactionManager: PlatformTransactionManager,
+    private val meterRegistry: MeterRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+
+    // ADR-056 — 주문 제출은 트랜잭션을 셋으로 나눈다. 같은 빈 안의 자기 호출에는 @Transactional이 걸리지 않으므로
+    // (ADR-011 Note) 경계를 템플릿으로 연다. REQUIRES_NEW라 호출자가 트랜잭션 안에서 불러도 각 단계가 독립 커밋된다.
+    private val requiresNew = TransactionTemplate(transactionManager).apply {
+        propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
+    }
+
+    private class PreparedOrder(
+        val orderId: Long,
+        val provider: BrokerageProvider,
+        val client: BrokerageClient,
+        val credentials: BrokerageCredentials,
+    )
 
     // ── 계좌 연동 ──────────────────────────────────────────────────────────────
 
@@ -96,16 +121,66 @@ class BrokerageService(
 
     // ── 주문 ───────────────────────────────────────────────────────────────────
 
-    @Transactional
-    fun submitOrder(userId: Long, request: BrokerageOrderRequest): BrokerageOrder {
+    /**
+     * ADR-056 — 실거래 주문 제출. 의도를 먼저 커밋하고(tx1), 트랜잭션 밖에서 증권사를 부르고, 결과를 기록한다(tx2).
+     *
+     * 의도적으로 @Transactional이 아니다 — 증권사 호출 동안 DB 커넥션을 잡지 않고, 호출 전에 의도가 커밋돼 있어야
+     * 크래시 지점마다 흔적이 남는다. 예외 계약:
+     *  - [OrderOutcomeUnknownException]: 의도는 커밋됐고 결과를 기록하지 못했다 → 주문이 나갔을 수 있다.
+     *  - 그 밖의 예외: 의도 커밋 전에 났다 → 증권사 호출은 없었다.
+     *
+     * @param clientOrderId 우리가 만든 주문 식별자. 조건부 주문은 결정적 값(co-<id>)을 넘긴다.
+     */
+    fun submitOrder(userId: Long, request: BrokerageOrderRequest, clientOrderId: String = newClientOrderId()): BrokerageOrder {
+        val prepared = requiresNew.execute { prepareOrder(userId, request, clientOrderId) }!!
+
+        val result = try {
+            prepared.client.submitOrder(prepared.credentials, request, clientOrderId)
+        } catch (e: Exception) {
+            // 클라이언트 계약은 예외 대신 결과로 알리는 것이지만, 던졌다면 요청이 나갔는지 모른다.
+            BrokerageOrderResult.indeterminate("주문 제출 중 예외: ${e.message}")
+        }
+        meterRegistry.counter(
+            "brokerage_order_submit_total",
+            "provider", prepared.provider.name, "outcome", result.outcome.name.lowercase(),
+        ).increment()
+
+        // 기록 실패는 대개 일시적이다(커넥션·락 타임아웃) — 한 번 더 시도한다. 그래도 실패하면 증권사 주문번호를
+        // 로그에 남긴다: 행에는 없으므로, 대조 매칭이 모호해질 때 운영자가 찾을 수 있는 유일한 키다.
+        var lastError: Exception? = null
+        repeat(2) {
+            try {
+                return requiresNew.execute { recordSubmitResult(prepared, result) }!!
+            } catch (e: Exception) { lastError = e }
+        }
+        log.error("주문 결과 기록 실패 — PENDING_SUBMIT으로 남아 대조 잡이 해소한다: orderId={} outcome={} pgOrderId={} brokerOrderRef={}",
+            prepared.orderId, result.outcome, result.pgOrderId, result.brokerOrderRef, lastError)
+        throw OrderOutcomeUnknownException(prepared.orderId, lastError!!)
+    }
+
+    /** tx1 — 검증·리스크 게이트·중복 가드를 통과하면 PENDING_SUBMIT 행을 남긴다. 여기서 난 예외는 증권사 호출 전이다. */
+    private fun prepareOrder(userId: Long, request: BrokerageOrderRequest, clientOrderId: String): PreparedOrder {
+        // 같은 사용자의 주문 준비를 직렬화한다 — 중복 가드의 "확인하고 넣기"가 동시 요청에 깨지지 않도록.
+        jdbc.query("SELECT pg_advisory_xact_lock(?, (? % 2147483647)::int)", { _ -> }, ADVISORY_NS_ORDER, userId)
+
         val account = getAccount(userId)
         val client = clientRegistry.get(account.provider)
         val credentials = requireCredentials(account)
+        if (request.orderType == "LIMIT" && request.limitPrice == null) {
+            throw IllegalArgumentException("지정가 주문에는 가격이 필요합니다.")
+        }
         // 등록되지 않은 종목은 리스크 게이트를 평가할 스냅샷 근거(candles/보유 비중)가 없다.
         // 예전엔 이 경우 리스크 체크를 건너뛰고 그대로 브로커에 보냈는데, 그게 곧 게이트
         // 우회 수단이었다(docs/validation-hardening-plan.md V-C1) — 건너뛰지 않고 거부한다.
         val stockId = resolveStockId(request.symbol)
             ?: throw IllegalArgumentException("등록되지 않은 종목입니다: ${request.symbol}")
+
+        // ADR-056 — 결과를 모르는 같은 종목·방향 주문이 있으면 새 주문을 받지 않는다. 이중 주문의 가장 흔한 경로는
+        // "실패한 줄 알고 다시 누르기"다. 해소(보통 1~2분)되면 다시 낼 수 있다.
+        orderRepo.findAllByUserIdAndSymbolAndStatusIn(userId, request.symbol, UNRESOLVED_STATUSES)
+            .firstOrNull { it.side.name == request.side }
+            ?.let { throw BusinessRuleException(
+                "증권사 확인 중인 ${request.symbol} ${request.side} 주문이 있습니다(주문 #${it.id}). 확인이 끝난 뒤 다시 시도해주세요.") }
 
         // ADR-025 — 페이퍼 트레이딩과 동일한 사전 리스크 게이트. 증권사에 보내기 전에
         // 막는다 — 실패하면 실제 주문은 아예 나가지 않는다.
@@ -116,40 +191,80 @@ class BrokerageService(
             throw RiskLimitException(riskResult.blockedBy ?: "Unknown risk rule")
         }
 
-        val result = client.submitOrder(credentials, request)
-
-        val order = BrokerageOrder(
-            userId    = userId,
-            accountId = account.id,
-            stockId   = stockId,
-            symbol    = request.symbol,
-            side      = OrderSide.valueOf(request.side),
-            orderType = OrderType.valueOf(request.orderType),
-            quantity  = request.quantity,
-            limitPrice = request.limitPrice,
-            pgOrderId = result.pgOrderId,
-            brokerOrderRef = result.brokerOrderRef,
+        // 이 행이 커밋된 뒤에만 증권사를 부른다. 그래서 "행이 없다 = 호출되지 않았다"가 성립한다(조건부 주문 리퍼의 근거).
+        // PENDING_SUBMIT 행도 시간당 주문 수 리스크 룰에 바로 잡힌다.
+        val order = orderRepo.save(
+            BrokerageOrder(
+                userId        = userId,
+                accountId     = account.id,
+                stockId       = stockId,
+                symbol        = request.symbol,
+                side          = OrderSide.valueOf(request.side),
+                orderType     = OrderType.valueOf(request.orderType),
+                quantity      = request.quantity,
+                limitPrice    = request.limitPrice,
+                status        = BrokerageOrderStatus.PENDING_SUBMIT,
+                clientOrderId = clientOrderId,
+            )
         )
+        return PreparedOrder(order.id, account.provider, client, credentials)
+    }
 
-        // 정산 레코드가 order_id FK를 참조하므로 체결 처리 전에 주문을 먼저 저장해 실제 ID를 확보한다.
-        orderRepo.save(order)
-
-        if (result.status == "REJECTED") {
-            order.reject(result.rejectReason ?: "증권사 거부")
-        } else {
-            // 시장가는 즉시 체결 상태로 동기화
-            val status = client.getOrderStatus(credentials, result.pgOrderId)
-            if (status.status == "FILLED" && status.avgFillPrice != null) {
-                order.fill(status.filledQty, status.avgFillPrice!!)
-                createSettlementFromFill(account, order, status.avgFillPrice!!)
+    /** tx2 — 제출 결과를 기록한다. 대조 잡이 먼저 해소했다면(호출이 매우 늦게 끝난 경우) 덮어쓰지 않는다. */
+    private fun recordSubmitResult(prepared: PreparedOrder, result: BrokerageOrderResult): BrokerageOrder {
+        val order = orderRepo.findWithLockById(prepared.orderId) ?: throw IllegalStateException("주문 행 없음: ${prepared.orderId}")
+        // 대조 잡이 "미접수"로 확정한 뒤에 접수 응답이 도착했다 — 증권사 응답이 맞다. 거의 불가능한 순서지만(2분 유예 >
+        // 호출 최악 수십 초) 틀리면 실제 주문이 거부로 보여 재주문을 부른다.
+        if (order.status == BrokerageOrderStatus.REJECTED && order.resolvedBy == OrderResolution.NOT_FOUND &&
+            result.outcome == SubmitOutcome.ACCEPTED) {
+            log.error("미접수로 확정된 주문에 접수 응답 도착 — 접수로 정정: orderId={} pgOrderId={}", order.id, result.pgOrderId)
+            order.resolvedBy = null
+            order.rejectReason = null
+            order.markSubmitted(result.pgOrderId!!, result.brokerOrderRef)
+            return orderRepo.save(order)
+        }
+        if (order.status != BrokerageOrderStatus.PENDING_SUBMIT) {
+            log.warn("제출 결과 도착 전에 이미 해소됨: orderId={} status={} outcome={}", order.id, order.status, result.outcome)
+            return order
+        }
+        when (result.outcome) {
+            SubmitOutcome.ACCEPTED -> {
+                order.markSubmitted(result.pgOrderId!!, result.brokerOrderRef)
+                // 시장가는 즉시 체결 상태로 동기화. 접수는 확정됐으니 이 조회가 실패해도 SUBMITTED로 둔다(수동 동기화로 따라잡는다).
+                runCatching { prepared.client.getOrderStatus(prepared.credentials, result.pgOrderId) }
+                    .onSuccess { status ->
+                        val account = accountRepo.findById(order.accountId).orElseThrow()
+                        applyBrokerStatus(account, order, status.status, status.filledQty, status.avgFillPrice)
+                    }
+                    .onFailure { log.warn("접수 직후 체결 조회 실패 — SUBMITTED 유지: orderId={} reason={}", order.id, it.message) }
+            }
+            SubmitOutcome.REJECTED -> order.reject(result.rejectReason ?: "증권사 거부")
+            SubmitOutcome.INDETERMINATE -> {
+                order.markUnknown(result.rejectReason ?: "증권사 응답 없음 — 접수 여부 확인 중")
+                log.error("주문 결과 불명: orderId={} userId={} symbol={} side={} qty={} reason={}",
+                    order.id, order.userId, order.symbol, order.side, order.quantity, result.rejectReason)
             }
         }
-
-        log.info("주문 제출: userId={} symbol={} side={} qty={} type={}", userId, request.symbol, request.side, request.quantity, request.orderType)
+        log.info("주문 제출: orderId={} userId={} symbol={} side={} qty={} type={} → {}",
+            order.id, order.userId, order.symbol, order.side, order.quantity, order.orderType, order.status)
         return orderRepo.save(order)
     }
 
-    @Transactional
+    /** 증권사가 알려준 상태를 주문에 반영한다. 제출 직후·수동 동기화·대조 잡이 같은 규칙을 쓴다. */
+    private fun applyBrokerStatus(account: BrokerageAccount, order: BrokerageOrder, status: String, filledQty: Int, avgFillPrice: BigDecimal?) {
+        when (status) {
+            "FILLED" -> if (avgFillPrice != null && order.status != BrokerageOrderStatus.FILLED) {
+                order.fill(filledQty, avgFillPrice)
+                createSettlementFromFill(account, order, avgFillPrice)
+            }
+            "CANCELLED" -> order.cancel()
+            "REJECTED"  -> order.reject("증권사 거부")
+        }
+    }
+
+    // 의도적으로 @Transactional이 아니다 — 결과 불명 분기는 대조를 자기 트랜잭션(REQUIRES_NEW)에서 돌리고 결과를 다시
+    // 읽어야 한다. 바깥 트랜잭션이 있으면 영속성 컨텍스트가 대조 전 엔티티를 캐시해 해소 전 상태를 돌려주고, 요청 하나가
+    // 커넥션 두 개를 잡는다.
     fun syncOrderStatus(userId: Long, orderId: Long): BrokerageOrder {
         val order   = orderRepo.findById(orderId).orElseThrow { NoSuchElementException("주문 없음: $orderId") }
         require(order.userId == userId) { "접근 권한 없음" }
@@ -157,23 +272,99 @@ class BrokerageService(
         if (order.status in listOf(BrokerageOrderStatus.FILLED, BrokerageOrderStatus.CANCELLED, BrokerageOrderStatus.REJECTED)) {
             return order
         }
+        // ADR-056 — 결과 불명 주문은 증권사 주문번호가 없다. 대조를 즉시 한 번 돌린다(별도 트랜잭션, 행 락).
+        if (order.status.isUnresolved) {
+            reconcileUnresolved(orderId)
+            return orderRepo.findById(orderId).orElseThrow()
+        }
+        return requiresNew.execute { syncSubmitted(userId, orderId) }!!
+    }
 
+    private fun syncSubmitted(userId: Long, orderId: Long): BrokerageOrder {
+        val order   = orderRepo.findById(orderId).orElseThrow()
         val account = getAccount(userId)
         val credentials = requireCredentials(account)
         val status  = clientRegistry.get(account.provider).getOrderStatus(credentials, order.pgOrderId ?: return order)
+        applyBrokerStatus(account, order, status.status, status.filledQty, status.avgFillPrice)
+        return orderRepo.save(order)
+    }
 
-        when (status.status) {
-            "FILLED" -> {
-                if (status.avgFillPrice != null) {
-                    order.fill(status.filledQty, status.avgFillPrice!!)
-                    createSettlementFromFill(account, order, status.avgFillPrice!!)
-                }
-            }
-            "CANCELLED" -> order.cancel()
-            "REJECTED"  -> order.reject("증권사 거부")
+    enum class ReconcileResult { SKIPPED, LOOKUP_FAILED, WAITING, MATCHED, NOT_FOUND, AMBIGUOUS }
+
+    /**
+     * ADR-056 — PENDING_SUBMIT/UNKNOWN 주문 하나를 증권사 당일 주문 목록과 대조한다. **재주문하지 않는다.**
+     * 여러 api 레플리카가 동시에 돌아도 같은 행을 두 번 처리하지 않도록 SKIP LOCKED로 가져간다.
+     */
+    fun reconcileUnresolved(orderId: Long, now: Instant = Instant.now()): ReconcileResult =
+        requiresNew.execute { reconcileLocked(orderId, now) }!!.also {
+            meterRegistry.counter("brokerage_order_reconcile_total", "result", it.name.lowercase()).increment()
         }
 
-        return orderRepo.save(order)
+    private fun reconcileLocked(orderId: Long, now: Instant): ReconcileResult {
+        val locked = jdbc.queryForList(
+            "SELECT id FROM brokerage_orders WHERE id = ? AND status IN ('PENDING_SUBMIT','UNKNOWN') FOR UPDATE SKIP LOCKED",
+            Long::class.java, orderId,
+        )
+        if (locked.isEmpty()) return ReconcileResult.SKIPPED
+        val order = orderRepo.findById(orderId).orElseThrow()
+        // 막 기록된 PENDING_SUBMIT은 아직 증권사 호출 중일 수 있다(읽기 타임아웃 5s + 결과 기록).
+        if (order.status == BrokerageOrderStatus.PENDING_SUBMIT && order.submittedAt.isAfter(now.minus(PENDING_SUBMIT_GRACE))) {
+            return ReconcileResult.SKIPPED
+        }
+
+        val account = accountRepo.findById(order.accountId).orElseThrow()
+        order.reconcileAttempts += 1
+        val snapshots = try {
+            clientRegistry.get(account.provider).findOrders(
+                requireCredentials(account), order.submittedAt.atZone(KST).toLocalDate(), order.symbol, order.side.name,
+            )
+        } catch (e: Exception) {
+            log.warn("대조용 증권사 조회 불가: orderId={} reason={}", orderId, e.message)
+            null
+        }
+        val knownBrokerIds = jdbc.queryForList(
+            "SELECT pg_order_id FROM brokerage_orders WHERE account_id = ? AND symbol = ? AND pg_order_id IS NOT NULL AND id <> ?",
+            String::class.java, order.accountId, order.symbol, order.id,
+        ).toSet()
+        val intent = UnknownOrderMatcher.Intent(
+            order.symbol, order.side.name, order.quantity,
+            order.limitPrice.takeIf { order.orderType == OrderType.LIMIT }, order.submittedAt,
+        )
+
+        // 다음 대조를 뒤로 미룬다(30s·60s·120s… 상한 10분). 해소되면 의미 없어지는 값이다.
+        order.nextReconcileAt = now.plus(
+            Duration.ofSeconds(30L shl (order.reconcileAttempts - 1).coerceIn(0, 5)).coerceAtMost(MAX_RECONCILE_BACKOFF),
+        )
+        val result = when (val d = UnknownOrderMatcher.decide(intent, snapshots, knownBrokerIds, now)) {
+            UnknownOrderMatcher.Decision.LookupFailed -> ReconcileResult.LOOKUP_FAILED
+            UnknownOrderMatcher.Decision.Wait -> ReconcileResult.WAITING
+            UnknownOrderMatcher.Decision.NotFound -> {
+                order.reject("증권사 미접수 확인 (대조)")
+                order.resolvedBy = OrderResolution.NOT_FOUND
+                ReconcileResult.NOT_FOUND
+            }
+            is UnknownOrderMatcher.Decision.Ambiguous -> {
+                if (!order.needsReview) {
+                    log.error("결과 불명 주문 매칭 모호 — 수동 검토 필요: orderId={} userId={} symbol={} candidates={}",
+                        order.id, order.userId, order.symbol, d.candidates)
+                }
+                order.needsReview = true
+                ReconcileResult.AMBIGUOUS
+            }
+            is UnknownOrderMatcher.Decision.Matched -> {
+                order.markSubmitted(d.snapshot.brokerOrderId, d.snapshot.brokerOrderRef)
+                order.resolvedBy = OrderResolution.BROKER_LOOKUP
+                order.needsReview = false
+                applyBrokerStatus(account, order, d.snapshot.status, d.snapshot.filledQty, d.snapshot.avgFillPrice)
+                ReconcileResult.MATCHED
+            }
+        }
+        orderRepo.save(order)
+        if (result == ReconcileResult.MATCHED || result == ReconcileResult.NOT_FOUND) {
+            log.info("결과 불명 주문 해소: orderId={} → {} (pgOrderId={}, attempts={})",
+                order.id, order.status, order.pgOrderId, order.reconcileAttempts)
+        }
+        return result
     }
 
     // ADR-028 — 지금까지 여기서 로컬 상태만 CANCELLED로 바꾸고 증권사에는 취소 요청을 전혀
@@ -369,5 +560,15 @@ class BrokerageService(
     companion object {
         // ADR-027 — 취소된 앱키로 매 요청마다 브로커 인증 엔드포인트를 두드리지 않기 위한 쿨다운.
         private const val AUTH_RETRY_COOLDOWN_SECONDS = 300L
+
+        /** pg_advisory_xact_lock의 첫 번째 키 — 다른 advisory lock 사용처와 겹치지 않게 네임스페이스를 둔다. */
+        private const val ADVISORY_NS_ORDER = 56_001
+        private val UNRESOLVED_STATUSES = listOf(BrokerageOrderStatus.PENDING_SUBMIT, BrokerageOrderStatus.UNKNOWN)
+        private val PENDING_SUBMIT_GRACE: Duration = Duration.ofSeconds(30)
+        private val MAX_RECONCILE_BACKOFF: Duration = Duration.ofMinutes(10)
+        private val KST: ZoneId = ZoneId.of("Asia/Seoul")
+
+        /** Toss clientOrderId 형식(≤36자, [a-zA-Z0-9_-])을 지킨다. */
+        fun newClientOrderId(): String = "mt-" + UUID.randomUUID().toString().replace("-", "")
     }
 }

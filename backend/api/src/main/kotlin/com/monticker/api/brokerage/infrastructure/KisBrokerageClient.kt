@@ -115,7 +115,8 @@ class KisBrokerageClient(
 
     // ── 주문 ───────────────────────────────────────────────────────────────────
 
-    override fun submitOrder(credentials: BrokerageCredentials, request: BrokerageOrderRequest): BrokerageOrderResult {
+    // ADR-056 — KIS에는 클라이언트 주문 ID 개념이 없어 clientOrderId는 보내지 않는다(대조는 당일 목록 매칭).
+    override fun submitOrder(credentials: BrokerageCredentials, request: BrokerageOrderRequest, clientOrderId: String): BrokerageOrderResult {
         return try {
             cb.executeCallable {
                 // TR_ID: 현금 매수 TTTC0802U, 현금 매도 TTTC0801U
@@ -139,21 +140,29 @@ class KisBrokerageClient(
                     .retrieve()
                     .body(KisOrderResponse::class.java)
 
-                if (resp?.rtCd == "0") {
-                    val pgOrderId = resp.output?.odno ?: "UNKNOWN"
-                    log.info("[KIS] 주문 접수: trId={} odno={} orgno={}", trId, pgOrderId, resp.output?.krxFwdgOrdOrgno)
-                    BrokerageOrderResult(pgOrderId = pgOrderId, status = "SUBMITTED", brokerOrderRef = resp.output?.krxFwdgOrdOrgno)
-                } else {
-                    log.warn("[KIS] 주문 거부: rtCd={} msg={}", resp?.rtCd, resp?.msg1)
-                    BrokerageOrderResult(pgOrderId = "REJECTED_${System.currentTimeMillis()}", status = "REJECTED", rejectReason = resp?.msg1)
+                val odno = resp?.output?.odno
+                when {
+                    resp?.rtCd == "0" && !odno.isNullOrBlank() -> {
+                        log.info("[KIS] 주문 접수: trId={} odno={} orgno={}", trId, odno, resp.output?.krxFwdgOrdOrgno)
+                        BrokerageOrderResult.accepted(odno, resp.output?.krxFwdgOrdOrgno)
+                    }
+                    // rt_cd가 명시적으로 실패 — 정상 응답의 거절이다.
+                    resp?.rtCd != null && resp.rtCd != "0" -> {
+                        log.warn("[KIS] 주문 거부: rtCd={} msg={}", resp.rtCd, resp.msg1)
+                        BrokerageOrderResult.rejected(resp.msg1 ?: "증권사 거부")
+                    }
+                    // 2xx인데 성공 표시는 있고 주문번호가 없거나, 본문이 비었다 — 접수됐을 수 있다. 예전엔 각각
+                    // pgOrderId="UNKNOWN" 문자열로 SUBMITTED, 또는 REJECTED로 처리했다.
+                    else -> {
+                        log.error("[KIS] 주문 응답 불완전: rtCd={} odno={}", resp?.rtCd, odno)
+                        BrokerageOrderResult.indeterminate("증권사 응답에 주문번호가 없음 — 접수 여부 확인 중")
+                    }
                 }
             }
-        } catch (e: CallNotPermittedException) {
-            log.warn("[CircuitBreaker:kis] 요청 차단됨 — 주문 제출 건너뜀")
-            BrokerageOrderResult(pgOrderId = "CB_OPEN_${System.currentTimeMillis()}", status = "REJECTED", rejectReason = "KIS API 서킷브레이커 OPEN")
-        } catch (e: RestClientException) {
-            log.error("[KIS] 주문 실패: {}", e.message)
-            BrokerageOrderResult(pgOrderId = "ERR_${System.currentTimeMillis()}", status = "REJECTED", rejectReason = e.message)
+        } catch (e: Exception) {
+            SubmitFailureClassifier.classify(e).also {
+                log.error("[KIS] 주문 제출 예외 → {}: {}", it.outcome, e.message)
+            }
         }
     }
 
@@ -265,6 +274,83 @@ class KisBrokerageClient(
         } catch (e: RestClientException) {
             log.error("[KIS] 주문 조회 실패: {}", e.message)
             BrokerageOrderStatus(pgOrderId, "SUBMITTED", 0, null)
+        }
+    }
+
+    // ── 당일 주문 목록 (ADR-056 대조용) ───────────────────────────────────────
+    //
+    // inquire-daily-ccld를 종목(PDNO)·매매구분(SLL_BUY_DVSN_CD 01=매도, 02=매수)으로 좁혀 부른다. 연속조회
+    // (CTX_AREA_*)는 아직 따라가지 않는다 — 대조 창이 1분이라 최근 주문만 필요하지만, 정렬 순서는 실계좌로
+    // 확인해야 한다(ADR-056 Consequences).
+
+    override fun findOrders(credentials: BrokerageCredentials, date: LocalDate, symbol: String, side: String): List<BrokerOrderSnapshot>? {
+        return try {
+            cb.executeCallable {
+                val (cano, acntPrdtCd) = accountFields(credentials.accountNumber)
+                val day = DATE_FMT.format(date)
+                val sideCode = if (side == "SELL") "01" else "02"
+                val uri = "/uapi/domestic-stock/v1/trading/inquire-daily-ccld" +
+                    "?CANO=$cano&ACNT_PRDT_CD=$acntPrdtCd" +
+                    "&INQR_STRT_DT=$day&INQR_END_DT=$day" +
+                    "&SLL_BUY_DVSN_CD=$sideCode&INQR_DVSN=00&PDNO=$symbol&CCLD_DVSN=00" +
+                    "&ORD_GNO_BRNO=&ODNO=&INQR_DVSN_3=00&INQR_DVSN_1=&CTX_AREA_FK100=&CTX_AREA_NK100="
+
+                val resp = restClient.get()
+                    .uri(uri)
+                    .headers { h -> authHeaders(credentials, dailyOrderTrId()).forEach { (k, v) -> h.set(k, v) } }
+                    .retrieve()
+                    .body(KisDailyOrderResponse::class.java)
+
+                // 본문이 없거나 rt_cd가 실패면 "조회 실패"다 — 빈 목록("주문 없음")으로 읽으면 안 된다.
+                if (resp == null || (resp.rt_cd != null && resp.rt_cd != "0")) {
+                    log.warn("[KIS] 당일 주문 조회 실패: rtCd={} msg={}", resp?.rt_cd, resp?.msg1)
+                    return@executeCallable null
+                }
+                // 한 건이라도 해석하지 못하면 "조회 실패"다. 빠뜨리고 넘어가면 실제로 체결된 주문이 목록에서 사라져
+                // 2분 뒤 "미접수"로 확정되고, 사용자는 재주문한다 — ADR-056이 막으려는 이중 주문 그 자체다.
+                val items = resp.output1 ?: emptyList()
+                val snapshots = items.map { it.toSnapshot(side) }
+                if (snapshots.any { it == null }) {
+                    log.error("[KIS] 당일 주문 응답 해석 실패 — 조회 실패로 취급: {}건 중 {}건", items.size, snapshots.count { it == null })
+                    return@executeCallable null
+                }
+                snapshots.filterNotNull()
+            }
+        } catch (e: Exception) {
+            log.warn("[KIS] 당일 주문 조회 예외: {}", e.message)
+            null
+        }
+    }
+
+    private fun KisDailyOrderItem.toSnapshot(requestedSide: String): BrokerOrderSnapshot? {
+        val id = odno?.takeIf { it.isNotBlank() } ?: return null
+        val orderedAt = runCatching {
+            java.time.LocalDateTime.parse("${ord_dt}${ord_tmd}", DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
+                .atZone(java.time.ZoneId.of("Asia/Seoul")).toInstant()
+        }.getOrNull() ?: return null
+        return BrokerOrderSnapshot(
+            brokerOrderId  = id,
+            brokerOrderRef = ord_gno_brno,
+            symbol         = pdno ?: "",
+            side           = when (sll_buy_dvsn_cd) { "01" -> "SELL"; "02" -> "BUY"; else -> requestedSide },
+            quantity       = ord_qty?.toIntOrNull() ?: 0,
+            price          = ord_unpr?.toBigDecimalOrNull()?.takeIf { it.signum() > 0 },
+            orderedAt      = orderedAt,
+            status         = kisStatus(),
+            filledQty      = totCcldQty?.toIntOrNull() ?: 0,
+            avgFillPrice   = avgPrvs?.toBigDecimalOrNull()?.takeIf { it.signum() > 0 },
+        )
+    }
+
+    private fun KisDailyOrderItem.kisStatus(): String {
+        val rejectedQty = rjctQty?.toIntOrNull() ?: 0
+        val filledQty   = totCcldQty?.toIntOrNull() ?: 0
+        val remainQty   = rmnQty?.toIntOrNull() ?: 0
+        return when {
+            rejectedQty > 0                  -> "REJECTED"
+            filledQty > 0 && remainQty == 0  -> "FILLED"
+            filledQty > 0 && remainQty > 0   -> "PARTIALLY_FILLED"
+            else                             -> "SUBMITTED"
         }
     }
 
@@ -383,6 +469,8 @@ class KisBrokerageClient(
     )
 
     private data class KisDailyOrderResponse(
+        val rt_cd: String? = null,
+        val msg1: String? = null,
         val output1: List<KisDailyOrderItem>?,
     )
 
@@ -395,6 +483,11 @@ class KisBrokerageClient(
         val rmn_qty: String?,
         val rjct_qty: String?,
         val avg_prvs: String?,
+        // ADR-056 대조용 — 주문일자(yyyyMMdd)·주문시각(HHmmss, KST)·주문단가·주문채번지점번호(취소 시 KRX_FWDG_ORD_ORGNO)
+        val ord_dt: String? = null,
+        val ord_tmd: String? = null,
+        val ord_unpr: String? = null,
+        val ord_gno_brno: String? = null,
     ) {
         val sllBuyDvsnCd: String? get() = sll_buy_dvsn_cd
         val totCcldQty: String?   get() = tot_ccld_qty

@@ -69,6 +69,8 @@ data class OrderResponse(
     val rejectReason: String?,
     val submittedAt: Instant,
     val filledAt: Instant?,
+    // ADR-056 — 결과 불명 주문의 매칭 후보가 2건 이상이라 자동으로 고를 수 없다.
+    val needsReview: Boolean = false,
 )
 
 data class SettlementResponse(
@@ -251,6 +253,7 @@ class BrokerageController(
         rejectReason = rejectReason,
         submittedAt  = submittedAt,
         filledAt     = filledAt,
+        needsReview  = needsReview,
     )
 
     private fun BrokerageSettlement.toResponse() = SettlementResponse(
