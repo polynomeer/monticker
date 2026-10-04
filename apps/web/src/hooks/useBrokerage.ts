@@ -25,6 +25,7 @@ import {
   getRebalanceTarget,
   previewRebalance,
   saveRebalanceTarget,
+  getTradingStatus,
   submitBrokerageOrder,
   syncBrokerageOrder,
 } from "@/services/brokerage";
@@ -91,10 +92,22 @@ export function useSubmitBrokerageOrder() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (req: SubmitBrokerageOrderRequest) => submitBrokerageOrder(req),
+    // ADR-057 — 423(킬 스위치)일 수 있다. 배너가 다음 포커스까지 기다리지 않도록 상태를 다시 읽는다.
+    onError: () => qc.invalidateQueries({ queryKey: ["brokerage", "trading-status"] }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["brokerage", "balance"] });
       qc.invalidateQueries({ queryKey: ["brokerage", "orders"] });
     },
+  });
+}
+
+/** ADR-057 — 실주문 킬 스위치 상태. 켜져 있는 동안만 30초마다 다시 읽어 해제를 빨리 반영한다. */
+export function useTradingStatus(enabled: boolean) {
+  return useQuery({
+    queryKey: ["brokerage", "trading-status"],
+    queryFn: getTradingStatus,
+    enabled,
+    refetchInterval: (query) => (query.state.data?.halted ? 30_000 : false),
   });
 }
 

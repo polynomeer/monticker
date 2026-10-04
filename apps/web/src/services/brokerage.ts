@@ -1,4 +1,5 @@
 import type {
+  TradingStatusResponse,
   BrokerageAccountResponse,
   BrokerageBalanceResponse,
   BrokerageOrderResponse,
@@ -64,6 +65,12 @@ export async function submitBrokerageOrder(req: SubmitBrokerageOrderRequest): Pr
 
 export async function cancelBrokerageOrder(id: number): Promise<BrokerageOrderResponse> {
   const res = await authFetch(`/api/brokerage/orders/${id}`, { method: "DELETE" });
+  await throwIfNotOk(res);
+  return res.json();
+}
+
+export async function getTradingStatus(): Promise<TradingStatusResponse> {
+  const res = await authFetch(`/api/brokerage/trading-status`);
   await throwIfNotOk(res);
   return res.json();
 }

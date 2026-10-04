@@ -16,6 +16,7 @@ import { ApiError } from "@/services/brokerage";
 import { authFetch } from "@/services/api";
 import { Card } from "@/components/ui/Card";
 import type { RebalanceExecutionResponse, RebalanceTargetSource } from "@monticker/types";
+import { TradingHaltBanner } from "@/components/brokerage/TradingHaltBanner";
 
 interface StockHit { id: number; symbol: string; name: string; }
 interface WeightRow { symbol: string; name: string; weightPct: string; id?: number; }
@@ -227,6 +228,8 @@ export default function RebalancePage() {
         <h1 className="text-xl font-bold text-gray-900 dark:text-dracula-fg">리밸런싱</h1>
         <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">목표 비중을 저장하고, 현재 보유와의 괴리를 확인한 뒤 직접 실행합니다</p>
       </div>
+
+      <TradingHaltBanner enabled={!!account} note="중단 중에는 리밸런싱을 실행할 수 없습니다. 목표 비중 저장과 미리보기는 가능합니다." />
 
       {/* 목표 비중 설정 */}
       <Card className="p-5" outerClassName="mb-6">
