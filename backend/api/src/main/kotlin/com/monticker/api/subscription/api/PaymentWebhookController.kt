@@ -1,9 +1,10 @@
 package com.monticker.api.subscription.api
 
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
+import com.monticker.api.common.aop.RateLimited
 import com.monticker.api.subscription.application.SubscriptionService
+import com.monticker.api.subscription.domain.PaymentStatus
 import com.monticker.api.subscription.domain.PlanCode
-import com.monticker.api.subscription.infrastructure.PaymentRecordRepository
 import com.monticker.api.subscription.infrastructure.pg.TossPgClient
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -34,17 +35,23 @@ import java.math.BigDecimal
 @ConditionalOnProperty("app.pg.mock.enabled", havingValue = "false")
 class PaymentWebhookController(
     private val tossPgClient: TossPgClient,
-    private val paymentRecordRepository: PaymentRecordRepository,
     private val subscriptionService: SubscriptionService,
     private val jwtTokenProvider: JwtTokenProvider,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    data class ConfirmRequest(
-        val paymentKey: String,
+    data class PrepareRequest(val planCode: String)
+
+    data class PrepareResponse(
         val orderId: String,
         val amount: BigDecimal,
         val planCode: String,
+    )
+
+    /** confirm 은 orderId 만 받는다. 금액은 서버가 준비 시점에 정한 값을 쓴다 (ADR-059). */
+    data class ConfirmRequest(
+        val paymentKey: String,
+        val orderId: String,
     )
 
     data class ConfirmResponse(
@@ -52,6 +59,30 @@ class PaymentWebhookController(
         val pgTransactionId: String?,
         val message: String?,
     )
+
+    /**
+     * 결제 준비 — 프론트가 토스 SDK 를 띄우기 **전에** 호출해 orderId 와 금액을 받는다.
+     *
+     * 예전에는 이 단계가 없어서 프론트가 orderId 와 amount 를 스스로 만들어 confirm 에 실어
+     * 보냈다. 토스 confirm 은 "보낸 금액이 실제 결제 금액과 같은가"만 검증하므로, 100원을
+     * 결제하고 `{amount:100, planCode:"PRO"}` 로 confirm 하면 PRO 가 활성화됐다 — 플랜 가격은
+     * 기록에만 쓰였다. 이제 금액과 orderId 를 서버가 쥔다.
+     */
+    @PostMapping("/prepare")
+    @RateLimited(limit = 20, windowSec = 3600, keyPrefix = "payment.prepare")
+    fun prepare(
+        @RequestHeader("Authorization") token: String,
+        @RequestBody req: PrepareRequest,
+    ): ResponseEntity<PrepareResponse> {
+        val userId = jwtTokenProvider.getUserId(token.removePrefix("Bearer "))
+        val planCode = runCatching { PlanCode.valueOf(req.planCode.uppercase()) }.getOrElse {
+            return ResponseEntity.badRequest().build()
+        }
+        val prepared = subscriptionService.preparePayment(userId, planCode)
+        return ResponseEntity.ok(
+            PrepareResponse(prepared.orderId, prepared.amount, prepared.planCode.name)
+        )
+    }
 
     /**
      * 프론트엔드 SDK 결제 완료 후 호출.
@@ -63,25 +94,44 @@ class PaymentWebhookController(
         @RequestBody req: ConfirmRequest,
     ): ResponseEntity<ConfirmResponse> {
         val userId = jwtTokenProvider.getUserId(token.removePrefix("Bearer "))
-        log.info("결제 확정 요청: userId={} plan={} orderId={}", userId, req.planCode, req.orderId)
+
+        // 준비된 주문만 확정한다. 남의 orderId 로는 조회되지 않는다.
+        val prepared = subscriptionService.findPreparedPayment(userId, req.orderId)
+            ?: return ResponseEntity.badRequest().body(
+                ConfirmResponse(false, null, "준비되지 않은 주문입니다. 결제를 다시 시작해주세요.")
+            )
+
+        // 이미 확정된 주문이면 PG 를 다시 찌르지 않는다 — 네트워크 재시도로 confirm 이 두 번
+        // 도착하는 경우다. 토스는 2회차를 4xx 로 거절하는데, 예전에는 그걸 "결제 실패"로 읽고
+        // 400 을 돌려줬다. 실제로는 성공한 결제인데도.
+        if (prepared.status == PaymentStatus.SUCCESS) {
+            log.info("confirm 재수신 (이미 확정): userId={} orderId={}", userId, req.orderId)
+            return ResponseEntity.ok(ConfirmResponse(true, prepared.pgTransactionId, null))
+        }
+
+        log.info("결제 확정 요청: userId={} plan={} orderId={}", userId, prepared.plan.code, req.orderId)
 
         val result = tossPgClient.confirmPayment(
             paymentKey = req.paymentKey,
             orderId    = req.orderId,
-            amount     = req.amount,
+            amount     = prepared.amount,     // 클라이언트가 보낸 금액을 쓰지 않는다
         )
 
-        if (!result.success) {
-            log.warn("결제 확정 실패: userId={} reason={}", userId, result.failureReason)
-            return ResponseEntity.badRequest().body(
-                ConfirmResponse(success = false, pgTransactionId = null, message = result.failureReason)
-            )
-        }
-
-        val planCode = runCatching { PlanCode.valueOf(req.planCode) }.getOrElse {
-            return ResponseEntity.badRequest().body(
-                ConfirmResponse(success = false, pgTransactionId = null, message = "유효하지 않은 플랜: ${req.planCode}")
-            )
+        // 확정이 실패했어도 끝이 아니다. PG 에 직접 물어 실제로 이미 승인된 건이면
+        // (confirm 중복 호출·응답 유실) 성공으로 이어간다 — 그래야 "돈은 빠졌는데 구독은
+        // 없다"가 생기지 않는다.
+        val pgTransactionId = result.pgTransactionId ?: run {
+            val verified = tossPgClient.getPaymentStatus(req.paymentKey)
+            if (verified.found && verified.status == "DONE" && verified.totalAmount == prepared.amount) {
+                log.warn("confirm 은 실패했지만 PG 재조회 결과 이미 승인됨: orderId={}", req.orderId)
+                verified.paymentKey ?: req.paymentKey
+            } else {
+                log.warn("결제 확정 실패: userId={} orderId={} reason={} (PG 상태={})",
+                    userId, req.orderId, result.failureReason, verified.status)
+                return ResponseEntity.badRequest().body(
+                    ConfirmResponse(false, null, result.failureReason)
+                )
+            }
         }
 
         // subscribe()가 아니라 activateConfirmedSubscription()을 쓴다 — 결제는 위에서 이미
@@ -89,15 +139,16 @@ class PaymentWebhookController(
         // 스텁으로 항상 실패 처리하도록 만들어져 있어, 그러면 실제로 결제된 고객의 구독이
         // 활성화되지 않는다 — 과거에 실제로 있던 버그).
         val subscribeResult = subscriptionService.activateConfirmedSubscription(
-            userId = userId, planCode = planCode, pgTransactionId = result.pgTransactionId!!,
+            userId = userId, orderId = req.orderId, pgTransactionId = pgTransactionId,
         )
 
         return if (subscribeResult.success) {
-            ResponseEntity.ok(ConfirmResponse(success = true, pgTransactionId = result.pgTransactionId, message = null))
+            ResponseEntity.ok(ConfirmResponse(success = true, pgTransactionId = pgTransactionId, message = null))
         } else {
-            log.error("결제는 확정됐으나 구독 활성화 실패: userId={} plan={} reason={}", userId, planCode, subscribeResult.errorMessage)
+            log.error("결제는 확정됐으나 구독 활성화 실패: userId={} orderId={} reason={}",
+                userId, req.orderId, subscribeResult.errorMessage)
             ResponseEntity.internalServerError().body(
-                ConfirmResponse(success = false, pgTransactionId = result.pgTransactionId, message = subscribeResult.errorMessage)
+                ConfirmResponse(success = false, pgTransactionId = pgTransactionId, message = subscribeResult.errorMessage)
             )
         }
     }

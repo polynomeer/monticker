@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.time.temporal.ChronoUnit
+import java.util.UUID
 
 @Service
 class SubscriptionService(
@@ -70,6 +71,41 @@ class SubscriptionService(
     }
 
     /**
+     * 일회성 결제 준비 — 프론트가 토스 SDK를 띄우기 **전에** 호출한다 (ADR-059).
+     *
+     * orderId와 결제 금액을 **서버가 정해서** PENDING 기록으로 남기고 돌려준다. 예전에는 둘 다
+     * 프론트가 confirm 요청 바디에 실어 보냈고, 그래서 두 가지가 열려 있었다:
+     *
+     *  1. **금액을 클라이언트가 정했다.** 토스 confirm은 "보낸 금액이 실제 결제 금액과 같은가"만
+     *     검증한다. 사용자가 SDK로 100원을 결제하고 `{amount:100, planCode:"PRO"}`로 confirm하면
+     *     토스는 DONE을 주고 우리는 PRO를 활성화했다 — 플랜 가격은 기록에만 쓰였다.
+     *  2. **orderId가 우리 것이 아니었다.** 멱등성의 열쇠를 클라이언트가 쥐고 있으면 DB 유니크
+     *     인덱스가 막을 수 있는 것이 없다.
+     *
+     * 이제 orderId는 `payment_records.pg_order_id`의 유니크 인덱스(V50)가 지키는 서버 생성값이고,
+     * 금액은 호출 시점의 플랜 가격으로 고정된다.
+     */
+    @Transactional
+    fun preparePayment(userId: Long, planCode: PlanCode): PreparedPayment {
+        val plan = planRepo.findByCode(planCode).orElseThrow {
+            IllegalArgumentException("존재하지 않는 플랜: $planCode")
+        }
+        require(plan.price.toLong() > 0L) { "무료 플랜은 결제가 필요하지 않습니다." }
+
+        val orderId = "sub_${userId}_${UUID.randomUUID()}"
+        val record = paymentRepo.save(
+            PaymentRecord(userId = userId, plan = plan, amount = plan.price, pgOrderId = orderId)
+        )
+        log.info("결제 준비: userId={} plan={} orderId={} amount={}", userId, planCode, orderId, plan.price)
+        return PreparedPayment(orderId = orderId, amount = plan.price, planCode = plan.code, paymentId = record.id)
+    }
+
+    /** 준비된 결제를 orderId로 되찾는다. 남의 orderId로는 조회되지 않는다. */
+    @Transactional(readOnly = true)
+    fun findPreparedPayment(userId: Long, orderId: String): PaymentRecord? =
+        paymentRepo.findByPgOrderId(orderId).orElse(null)?.takeIf { it.userId == userId }
+
+    /**
      * 토스페이먼츠 confirm 플로우 전용(PaymentWebhookController.confirm 참고). 프론트가
      * 토스 SDK로 결제를 이미 완료했고, 컨트롤러가 tossPgClient.confirmPayment()로 그 결제를
      * 이미 확정한 뒤 호출한다.
@@ -78,14 +114,23 @@ class SubscriptionService(
      * TossPgClient.requestPayment()는 "웹훅 플로우를 쓰라"는 스텁이라 항상 실패를 반환하므로,
      * 여기서 다시 호출하면 방금 실제로 성공한 결제인데도 구독이 활성화되지 않고 PaymentRecord만
      * FAILED로 남는다 — 실제 코드에 있던 버그(고객은 결제됐는데 서비스는 활성화 안 됨).
+     *
+     * ADR-059 — preparePayment()가 만든 기록을 orderId로 찾아 그 위에 확정한다. 이미 SUCCESS면
+     * 다시 활성화하지 않고 그 결과를 그대로 돌려준다(멱등 재생). 네트워크 재시도로 confirm이
+     * 두 번 도착해도 결제 기록이 둘로 늘지 않는다.
      */
     @Transactional
-    fun activateConfirmedSubscription(userId: Long, planCode: PlanCode, pgTransactionId: String): SubscribeResult {
-        val plan = planRepo.findByCode(planCode).orElseThrow {
-            IllegalArgumentException("존재하지 않는 플랜: $planCode")
+    fun activateConfirmedSubscription(userId: Long, orderId: String, pgTransactionId: String): SubscribeResult {
+        val record = paymentRepo.findByPgOrderId(orderId).orElseThrow {
+            IllegalArgumentException("준비되지 않은 주문입니다: $orderId")
         }
-        val record = paymentRepo.save(PaymentRecord(userId = userId, plan = plan, amount = plan.price))
-        return activatePaidPlan(userId, plan, record, pgTransactionId)
+        require(record.userId == userId) { "다른 사용자의 주문입니다." }
+
+        if (record.status == PaymentStatus.SUCCESS) {
+            log.info("confirm 재수신 — 이미 확정된 결제다. 그대로 돌려준다: orderId={}", orderId)
+            return SubscribeResult.success(record.plan.code, paymentId = record.id)
+        }
+        return activatePaidPlan(userId, record.plan, record, pgTransactionId)
     }
 
     private fun activatePaidPlan(
@@ -102,7 +147,9 @@ class SubscriptionService(
         subscriptionRepo.save(subscription)
 
         log.info("구독 활성화: userId={} plan={} txId={}", userId, plan.code, pgTransactionId)
-        ledgerService.recordSubscriptionPayment(userId, plan.code.name, plan.price, record.id)
+        // 기록의 금액을 쓴다(plan.price 가 아니라) — 준비 시점에 고정된 값이 과금의 근거이고,
+        // 그 사이 플랜 가격이 바뀌었더라도 고객이 실제로 낸 금액은 기록 쪽이다 (ADR-059).
+        ledgerService.recordSubscriptionPayment(userId, plan.code.name, record.amount, record.id)
         return SubscribeResult.success(plan.code, paymentId = record.id)
     }
 
@@ -299,6 +346,14 @@ class SubscriptionService(
             subscriptionRepo.save(UserSubscription(userId = userId, plan = plan))
         }
 }
+
+/** preparePayment 가 프론트에 돌려주는 값 — 이 orderId·amount 로 토스 SDK 를 띄운다. */
+data class PreparedPayment(
+    val orderId: String,
+    val amount: java.math.BigDecimal,
+    val planCode: PlanCode,
+    val paymentId: Long,
+)
 
 data class SubscribeResult(
     val success: Boolean,
