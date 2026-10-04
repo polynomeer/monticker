@@ -57,6 +57,7 @@ class BrokerageService(
     transactionManager: PlatformTransactionManager,
     private val meterRegistry: MeterRegistry,
     private val tradingHaltService: TradingHaltService,
+    private val pendingBuyQuery: PendingBuyQuery,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -191,7 +192,7 @@ class BrokerageService(
         // ADR-025 — 페이퍼 트레이딩과 동일한 사전 리스크 게이트. 증권사에 보내기 전에
         // 막는다 — 실패하면 실제 주문은 아예 나가지 않는다.
         val estimatedPrice = request.limitPrice ?: currentPrice(request.symbol) ?: BigDecimal.ZERO
-        val snapshot = buildPortfolioSnapshot(userId, client, credentials)
+        val snapshot = buildPortfolioSnapshot(userId, account, stockId, client, credentials)
         val riskResult = riskChecker.checkBrokerageOrder(userId, stockId, request.side, request.quantity, estimatedPrice, snapshot)
         if (!riskResult.approved) {
             throw RiskLimitException(riskResult.blockedBy ?: "Unknown risk rule")
@@ -483,11 +484,22 @@ class BrokerageService(
     }
 
     /** ADR-025 — 실거래 사전 리스크 게이트에 넘길 포트폴리오 스냅샷을 조립한다. */
-    private fun buildPortfolioSnapshot(userId: Long, client: BrokerageClient, credentials: BrokerageCredentials): PortfolioSnapshot {
+    private fun buildPortfolioSnapshot(
+        userId: Long, account: BrokerageAccount, stockId: Long, client: BrokerageClient, credentials: BrokerageCredentials,
+    ): PortfolioSnapshot {
         val balance = client.getBalance(credentials)
-        val holdings = balance.holdings.mapNotNull { h ->
-            resolveStockId(h.symbol)?.let { HoldingPosition(stockId = it, qty = h.quantity) }
-        }
+        // 수량 0(오늘 전량 매도) 행은 빼고, 한 종목이 여러 행(현금·신용 등)으로 오면 합친다 — 그대로 두면 보유 종목 수가
+        // 부풀고, 집중도는 첫 행만 봐서 과소평가된다.
+        val holdings = balance.holdings
+            .filter { it.quantity > 0 }
+            .mapNotNull { h -> resolveStockId(h.symbol)?.let { it to h.quantity } }
+            .groupBy({ it.first }, { it.second })
+            .map { (id, qtys) -> HoldingPosition(stockId = id, qty = qtys.sum()) }
+
+        // ADR-058 — 같은 종목의 진행 중 매수 상태를 증권사에서 먼저 갱신한다. 지정가 매수는 체결돼도 자동으로 FILLED가 되지
+        // 않아(대조 잡은 결과 불명만 본다) 체결분이 보유와 대기에 하루 종일 이중으로 잡힌다. 이중 계산이 문제되는 건 집중도이고
+        // 집중도는 이 종목만 보므로 이 종목만 조회한다(보통 0~1건). 조회가 실패하면 SUBMITTED로 남아 대기로 센다(안전 쪽).
+        refreshOpenBuys(account, stockId, client, credentials)
 
         // brokerage_settlements는 T+2로 미래 날짜에 정산되므로 "오늘의 리스크"에는 쓸 수
         // 없다 — 오늘 체결된 주문에서 직접 현금흐름을 근사한다(페이퍼의 daily PnL과 동일한 방식).
@@ -510,7 +522,23 @@ class BrokerageService(
             holdings         = holdings,
             dailyPnl         = dailyPnl,
             recentOrderCount = recentOrderCount,
+            // ADR-058 — 현금에서 빼지 않는다(매수 가능 금액은 증권사가 판정하고, Toss 현금은 이미 미체결을 뺀 값이다).
+            // 진행 중 매수는 노출에 더하고, 분모는 증권사가 계산한 총평가액을 쓴다.
+            pendingBuys      = pendingBuyQuery.pendingBuys(account.id),
+            totalAssets      = balance.totalEvaluated,
         )
+    }
+
+    private fun refreshOpenBuys(account: BrokerageAccount, stockId: Long, client: BrokerageClient, credentials: BrokerageCredentials) {
+        orderRepo.findAllByAccountIdAndStockIdAndSideAndStatusAndSubmittedAtAfter(
+            account.id, stockId, OrderSide.BUY, BrokerageOrderStatus.SUBMITTED, Instant.now().minus(PendingBuyQuery.OPEN_ORDER_WINDOW),
+        ).forEach { order ->
+            val pgOrderId = order.pgOrderId ?: return@forEach
+            runCatching { client.getOrderStatus(credentials, pgOrderId) }.onSuccess { status ->
+                applyBrokerStatus(account, order, status.status, status.filledQty, status.avgFillPrice)
+                orderRepo.save(order)
+            }
+        }
     }
 
     private fun currentPrice(symbol: String): BigDecimal? =

@@ -1,8 +1,10 @@
 package com.monticker.api.brokerage
 
 import com.monticker.api.brokerage.application.BrokerageService
+import com.monticker.api.brokerage.application.PendingBuyQuery
 import com.monticker.api.brokerage.application.TradingHaltService
 import com.monticker.api.brokerage.domain.BrokerageAccount
+import com.monticker.api.brokerage.domain.BrokerageOrder
 import com.monticker.api.brokerage.domain.BrokerageOrderStatus
 import com.monticker.api.brokerage.domain.BrokerageProvider
 import com.monticker.api.brokerage.infrastructure.BrokerageAccountRepository
@@ -13,7 +15,9 @@ import com.monticker.api.brokerage.infrastructure.BrokerageSettlementRepository
 import com.monticker.api.brokerage.infrastructure.MockBrokerageClient
 import com.monticker.api.common.exception.BusinessRuleException
 import com.monticker.api.risk.application.RiskCheckResult
+import com.monticker.api.risk.application.RiskCheckAuditLogger
 import com.monticker.api.risk.application.RiskCheckerService
+import com.monticker.api.risk.application.RiskRuleQueryService
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every
 import io.mockk.mockk
@@ -80,16 +84,32 @@ class BrokerageOrderUnknownOutcomeFlowIntegrationTest {
     private val lostSymbol = "LOST01"     // Mock 증권사가 접수하고 응답을 잃어버리는 종목
     private val normalSymbol = "OK0001"
 
-    private fun service(): BrokerageService {
-        val mockBroker = MockBrokerageClient(jdbc, indeterminateSymbolsRaw = lostSymbol)
-        val riskChecker = mockk<RiskCheckerService> {
+    @Autowired private lateinit var riskLimitRepo: com.monticker.api.risk.infrastructure.RiskLimitRepository
+
+    /** ADR-058 — 리스크 게이트까지 실제로 조립한다(룰 판정·감사 기록이 실제 SQL로 돈다). */
+    private fun serviceWithRealRiskGate(): BrokerageService = service(
+        RiskCheckerService(
+            riskLimitRepo, RiskRuleQueryService(jdbc),
+            // 운영처럼 트랜잭션 프록시를 씌운다 — record()는 REQUIRES_NEW라 거부와 함께 롤백되지 않고 남아야 한다.
+            ProxyFactory(RiskCheckAuditLogger(jdbc, com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules())).apply {
+                isProxyTargetClass = true
+                addAdvice(TransactionInterceptor(txManager, AnnotationTransactionAttributeSource()))
+            }.proxy as RiskCheckAuditLogger,
+            SimpleMeterRegistry(), jdbc,
+        ),
+    )
+
+    private fun service(
+        riskChecker: RiskCheckerService = mockk {
             every { checkBrokerageOrder(any(), any(), any(), any(), any(), any()) } returns
                 RiskCheckResult(approved = true, blockedBy = null, severity = "APPROVED", checks = emptyList())
-        }
+        },
+    ): BrokerageService {
+        val mockBroker = MockBrokerageClient(jdbc, indeterminateSymbolsRaw = lostSymbol)
         val target = BrokerageService(
             BrokerageClientRegistry(BrokerageProvider.entries.associateWith { mockBroker }),
             accountRepo, orderRepo, settlementRepo, mockk(relaxed = true), riskChecker, jdbc,
-            txManager, SimpleMeterRegistry(), TradingHaltService(jdbc, SimpleMeterRegistry()),
+            txManager, SimpleMeterRegistry(), TradingHaltService(jdbc, SimpleMeterRegistry()), PendingBuyQuery(jdbc),
         )
         // 운영처럼 @Transactional 프록시를 씌운다. 직접 생성한 인스턴스는 애노테이션이 무시돼, 예컨대 syncOrderStatus에
         // 바깥 트랜잭션이 생겨 캐시된(해소 전) 엔티티를 돌려주는 회귀를 이 테스트가 잡지 못했다.
@@ -232,5 +252,54 @@ class BrokerageOrderUnknownOutcomeFlowIntegrationTest {
 
         assertThat(svc.submitOrder(userId, BrokerageOrderRequest(normalSymbol, "BUY", "MARKET", 1)).status)
             .isEqualTo(BrokerageOrderStatus.FILLED)
+    }
+
+    // ── ADR-058 — 진행 중 매수가 노출에 잡힌다 ─────────────────────────────────────────────
+
+    private fun stockIdOf(symbol: String) = jdbc.queryForObject("SELECT id FROM stocks WHERE symbol = ?", Long::class.java, symbol)!!
+
+    // Mock 증권사: 총평가 1억, 현재가 70,000 > 지정가 69,000 이라 체결되지 않고 SUBMITTED로 남는다. 360주 = 24.8%.
+    private val quarter = BrokerageOrderRequest(normalSymbol, "BUY", "LIMIT", 360, BigDecimal("69000"))
+
+    @Test
+    fun `같은 종목 24·8% 지정가 매수 두 건 — 첫 건은 통과, 두 번째는 첫 건이 대기 노출로 잡혀 집중도 30% 한도에 막힌다`() {
+        val svc = serviceWithRealRiskGate()
+        val userId = seedUser()
+
+        assertThat(svc.submitOrder(userId, quarter).status).isEqualTo(BrokerageOrderStatus.SUBMITTED)
+
+        assertThatThrownBy { svc.submitOrder(userId, quarter) }
+            .isInstanceOf(com.monticker.api.common.aop.RiskLimitException::class.java)
+            .hasMessageContaining("ConcentrationRule")
+        val detail = jdbc.queryForObject(
+            "SELECT checks_json::text FROM risk_check_logs WHERE user_id = ? AND approved = false ORDER BY id DESC LIMIT 1", String::class.java, userId,
+        )
+        assertThat(detail).contains("대기 360")
+        assertThat(stockIdOf(normalSymbol)).isPositive()
+    }
+
+    @Test
+    fun `동시에 들어온 두 건도 한 건만 통과한다 — 준비 단계 직렬화로 두 번째가 첫 번째의 의도 행을 본다`() {
+        // 두 번째가 준비할 때 첫 번째는 아직 PENDING_SUBMIT(증권사 호출 중)일 수도, 이미 SUBMITTED일 수도 있다.
+        // 앞이면 ADR-056 중복 가드가, 뒤면 ADR-058 대기 노출(집중도)이 막는다. 어느 쪽이든 두 건이 함께 통과하지 않는다.
+        val svc = serviceWithRealRiskGate()
+        val userId = seedUser()
+        val start = java.util.concurrent.CountDownLatch(1)
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(2)
+        try {
+            val results = (1..2).map {
+                pool.submit<Result<BrokerageOrder>> { start.await(); runCatching { svc.submitOrder(userId, quarter) } }
+            }
+            start.countDown()
+            val outcomes = results.map { it.get(30, java.util.concurrent.TimeUnit.SECONDS) }
+
+            assertThat(outcomes.count { it.isSuccess }).isEqualTo(1)
+            assertThat(outcomes.single { it.isFailure }.exceptionOrNull()).isInstanceOfAny(
+                com.monticker.api.common.aop.RiskLimitException::class.java,
+                com.monticker.api.common.exception.BusinessRuleException::class.java,
+            )
+        } finally {
+            pool.shutdownNow()
+        }
     }
 }

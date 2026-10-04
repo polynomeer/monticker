@@ -53,8 +53,14 @@ class BrokerageServiceTest {
     private val txManager      = mockk<PlatformTransactionManager>(relaxed = true)
     private val meterRegistry  = SimpleMeterRegistry()
     private val haltService    = mockk<TradingHaltService> { every { findActive(any(), any()) } returns null }
+    private val pendingBuyQuery = mockk<PendingBuyQuery> { every { pendingBuys(any(), any()) } returns emptyMap() }
 
-    private val service = BrokerageService(clientRegistry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService)
+    init {
+        // ADR-058 — 리스크 게이트 직전에 같은 종목의 진행 중 매수를 갱신한다. 기본은 없음.
+        every { orderRepo.findAllByAccountIdAndStockIdAndSideAndStatusAndSubmittedAtAfter(any(), any(), any(), any(), any()) } returns emptyList()
+    }
+
+    private val service = BrokerageService(clientRegistry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery)
 
     private val approvedRisk = RiskCheckResult(approved = true, blockedBy = null, severity = "APPROVED", checks = emptyList())
 
@@ -264,7 +270,7 @@ class BrokerageServiceTest {
 
     private fun serviceWithFakeClient(fakeClient: BrokerageClient): BrokerageService {
         val registry = BrokerageClientRegistry(BrokerageProvider.entries.associateWith { fakeClient })
-        return BrokerageService(registry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService)
+        return BrokerageService(registry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery)
     }
 
     @Test
@@ -623,5 +629,47 @@ class BrokerageServiceTest {
         val halt = TradingHalt(1, HaltScope.USER, "1", "자격증명 유출 의심", 9, Instant.now(), null, null, null)
         assertThat(halt.userMessage).doesNotContain("유출").contains("고객센터")
         assertThat(halt.copy(scope = HaltScope.GLOBAL, target = null, reason = "증권사 점검").userMessage).contains("증권사 점검")
+    }
+
+    // ── ADR-058 — 진행 중 매수 갱신 ──────────────────────────────────────────────────────
+
+    @Test
+    fun `리스크 게이트 직전에 같은 종목의 미체결 매수를 증권사에서 갱신한다 — 체결된 것이 보유와 대기에 이중으로 잡히지 않게`() {
+        val orderSlot = slot<BrokerageOrder>()
+        val (svc, fakeClient) = fakeClientService(BrokerageOrderResult.accepted("ODNO-NEW"), orderSlot)
+        val open = makeOrder(status = BrokerageOrderStatus.SUBMITTED, pgOrderId = "ODNO-OPEN")
+        every { orderRepo.findAllByAccountIdAndStockIdAndSideAndStatusAndSubmittedAtAfter(1L, 1L, OrderSide.BUY, BrokerageOrderStatus.SUBMITTED, any()) } returns listOf(open)
+        every { fakeClient.getOrderStatus(any(), "ODNO-OPEN") } returns
+            com.monticker.api.brokerage.infrastructure.BrokerageOrderStatus("ODNO-OPEN", "FILLED", 10, BigDecimal("70000"))
+        every { settlementRepo.save(any()) } answers { firstArg() }
+
+        svc.submitOrder(1L, BrokerageOrderRequest("005930", "BUY", "MARKET", 1))
+
+        assertThat(open.status).isEqualTo(BrokerageOrderStatus.FILLED)
+        verify(ordering = io.mockk.Ordering.ORDERED) {
+            orderRepo.save(open)
+            pendingBuyQuery.pendingBuys(any(), any())   // 갱신이 대기 집계보다 먼저다
+        }
+    }
+
+    @Test
+    fun `보유 내역은 수량 0 행을 빼고 같은 종목 여러 행을 합친다`() {
+        val orderSlot = slot<BrokerageOrder>()
+        val (svc, fakeClient) = fakeClientService(BrokerageOrderResult.accepted("ODNO-H"), orderSlot)
+        every { fakeClient.getBalance(any()) } returns BrokerageBalance(
+            BigDecimal("10000000"), BigDecimal("10000000"),
+            listOf(
+                com.monticker.api.brokerage.infrastructure.BrokerageHolding("005930", 3, BigDecimal.ONE, BigDecimal.ONE),
+                com.monticker.api.brokerage.infrastructure.BrokerageHolding("005930", 4, BigDecimal.ONE, BigDecimal.ONE),
+                com.monticker.api.brokerage.infrastructure.BrokerageHolding("000660", 0, BigDecimal.ONE, BigDecimal.ONE),
+            ),
+        )
+        val snapshot = slot<com.monticker.api.risk.application.PortfolioSnapshot>()
+        every { riskChecker.checkBrokerageOrder(any(), any(), any(), any(), any(), capture(snapshot)) } returns approvedRisk
+
+        svc.submitOrder(1L, req)
+
+        assertThat(snapshot.captured.holdings).containsExactly(com.monticker.api.risk.application.HoldingPosition(stockId = 1L, qty = 7))
+        assertThat(snapshot.captured.totalAssets).isEqualByComparingTo(BigDecimal("10000000"))
     }
 }

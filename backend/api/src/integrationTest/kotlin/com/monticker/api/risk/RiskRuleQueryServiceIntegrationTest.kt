@@ -1,5 +1,7 @@
 package com.monticker.api.risk
 
+import com.monticker.api.risk.application.HoldingPosition
+import com.monticker.api.risk.application.PortfolioSnapshot
 import com.monticker.api.risk.application.RiskRuleQueryService
 import com.monticker.api.risk.domain.RiskLimit
 import com.monticker.api.support.PostgresIntegrationTest
@@ -97,5 +99,65 @@ class RiskRuleQueryServiceIntegrationTest : PostgresIntegrationTest() {
 
         // b는 (미러가 없어) 신규 종목이므로 PositionCountRule이 평가되고, 현재 보유 종목 수는 a 하나다
         assertThat(checks.first { it.rule == "PositionCountRule" }.current).isEqualTo(1.0)
+    }
+
+    // ── ADR-058 — 실거래 스냅샷: 진행 중 매수, 증권사 총평가액 분모 ──────────────────────────
+
+    private fun real(
+        stockId: Long, qty: Int, price: String, cash: String = "100000000",
+        pending: Map<Long, Int> = emptyMap(), totalAssets: String? = "100000000", holdings: List<HoldingPosition> = emptyList(),
+    ) = service.evaluateWithSnapshot(
+        stockId, "BUY", qty, BigDecimal(price), limits,
+        PortfolioSnapshot(BigDecimal(cash), holdings, BigDecimal.ZERO, 0, pending, totalAssets?.let(::BigDecimal)),
+    )
+
+    @Test
+    fun `같은 종목의 진행 중 매수까지 더해 집중도를 본다 — 25% 두 건이 각각 통과하던 구멍`() {
+        val s = stocks(1)[0]
+        assertThat(real(s, 360, "69000").first { it.rule == "ConcentrationRule" }.passed).isTrue()          // 24.8%
+
+        val r = real(s, 360, "69000", pending = mapOf(s to 360)).first { it.rule == "ConcentrationRule" }
+        assertThat(r.passed).isFalse()                                                                          // 49.7%
+        assertThat(r.detail).contains("대기 360")
+    }
+
+    @Test
+    fun `진행 중 매수 종목도 보유 종목 수에 들어간다`() {
+        val ids = stocks(11)
+        val target = ids.last()
+        val pending = ids.take(10).associateWith { 1 }      // 신규 종목 10개를 걸어둔 상태 — 한도 10개
+
+        val r = real(target, 1, "100", pending = pending).first { it.rule == "PositionCountRule" }
+        assertThat(r.passed).isFalse()
+        // 이미 걸어둔 종목을 더 사는 것은 신규가 아니다
+        assertThat(real(ids.first(), 1, "100", pending = pending).none { it.rule == "PositionCountRule" }).isTrue()
+    }
+
+    @Test
+    fun `분모는 증권사 총평가액 — KIS 예수금에 정산 전 매수 대금이 남아 있어도 이중으로 세지 않는다`() {
+        // 전용 종목 — 공유 시드 종목이면 다른 테스트가 넣은 더 최근 캔들 가격을 읽을 수 있다
+        val s = jdbcTemplate.queryForObject(
+            "INSERT INTO stocks (symbol, name, market, exchange) VALUES (?, 'k', 'KOSPI', 'KRX') RETURNING id",
+            Long::class.java, "K${System.nanoTime() % 100000000}",
+        )!!
+        // 오늘 2,000만원어치를 샀다: 보유에 있고, 정산 전이라 예수금(cash)에도 그대로 있다. 총평가액(D+2 기준)은 1억.
+        val holdings = listOf(HoldingPosition(stockId = s, qty = 200))
+        jdbcTemplate.update(
+            "INSERT INTO candles_1m (stock_id, open, high, low, close, volume, candle_time) VALUES (?, 100000, 100000, 100000, 100000, 1, now()) ON CONFLICT DO NOTHING", s,
+        )
+        val withBroker = real(s, 110, "100000", cash = "100000000", holdings = holdings).first { it.rule == "ConcentrationRule" }
+        assertThat(withBroker.passed).isFalse()   // (200+110)×10만 / 1억 = 31%
+
+        // 예전 방식(분모 = 예수금 + 보유) — 같은 돈을 두 번 세 1.2억이 되고 25.8%로 통과했다
+        val legacy = real(s, 110, "100000", cash = "100000000", holdings = holdings, totalAssets = null).first { it.rule == "ConcentrationRule" }
+        assertThat(legacy.passed).isTrue()
+    }
+
+    @Test
+    fun `증권사가 총평가액을 주지 않으면(0) 집중도를 판정할 수 없어 거부한다`() {
+        val s = stocks(1)[0]
+        val r = real(s, 1, "100", totalAssets = "0").first { it.rule == "ConcentrationRule" }
+        assertThat(r.passed).isFalse()
+        assertThat(r.detail).contains("총평가액")
     }
 }

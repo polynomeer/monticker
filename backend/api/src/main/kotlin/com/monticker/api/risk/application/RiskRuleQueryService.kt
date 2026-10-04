@@ -19,6 +19,16 @@ data class PortfolioSnapshot(
     val holdings: List<HoldingPosition>,
     val dailyPnl: BigDecimal,
     val recentOrderCount: Long,   // 최근 1시간
+    /**
+     * ADR-058 — 아직 보유 내역에 없을 수 있는 매수(stockId → 수량): 결과 불명·미체결 잔량·막 체결된 것. 노출을 늘리는 쪽으로만
+     * 센다(진행 중 매도는 넣지 않는다). 모의투자는 사가가 현금·보유를 원자적으로 바꾸므로 비어 있다.
+     */
+    val pendingBuys: Map<Long, Int> = emptyMap(),
+    /**
+     * ADR-058 — 집중도 분모. 실거래는 증권사가 계산한 총평가액(KIS `tot_evlu_amt`는 D+2 예수금 기준이라 오늘 매수 대금이
+     * 이중으로 들어가지 않는다). null이면 `cash + Σ보유`(모의투자 — 체결 즉시 현금이 줄어든다).
+     */
+    val totalAssets: BigDecimal? = null,
 )
 
 @Service
@@ -87,21 +97,33 @@ class RiskRuleQueryService(
                     limit   = concentrationLimit,
                 ))
             } else {
-                val totalStockValue = snapshot.holdings.sumOf { h ->
+                val totalAssets = snapshot.totalAssets?.toDouble() ?: (accountCash.toDouble() + snapshot.holdings.sumOf { h ->
                     currentPrice(h.stockId).multiply(BigDecimal(h.qty)).toDouble()
-                }
-                val totalAssets      = accountCash.toDouble() + totalStockValue
+                })
                 val currentQty       = snapshot.holdings.find { it.stockId == stockId }?.qty ?: 0
-                val currentValue     = estimatedPrice.multiply(BigDecimal(currentQty)).toDouble()
-                val newHoldingValue  = currentValue + estimatedPrice.multiply(BigDecimal(qty)).toDouble()
-                val concentrationPct = if (totalAssets > 0) newHoldingValue / totalAssets * 100 else 0.0
-                checks.add(RuleResult(
-                    rule    = "ConcentrationRule",
-                    passed  = concentrationPct <= concentrationLimit,
-                    detail  = "집중도 ${String.format("%.2f", concentrationPct)}% / 한도 ${concentrationLimit}%",
-                    current = concentrationPct,
-                    limit   = concentrationLimit,
-                ))
+                // ADR-058 — 같은 종목의 진행 중 매수까지 더한다. 빠지면 한도 30%에 25%짜리 매수 두 건이 각각 통과한다.
+                val pendingQty       = snapshot.pendingBuys[stockId] ?: 0
+                val newHoldingValue  = estimatedPrice.multiply(BigDecimal(currentQty + pendingQty + qty)).toDouble()
+                if (snapshot.totalAssets != null && totalAssets <= 0) {
+                    // 증권사가 총평가액을 주지 않았다 — 분모를 모르는데 안전하다고 판정하지 않는다(V-H3와 같은 원칙).
+                    checks.add(RuleResult(
+                        rule    = "ConcentrationRule",
+                        passed  = false,
+                        detail  = "증권사 총평가액을 확인할 수 없어 집중도를 판정할 수 없습니다.",
+                        current = 0.0,
+                        limit   = concentrationLimit,
+                    ))
+                } else {
+                    val concentrationPct = if (totalAssets > 0) newHoldingValue / totalAssets * 100 else 0.0
+                    val pendingNote = if (pendingQty > 0) " (보유 $currentQty + 대기 $pendingQty + 주문 $qty)" else ""
+                    checks.add(RuleResult(
+                        rule    = "ConcentrationRule",
+                        passed  = concentrationPct <= concentrationLimit,
+                        detail  = "집중도 ${String.format("%.2f", concentrationPct)}% / 한도 ${concentrationLimit}%$pendingNote",
+                        current = concentrationPct,
+                        limit   = concentrationLimit,
+                    ))
+                }
             }
         }
 
@@ -145,9 +167,11 @@ class RiskRuleQueryService(
 
         // 4. Position Count Rule (BUY + new stock only)
         if (side == "BUY") {
-            val isNewStock = snapshot.holdings.none { it.stockId == stockId }
+            // ADR-058 — 진행 중 매수 종목도 보유로 센다. 빠지면 신규 종목 매수를 여러 건 걸어 한도를 넘는다.
+            val positions = snapshot.holdings.map { it.stockId }.toSet() + snapshot.pendingBuys.filterValues { it > 0 }.keys
+            val isNewStock = stockId !in positions
             if (isNewStock) {
-                val positionCount = snapshot.holdings.size
+                val positionCount = positions.size
                 val maxPos = limits.maxPositionCount.toDouble()
                 checks.add(RuleResult(
                     rule    = "PositionCountRule",
