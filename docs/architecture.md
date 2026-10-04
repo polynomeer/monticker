@@ -118,7 +118,7 @@ Framework:   Spring Boot 3.5
 Pattern:     Modular Monolith
 API:         REST + WebSocket (STOMP over SockJS)
 ORM:         Spring Data JPA
-Migration:   Flyway (V1–V50)
+Migration:   Flyway (V1–V51)
 Batch:       Spring @Scheduled
 Resilience:  Resilience4j (Circuit Breaker)
 Observability: OpenTelemetry + Jaeger, Micrometer
@@ -1414,3 +1414,4 @@ portfolio_positions (
 | [ADR-049](decisions/049-retire-quant-engine.md) | quant-engine 폐기 — 위임 미연결, L-06 실측으로 bulkhead 격리 충분 확인 | Accepted |
 | [ADR-050](decisions/050-realtime-pipeline-defaults-from-load-tests.md)–[ADR-054](decisions/054-pinpoint-apm-alongside-jaeger.md) | 부하테스트 기반 기본값 · 이벤트 트리거 모의주문 · 현금 예약 락 · 결제 멱등성 · Pinpoint | Accepted |
 | [ADR-055](decisions/055-price-provenance-gate-for-real-orders.md) | 실주문은 출처가 확인된 실시세로만 발동 — 틱 출처 태깅 | Accepted |
+| [ADR-056](decisions/056-brokerage-order-unknown-outcome.md) | 실거래 주문 결과 불명을 일급 상태로 — 의도 선기록, 실패 3분류, 당일 목록 대조 | Accepted |

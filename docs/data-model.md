@@ -977,7 +977,7 @@ stocks
 | `alert_histories` | V6 | ✅ |
 | `alert_rules` | V6 | ✅ |
 | `brokerage_accounts` | V27 | — |
-| `brokerage_orders` | V27 | — |
+| `brokerage_orders` | V27 (+V37 `broker_order_ref`, +V51 `PENDING_SUBMIT`/`UNKNOWN`·`client_order_id`·대조 컬럼, ADR-056) | — |
 | `brokerage_settlements` | V27 | — |
 | `candles_1d` | V4 | — |
 | `candles_1m` | V4 | ✅ |
