@@ -977,8 +977,8 @@ stocks
 | `alert_histories` | V6 | ✅ |
 | `alert_rules` | V6 | ✅ |
 | `brokerage_accounts` | V27 | — |
-| `brokerage_orders` | V27 (+V37 `broker_order_ref`, +V51 `PENDING_SUBMIT`/`UNKNOWN`·`client_order_id`·대조 컬럼, ADR-056) | — |
-| `brokerage_settlements` | V27 | — |
+| `brokerage_orders` | V27 (+V37 `broker_order_ref`, +V51 `PENDING_SUBMIT`/`UNKNOWN`·`client_order_id`·대조 컬럼 ADR-056, +V54 수동 확정, +V55 `status_synced_at` ADR-061, +V56 `cost_basis_price` ADR-062) | — |
+| `brokerage_settlements` | V27 (+V55 `order_id` 유일 — 체결 하나에 정산 하나, ADR-061) | — |
 | `candles_1d` | V4 | — |
 | `candles_1m` | V4 | ✅ |
 | `conditional_orders` | V38 | — |

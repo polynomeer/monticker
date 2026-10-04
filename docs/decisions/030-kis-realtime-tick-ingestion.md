@@ -7,6 +7,8 @@ Accepted
 ([ADR-060](060-realtime-price-coverage-for-conditional-orders.md)). 키 없이 켜면 구독기는 아무것도 구독하지 않고 끝나는데, 집합은 그대로
 선언돼 `MockPriceGenerator`가 그 종목들을 건너뛰어 **시세가 아예 멈췄다.** 이제 그 경우 Mock이 계속 채운다. 집합은 worker가
 `realtime_price_coverage`에 공표하고 api가 조건부 주문 생성에 쓴다.
+또 실시간 구독기(KIS 체결·호가, Toss 체결)는 이제 시세 생산 역할(`worker.role` market|all)에서만 생긴다 — 예전엔 역할을 보지 않아
+역할 분리 배포에서 모든 worker가 같은 앱키로 웹소켓을 열었다([ADR-022](022-tick-consumer-msa-role-gating.md)와 같은 원칙).
 
 ## Context
 

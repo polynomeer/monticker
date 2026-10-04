@@ -51,16 +51,16 @@
 - [x] **500/409 버그 수정** — ✅ 완료(2026-09-08, `485767e`). `GET /api/brokerage/account`가 미연동 신규 사용자에게 500을 반환하던 문제 — `GlobalExceptionHandler`의 409 키워드 매칭이 "없음"만 잡고 실제 예외 메시지의 "없습니다"는 놓쳤던 게 원인. 신규 가입 테스트 사용자로 라이브 확인.
 
 - [x] **실거래 결과 불명 주문 + `TRIGGERED` 리퍼** — ✅ 완료(2026-10-04, [ADR-056](decisions/056-brokerage-order-unknown-outcome.md)). 실계좌 미검증: 모의투자 E2E 때 `bench/chaos/kis-stub.py`로 읽기 타임아웃을 주입해 KIS `ord_tmd`·`ord_gno_brno` 매칭을 확인할 것. 로컬 재현: `app.brokerage.mock.indeterminate-symbols=<종목>`.
-- [ ] **결과 불명 주문 수동 확정(관리자)** — [ADR-056](decisions/056-brokerage-order-unknown-outcome.md) `needs_review=true` 주문(매칭 후보 2건 이상)을 운영자가 증권사 주문번호를 지정하거나 미접수로 확정하는 관리 기능. 지금은 DB 직접 수정뿐이고, 그동안 사용자의 같은 종목·방향 주문이 막힌다.
+- [x] ~~**결과 불명 주문 수동 확정(관리자)**~~ ✅ 2026-10-04 (ADR-056 Note, `/api/admin/brokerage-orders`, V54) — [ADR-056](decisions/056-brokerage-order-unknown-outcome.md) `needs_review=true` 주문(매칭 후보 2건 이상)을 운영자가 증권사 주문번호를 지정하거나 미접수로 확정하는 관리 기능. 지금은 DB 직접 수정뿐이고, 그동안 사용자의 같은 종목·방향 주문이 막힌다.
 - [ ] **스탑로스가 결과 불명 주문 때문에 막히면 알림** — ADR-056 중복 가드에 걸린 조건부 주문은 `FAILED`가 되고 재시도하지 않는다(ADR-032) → 보호가 조용히 사라진다. 최소한 푸시 알림, 가능하면 해소 후 재무장 여부를 사용자에게 묻기.
 - [x] **실거래 킬 스위치** — ✅ 완료(2026-10-04, [ADR-057](decisions/057-real-order-kill-switch.md), 런북 [trading-halt](runbooks/trading-halt.md)). 관리 UI는 없다(API·SQL). 자동 정지 조건은 ADR-057 Revisit When.
 - [x] **실거래 리스크 게이트 진행 중 노출** — ✅ 완료(2026-10-04, [ADR-058](decisions/058-risk-gate-in-flight-exposure.md)). "현금 차감"은 틀린 처방이었다(ADR Context). 실계좌로 확인할 것: KIS `tot_evlu_amt`가 D+2 예수금 기준인지(매수 직후 잔고 응답), 체결 반영 지연이 2분 창 안에 드는지.
-- [ ] **지정가 체결이 자동으로 동기화되지 않는다** — `SUBMITTED` 실거래 주문은 제출 직후 1회 조회, 사용자의 "다시 확인", 그리고 [ADR-058](decisions/058-risk-gate-in-flight-exposure.md)의 같은 종목 매수 직전 갱신에서만 바뀐다. 그래서 지정가가 장중에 체결돼도 **T+2 정산 기록(`brokerage_settlements`)과 원장 반영이 사용자가 확인할 때까지 생기지 않는다.** 대조 잡(ADR-056)처럼 당일 `SUBMITTED`를 주기적으로 동기화하는 잡이 필요하다(증권사 호출량·레이트리밋 고려). 2026-10-04 ADR-058 리뷰에서 발견.
-- [ ] **실거래 `dailyPnl`의 `current_date`가 UTC다** — `buildPortfolioSnapshot`의 `filled_at >= current_date`는 DB 세션 타임존 기준이라 KST 00:00~09:00 체결이 전날로 빠진다(KST↔UTC 함정). 위 "dailyPnl도 현금 흐름" 항목과 함께 재정의할 것.
+- [x] ~~**지정가 체결이 자동으로 동기화되지 않는다**~~ ✅ 2026-10-04 ([ADR-061](decisions/061-brokerage-order-status-sync-and-single-settlement.md)) — `SUBMITTED` 실거래 주문은 제출 직후 1회 조회, 사용자의 "다시 확인", 그리고 [ADR-058](decisions/058-risk-gate-in-flight-exposure.md)의 같은 종목 매수 직전 갱신에서만 바뀐다. 그래서 지정가가 장중에 체결돼도 **T+2 정산 기록(`brokerage_settlements`)과 원장 반영이 사용자가 확인할 때까지 생기지 않는다.** 대조 잡(ADR-056)처럼 당일 `SUBMITTED`를 주기적으로 동기화하는 잡이 필요하다(증권사 호출량·레이트리밋 고려). 2026-10-04 ADR-058 리뷰에서 발견.
+- [x] ~~**실거래 `dailyPnl`의 `current_date`가 UTC다**~~ ✅ 2026-10-04 ([ADR-062](decisions/062-real-account-daily-loss-realized-pnl.md)) — `buildPortfolioSnapshot`의 `filled_at >= current_date`는 DB 세션 타임존 기준이라 KST 00:00~09:00 체결이 전날로 빠진다(KST↔UTC 함정). 위 "dailyPnl도 현금 흐름" 항목과 함께 재정의할 것.
 - [x] **조건부 주문 실시세 커버리지** — ✅ 완료(2026-10-04, [ADR-060](decisions/060-realtime-price-coverage-for-conditional-orders.md)). 실거래 P0 5건 모두 처리.
 - [ ] **실거래 공개 전: `INGESTION_SOURCE`에 kis/toss를 켜고 플랫폼 키 주입** — 기본 배포(`internal`)는 실시세 0종목이라 ADR-060 이후 실계좌 조건부 주문 생성이 전부 409다(그 전에도 발동은 안 됐다). [human-action-items.md](human-action-items.md)의 플랫폼 키 항목과 함께.
 - [ ] **수요 기반 실시세 구독** — 지금 KIS 커버리지는 ID 순 21종목(사용자와 무관), 낮은 ID 종목이 추가되면 집합이 밀린다. 사용자의 조건부 주문·관심 종목으로 구독 대상을 고르고, 생성 시 "구독 요청 → 성공하면 생성"으로. ADR-060 Revisit When.
-- [ ] **KIS 실시간 구독기가 모든 worker 역할에서 돈다** — `KisExecutionTickSubscriber`·`TossExecutionTickSubscriber`는 `ingestion.source`만 보고 역할(`worker.role`)을 보지 않는다. 역할 분리 배포에서 kis를 켜면 market·event·alert가 같은 앱키로 각자 웹소켓을 열어 41건 등록 한도를 나눠 쓴다. 생산자 역할(market|all)로 한정할 것. 2026-10-04 ADR-060 작업 중 발견.
+- [x] ~~**KIS 실시간 구독기가 모든 worker 역할에서 돈다**~~ ✅ 2026-10-04 (market|all로 한정, 호가 구독기 포함) — `KisExecutionTickSubscriber`·`TossExecutionTickSubscriber`는 `ingestion.source`만 보고 역할(`worker.role`)을 보지 않는다. 역할 분리 배포에서 kis를 켜면 market·event·alert가 같은 앱키로 각자 웹소켓을 열어 41건 등록 한도를 나눠 쓴다. 생산자 역할(market|all)로 한정할 것. 2026-10-04 ADR-060 작업 중 발견.
 - [ ] **k8s base가 role=all `worker`와 `worker-market`을 함께 배포한다** — `infra/k8s/base/kustomization.yaml`이 `worker.yaml`(WORKER_ROLE 없음 = all, 1개)과 `worker-market.yaml`(2개)을 둘 다 포함한다. role=all도 `MarketTickScheduler`(Mock 시세 생성)를 돌리므로 **시세 생산이 중복**되고, 커버리지 공표자도 여럿이 된다(ADR-060 — advisory lock으로 직렬화는 했다). compose는 둘을 같이 띄우지 말라고 경고한다. 역할 분리 배포라면 `worker.yaml`을 base에서 빼는 게 맞아 보인다 — 배포 판단이라 확인 후 처리. 2026-10-04 ADR-060 리뷰에서 발견.
 - [ ] **`HttpTimeoutsTest`가 가끔 실패한다** — "requestFactory로 만든 RestClient는 read 타임아웃에 걸려 매달리지 않는다"가 `ResourceAccessException` 대신 `CancellationException`을 받은 적이 있다(전체 스위트 1회, 단독 재실행 3/3 통과). JDK HttpClient 타임아웃 경로의 예외 래핑이 경합에 따라 다르다 — 단언을 둘 다 받게 하거나 원인 확인.
 - [ ] **실시세를 잃은 조건부 주문 사용자 알림** — ADR-060은 화면 경고·운영 알림만 한다. `NONE/STALE`로 바뀌는 순간 푸시.
@@ -136,7 +136,7 @@
   NULL 룰을 비활성화한 뒤 컬럼을 NOT NULL로 만들었다.
 - [x] ~~**`DailyLossRule`이 매수를 손실로 계산한다**~~ — 모의투자 경로는 수정(2026-09-14): 두 체결 경로 합집합에서
   이동평균 평단가로 오늘 실현 손익을 계산, 보유 종목도 합집합, "오늘"은 KST. `RiskRuleQueryServiceIntegrationTest`.
-- [ ] **실거래 리스크 게이트의 `dailyPnl`도 현금 흐름이다** — `BrokerageService.buildPortfolioSnapshot`이
+- [x] ~~**실거래 리스크 게이트의 `dailyPnl`도 현금 흐름이다**~~ ✅ 2026-10-04 ([ADR-062](decisions/062-real-account-daily-loss-realized-pnl.md), 증권사 평단가를 매도 시점에 기록) — `BrokerageService.buildPortfolioSnapshot`이
   `brokerage_orders`에서 `SUM(SELL − BUY) × avg_fill_price`를 "일간 손익"으로 넘긴다. 모의투자와 같은 결함이고
   **실제 돈이 걸린 경로**다 — 하루 3% 이상 매수하면 모든 실거래 매수가 차단된다. 평단가는 증권사 잔고 API의
   `avgPrice`(보유 종목 응답에 있다)를 써서 오늘 체결된 매도의 실현 손익으로 재정의해야 한다.

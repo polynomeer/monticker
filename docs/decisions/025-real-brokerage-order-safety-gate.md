@@ -6,6 +6,7 @@ Accepted
 **Note (2026-10-04):** 이 ADR의 `PortfolioSnapshot`은 증권사 보유 내역과 현금만 봤다. [ADR-058](058-risk-gate-in-flight-exposure.md)이
 진행 중 매수(결과 불명·미체결 잔량·막 체결분)를 노출에 더하고, 집중도 분모를 증권사 총평가액으로 바꿨다 — KIS 예수금에는 정산 전
 매수 대금이 남아 있어 분모가 이중으로 부풀었다. 또 이 게이트에는 매수 가능 금액 룰이 없다(증권사가 판정한다)는 점을 명시했다.
+일간 손실 룰의 입력은 [ADR-062](062-real-account-daily-loss-realized-pnl.md)로 현금 흐름에서 실현손익(매도 시점 증권사 평단가 기준)으로 바뀌었다.
 
 ## Context
 

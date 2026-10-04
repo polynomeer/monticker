@@ -3,6 +3,11 @@
 ## Status
 Accepted
 
+**Note (2026-10-04):** `needs_review` 주문의 사람 확정 경로가 생겼다 — `GET /api/admin/brokerage-orders/unresolved`,
+`POST /api/admin/brokerage-orders/{id}/resolve`(`brokerOrderId` 지정 또는 `notPlaced`). 지정한 번호는 증권사 당일 목록에서 다시 찾아
+종목·방향·수량·미연결을 확인한 뒤 연결한다. `resolved_by = MANUAL`, 확정자·사유는 `resolved_by_user`·`resolution_note`(V54).
+접수(`SUBMITTED`) 이후의 체결 동기화는 [ADR-061](061-brokerage-order-status-sync-and-single-settlement.md)이 맡는다.
+
 [ADR-053](053-payment-idempotency-and-failure-classification.md)(결제 실패 3분류)의 원리를 **실거래 주문**으로 옮긴다.
 [ADR-025](025-real-brokerage-order-safety-gate.md)·[ADR-032](032-conditional-orders.md)·[ADR-034](034-rebalancing-execution.md)의
 주문 제출 경로를 바꾸며, 각 결정은 그대로 유효하다.
