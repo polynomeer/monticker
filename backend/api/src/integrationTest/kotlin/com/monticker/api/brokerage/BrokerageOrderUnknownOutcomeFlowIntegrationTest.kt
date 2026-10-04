@@ -375,4 +375,14 @@ class BrokerageOrderUnknownOutcomeFlowIntegrationTest {
             .isInstanceOf(com.monticker.api.common.aop.RiskLimitException::class.java)
             .hasMessageContaining("DailyLossRule")
     }
+
+    @Test
+    fun `실현손실이 한도를 넘어도 매도는 나간다 — 손절을 막지 않는다`() {
+        val svc = serviceWithRealRiskGate()
+        val userId = seedUser()
+        filledOrder(userId, "SELL", 100, "50000", "90000", todayKst8am)        // 한도 초과 손실
+
+        assertThat(svc.submitOrder(userId, BrokerageOrderRequest(normalSymbol, "SELL", "MARKET", 1)).status)
+            .isEqualTo(BrokerageOrderStatus.FILLED)
+    }
 }

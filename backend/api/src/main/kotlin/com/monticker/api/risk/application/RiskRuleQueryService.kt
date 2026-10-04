@@ -71,12 +71,14 @@ class RiskRuleQueryService(
             ))
         }
 
-        // 1. Daily Loss Rule — 한도 기준 금액은 실거래면 증권사 총평가액(ADR-062: KIS 예수금은 정산 전 매수 대금이 남아 부푼다),
-        // 모의투자면 현금(체결 즉시 줄어든다).
+        // 1. Daily Loss Rule (BUY only — ADR-063) — 한도 기준 금액은 실거래면 증권사 총평가액(KIS 예수금은 정산 전 매수 대금이
+        // 남아 부푼다), 모의투자면 현금(체결 즉시 줄어든다).
+        // 매도에는 걸지 않는다(VaR와 같은 이유, ADR-063): 손실 한도는 위험을 더 늘리는 주문을 멈추는 장치다. 매도까지 막으면 손실 매도
+        // 한 번 뒤에 스탑로스·리밸런싱 매도가 전부 막혀 사용자를 떨어지는 포지션에 가둔다(일간 손실이 실현손익이 되면서 드러났다).
         val lossLimitAmt = (snapshot.totalAssets ?: accountCash).multiply(limits.dailyLossLimitPct)
             .divide(BigDecimal("100"), 4, java.math.RoundingMode.HALF_UP)
         val dailyLossPassed = snapshot.dailyPnl >= lossLimitAmt.negate()
-        checks.add(RuleResult(
+        if (side == "BUY") checks.add(RuleResult(
             rule    = "DailyLossRule",
             passed  = dailyLossPassed,
             detail  = "일간 손실 ${snapshot.dailyPnl.toPlainString()} / 한도 ${lossLimitAmt.negate().toPlainString()}",
