@@ -73,6 +73,7 @@ func tickLoop(ctx context.Context, s stock.Stock, pub Publisher, interval time.D
 				Volume:      randVolume(),
 				TradeTime:   time.Now().UTC(),
 				GeneratedAt: time.Now().UTC(),
+				Source:      tick.SourceMock,
 			}
 			if opt.Seq {
 				seq++

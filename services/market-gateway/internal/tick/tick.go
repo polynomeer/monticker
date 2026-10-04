@@ -18,4 +18,10 @@ type Tick struct {
 	// TickOrderMonitor가 순서 위반·중복·유실을 세는 근거다. TICK_SEQ=true 일 때만 채워지고,
 	// 0이면 JSON에서 빠진다(omitempty) — 기본 와이어 포맷은 그대로다.
 	Seq int64 `json:"seq,omitempty"`
+	// Source: 시세 출처(ADR-055). 이 게이트웨이는 합성 틱만 만들므로 항상 SourceMock이다.
+	// api의 조건부 주문 평가기는 MOCK 틱으로는 실주문을 발동하지 않는다.
+	Source string `json:"source"`
 }
+
+// SourceMock — 합성(랜덤워크) 시세. worker의 TickSource.MOCK과 같은 문자열이어야 한다.
+const SourceMock = "MOCK"
