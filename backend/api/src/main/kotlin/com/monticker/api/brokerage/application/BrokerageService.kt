@@ -192,7 +192,7 @@ class BrokerageService(
         // ADR-025 — 페이퍼 트레이딩과 동일한 사전 리스크 게이트. 증권사에 보내기 전에
         // 막는다 — 실패하면 실제 주문은 아예 나가지 않는다.
         val estimatedPrice = request.limitPrice ?: currentPrice(request.symbol) ?: BigDecimal.ZERO
-        val snapshot = buildPortfolioSnapshot(userId, account, stockId, client, credentials)
+        val (snapshot, balance) = buildPortfolioSnapshot(userId, account, stockId, client, credentials)
         val riskResult = riskChecker.checkBrokerageOrder(userId, stockId, request.side, request.quantity, estimatedPrice, snapshot)
         if (!riskResult.approved) {
             throw RiskLimitException(riskResult.blockedBy ?: "Unknown risk rule")
@@ -212,6 +212,8 @@ class BrokerageService(
                 limitPrice    = request.limitPrice,
                 status        = BrokerageOrderStatus.PENDING_SUBMIT,
                 clientOrderId = clientOrderId,
+                // ADR-062 — 매도는 지금 증권사가 아는 평단가를 원가로 남긴다(매도 후엔 보유가 줄거나 사라져 다시 얻을 수 없다).
+                costBasisPrice = if (request.side == "SELL") costBasis(balance, request.symbol) else null,
             )
         )
         return PreparedOrder(order.id, account.provider, client, credentials)
@@ -563,7 +565,7 @@ class BrokerageService(
     /** ADR-025 — 실거래 사전 리스크 게이트에 넘길 포트폴리오 스냅샷을 조립한다. */
     private fun buildPortfolioSnapshot(
         userId: Long, account: BrokerageAccount, stockId: Long, client: BrokerageClient, credentials: BrokerageCredentials,
-    ): PortfolioSnapshot {
+    ): Pair<PortfolioSnapshot, BrokerageBalance> {
         val balance = client.getBalance(credentials)
         // 수량 0(오늘 전량 매도) 행은 빼고, 한 종목이 여러 행(현금·신용 등)으로 오면 합친다 — 그대로 두면 보유 종목 수가
         // 부풀고, 집중도는 첫 행만 봐서 과소평가된다.
@@ -578,14 +580,15 @@ class BrokerageService(
         // 집중도는 이 종목만 보므로 이 종목만 조회한다(보통 0~1건). 조회가 실패하면 SUBMITTED로 남아 대기로 센다(안전 쪽).
         refreshOpenBuys(account, stockId, client, credentials)
 
-        // brokerage_settlements는 T+2로 미래 날짜에 정산되므로 "오늘의 리스크"에는 쓸 수
-        // 없다 — 오늘 체결된 주문에서 직접 현금흐름을 근사한다(페이퍼의 daily PnL과 동일한 방식).
+        // ADR-062 — 오늘(KST) 체결된 매도의 실현손익. 예전엔 SUM(매도 대금 − 매수 대금) 현금 흐름이라 매수가 손실로 잡혀, 하루 3%
+        // 넘게 사면 이후 모든 실거래 매수가 막혔다. 날짜도 DB 세션(UTC) 기준이었다. 원가가 없는(이 변경 전) 매도는 뺀다.
+        val todayStartKst = Timestamp.from(LocalDate.now(KST).atStartOfDay(KST).toInstant())
         val dailyPnl = jdbc.queryForObject(
-            """SELECT COALESCE(SUM(CASE WHEN side='SELL' THEN quantity * avg_fill_price
-                                         ELSE -quantity * avg_fill_price END), 0)
+            """SELECT COALESCE(SUM(filled_qty * (avg_fill_price - cost_basis_price)), 0)
                FROM brokerage_orders
-               WHERE user_id = ? AND status IN ('FILLED','PARTIALLY_FILLED') AND filled_at >= current_date""",
-            BigDecimal::class.java, userId,
+               WHERE user_id = ? AND side = 'SELL' AND status IN ('FILLED','PARTIALLY_FILLED')
+                 AND cost_basis_price IS NOT NULL AND avg_fill_price IS NOT NULL AND filled_at >= ?""",
+            BigDecimal::class.java, userId, todayStartKst,
         ) ?: BigDecimal.ZERO
 
         val oneHourAgo = Instant.now().minusSeconds(3600)
@@ -603,7 +606,16 @@ class BrokerageService(
             // 진행 중 매수는 노출에 더하고, 분모는 증권사가 계산한 총평가액을 쓴다.
             pendingBuys      = pendingBuyQuery.pendingBuys(account.id),
             totalAssets      = balance.totalEvaluated,
-        )
+        ) to balance
+    }
+
+    /** ADR-062 — 증권사 잔고에서 그 종목의 평단가(여러 행이면 수량 가중 평균). 보유가 없으면 null. */
+    private fun costBasis(balance: BrokerageBalance, symbol: String): BigDecimal? {
+        val rows = balance.holdings.filter { it.symbol == symbol && it.quantity > 0 }
+        val qty = rows.sumOf { it.quantity }
+        if (qty == 0) return null
+        return rows.fold(BigDecimal.ZERO) { acc, h -> acc + h.avgPrice.multiply(BigDecimal(h.quantity)) }
+            .divide(BigDecimal(qty), 4, java.math.RoundingMode.HALF_UP)
     }
 
     private fun refreshOpenBuys(account: BrokerageAccount, stockId: Long, client: BrokerageClient, credentials: BrokerageCredentials) {

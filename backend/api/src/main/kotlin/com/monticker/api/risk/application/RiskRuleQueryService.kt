@@ -71,8 +71,9 @@ class RiskRuleQueryService(
             ))
         }
 
-        // 1. Daily Loss Rule
-        val lossLimitAmt = accountCash.multiply(limits.dailyLossLimitPct)
+        // 1. Daily Loss Rule — 한도 기준 금액은 실거래면 증권사 총평가액(ADR-062: KIS 예수금은 정산 전 매수 대금이 남아 부푼다),
+        // 모의투자면 현금(체결 즉시 줄어든다).
+        val lossLimitAmt = (snapshot.totalAssets ?: accountCash).multiply(limits.dailyLossLimitPct)
             .divide(BigDecimal("100"), 4, java.math.RoundingMode.HALF_UP)
         val dailyLossPassed = snapshot.dailyPnl >= lossLimitAmt.negate()
         checks.add(RuleResult(

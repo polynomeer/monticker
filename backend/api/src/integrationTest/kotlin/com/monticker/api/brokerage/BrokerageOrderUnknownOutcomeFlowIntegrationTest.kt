@@ -341,4 +341,38 @@ class BrokerageOrderUnknownOutcomeFlowIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM brokerage_settlements WHERE order_id = ?", Long::class.java, resting.id))
             .isEqualTo(1L)
     }
+
+    // ── ADR-062 — 실거래 일간 손실은 실현손익 ──────────────────────────────────────────────
+
+    private fun filledOrder(userId: Long, side: String, qty: Int, fill: String, cost: String?, filledAt: String) {
+        val accountId = jdbc.queryForObject("SELECT id FROM brokerage_accounts WHERE user_id = ?", Long::class.java, userId)
+        jdbc.update(
+            "INSERT INTO brokerage_orders (user_id, account_id, symbol, side, order_type, quantity, filled_qty, avg_fill_price, cost_basis_price, status, filled_at) " +
+                "VALUES (?, ?, 'OTHER1', ?, 'MARKET', ?, ?, ?, ?, 'FILLED', $filledAt)",
+            userId, accountId, side, qty, qty, BigDecimal(fill), cost?.let(::BigDecimal),
+        )
+    }
+
+    private val todayKst8am = "(date_trunc('day', now() AT TIME ZONE 'Asia/Seoul') + interval '8 hours') AT TIME ZONE 'Asia/Seoul'"
+
+    @Test
+    fun `하루에 크게 사도 매수가 막히지 않는다 — 예전엔 매수 대금이 손실로 잡혀 3% 넘게 사면 모든 매수가 막혔다`() {
+        val svc = serviceWithRealRiskGate()
+        val userId = seedUser()
+        filledOrder(userId, "BUY", 200, "50000", null, todayKst8am)          // 오늘 1,000만원 매수(총평가 1억의 10%)
+
+        assertThat(svc.submitOrder(userId, BrokerageOrderRequest(normalSymbol, "BUY", "MARKET", 1)).status)
+            .isEqualTo(BrokerageOrderStatus.FILLED)
+    }
+
+    @Test
+    fun `오늘(KST) 실현손실이 총평가액의 3%를 넘으면 막힌다 — KST 08시 체결(UTC로는 전날)도 오늘이다`() {
+        val svc = serviceWithRealRiskGate()
+        val userId = seedUser()
+        filledOrder(userId, "SELL", 100, "50000", "90000", todayKst8am)        // 100 × (5만 − 9만) = −400만 > 300만 한도
+
+        assertThatThrownBy { svc.submitOrder(userId, BrokerageOrderRequest(normalSymbol, "BUY", "MARKET", 1)) }
+            .isInstanceOf(com.monticker.api.common.aop.RiskLimitException::class.java)
+            .hasMessageContaining("DailyLossRule")
+    }
 }

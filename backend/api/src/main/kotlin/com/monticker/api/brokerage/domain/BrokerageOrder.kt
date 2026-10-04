@@ -108,6 +108,10 @@ class BrokerageOrder(
     // ADR-061 — 동기화 잡이 마지막으로 증권사에 상태를 물어본 시각.
     @Column(name = "status_synced_at")
     var statusSyncedAt: Instant? = null,
+
+    // ADR-062 — 매도 주문의 원가(의도 기록 시점의 증권사 평단가). 실거래 일간 실현손익의 기준.
+    @Column(name = "cost_basis_price")
+    val costBasisPrice: BigDecimal? = null,
 ) {
     fun markSubmitted(pgOrderId: String, brokerOrderRef: String?) {
         this.pgOrderId      = pgOrderId

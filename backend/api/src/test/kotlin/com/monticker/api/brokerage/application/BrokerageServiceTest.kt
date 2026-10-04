@@ -72,6 +72,8 @@ class BrokerageServiceTest {
     private fun stubStockLookup(stockId: Long = 1L) {
         every { jdbc.queryForObject("SELECT id FROM stocks WHERE symbol = ?", Long::class.java, any()) } returns stockId
         every { jdbc.queryForObject(any<String>(), eq(Long::class.java), any(), any()) } returns 0L
+        // ADR-062 — 일간 실현손익 조회(사용자, KST 오늘 시작). 기본 0.
+        every { jdbc.queryForObject(match<String> { it.contains("cost_basis_price") }, eq(BigDecimal::class.java), any(), any()) } returns BigDecimal.ZERO
     }
 
     /**
@@ -779,5 +781,29 @@ class BrokerageServiceTest {
         assertThat(serviceWithFakeClient(failing).syncSubmittedOrder(order.id)).isEqualTo(BrokerageService.StatusSyncResult.LOOKUP_FAILED)
         assertThat(order.status).isEqualTo(BrokerageOrderStatus.SUBMITTED)
         assertThat(order.statusSyncedAt).isNotNull()
+    }
+
+    // ── ADR-062 — 매도 원가 기록 ─────────────────────────────────────────────────────────
+
+    @Test
+    fun `매도 의도를 기록할 때 증권사 평단가(여러 행이면 수량 가중)를 원가로 남기고, 매수는 남기지 않는다`() {
+        val orderSlot = slot<BrokerageOrder>()
+        val (svc, fakeClient) = fakeClientService(BrokerageOrderResult.accepted("ODNO-C"), orderSlot)
+        every { fakeClient.getBalance(any()) } returns BrokerageBalance(
+            BigDecimal("10000000"), BigDecimal("10000000"),
+            listOf(
+                com.monticker.api.brokerage.infrastructure.BrokerageHolding("005930", 10, BigDecimal("60000"), BigDecimal("70000")),
+                com.monticker.api.brokerage.infrastructure.BrokerageHolding("005930", 30, BigDecimal("80000"), BigDecimal("70000")),
+            ),
+        )
+        val saved = mutableListOf<BrokerageOrder>()
+        every { orderRepo.save(capture(saved)) } answers { orderSlot.captured = firstArg(); firstArg() }
+
+        svc.submitOrder(1L, req)                                                   // SELL
+        assertThat(saved.first().costBasisPrice).isEqualByComparingTo(BigDecimal("75000"))   // (10×6만 + 30×8만) / 40
+
+        saved.clear()
+        svc.submitOrder(1L, BrokerageOrderRequest("005930", "BUY", "MARKET", 1))
+        assertThat(saved.first().costBasisPrice).isNull()
     }
 }
