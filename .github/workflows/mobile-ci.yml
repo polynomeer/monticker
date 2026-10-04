@@ -19,9 +19,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # 버전은 package.json의 packageManager(pnpm@9.15.9)에서 읽는다 — 여기에 version을 같이 적으면
+      # action-setup이 "Multiple versions of pnpm specified"로 실패한다(web-ci와 같은 이유).
       - uses: pnpm/action-setup@v6
-        with:
-          version: 9
 
       - uses: actions/setup-node@v7
         with:
@@ -37,7 +37,10 @@ jobs:
       # 로컬 에셋만 처리하는 빌드 경로라 실질 위험이 낮아 예외 처리.
       - name: Audit dependencies (high+ severity, apps/mobile scope)
         working-directory: .
-        run: node scripts/ci/audit-scope.js apps/mobile --allow image-size
+        # braces·node-forge도 같은 이유(업스트림 패치 없음). braces는 react-native codegen > jscodeshift > micromatch,
+        # node-forge는 @react-native/dev-middleware > selfsigned(로컬 개발 서버 인증서 생성) — 둘 다 앱 번들에 들어가지 않는
+        # 개발 도구 경로다. web-ci 주석 참고. 패치가 나오면 --allow를 지울 것.
+        run: node scripts/ci/audit-scope.js apps/mobile --allow image-size --allow braces --allow node-forge
 
       - name: TypeScript check
         run: pnpm exec tsc --noEmit
