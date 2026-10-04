@@ -1,9 +1,12 @@
 package com.monticker.api.marketdata.infrastructure
 
 import com.monticker.api.marketdata.domain.MarketTickReceivedEvent
+import com.monticker.api.marketdata.domain.PriceSource
+import com.monticker.api.marketdata.domain.TickProvenance
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.assertj.core.api.Assertions.assertThat
@@ -12,6 +15,7 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.kafka.core.ConsumerFactory
 import org.springframework.kafka.core.KafkaAdmin
 import org.springframework.kafka.support.TopicPartitionOffset
+import java.time.Instant
 
 /** ADR-038 — 컨슈머 그룹 분할 대신 전 파티션 수동 할당. */
 class MarketTickBroadcastConsumerTest {
@@ -48,5 +52,44 @@ class MarketTickBroadcastConsumerTest {
         consumer.onTick(ConsumerRecord("market.ticks", 0, 0L, "x", "not json"))
 
         assertThat(registry.counter("tick_broadcast_failed_total").count()).isEqualTo(1.0)
+    }
+
+    // ── ADR-055 — 시세 출처 ─────────────────────────────────────────────────────
+
+    private fun publishedEventFor(json: String): MarketTickReceivedEvent {
+        val events = mockk<ApplicationEventPublisher>(relaxed = true)
+        val consumer = MarketTickBroadcastConsumer(mockk(relaxed = true), events, mockk(), mockk(), SimpleMeterRegistry())
+        consumer.onTick(ConsumerRecord("market.ticks", 0, 0L, "2", json))
+        val captured = slot<MarketTickReceivedEvent>()
+        verify { events.publishEvent(capture(captured)) }
+        return captured.captured
+    }
+
+    @Test
+    fun `와이어의 source·marketStatus·generatedAt을 출처로 옮긴다`() {
+        val e = publishedEventFor(
+            """{"stockId":2,"symbol":"005930","market":"KOSPI","price":77000,"volume":10,"tradeTime":"2026-09-11T05:00:00Z",
+               "generatedAt":"2026-09-11T05:00:01Z","marketStatus":"OPEN","source":"KIS"}""")
+
+        assertThat(e.provenance).isEqualTo(TickProvenance(PriceSource.KIS, "OPEN", Instant.parse("2026-09-11T05:00:01Z")))
+    }
+
+    @Test
+    fun `출처 필드가 없는 예전 틱은 UNKNOWN·상태 없음·EPOCH로 — 정규장 실시세로 위장되지 않는다`() {
+        val e = publishedEventFor(
+            """{"stockId":2,"symbol":"005930","market":"KOSPI","price":77000,"volume":10,"tradeTime":"2026-09-11T05:00:00Z"}""")
+
+        assertThat(e.provenance.source).isEqualTo(PriceSource.UNKNOWN)
+        assertThat(e.provenance.marketStatus).isNull()
+        assertThat(e.provenance.generatedAt).isEqualTo(Instant.EPOCH)
+    }
+
+    @Test
+    fun `모르는 필드가 추가돼도 브로드캐스트는 멈추지 않는다 — 생산자를 먼저 배포해도 안전하다`() {
+        val e = publishedEventFor(
+            """{"stockId":2,"symbol":"005930","market":"KOSPI","price":77000,"volume":10,"tradeTime":"2026-09-11T05:00:00Z",
+               "source":"TOSS","someFutureField":42}""")
+
+        assertThat(e.provenance.source).isEqualTo(PriceSource.TOSS)
     }
 }

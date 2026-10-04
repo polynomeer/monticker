@@ -6,7 +6,10 @@ import com.monticker.api.brokerage.domain.OrderSide
 import com.monticker.api.brokerage.domain.OrderType
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRequest
 import com.monticker.api.marketdata.domain.MarketTickReceivedEvent
+import com.monticker.api.marketdata.domain.PriceSource
 import com.monticker.api.marketdata.domain.PriceTick
+import com.monticker.api.marketdata.domain.TickProvenance
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -24,7 +27,8 @@ class ConditionalOrderEvaluatorTest {
 
     private val jdbc = mockk<JdbcTemplate>()
     private val brokerageService = mockk<BrokerageService>()
-    private val evaluator = ConditionalOrderEvaluator(jdbc, brokerageService)
+    private val registry = SimpleMeterRegistry()
+    private val evaluator = ConditionalOrderEvaluator(jdbc, brokerageService, registry)
 
     private fun stubActiveRow(
         id: Long = 1L, userId: Long = 1L, symbol: String = "005930", side: String = "SELL",
@@ -51,8 +55,13 @@ class ConditionalOrderEvaluatorTest {
         }
     }
 
-    private fun tick(stockId: Long, price: String) =
-        MarketTickReceivedEvent(PriceTick(stockId, "005930", BigDecimal(price), 10L, Instant.now()))
+    private fun tick(
+        stockId: Long, price: String,
+        source: PriceSource = PriceSource.KIS, marketStatus: String? = "OPEN", generatedAt: Instant = Instant.now(),
+    ) = MarketTickReceivedEvent(
+        PriceTick(stockId, "005930", BigDecimal(price), 10L, Instant.now()),
+        TickProvenance(source, marketStatus, generatedAt),
+    )
 
     private fun makeOrder(id: Long, status: BrokerageOrderStatus, rejectReason: String? = null): BrokerageOrder =
         BrokerageOrder(
@@ -124,5 +133,60 @@ class ConditionalOrderEvaluatorTest {
         evaluator.onTick(tick(stockId = 1L, price = "69000"))
 
         verify { jdbc.update(match<String> { it.contains("SET status = 'FAILED'") }, "리스크 게이트 거부", null, any(), 1L) }
+    }
+
+    // ── ADR-055 — 시세 출처 게이트 ──────────────────────────────────────────────
+
+    @Test
+    fun `합성(MOCK) 틱은 트리거 가격을 넘어도 실주문을 내지 않고 DB도 조회하지 않는다`() {
+        stubActiveRow()
+
+        evaluator.onTick(tick(stockId = 1L, price = "1", source = PriceSource.MOCK))
+
+        verify(exactly = 0) { jdbc.query(any<String>(), any<RowMapper<Any>>(), *anyVararg()) }
+        verify(exactly = 0) { brokerageService.submitOrder(any(), any()) }
+        assertThat(registry.counter("conditional_order_tick_ignored_total", "reason", "source").count()).isEqualTo(1.0)
+    }
+
+    @Test
+    fun `출처를 모르는 틱은 실시세가 아닌 것으로 취급한다`() {
+        stubActiveRow()
+
+        evaluator.onTick(tick(stockId = 1L, price = "1", source = PriceSource.UNKNOWN))
+
+        verify(exactly = 0) { brokerageService.submitOrder(any(), any()) }
+    }
+
+    @Test
+    fun `실시세라도 정규장이 아니면 발동하지 않는다`() {
+        stubActiveRow()
+
+        evaluator.onTick(tick(stockId = 1L, price = "1", marketStatus = "POST_MARKET"))
+        evaluator.onTick(tick(stockId = 1L, price = "1", marketStatus = null))
+
+        verify(exactly = 0) { brokerageService.submitOrder(any(), any()) }
+        assertThat(registry.counter("conditional_order_tick_ignored_total", "reason", "marketStatus").count()).isEqualTo(2.0)
+    }
+
+    @Test
+    fun `파이프라인 랙 SLO(5초)를 넘겨 도착한 틱으로는 발동하지 않는다`() {
+        stubActiveRow()
+
+        evaluator.onTick(tick(stockId = 1L, price = "1", generatedAt = Instant.now().minusSeconds(30)))
+
+        verify(exactly = 0) { brokerageService.submitOrder(any(), any()) }
+        assertThat(registry.counter("conditional_order_tick_ignored_total", "reason", "stale").count()).isEqualTo(1.0)
+    }
+
+    @Test
+    fun `Toss 실시세도 실시세다`() {
+        stubActiveRow()
+        every { jdbc.update(match<String> { it.contains("SET status = 'TRIGGERED'") }, *anyVararg()) } returns 1
+        every { jdbc.update(match<String> { it.contains("SET status = 'EXECUTED'") }, *anyVararg()) } returns 1
+        every { brokerageService.submitOrder(1L, any()) } returns makeOrder(100L, BrokerageOrderStatus.FILLED)
+
+        evaluator.onTick(tick(stockId = 1L, price = "69000", source = PriceSource.TOSS))
+
+        verify(exactly = 1) { brokerageService.submitOrder(1L, any()) }
     }
 }

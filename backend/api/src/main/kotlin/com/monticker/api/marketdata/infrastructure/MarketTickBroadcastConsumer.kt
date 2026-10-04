@@ -1,8 +1,11 @@
 package com.monticker.api.marketdata.infrastructure
 
+import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.api.marketdata.domain.MarketTickReceivedEvent
+import com.monticker.api.marketdata.domain.PriceSource
 import com.monticker.api.marketdata.domain.PriceTick
+import com.monticker.api.marketdata.domain.TickProvenance
 import io.micrometer.core.instrument.MeterRegistry
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.slf4j.LoggerFactory
@@ -39,7 +42,10 @@ class MarketTickBroadcastConsumer(
 ) : SmartLifecycle {
 
     private val log = LoggerFactory.getLogger(javaClass)
+    // ADR-055 — 관대한 리더. 생산자(worker·gateway)가 필드를 먼저 추가해도 이 컨슈머가 죽지 않게 한다 —
+    // 아래 seq 필드 주석의 사고(모르는 필드 하나로 브로드캐스트 전체가 멈춤)가 배포 순서에 좌우되지 않도록.
     private val objectMapper = ObjectMapper().findAndRegisterModules()
+        .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
     private val failed = meterRegistry.counter("tick_broadcast_failed_total")
     companion object {
         const val TOPIC = "market.ticks"
@@ -59,7 +65,12 @@ class MarketTickBroadcastConsumer(
             priceBroadcaster.broadcast(tick)
             // ADR-032 — ConditionalOrderEvaluator가 구독한다. 조건부 주문 평가는 conflation하지 않는다 —
             // 모든 틱을 봐야 한다. 리스너가 @Async라 이 컨슈머 스레드를 블로킹하지 않는다.
-            eventPublisher.publishEvent(MarketTickReceivedEvent(tick))
+            eventPublisher.publishEvent(
+                MarketTickReceivedEvent(
+                    tick,
+                    TickProvenance(PriceSource.fromWire(wire.source), wire.marketStatus, wire.generatedAt ?: Instant.EPOCH),
+                ),
+            )
         }.onFailure { e ->
             // 브로드캐스트는 유실 허용 경로다(다음 틱이 곧 온다) — 삼키되 카운터로 남긴다.
             failed.increment()
@@ -84,8 +95,11 @@ class MarketTickBroadcastConsumer(
         val price: BigDecimal,
         val volume: Long,
         val tradeTime: Instant,
-        val generatedAt: Instant = Instant.now(),
-        val marketStatus: String = "OPEN",
-        val seq: Long? = null,   // gateway TICK_SEQ=true(실험 M-002)일 때만 실린다 — 없으면 역직렬화가 거부해 브로드캐스트가 전부 죽는다
+        // ADR-055 — 없으면 null → 신선도 판정에서 오래된 틱(EPOCH)으로 취급한다. now()로 채우면 위장이다.
+        val generatedAt: Instant? = null,
+        // ADR-055 — 기본값을 "OPEN"으로 두면 필드가 빠진 틱이 정규장으로 위장된다. 없으면 null.
+        val marketStatus: String? = null,
+        val seq: Long? = null,   // gateway TICK_SEQ=true(실험 M-002)일 때만 실린다 — 예전엔 이 필드가 없어 역직렬화가 거부, 브로드캐스트가 전부 죽었다
+        val source: String? = null,   // ADR-055 — 없으면 PriceSource.UNKNOWN(실시세 아님)
     )
 }

@@ -5,6 +5,7 @@ import com.monticker.api.brokerage.domain.ConditionalTriggerType
 import com.monticker.api.brokerage.domain.OrderSide
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRequest
 import com.monticker.api.marketdata.domain.MarketTickReceivedEvent
+import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.context.event.EventListener
 import org.springframework.jdbc.core.JdbcTemplate
@@ -37,6 +38,7 @@ data class ConditionalOrderRow(
 class ConditionalOrderEvaluator(
     private val jdbc: JdbcTemplate,
     private val brokerageService: BrokerageService,
+    private val meterRegistry: MeterRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -44,6 +46,12 @@ class ConditionalOrderEvaluator(
     @Async("conditionalOrderExecutor")
     fun onTick(event: MarketTickReceivedEvent) {
         val tick = event.tick
+        // ADR-055 — 실시세·정규장·신선한 틱으로만 실주문을 낸다. market.ticks에는 KIS/Toss가 덮지 않는
+        // 종목의 합성(Mock) 틱과 장외 틱이 같이 흐른다. DB 조회 전에 거른다(합성 틱마다 조회하지 않도록).
+        event.provenance.rejectReasonForRealOrder(Instant.now())?.let { reason ->
+            meterRegistry.counter("conditional_order_tick_ignored_total", "reason", reason.substringBefore('=')).increment()
+            return
+        }
         try {
             for (row in fetchActiveForStock(tick.stockId)) {
                 if (row.triggerType.isTriggered(tick.price, row.triggerPrice)) {
