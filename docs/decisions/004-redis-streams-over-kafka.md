@@ -1,7 +1,11 @@
 # ADR-004: Use Redis Streams for MVP, Kafka Later
 
 ## Status
-Accepted
+Superseded by [ADR-005](005-kafka-go-gateway-netty-broadcast.md)
+
+**Note (2026-10-04):** Redis Streams 버스는 계획만 됐고 구현된 적이 없다. 실시간 틱·이벤트 버스는 ADR-005로
+Kafka가 됐다(ADR-005 Status도 이 결정을 대체한다고 적고 있었으나 이 파일의 Status가 갱신되지 않았다 —
+[2026-10 설계 리뷰](../design-review-2026-10.md)에서 발견).
 
 ## Context
 

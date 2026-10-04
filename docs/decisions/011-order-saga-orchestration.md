@@ -3,6 +3,17 @@
 ## Status
 Accepted
 
+**Note (2026-10-04) — 구현이 이 문서의 보상 모델과 다르다.** [2026-10 설계 리뷰](../design-review-2026-10.md)에서 확인:
+- `execute()` 전체가 `@Transactional` 하나다. 사가 행·현금 예약·주문·체결·`PaperExecutionListener`가 함께 커밋되거나
+  함께 롤백된다. 크래시 시 Postgres 롤백이 모든 것을 되돌리므로 **실제 돈 정합성은 이 단일 트랜잭션이 지킨다.**
+- `compensate()`의 `REQUIRES_NEW`는 **동작하지 않는다** — `this.compensate(...)` 자기 호출이라 프록시를 거치지 않는다.
+  보상은 바깥 트랜잭션 안에서 돌고, 이어지는 예외로 FAILED 상태 기록까지 함께 롤백된다(감사 기록이 남지 않는다).
+- 그래서 `STARTED`/`COMPENSATING` 사가 행은 커밋될 수 없고 `recoverIncomplete()`는 사실상 죽은 코드다. 만약 그런 행이
+  생기면 완료 여부 확인 없이 예약금을 환불하므로 이중 환불 위험이 있다.
+
+"다단계 보상"은 지금 이론상의 설계다. 실제로 트랜잭션 경계 밖 단계(외부 호출)가 사가에 들어오면 그때 보상을
+별도 빈으로 분리해 `REQUIRES_NEW`가 실제로 걸리게 하고, 복구 스케줄러에 완료 여부 확인을 넣어야 한다.
+
 ## Context
 
 `MatchingService.submitOrder()`는 다음 단계를 순서대로 수행한다:

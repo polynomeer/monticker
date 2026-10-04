@@ -3,6 +3,10 @@
 ## Status
 Accepted
 
+**Note (2026-10-04):** 이 ADR의 평가기는 `market.ticks`의 모든 틱에 반응했는데, 그 토픽에는 KIS/Toss가 덮지 않는
+종목의 합성(Mock) 틱도 흐른다(ADR-030/031) — 합성 가격으로 실주문이 나갈 수 있었다.
+[ADR-055](055-price-provenance-gate-for-real-orders.md)가 실시세·정규장·신선한 틱으로만 발동하도록 게이트를 추가했다.
+
 ## Context
 
 `BrokerageOrderRequest`/`BrokerageClient`는 MARKET/LIMIT 즉시 제출만 지원한다 — 가격 조건이 충족될 때까지 기다렸다가 발동하는 주문(스탑로스, 익절, 특정가 돌파 매수 등)은 전혀 없다. `docs/product.md`/[ADR-023](023-commercialization-pivot.md)이 이미 이걸 로드맵 항목으로 명시했었다("`Order` 도메인은 현재 MARKET/LIMIT만 지원 — 기존 OMS를 대체하지 않고 그 위에 얹는 감시 컴포넌트로 설계").
