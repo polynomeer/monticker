@@ -118,7 +118,7 @@ Framework:   Spring Boot 3.5
 Pattern:     Modular Monolith
 API:         REST + WebSocket (STOMP over SockJS)
 ORM:         Spring Data JPA
-Migration:   Flyway (V1–V52)
+Migration:   Flyway (V1–V53)
 Batch:       Spring @Scheduled
 Resilience:  Resilience4j (Circuit Breaker)
 Observability: OpenTelemetry + Jaeger, Micrometer
@@ -1417,3 +1417,4 @@ portfolio_positions (
 | [ADR-056](decisions/056-brokerage-order-unknown-outcome.md) | 실거래 주문 결과 불명을 일급 상태로 — 의도 선기록, 실패 3분류, 당일 목록 대조 | Accepted |
 | [ADR-057](decisions/057-real-order-kill-switch.md) | 실거래 주문 킬 스위치 — Postgres 플래그, 전역·증권사·사용자, 주문 준비 트랜잭션에서 판정 | Accepted |
 | [ADR-058](decisions/058-risk-gate-in-flight-exposure.md) | 실거래 리스크 게이트 — 진행 중 매수를 노출에, 집중도 분모는 증권사 총평가액 | Accepted |
+| [ADR-060](decisions/060-realtime-price-coverage-for-conditional-orders.md) | 조건부 주문은 실시세가 흐르는 종목에만 — worker 공표, 생성 시 거부, 상실 감시, Mock 증권사 예외 | Accepted |

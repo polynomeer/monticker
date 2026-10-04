@@ -57,7 +57,13 @@
 - [x] **실거래 리스크 게이트 진행 중 노출** — ✅ 완료(2026-10-04, [ADR-058](decisions/058-risk-gate-in-flight-exposure.md)). "현금 차감"은 틀린 처방이었다(ADR Context). 실계좌로 확인할 것: KIS `tot_evlu_amt`가 D+2 예수금 기준인지(매수 직후 잔고 응답), 체결 반영 지연이 2분 창 안에 드는지.
 - [ ] **지정가 체결이 자동으로 동기화되지 않는다** — `SUBMITTED` 실거래 주문은 제출 직후 1회 조회, 사용자의 "다시 확인", 그리고 [ADR-058](decisions/058-risk-gate-in-flight-exposure.md)의 같은 종목 매수 직전 갱신에서만 바뀐다. 그래서 지정가가 장중에 체결돼도 **T+2 정산 기록(`brokerage_settlements`)과 원장 반영이 사용자가 확인할 때까지 생기지 않는다.** 대조 잡(ADR-056)처럼 당일 `SUBMITTED`를 주기적으로 동기화하는 잡이 필요하다(증권사 호출량·레이트리밋 고려). 2026-10-04 ADR-058 리뷰에서 발견.
 - [ ] **실거래 `dailyPnl`의 `current_date`가 UTC다** — `buildPortfolioSnapshot`의 `filled_at >= current_date`는 DB 세션 타임존 기준이라 KST 00:00~09:00 체결이 전날로 빠진다(KST↔UTC 함정). 위 "dailyPnl도 현금 흐름" 항목과 함께 재정의할 것.
-- [ ] **🔴 실거래 P0 잔여 — [design-review-2026-10.md §5](design-review-2026-10.md#5-남은-것--우선순위)** — (5) 조건부 주문 생성 시 시세 커버리지 확인.
+- [x] **조건부 주문 실시세 커버리지** — ✅ 완료(2026-10-04, [ADR-060](decisions/060-realtime-price-coverage-for-conditional-orders.md)). 실거래 P0 5건 모두 처리.
+- [ ] **실거래 공개 전: `INGESTION_SOURCE`에 kis/toss를 켜고 플랫폼 키 주입** — 기본 배포(`internal`)는 실시세 0종목이라 ADR-060 이후 실계좌 조건부 주문 생성이 전부 409다(그 전에도 발동은 안 됐다). [human-action-items.md](human-action-items.md)의 플랫폼 키 항목과 함께.
+- [ ] **수요 기반 실시세 구독** — 지금 KIS 커버리지는 ID 순 21종목(사용자와 무관), 낮은 ID 종목이 추가되면 집합이 밀린다. 사용자의 조건부 주문·관심 종목으로 구독 대상을 고르고, 생성 시 "구독 요청 → 성공하면 생성"으로. ADR-060 Revisit When.
+- [ ] **KIS 실시간 구독기가 모든 worker 역할에서 돈다** — `KisExecutionTickSubscriber`·`TossExecutionTickSubscriber`는 `ingestion.source`만 보고 역할(`worker.role`)을 보지 않는다. 역할 분리 배포에서 kis를 켜면 market·event·alert가 같은 앱키로 각자 웹소켓을 열어 41건 등록 한도를 나눠 쓴다. 생산자 역할(market|all)로 한정할 것. 2026-10-04 ADR-060 작업 중 발견.
+- [ ] **k8s base가 role=all `worker`와 `worker-market`을 함께 배포한다** — `infra/k8s/base/kustomization.yaml`이 `worker.yaml`(WORKER_ROLE 없음 = all, 1개)과 `worker-market.yaml`(2개)을 둘 다 포함한다. role=all도 `MarketTickScheduler`(Mock 시세 생성)를 돌리므로 **시세 생산이 중복**되고, 커버리지 공표자도 여럿이 된다(ADR-060 — advisory lock으로 직렬화는 했다). compose는 둘을 같이 띄우지 말라고 경고한다. 역할 분리 배포라면 `worker.yaml`을 base에서 빼는 게 맞아 보인다 — 배포 판단이라 확인 후 처리. 2026-10-04 ADR-060 리뷰에서 발견.
+- [ ] **`HttpTimeoutsTest`가 가끔 실패한다** — "requestFactory로 만든 RestClient는 read 타임아웃에 걸려 매달리지 않는다"가 `ResourceAccessException` 대신 `CancellationException`을 받은 적이 있다(전체 스위트 1회, 단독 재실행 3/3 통과). JDK HttpClient 타임아웃 경로의 예외 래핑이 경합에 따라 다르다 — 단언을 둘 다 받게 하거나 원인 확인.
+- [ ] **실시세를 잃은 조건부 주문 사용자 알림** — ADR-060은 화면 경고·운영 알림만 한다. `NONE/STALE`로 바뀌는 순간 푸시.
 - [ ] **조건부 주문 생성 시 시세 커버리지 확인** — [ADR-055](decisions/055-price-provenance-gate-for-real-orders.md) 이후 KIS/Toss 미커버 종목의 조건부 주문은 합성 틱으로 발동하지 않지만 **조용히** 발동하지 않는다(사용자는 스탑로스가 걸려 있다고 믿는다). worker의 커버리지 집합을 Redis에 게시하고 생성 시 거부/경고.
 
 ## 3. 리밸런싱 실행 자동화

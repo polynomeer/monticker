@@ -1008,6 +1008,7 @@ stocks
 | `quant_forward_test_equity` | V33 | — |
 | `quant_forward_tests` | V33 | — |
 | `quant_signals` | V13 | ✅ |
+| `realtime_price_coverage` | V53 | — 실시세 연결 종목, worker 공표·heartbeat (ADR-060) |
 | `rebalance_execution_legs` | V39 | — |
 | `rebalance_executions` | V39 | — |
 | `rebalance_targets` | V39 | — |
