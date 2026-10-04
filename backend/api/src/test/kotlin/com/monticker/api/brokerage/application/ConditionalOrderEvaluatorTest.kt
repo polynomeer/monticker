@@ -29,7 +29,10 @@ class ConditionalOrderEvaluatorTest {
     private val brokerageService = mockk<BrokerageService>()
     private val registry = SimpleMeterRegistry()
     private val haltService = mockk<TradingHaltService> { every { findActive(any(), any()) } returns null }
-    private val evaluator = ConditionalOrderEvaluator(jdbc, brokerageService, registry, haltService)
+    private val realClient = mockk<com.monticker.api.brokerage.infrastructure.BrokerageClient> { every { movesRealMoney } returns true }
+    private val realRegistry = com.monticker.api.brokerage.infrastructure.BrokerageClientRegistry(
+        com.monticker.api.brokerage.domain.BrokerageProvider.entries.associateWith { realClient })
+    private val evaluator = ConditionalOrderEvaluator(jdbc, brokerageService, registry, haltService, realRegistry)
 
     private fun stubActiveRow(
         id: Long = 1L, userId: Long = 1L, symbol: String = "005930", side: String = "SELL",
@@ -262,5 +265,23 @@ class ConditionalOrderEvaluatorTest {
         verify { jdbc.update(match<String> { it.contains("SET status = 'ACTIVE', triggered_at = NULL") }, any(), 1L) }
         verify(exactly = 0) { jdbc.update(match<String> { it.contains("SET status = 'FAILED'") }, *anyVararg()) }
         verify(exactly = 0) { jdbc.update(match<String> { it.contains("oco_group_id = ?") }, *anyVararg()) }   // OCO 형제도 그대로
+    }
+
+    // ── ADR-060 — Mock 증권사 계좌는 합성 시세로도 발동 ─────────────────────────────────
+
+    @Test
+    fun `실제 돈을 움직이지 않는 증권사(Mock 모드)면 합성 틱으로도 발동한다`() {
+        val mockClient = mockk<com.monticker.api.brokerage.infrastructure.BrokerageClient> { every { movesRealMoney } returns false }
+        val mockEvaluator = ConditionalOrderEvaluator(jdbc, brokerageService, registry, haltService,
+            com.monticker.api.brokerage.infrastructure.BrokerageClientRegistry(
+                com.monticker.api.brokerage.domain.BrokerageProvider.entries.associateWith { mockClient }))
+        stubActiveRow()
+        every { jdbc.update(match<String> { it.contains("SET status = 'TRIGGERED'") }, *anyVararg()) } returns 1
+        every { jdbc.update(match<String> { it.contains("SET status = 'EXECUTED'") }, *anyVararg()) } returns 1
+        every { brokerageService.submitOrder(1L, any(), any()) } returns makeOrder(100L, BrokerageOrderStatus.FILLED)
+
+        mockEvaluator.onTick(tick(stockId = 1L, price = "69000", source = PriceSource.MOCK, marketStatus = "POST_MARKET"))
+
+        verify(exactly = 1) { brokerageService.submitOrder(1L, any(), any()) }
     }
 }

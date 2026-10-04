@@ -3,6 +3,7 @@ package com.monticker.api.brokerage.api
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
 import com.monticker.api.brokerage.application.ConditionalOrderLeg
 import com.monticker.api.brokerage.application.ConditionalOrderService
+import com.monticker.api.brokerage.application.PriceFeed
 import com.monticker.api.brokerage.domain.ConditionalOrder
 import com.monticker.api.brokerage.domain.ConditionalTriggerType
 import com.monticker.api.brokerage.domain.OrderSide
@@ -68,6 +69,8 @@ data class ConditionalOrderResponse(
     val createdAt: Instant,
     val triggeredAt: Instant?,
     val expiresAt: Instant?,
+    /** ADR-060 — ACTIVE일 때만: LIVE | STALE | NONE. NONE·STALE이면 발동하지 않는다. */
+    val priceFeed: String? = null,
 )
 
 // ── 컨트롤러 ───────────────────────────────────────────────────────────────────
@@ -111,8 +114,10 @@ class ConditionalOrderController(
         @RequestHeader("Authorization") token: String,
         @PageableDefault(size = 20) pageable: Pageable,
     ): ResponseEntity<Page<ConditionalOrderResponse>> {
-        val page = conditionalOrderService.getAll(userId(token), pageable).map { it.toResponse() }
-        return ResponseEntity.ok(page)
+        val uid = userId(token)
+        val orders = conditionalOrderService.getAll(uid, pageable)
+        val feeds = conditionalOrderService.priceFeeds(uid, orders.content)
+        return ResponseEntity.ok(orders.map { it.toResponse(feeds[it.id]) })
     }
 
     @DeleteMapping("/{id}")
@@ -124,7 +129,7 @@ class ConditionalOrderController(
         return ResponseEntity.ok(order.toResponse())
     }
 
-    private fun ConditionalOrder.toResponse() = ConditionalOrderResponse(
+    private fun ConditionalOrder.toResponse(priceFeed: PriceFeed? = null) = ConditionalOrderResponse(
         id              = id,
         symbol          = symbol,
         side            = side.name,
@@ -140,5 +145,6 @@ class ConditionalOrderController(
         createdAt       = createdAt,
         triggeredAt     = triggeredAt,
         expiresAt       = expiresAt,
+        priceFeed       = priceFeed?.name,
     )
 }

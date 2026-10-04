@@ -1,5 +1,6 @@
 package com.monticker.api.brokerage.application
 
+import io.mockk.verify
 import com.monticker.api.brokerage.domain.BrokerageAccount
 import com.monticker.api.brokerage.domain.BrokerageProvider
 import com.monticker.api.brokerage.domain.ConditionalOrder
@@ -24,7 +25,12 @@ class ConditionalOrderServiceTest {
     private val accountRepo = mockk<BrokerageAccountRepository>()
     private val conditionalOrderRepo = mockk<ConditionalOrderRepository>()
     private val jdbc = mockk<JdbcTemplate>()
-    private val service = ConditionalOrderService(accountRepo, conditionalOrderRepo, jdbc)
+    // 기본은 실거래 모드(실제 돈을 움직이는 클라이언트) + 커버리지 안 — ADR-060 게이트를 통과한다.
+    private val realClient = mockk<com.monticker.api.brokerage.infrastructure.BrokerageClient> { every { movesRealMoney } returns true }
+    private val mockClient = mockk<com.monticker.api.brokerage.infrastructure.BrokerageClient> { every { movesRealMoney } returns false }
+    private val priceFeedMonitor = mockk<PriceFeedMonitor> { every { isCovered(any()) } returns true }
+    private val service = ConditionalOrderService(accountRepo, conditionalOrderRepo, jdbc,
+        com.monticker.api.brokerage.infrastructure.BrokerageClientRegistry(BrokerageProvider.entries.associateWith { realClient }), priceFeedMonitor)
 
     private fun makeAccount() = BrokerageAccount(id = 1L, userId = 1L, provider = BrokerageProvider.MOCK, accountNumber = "12345678")
 
@@ -127,5 +133,36 @@ class ConditionalOrderServiceTest {
         every { conditionalOrderRepo.findById(1L) } returns Optional.of(order)
 
         assertThatThrownBy { service.cancel(1L, 1L) }.isInstanceOf(IllegalArgumentException::class.java)
+    }
+
+    // ── ADR-060 — 실시세 커버리지 ──────────────────────────────────────────────────────
+
+    private val stopLoss = ConditionalOrderLeg(ConditionalTriggerType.STOP_LOSS, BigDecimal("70000"), OrderType.MARKET)
+
+    @Test
+    fun `실계좌는 실시세가 연결되지 않은 종목에 조건부 주문을 걸 수 없다 — 영영 발동하지 않으니까`() {
+        stubAccountAndStock()
+        every { priceFeedMonitor.isCovered(1L) } returns false
+
+        assertThatThrownBy { service.create(1L, "005930", OrderSide.SELL, 10, stopLoss) }
+            .isInstanceOf(com.monticker.api.common.exception.BusinessRuleException::class.java)
+            .hasMessageContaining("실시간 시세")
+        assertThatThrownBy { service.createOco(1L, "005930", OrderSide.SELL, 10, listOf(stopLoss, stopLoss.copy(triggerType = ConditionalTriggerType.TAKE_PROFIT, triggerPrice = BigDecimal("80000")))) }
+            .isInstanceOf(com.monticker.api.common.exception.BusinessRuleException::class.java)
+        verify(exactly = 0) { conditionalOrderRepo.save(any()) }
+    }
+
+    @Test
+    fun `실제 돈을 움직이지 않는 증권사(Mock) 계좌는 커버리지와 무관하게 걸 수 있다`() {
+        val mockService = ConditionalOrderService(accountRepo, conditionalOrderRepo, jdbc,
+            com.monticker.api.brokerage.infrastructure.BrokerageClientRegistry(BrokerageProvider.entries.associateWith { mockClient }), priceFeedMonitor)
+        stubAccountAndStock()
+        every { priceFeedMonitor.isCovered(any()) } returns false
+        every { conditionalOrderRepo.save(any()) } answers { firstArg() }
+
+        mockService.create(1L, "005930", OrderSide.SELL, 10, stopLoss)
+
+        verify(exactly = 1) { conditionalOrderRepo.save(any()) }
+        verify(exactly = 0) { priceFeedMonitor.isCovered(any()) }
     }
 }

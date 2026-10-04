@@ -4,6 +4,7 @@ import com.monticker.api.brokerage.domain.BrokerageOrderStatus
 import com.monticker.api.brokerage.domain.BrokerageProvider
 import com.monticker.api.brokerage.domain.ConditionalTriggerType
 import com.monticker.api.brokerage.domain.OrderSide
+import com.monticker.api.brokerage.infrastructure.BrokerageClientRegistry
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRequest
 import com.monticker.api.common.exception.TradingHaltedException
 import com.monticker.api.marketdata.domain.MarketTickReceivedEvent
@@ -43,22 +44,28 @@ class ConditionalOrderEvaluator(
     private val brokerageService: BrokerageService,
     private val meterRegistry: MeterRegistry,
     private val tradingHaltService: TradingHaltService,
+    private val clientRegistry: BrokerageClientRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
     // ADR-055 — 실시세 틱만 비동기 큐에 넣는다. condition은 @Async 디스패치 전에 평가되므로 합성(Mock) 틱
     // 폭주가 conditionalOrderExecutor 큐(200)를 채워 실시세 틱을 밀어내지 않는다.
-    @EventListener(condition = "#event.provenance.source.real")
+    // ADR-060 — Mock 증권사(실제 돈 없음)가 하나라도 있으면 합성 틱도 받는다 — 단 ACTIVE 조건부 주문이 걸린 종목만(큐 포화 방지).
+    // 실거래 모드에서는 지금과 같다(실시세 틱만).
+    @EventListener(condition = "#event.provenance.source.real or (@brokerageClientRegistry.anySimulated() and @activeConditionalStocks.contains(#event.tick.stockId))")
     @Async("conditionalOrderExecutor")
     fun onTick(event: MarketTickReceivedEvent) {
         val tick = event.tick
-        // 실시세라도 정규장·신선한 틱으로만 실주문을 낸다. DB 조회 전에 거른다.
-        event.provenance.rejectReasonForRealOrder(Instant.now())?.let { reason ->
-            meterRegistry.counter("conditional_order_tick_ignored_total", "reason", reason.substringBefore('=')).increment()
+        // 실시세라도 정규장·신선한 틱으로만 실주문을 낸다. 실제 돈을 움직이는 계좌만 이 조건을 탄다(ADR-060) — 그런 계좌만
+        // 있으면(실거래 모드) DB 조회 전에 거른다.
+        val realOrderReject = event.provenance.rejectReasonForRealOrder(Instant.now())
+        if (realOrderReject != null && !clientRegistry.anySimulated()) {
+            meterRegistry.counter("conditional_order_tick_ignored_total", "reason", realOrderReject.substringBefore('=')).increment()
             return
         }
         try {
             for (row in fetchActiveForStock(tick.stockId)) {
+                if (realOrderReject != null && clientRegistry.movesRealMoney(row.provider)) continue
                 if (row.triggerType.isTriggered(tick.price, row.triggerPrice)) {
                     // ADR-057 — 킬 스위치 중에는 클레임하지 않는다. ACTIVE로 남아 해제 뒤 다음 실시세 틱부터 다시 평가된다.
                     if (tradingHaltService.findActive(row.provider, row.userId) != null) {

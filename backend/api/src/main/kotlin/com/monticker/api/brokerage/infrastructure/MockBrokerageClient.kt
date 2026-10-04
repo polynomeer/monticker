@@ -30,6 +30,9 @@ class MockBrokerageClient(
     @Value("\${app.brokerage.mock.indeterminate-symbols:}") indeterminateSymbolsRaw: String = "",
 ) : BrokerageClient {
 
+    // ADR-060 — 개발용 가짜 증권사. 합성 시세로도 조건부 주문을 만들고 발동시킬 수 있다.
+    override val movesRealMoney: Boolean = false
+
     private val indeterminateSymbols = indeterminateSymbolsRaw.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
 
     private val log = LoggerFactory.getLogger(javaClass)

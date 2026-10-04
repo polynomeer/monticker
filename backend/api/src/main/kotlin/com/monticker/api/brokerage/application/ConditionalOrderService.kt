@@ -1,12 +1,15 @@
 package com.monticker.api.brokerage.application
 
+import com.monticker.api.brokerage.domain.BrokerageAccount
 import com.monticker.api.brokerage.domain.ConditionalOrder
 import com.monticker.api.brokerage.domain.ConditionalOrderStatus
 import com.monticker.api.brokerage.domain.ConditionalTriggerType
 import com.monticker.api.brokerage.domain.OrderSide
 import com.monticker.api.brokerage.domain.OrderType
 import com.monticker.api.brokerage.infrastructure.BrokerageAccountRepository
+import com.monticker.api.brokerage.infrastructure.BrokerageClientRegistry
 import com.monticker.api.brokerage.infrastructure.ConditionalOrderRepository
+import com.monticker.api.common.exception.BusinessRuleException
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
@@ -34,6 +37,8 @@ class ConditionalOrderService(
     private val accountRepo: BrokerageAccountRepository,
     private val conditionalOrderRepo: ConditionalOrderRepository,
     private val jdbc: JdbcTemplate,
+    private val clientRegistry: BrokerageClientRegistry,
+    private val priceFeedMonitor: PriceFeedMonitor,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -42,6 +47,7 @@ class ConditionalOrderService(
         require(quantity > 0) { "수량은 0보다 커야 합니다." }
         val account = activeAccount(userId)
         val stockId = resolveStockId(symbol) ?: throw IllegalArgumentException("존재하지 않는 종목입니다: $symbol")
+        requireRealtimeFeed(account, stockId, symbol)
         validateLeg(leg)
 
         val order = conditionalOrderRepo.save(
@@ -63,6 +69,7 @@ class ConditionalOrderService(
         require(quantity > 0) { "수량은 0보다 커야 합니다." }
         val account = activeAccount(userId)
         val stockId = resolveStockId(symbol) ?: throw IllegalArgumentException("존재하지 않는 종목입니다: $symbol")
+        requireRealtimeFeed(account, stockId, symbol)
         legs.forEach { validateLeg(it) }
 
         val groupId = UUID.randomUUID()
@@ -104,6 +111,26 @@ class ConditionalOrderService(
         if (leg.orderType == OrderType.LIMIT) {
             require(leg.limitPrice != null && leg.limitPrice > BigDecimal.ZERO) { "지정가 주문에는 가격이 필요합니다." }
         }
+    }
+
+    /**
+     * ADR-060 — 실제 돈을 움직이는 계좌는 실시세가 연결된 종목에만 조건부 주문을 걸 수 있다. 조건부 주문은 실시세 틱으로만
+     * 발동하므로(ADR-055) 커버리지 밖에 만들면 영영 발동하지 않는데, 사용자는 보호받고 있다고 믿는다.
+     */
+    private fun requireRealtimeFeed(account: BrokerageAccount, stockId: Long, symbol: String) {
+        if (clientRegistry.movesRealMoney(account.provider) && !priceFeedMonitor.isCovered(stockId)) {
+            throw BusinessRuleException("$symbol 은(는) 실시간 시세가 연결돼 있지 않아 조건부 주문을 걸 수 없습니다. 실시간 시세가 있는 종목에만 걸 수 있습니다.")
+        }
+    }
+
+    /** ADR-060 — ACTIVE 조건부 주문의 실시세 상태. 실제 돈을 움직이지 않는 계좌는 합성 시세로도 발동하므로 항상 LIVE다. */
+    fun priceFeeds(userId: Long, orders: List<ConditionalOrder>): Map<Long, PriceFeed> {
+        val active = orders.filter { it.status == ConditionalOrderStatus.ACTIVE }
+        if (active.isEmpty()) return emptyMap()
+        val real = accountRepo.findByUserIdAndIsActiveTrue(userId).map { clientRegistry.movesRealMoney(it.provider) }.orElse(true)
+        if (!real) return active.associate { it.id to PriceFeed.LIVE }
+        val byStock = priceFeedMonitor.feedStatus(active.map { it.stockId }.toSet())
+        return active.associate { it.id to (byStock[it.stockId] ?: PriceFeed.NONE) }
     }
 
     private fun resolveStockId(symbol: String): Long? =

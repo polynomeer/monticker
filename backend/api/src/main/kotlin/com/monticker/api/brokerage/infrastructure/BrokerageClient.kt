@@ -113,6 +113,12 @@ data class BrokerageHolding(
 // ── 인터페이스 ─────────────────────────────────────────────────────────────────
 
 interface BrokerageClient {
+    /**
+     * ADR-060 — 이 클라이언트로 낸 주문이 실제 돈을 움직이는가. 실시세 출처 게이트(ADR-055)·커버리지 확인은 true일 때만 건다.
+     * 기본값이 true인 이유: 새 클라이언트가 이 속성을 잊으면 실제 돈으로 취급돼 게이트가 걸린다(fail-closed). Mock만 false.
+     */
+    val movesRealMoney: Boolean get() = true
+
     fun issueToken(appKey: String, appSecret: String): BrokerageToken
 
     /**

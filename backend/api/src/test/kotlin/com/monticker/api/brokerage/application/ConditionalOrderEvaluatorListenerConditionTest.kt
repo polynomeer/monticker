@@ -26,11 +26,18 @@ class ConditionalOrderEvaluatorListenerConditionTest {
     private val jdbc = mockk<JdbcTemplate>()
     private val registry = SimpleMeterRegistry()
 
-    private fun publish(source: PriceSource) {
+    private fun registryOf(movesRealMoney: Boolean) = com.monticker.api.brokerage.infrastructure.BrokerageClientRegistry(
+        com.monticker.api.brokerage.domain.BrokerageProvider.entries.associateWith {
+            mockk<com.monticker.api.brokerage.infrastructure.BrokerageClient> { every { this@mockk.movesRealMoney } returns movesRealMoney }
+        })
+
+    private fun publish(source: PriceSource, movesRealMoney: Boolean = true, watched: Boolean = true) {
         AnnotationConfigApplicationContext().use { ctx ->
             ctx.beanFactory.registerSingleton("jdbc", jdbc)
             ctx.beanFactory.registerSingleton("brokerageService", mockk<BrokerageService>())
             ctx.beanFactory.registerSingleton("meterRegistry", registry)
+            ctx.beanFactory.registerSingleton(com.monticker.api.brokerage.infrastructure.BrokerageClientRegistryConfig.BEAN_NAME, registryOf(movesRealMoney))
+            ctx.beanFactory.registerSingleton("activeConditionalStocks", mockk<ActiveConditionalStocks> { every { contains(any()) } returns watched })
             ctx.beanFactory.registerSingleton("tradingHaltService", mockk<TradingHaltService> { every { findActive(any(), any()) } returns null })
             ctx.register(ConditionalOrderEvaluator::class.java)
             ctx.refresh()
@@ -56,5 +63,18 @@ class ConditionalOrderEvaluatorListenerConditionTest {
         every { jdbc.query(any<String>(), any<RowMapper<Any>>(), *anyVararg()) } returns emptyList()
         publish(PriceSource.KIS)
         verify(exactly = 1) { jdbc.query(any<String>(), any<RowMapper<Any>>(), *anyVararg()) }
+    }
+
+    @Test
+    fun `Mock 증권사 모드에서는 합성 틱도 리스너까지 온다 — SpEL이 레지스트리 빈을 찾는다`() {
+        every { jdbc.query(any<String>(), any<RowMapper<Any>>(), *anyVararg()) } returns emptyList()
+        publish(PriceSource.MOCK, movesRealMoney = false)
+        verify(exactly = 1) { jdbc.query(any<String>(), any<RowMapper<Any>>(), *anyVararg()) }
+    }
+
+    @Test
+    fun `Mock 증권사 모드라도 ACTIVE 조건부 주문이 없는 종목의 합성 틱은 큐에 넣지 않는다 — 큐 포화 방지`() {
+        publish(PriceSource.MOCK, movesRealMoney = false, watched = false)
+        verify(exactly = 0) { jdbc.query(any<String>(), any<RowMapper<Any>>(), *anyVararg()) }
     }
 }
