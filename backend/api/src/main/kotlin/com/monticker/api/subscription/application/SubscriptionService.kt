@@ -1,6 +1,7 @@
 package com.monticker.api.subscription.application
 
 import com.monticker.api.common.exception.BusinessRuleException
+import com.monticker.api.common.metrics.PaymentMetrics
 import com.monticker.api.subscription.domain.*
 import com.monticker.api.subscription.infrastructure.PaymentRecordRepository
 import com.monticker.api.subscription.infrastructure.SubscriptionPlanRepository
@@ -27,6 +28,7 @@ class SubscriptionService(
     private val pgClient: PgClient,
     private val ledgerService: LedgerService,
     private val billingKeyRepo: UserBillingKeyRepository,
+    private val paymentMetrics: PaymentMetrics,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -65,6 +67,7 @@ class SubscriptionService(
         } else {
             record.markFailed(result.failureReason ?: "PG 결제 실패")
             paymentRepo.save(record)
+            paymentMetrics.declined()
             log.warn("결제 실패: userId={} plan={} reason={}", userId, planCode, result.failureReason)
             SubscribeResult.failure(planCode, result.failureReason ?: "결제 처리 중 오류가 발생했습니다.")
         }
@@ -239,12 +242,14 @@ class SubscriptionService(
             // PG에 닿지도 못했다 — 청구되지 않았음이 확실하다. 기록을 PENDING으로 남겨두면
             // 다음 배치가 같은 orderId로 이어서 시도한다. 고객 잘못이 아니므로 카운트하지 않는다.
             PaymentFailureKind.UNAVAILABLE -> {
+                paymentMetrics.unavailable()
                 log.warn("갱신 보류 (PG 장애): userId={} orderId={} reason={}",
                     subscription.userId, orderId, result.failureReason)
                 RenewResult.Deferred
             }
             // 청구됐는지 알 수 없다. 여기서 실패로 단정하고 다음 주기에 다시 긁으면 이중청구다.
             PaymentFailureKind.INDETERMINATE -> {
+                paymentMetrics.indeterminate()
                 log.warn("갱신 불확정 (응답 없음): userId={} orderId={} — PG 재조회로 확인한다",
                     subscription.userId, orderId)
                 reconcilePending(record, orderId) ?: RenewResult.Deferred
@@ -279,6 +284,7 @@ class SubscriptionService(
         )
         record.markFailed(reason)
         paymentRepo.save(record)
+        paymentMetrics.declined()
 
         if (consecutiveFailures(subscription.userId) >= MAX_RENEWAL_FAILURES) {
             val freePlan = planRepo.findByCode(PlanCode.FREE).orElseThrow()
@@ -321,6 +327,7 @@ class SubscriptionService(
     ) {
         record.markSuccess(pgTransactionId)
         paymentRepo.save(record)
+        paymentMetrics.success()
         ledgerService.recordSubscriptionPayment(
             record.userId, record.plan.code.name, record.amount, record.id,
         )

@@ -1,6 +1,7 @@
 package com.monticker.api.subscription.application
 
 import com.monticker.api.common.exception.BusinessRuleException
+import com.monticker.api.common.metrics.PaymentMetrics
 import com.monticker.api.subscription.domain.*
 import com.monticker.api.subscription.infrastructure.PaymentRecordRepository
 import com.monticker.api.subscription.infrastructure.SubscriptionPlanRepository
@@ -15,6 +16,7 @@ import com.monticker.api.subscription.infrastructure.pg.PaymentStatusResult
 import com.monticker.api.subscription.infrastructure.pg.PgClient
 import com.monticker.api.subscription.infrastructure.pg.RefundResult
 import com.monticker.api.wallet.application.LedgerService
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.*
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -33,8 +35,9 @@ class SubscriptionServiceTest {
     private val pgClient         = MockPgClient()          // 실제 Mock PG 사용
     private val ledgerService    = mockk<LedgerService>(relaxed = true)
     private val billingKeyRepo   = mockk<UserBillingKeyRepository>()
+    private val paymentMetrics   = PaymentMetrics(SimpleMeterRegistry())
 
-    private val service = SubscriptionService(planRepo, subscriptionRepo, paymentRepo, pgClient, ledgerService, billingKeyRepo)
+    private val service = SubscriptionService(planRepo, subscriptionRepo, paymentRepo, pgClient, ledgerService, billingKeyRepo, paymentMetrics)
 
     // ── subscribe ─────────────────────────────────────────────────────────────
 
@@ -94,7 +97,7 @@ class SubscriptionServiceTest {
         val record  = makePaymentRecord(proPlan).also { it.status = PaymentStatus.PENDING }
         val sub     = makeSubscription(proPlan)
         val spyPgClient = spyk(pgClient)
-        val serviceWithSpy = SubscriptionService(planRepo, subscriptionRepo, paymentRepo, spyPgClient, ledgerService, billingKeyRepo)
+        val serviceWithSpy = SubscriptionService(planRepo, subscriptionRepo, paymentRepo, spyPgClient, ledgerService, billingKeyRepo, paymentMetrics)
 
         every { paymentRepo.findByPgOrderId("sub_1_abc") } returns Optional.of(record)
         every { subscriptionRepo.findByUserId(1L) }        returns Optional.of(sub)
@@ -228,7 +231,7 @@ class SubscriptionServiceTest {
             id = 1L, userId = 1L, customerKey = "cust_1", billingKeyValue = "billing_key_1",
         )
         val spyPgClient = spyk(pgClient)
-        val serviceWithSpy = SubscriptionService(planRepo, subscriptionRepo, paymentRepo, spyPgClient, ledgerService, billingKeyRepo)
+        val serviceWithSpy = SubscriptionService(planRepo, subscriptionRepo, paymentRepo, spyPgClient, ledgerService, billingKeyRepo, paymentMetrics)
 
         every { billingKeyRepo.findByUserId(1L) } returns Optional.of(billingKey)
         stubRenewal(record)
@@ -303,7 +306,7 @@ class SubscriptionServiceTest {
         val sub    = makeSubscription(plan)
         val paid   = makePaymentRecord(plan).also { it.status = PaymentStatus.SUCCESS }
         val spyPg  = spyk(pgClient)
-        val svc    = SubscriptionService(planRepo, subscriptionRepo, paymentRepo, spyPg, ledgerService, billingKeyRepo)
+        val svc    = SubscriptionService(planRepo, subscriptionRepo, paymentRepo, spyPg, ledgerService, billingKeyRepo, paymentMetrics)
 
         every { paymentRepo.findByPgOrderId(any()) } returns Optional.of(paid)
         every { subscriptionRepo.save(any()) }        returns sub
@@ -608,7 +611,7 @@ class SubscriptionServiceTest {
         UserBillingKey(id = 1L, userId = 1L, customerKey = "cust_1", billingKeyValue = "billing_key_1")
 
     private fun serviceWith(pg: PgClient) =
-        SubscriptionService(planRepo, subscriptionRepo, paymentRepo, pg, ledgerService, billingKeyRepo)
+        SubscriptionService(planRepo, subscriptionRepo, paymentRepo, pg, ledgerService, billingKeyRepo, paymentMetrics)
 
     /**
      * 청구 결과와 재조회 결과를 미리 정해두는 PG. mockk 대신 쓰는 이유는 호출 횟수가
