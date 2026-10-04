@@ -89,6 +89,7 @@ ADR-046(디텍터 상태)·ADR-021(캔들 버퍼)·인메모리 CLOB는 각각 �
 | `fix(api): prevent double refund…` | 취소 시 `PESSIMISTIC_WRITE` 행 락 + 검증 선행. 실제 Postgres 통합 테스트(락 제거 시 실패 확인) |
 | `fix(api): let watch-rule infrastructure failures…` | 룰 단위 격리 유지 + 루프 후 재던짐. 이 삼킴이 가리던 테스트 픽스처 결함(9건) 동반 수정 |
 | `fix(api): read settlement due-date…` | 모의·실거래 정산 리더를 `@StepScope` + 잡 파라미터 `date`로 |
+| 브랜치 적대적 리뷰 반영 | worker `GeneratedTick` 관대한 리더(별개 Deployment 배포 순서 사고 방지 — ADR-055 초안의 틀린 서술 정정), 출처 필터를 `@Async` 디스패치 전 리스너 조건으로, 죽은 코드 `KisPriceProvider`의 `KIS` 태깅 철회, 워치룰 DLT 로그 정정. 모든 신규 테스트는 변이(가드 제거)로 실패하는 것을 확인 |
 | `docs` | ADR-004 Superseded 표기, ADR-011/012/014/029/032 구현 차이 Note, architecture.md 드리프트 12곳, data-model.md |
 
 ## 5. 남은 것 — 우선순위
@@ -112,6 +113,9 @@ ADR-046(디텍터 상태)·ADR-021(캔들 버퍼)·인메모리 CLOB는 각각 �
 8. 스케줄러 분산 락(ShedLock 등) — 정산·사가 복구·포워드 테스트·Outbox 재발행. 수동 실행의 `runId` 우회 제거.
 9. 자격증명 재발급 계정 단위 락 + 401/403에만 `authFailedAt`.
 10. 디텍터 워밍업 강제(N틱 전 판정 금지), 리밸런스 후 `prev` 초기화.
+10a. 정산 리더 페이징 누락 — `status='PENDING'` 필터에 offset 페이징이라, 청크 커밋으로 결과 집합이 줄면 다음 페이지가
+    50건씩 건너뛴다(마감일 정산 50건 초과 시 절반이 다음 날로). 정렬에 `id` 타이브레이커도 없다. 키셋(`id > lastId`) 리더로.
+10b. ADR-055 신선도에 `tradeTime` 검사 추가(거래소 지연 메시지) — Consequences 참고.
 
 ### P2 — 모델
 11. 시장별 세션 일자로 `candles_1d` 버킷팅(T5).

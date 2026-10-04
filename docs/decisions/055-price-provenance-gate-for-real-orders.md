@@ -45,7 +45,7 @@ ADR-030/031(시세 커버리지)과 ADR-032(조건부 주문)를 **보완**한�
 | 생산자 | `source` |
 |--------|----------|
 | worker `KisExecutionTickHandler` (H0STCNT0 실시간 체결) | `KIS` |
-| worker `KisPriceProvider` (REST 현재가 폴링) | `KIS` (+ `marketStatus`를 `MarketSchedule`로 채운다 — 이전엔 비어 있어 항상 `OPEN`으로 해석됐다) |
+| worker `KisPriceProvider` (REST 현재가 폴링 — 현재 호출처 없음) | 명시하지 않음 → `MOCK`. 스냅샷(장 마감 후 종가 포함)이라 실시간 체결과 같은 `KIS`로 태깅하면 "실시세·정규장·신선"으로 통과할 수 있다. 연결할 일이 생기면 별도 출처 값을 정의할 것 |
 | worker `TossExecutionTickHandler` | `TOSS` |
 | worker `MockPriceGenerator` | `MOCK` |
 | Go `market-gateway` | `MOCK` (합성 생성기뿐이다) |
@@ -66,7 +66,7 @@ data class TickProvenance(val source: PriceSource, val marketStatus: String?, va
 
 ### 3. 실주문 게이트 — 세 조건을 모두 만족할 때만
 
-`ConditionalOrderEvaluator.onTick`이 **DB를 조회하기 전에** `TickProvenance.rejectReasonForRealOrder(now)`를 본다.
+출처 필터는 `@EventListener(condition = "#event.provenance.source.real")`로 **`@Async` 디스패치 전에** 건다 — 합성 틱 폭주가 `conditionalOrderExecutor` 큐(200)를 채워 실시세 틱을 밀어내지 않도록. 리스너 안에서는 **DB를 조회하기 전에** `TickProvenance.rejectReasonForRealOrder(now)`로 세 조건을 다시 본다(출처 포함 — 이중 방어).
 
 | 조건 | 이유 |
 |------|------|
@@ -76,12 +76,19 @@ data class TickProvenance(val source: PriceSource, val marketStatus: String?, va
 
 거른 틱은 `conditional_order_tick_ignored_total{reason=source|marketStatus|stale}`로 센다.
 
-### 4. api 컨슈머는 관대한 리더(tolerant reader)가 된다
+### 4. 틱 소비자는 모두 관대한 리더(tolerant reader)가 된다
 
-`MarketTickBroadcastConsumer`의 ObjectMapper를 `FAIL_ON_UNKNOWN_PROPERTIES=false`로 바꾼다. 이번 변경으로
-생산자(worker·gateway)와 소비자(api)의 배포 순서가 생기는데, 예전 `seq` 필드 때처럼 모르는 필드 하나로
-브로드캐스트 전체가 멈추면 안 된다. worker 쪽 `TickKafkaConsumer`는 `GeneratedTick` 자체에 필드가 추가됐으므로
-gateway가 먼저 배포돼도 문제없다.
+이번 변경으로 생산자와 소비자 사이에 배포 순서가 생긴다. 예전 `seq` 필드 때처럼 모르는 필드 하나로 소비 전체가
+멈추면 안 된다.
+
+- api `MarketTickBroadcastConsumer` — ObjectMapper를 `FAIL_ON_UNKNOWN_PROPERTIES=false`로.
+- worker `GeneratedTick` — `@JsonIgnoreProperties(ignoreUnknown = true)`. `worker-market`·`market-gateway`(생산자)와
+  `worker-event`(소비자, `TickKafkaConsumer`·`TickPipelineConfig`)는 **별개 K8s Deployment**라, 생산자가 먼저 롤아웃되면
+  구버전 소비자가 `source`를 모르고 틱마다 실패해 전부 `market.ticks-dlt`로 간다. (이 ADR 초안은 "worker는 같은
+  클래스라 안전하다"고 적었는데 틀렸다 — 같은 코드베이스여도 배포 단위가 다르다. 브랜치 리뷰에서 발견.)
+
+이번 배포 자체는 소비자가 아직 관대하지 않으므로 **api·worker-event를 먼저, worker-market·market-gateway를 나중에**
+롤아웃한다. 이후 필드 추가부터는 순서가 무관하다.
 
 ## Reasons
 
@@ -101,6 +108,10 @@ gateway가 먼저 배포돼도 문제없다.
 - **실시세 피드가 끊기면 조건부 주문도 멈춘다.** KIS 웹소켓이 끊기면 해당 종목은 Mock으로 대체되지 않고
   틱이 끊기므로(커버리지 집합이 기동 시 고정), 끊긴 동안의 가격 이동에는 반응하지 못한다. 재연결 후 첫 틱이
   여전히 조건을 만족하면 그때 발동한다.
+- **신선도는 파이프라인 지연만 잰다.** `generatedAt`은 worker 핸들러가 틱을 만든 시각이라, 거래소가 늦게 보낸
+  메시지(웹소켓 재연결 직후의 마지막 체결 스냅샷 등)는 `tradeTime`이 오래돼도 통과한다. `now − tradeTime` 검사를
+  추가하려면 KIS `tradeTime`이 초 단위(HHMMSS)라 여유를 둬야 하고, 파싱 오류가 나면 실주문이 전면 정지하므로
+  별도 검증 후 도입한다.
 - **5초는 정규장 기준이다.** 실시세 틱의 `generatedAt`은 worker가 틱을 만든 시각이라 worker↔api 시계 차이가
   그대로 들어간다. NTP 동기화를 전제한다. 시계가 미래로 어긋난 틱(음수 경과)은 신선한 것으로 본다.
 - **정규장 판정이 worker의 `MarketSchedule`에 의존한다.** 휴장일·조기 폐장을 `MarketSchedule`이 모르면 그날은
