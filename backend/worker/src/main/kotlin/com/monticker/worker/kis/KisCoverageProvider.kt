@@ -19,6 +19,11 @@ data class KisTickTarget(val stockId: Long, val symbol: String, val market: Stri
 class KisCoverageProvider(
     jdbc: JdbcTemplate,
     @Value("\${ingestion.source:internal}") ingestionSource: String,
+    // ADR-060 — 키가 없으면 KisExecutionTickSubscriber는 구독하지 않고 끝난다. 그때도 집합을 선언하면 MockPriceGenerator가 이 종목들을
+    // 건너뛰어 시세가 아예 멈추고, 커버리지 공표는 실시세가 없는 종목을 있다고 알린다. 키 값을 직접 읽는다 — KisWebSocketClient를
+    // 주입받으면 핸들러(이 공급자를 쓴다)를 통해 순환 의존이 생긴다.
+    @Value("\${kis.app-key:}") appKey: String = "",
+    @Value("\${kis.app-secret:}") appSecret: String = "",
 ) {
     companion object {
         const val MAX_TICK_SYMBOLS = 21
@@ -27,7 +32,7 @@ class KisCoverageProvider(
     // ADR-031 — ingestion.source가 "kis,toss"처럼 콤마 구분 다중값일 수 있어 정확히
     // 일치 대신 포함 여부로 판단한다. "kis" 단독 사용 시 동작은 바뀌지 않는다.
     val targets: List<KisTickTarget> =
-        if (ingestionSource.contains("kis"))
+        if (ingestionSource.contains("kis") && appKey.isNotBlank() && appSecret.isNotBlank())
             jdbc.query(
                 """
                 SELECT id, symbol, market FROM stocks

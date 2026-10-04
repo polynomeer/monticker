@@ -50,10 +50,10 @@ class TossCoverageProviderTest {
                 listOf(mapper.mapRow(rs, 0))
             }
         }
-        val kisCoverage = KisCoverageProvider(kisJdbc, "kis")
+        val kisCoverage = KisCoverageProvider(kisJdbc, "kis", "k", "s")
 
         val tossJdbc = krRows(1L to "005930", 2L to "000660")
-        val coverage = TossCoverageProvider(tossJdbc, "toss", kisCoverage)
+        val coverage = TossCoverageProvider(tossJdbc, "toss", kisCoverage, "k", "s")
 
         assertThat(coverage.krTargets.map { it.stockId }).containsExactly(2L)
     }

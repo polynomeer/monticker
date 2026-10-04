@@ -31,6 +31,9 @@ class TossWebSocketClient(
     private val wsRef = AtomicReference<WebSocket?>()
     private val connected = AtomicBoolean(false)
 
+    /** ADR-060 — 커버리지 공표가 쓴다. */
+    val isConnected: Boolean get() = connected.get()
+
     // (channel, code) 쌍 — 재연결 시 그대로 재구독한다.
     private val declarations = CopyOnWriteArraySet<Pair<String, String>>()
 

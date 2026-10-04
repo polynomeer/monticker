@@ -36,7 +36,7 @@ class TossExecutionTickHandlerTest {
                 listOf(mapper.mapRow(rs, 0))
             }
         }
-        return TossCoverageProvider(jdbc, "toss", noKisCoverage)
+        return TossCoverageProvider(jdbc, "toss", noKisCoverage, "k", "s")
     }
 
     private fun tradeMessage(topic: String, price: String, volume: String, timestamp: String) =

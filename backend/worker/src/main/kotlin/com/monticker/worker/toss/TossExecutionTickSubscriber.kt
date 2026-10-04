@@ -33,6 +33,14 @@ class TossExecutionTickSubscriber(
         TossWebSocketClient("KR", tokenIssuer, mapOf(tickHandler.channelPrefix to tickHandler), wsUrl)
     }
 
+    /**
+     * ADR-060 — 지금 연결이 살아 있는 Toss 실시간 종목. 커버리지 공표가 이 집합만 내보낸다 — 끊긴 연결의 종목을 "실시세 있음"으로
+     * 알리면 조건부 주문이 만들어지고 영영 발동하지 않는다.
+     */
+    fun connectedStockIds(): Set<Long> =
+        (if (usConnection.isConnected) coverage.usTargets.map { it.stockId } else emptyList<Long>()).toSet() +
+            (if (krConnection.isConnected) coverage.krTargets.map { it.stockId } else emptyList()).toSet()
+
     @PostConstruct
     fun start() {
         if (!tokenIssuer.isConfigured) {

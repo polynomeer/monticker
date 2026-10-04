@@ -41,7 +41,7 @@ class KisExecutionTickHandlerTest {
                 listOf(mapper.mapRow(rs, 0))
             }
         }
-        return KisCoverageProvider(jdbc, "kis")
+        return KisCoverageProvider(jdbc, "kis", "k", "s")
     }
 
     @Test
