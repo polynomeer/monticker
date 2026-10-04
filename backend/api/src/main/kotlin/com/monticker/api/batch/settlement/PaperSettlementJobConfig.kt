@@ -6,6 +6,7 @@ import com.monticker.api.paper.infrastructure.PaperSettlementRepository
 import org.slf4j.LoggerFactory
 import org.springframework.batch.core.Job
 import org.springframework.batch.core.Step
+import org.springframework.batch.core.configuration.annotation.StepScope
 import org.springframework.batch.core.job.builder.JobBuilder
 import org.springframework.batch.core.repository.JobRepository
 import org.springframework.batch.core.step.builder.StepBuilder
@@ -13,11 +14,13 @@ import org.springframework.batch.item.ItemProcessor
 import org.springframework.batch.item.ItemWriter
 import org.springframework.batch.item.data.RepositoryItemReader
 import org.springframework.batch.item.data.builder.RepositoryItemReaderBuilder
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.data.domain.Sort
 import org.springframework.transaction.PlatformTransactionManager
 import java.time.LocalDate
+import java.time.ZoneId
 
 @Configuration
 class PaperSettlementJobConfig(
@@ -38,7 +41,7 @@ class PaperSettlementJobConfig(
     fun paperSettlementStep(): Step =
         StepBuilder("paperSettlementStep", jobRepository)
             .chunk<PaperSettlement, PaperSettlement>(50, transactionManager)
-            .reader(dueSettlementReader())
+            .reader(dueSettlementReader(null))
             .processor(settlementProcessor())
             .writer(settlementWriter())
             .faultTolerant()
@@ -46,13 +49,18 @@ class PaperSettlementJobConfig(
             .skipLimit(100)
             .build()
 
+    // StepScope — 싱글턴 빈에서 LocalDate.now()를 인자로 굳히면 기동한 날짜로 고정돼, JVM이 떠 있는 동안
+    // 그 뒤에 기준일이 도래한 정산을 영영 읽지 않는다(2026-10 설계 리뷰). 실행마다 잡 파라미터의 date를 쓴다.
     @Bean
-    fun dueSettlementReader(): RepositoryItemReader<PaperSettlement> =
+    @StepScope
+    fun dueSettlementReader(
+        @Value("#{jobParameters['date']}") date: String?,
+    ): RepositoryItemReader<PaperSettlement> =
         RepositoryItemReaderBuilder<PaperSettlement>()
             .name("dueSettlementReader")
             .repository(settlementRepo)
             .methodName("findDueSettlements")
-            .arguments(listOf(LocalDate.now()))
+            .arguments(listOf(date?.let(LocalDate::parse) ?: LocalDate.now(ZoneId.of("Asia/Seoul"))))
             .sorts(mapOf("settleDate" to Sort.Direction.ASC))
             .pageSize(50)
             .build()
