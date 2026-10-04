@@ -217,12 +217,14 @@ class TossBrokerageClient(
                     .body(TossOrderEnvelope::class.java)
 
                 val order = resp?.result
-                val status = tossStatus(order?.status)
+                val filled = order?.execution?.filledQuantity?.toBigDecimalOrNull()?.toInt() ?: 0
+                // 일부 체결 뒤 잔량이 취소·거부되면 체결분은 남는다 — FILLED(filledQty < 주문 수량)로 반영한다(2026-10 리뷰).
+                val status = tossStatus(order?.status).let { if (filled > 0 && it in setOf("CANCELLED", "REJECTED")) "FILLED" else it }
 
                 BrokerageOrderStatus(
                     pgOrderId    = pgOrderId,
                     status       = status,
-                    filledQty    = order?.execution?.filledQuantity?.toBigDecimalOrNull()?.toInt() ?: 0,
+                    filledQty    = filled,
                     avgFillPrice = order?.execution?.averageFilledPrice?.toBigDecimalOrNull(),
                 )
             }

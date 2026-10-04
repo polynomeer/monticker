@@ -332,9 +332,10 @@ class BrokerageOrderUnknownOutcomeFlowIntegrationTest {
             val start = java.util.concurrent.CountDownLatch(1)
             val tasks = listOf(
                 { svc.syncSubmittedOrder(resting.id) }, { svc.syncSubmittedOrder(resting.id) }, { svc.syncOrderStatus(userId, resting.id) },
-            ).map { task -> pool.submit<Any?> { start.await(); runCatching { task() }.getOrNull() } }
+            ).map { task -> pool.submit<Result<Any?>> { start.await(); runCatching { task() } } }
             start.countDown()
-            tasks.forEach { it.get(30, java.util.concurrent.TimeUnit.SECONDS) }
+            // 락으로 직렬화되므로 어느 경로도 실패하지 않아야 한다 — 정산 유일 제약 위반(롤백)으로 "하나만 남는" 것이 아니라
+            tasks.forEach { assertThat(it.get(30, java.util.concurrent.TimeUnit.SECONDS).exceptionOrNull()).isNull() }
         } finally { pool.shutdownNow() }
 
         assertThat(row(resting.id)["status"]).isEqualTo("FILLED")

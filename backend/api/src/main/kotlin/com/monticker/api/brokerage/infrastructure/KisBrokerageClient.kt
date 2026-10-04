@@ -254,10 +254,15 @@ class KisBrokerageClient(
                     val rejectedQty = item.rjctQty?.toIntOrNull() ?: 0
                     val filledQty   = item.totCcldQty?.toIntOrNull() ?: 0
                     val remainQty   = item.rmnQty?.toIntOrNull() ?: 0
+                    val orderQty    = item.ord_qty?.toIntOrNull() ?: 0
+                    // 잔량이 0인데 체결도 0이면 취소된 주문이다(취소 시 원주문의 잔량이 0이 된다). 일부 체결 뒤 잔량이 취소되면
+                    // FILLED로 보고 filledQty(< 주문 수량)만 반영한다 — 이전엔 둘 다 SUBMITTED에 머물러 24시간 동기화 창 밖으로
+                    // 빠질 때까지 미체결로 남았다(2026-10 리뷰).
                     val status = when {
                         rejectedQty > 0            -> "REJECTED"
                         filledQty > 0 && remainQty == 0 -> "FILLED"
                         filledQty > 0 && remainQty > 0   -> "PARTIALLY_FILLED"
+                        orderQty > 0 && remainQty == 0 && (item.cncl_yn == "Y" || item.cncl_yn == null) -> "CANCELLED"
                         else                        -> "SUBMITTED"
                     }
                     BrokerageOrderStatus(
@@ -488,6 +493,7 @@ class KisBrokerageClient(
         val ord_tmd: String? = null,
         val ord_unpr: String? = null,
         val ord_gno_brno: String? = null,
+        val cncl_yn: String? = null,   // 취소 여부
     ) {
         val sllBuyDvsnCd: String? get() = sll_buy_dvsn_cd
         val totCcldQty: String?   get() = tot_ccld_qty

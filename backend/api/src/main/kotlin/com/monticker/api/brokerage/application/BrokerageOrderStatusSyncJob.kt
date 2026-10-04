@@ -32,7 +32,11 @@ class BrokerageOrderStatusSyncJob(
         )
         ids.forEach { id ->
             runCatching { brokerageService.syncSubmittedOrder(id) }
-                .onFailure { log.warn("[BrokerageOrderStatusSync] 동기화 실패: orderId={} reason={}", id, it.message) }
+                .onFailure {
+                    log.warn("[BrokerageOrderStatusSync] 동기화 실패: orderId={} reason={}", id, it.message)
+                    // 실패한 트랜잭션의 확인 시각은 롤백됐다 — 따로 남겨 이 행이 매 주기 맨 앞에서 큐를 막지 않게 한다.
+                    runCatching { brokerageService.markSynced(id) }
+                }
         }
     }
 

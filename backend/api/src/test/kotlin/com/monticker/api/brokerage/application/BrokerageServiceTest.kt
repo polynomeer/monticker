@@ -231,10 +231,11 @@ class BrokerageServiceTest {
         val order = makeOrder(status = BrokerageOrderStatus.SUBMITTED, pgOrderId = "KIS123", brokerOrderRef = "00950")
         val account = makeAccount()
         val fakeClient = mockk<BrokerageClient>()
-        every { orderRepo.findById(1L) } returns Optional.of(order)
+        stubCancel(order, account)
         every { orderRepo.save(any()) } returns order
-        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
         every { fakeClient.cancelOrder(any(), "KIS123", "00950") } returns BrokerageCancelResult(cancelled = true)
+        every { fakeClient.getOrderStatus(any(), "KIS123") } returns
+            com.monticker.api.brokerage.infrastructure.BrokerageOrderStatus("KIS123", "CANCELLED", 0, null)
 
         serviceWithFakeClient(fakeClient).cancelOrder(userId = 1L, orderId = 1L)
 
@@ -247,8 +248,7 @@ class BrokerageServiceTest {
         val order = makeOrder(status = BrokerageOrderStatus.SUBMITTED, pgOrderId = "KIS123", brokerOrderRef = "00950")
         val account = makeAccount()
         val fakeClient = mockk<BrokerageClient>()
-        every { orderRepo.findById(1L) } returns Optional.of(order)
-        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
+        stubCancel(order, account)
         every { fakeClient.cancelOrder(any(), "KIS123", "00950") } returns
             BrokerageCancelResult(cancelled = false, reason = "이미 체결된 주문입니다")
 
@@ -261,11 +261,38 @@ class BrokerageServiceTest {
     @Test
     fun `이미 FILLED된 주문 취소 시 예외 발생`() {
         val order = makeOrder(status = BrokerageOrderStatus.FILLED)
-        every { orderRepo.findById(1L) } returns Optional.of(order)
+        stubCancel(order, makeAccount())
 
         assertThrows<IllegalArgumentException> {
             service.cancelOrder(userId = 1L, orderId = 1L)
         }
+    }
+
+    @Test
+    fun `취소 — 잔량 취소 전에 일부가 체결됐으면 체결분만 FILLED와 정산으로 남긴다(2026-10 리뷰)`() {
+        val order = makeOrder(status = BrokerageOrderStatus.SUBMITTED, pgOrderId = "KIS123", brokerOrderRef = "00950")
+        val fakeClient = mockk<BrokerageClient>()
+        stubCancel(order, makeAccount())
+        every { orderRepo.save(any()) } returns order
+        val settlement = slot<BrokerageSettlement>()
+        every { settlementRepo.save(capture(settlement)) } answers { firstArg() }
+        every { fakeClient.cancelOrder(any(), "KIS123", "00950") } returns BrokerageCancelResult(cancelled = true)
+        every { fakeClient.getOrderStatus(any(), "KIS123") } returns
+            com.monticker.api.brokerage.infrastructure.BrokerageOrderStatus("KIS123", "FILLED", 3, BigDecimal("70000"))
+
+        serviceWithFakeClient(fakeClient).cancelOrder(userId = 1L, orderId = 1L)
+
+        assertThat(order.status).isEqualTo(BrokerageOrderStatus.FILLED)
+        assertThat(order.filledQty).isEqualTo(3)
+        assertThat(settlement.captured.quantity).isEqualTo(3)
+        assertThat(settlement.captured.grossAmount).isEqualByComparingTo(BigDecimal("210000"))
+    }
+
+    /** 취소는 자격증명을 먼저 얻고(계좌 → 주문 순서) 주문 행을 잠가 다시 읽는다. */
+    private fun stubCancel(order: BrokerageOrder, account: BrokerageAccount) {
+        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
+        every { accountRepo.findById(account.id) } returns Optional.of(account)
+        every { orderRepo.findWithLockById(order.id) } returns order
     }
 
     // ── 토큰 자동 재발급 (ADR-027) ────────────────────────────────────────────────
@@ -465,6 +492,7 @@ class BrokerageServiceTest {
         every { orderRepo.findById(order.id) } returns Optional.of(order)
         every { orderRepo.save(any()) } answers { firstArg() }
         every { accountRepo.findById(account.id) } returns Optional.of(account)
+        every { jdbc.queryForList(match<String> { it.contains("SELECT account_id") }, eq(Long::class.java), any()) } returns listOf(account.id)
         every { settlementRepo.save(any()) } answers { firstArg() }
         every { fakeClient.findOrders(any(), any(), "005930", "SELL") } returns snapshots
         return fakeClient
@@ -684,6 +712,7 @@ class BrokerageServiceTest {
         every { orderRepo.findWithLockById(order.id) } returns order
         every { orderRepo.save(any()) } answers { firstArg() }
         every { accountRepo.findById(account.id) } returns Optional.of(account)
+        every { jdbc.queryForList(match<String> { it.contains("SELECT account_id") }, eq(Long::class.java), any()) } returns listOf(account.id)
         every { settlementRepo.save(any()) } answers { firstArg() }
         every { fakeClient.findOrders(any(), any(), "005930", "SELL") } returns snapshots
         every { jdbc.queryForObject(match<String> { it.contains("pg_order_id = ? AND id <> ?") }, eq(Long::class.java), *anyVararg()) } returns linkedElsewhere
@@ -741,6 +770,19 @@ class BrokerageServiceTest {
         assertThrows<IllegalArgumentException> { svc.resolveManually(unknown.id, 9L, null, false, "x") }
     }
 
+    @Test
+    fun `수동 확정 — 막 기록된 PENDING_SUBMIT은 증권사 응답을 기다리도록 거부한다(대조 잡과 같은 유예)`() {
+        val fresh = makeSellOrder(BrokerageOrderStatus.PENDING_SUBMIT, submittedAt = Instant.now())
+        assertThrows<BusinessRuleException> {
+            serviceWithFakeClient(stubManual(fresh, emptyList())).resolveManually(fresh.id, 9L, null, true, "x")
+        }
+        assertThat(fresh.status).isEqualTo(BrokerageOrderStatus.PENDING_SUBMIT)
+
+        val stale = makeSellOrder(BrokerageOrderStatus.PENDING_SUBMIT, submittedAt = Instant.now().minusSeconds(120))
+        val resolved = serviceWithFakeClient(stubManual(stale, emptyList())).resolveManually(stale.id, 9L, null, true, "x")
+        assertThat(resolved.status).isEqualTo(BrokerageOrderStatus.REJECTED)
+    }
+
     // ── ADR-061 — 접수 주문 상태 동기화 ──────────────────────────────────────────────────
 
     private fun stubSync(order: BrokerageOrder, locked: Boolean = true): BrokerageClient {
@@ -751,6 +793,7 @@ class BrokerageServiceTest {
         every { orderRepo.findById(order.id) } returns Optional.of(order)
         every { orderRepo.save(any()) } answers { firstArg() }
         every { accountRepo.findById(account.id) } returns Optional.of(account)
+        every { jdbc.queryForList(match<String> { it.contains("SELECT account_id") }, eq(Long::class.java), any()) } returns listOf(account.id)
         every { settlementRepo.save(any()) } answers { firstArg() }
         return fakeClient
     }
@@ -783,6 +826,17 @@ class BrokerageServiceTest {
         assertThat(order.statusSyncedAt).isNotNull()
     }
 
+    @Test
+    fun `동기화 — 자격증명을 얻지 못하면 주문을 잠그지 않고 확인 시각만 남긴다`() {
+        val order = makeSellOrder(BrokerageOrderStatus.SUBMITTED).apply { pgOrderId = "ODNO-S" }
+        val client = stubSync(order)
+        every { accountRepo.findById(any()) } returns Optional.empty()
+
+        assertThat(serviceWithFakeClient(client).syncSubmittedOrder(order.id)).isEqualTo(BrokerageService.StatusSyncResult.LOOKUP_FAILED)
+        verify(exactly = 0) { jdbc.queryForList(match<String> { it.contains("SKIP LOCKED") }, eq(Long::class.java), any()) }
+        verify { jdbc.update(match<String> { it.contains("SET status_synced_at") }, any(), order.id) }
+    }
+
     // ── ADR-062 — 매도 원가 기록 ─────────────────────────────────────────────────────────
 
     @Test
@@ -805,5 +859,23 @@ class BrokerageServiceTest {
         saved.clear()
         svc.submitOrder(1L, BrokerageOrderRequest("005930", "BUY", "MARKET", 1))
         assertThat(saved.first().costBasisPrice).isNull()
+    }
+
+    @Test
+    fun `평단가가 0인 보유 행은 원가로 쓰지 않는다 — 매도 대금 전체가 이익으로 잡히지 않게`() {
+        val orderSlot = slot<BrokerageOrder>()
+        val (svc, fakeClient) = fakeClientService(BrokerageOrderResult.accepted("ODNO-Z"), orderSlot)
+        every { fakeClient.getBalance(any()) } returns BrokerageBalance(
+            BigDecimal("10000000"), BigDecimal("10000000"),
+            listOf(
+                com.monticker.api.brokerage.infrastructure.BrokerageHolding("005930", 10, BigDecimal.ZERO, BigDecimal("70000")),
+                com.monticker.api.brokerage.infrastructure.BrokerageHolding("005930", 30, BigDecimal("80000"), BigDecimal("70000")),
+            ),
+        )
+        val saved = mutableListOf<BrokerageOrder>()
+        every { orderRepo.save(capture(saved)) } answers { orderSlot.captured = firstArg(); firstArg() }
+
+        svc.submitOrder(1L, req)
+        assertThat(saved.first().costBasisPrice).isEqualByComparingTo(BigDecimal("80000"))
     }
 }
