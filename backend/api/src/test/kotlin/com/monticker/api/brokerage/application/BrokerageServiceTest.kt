@@ -672,4 +672,69 @@ class BrokerageServiceTest {
         assertThat(snapshot.captured.holdings).containsExactly(com.monticker.api.risk.application.HoldingPosition(stockId = 1L, qty = 7))
         assertThat(snapshot.captured.totalAssets).isEqualByComparingTo(BigDecimal("10000000"))
     }
+
+    // ── ADR-056 Note — 관리자 수동 확정 ─────────────────────────────────────────────────
+
+    private fun stubManual(order: BrokerageOrder, snapshots: List<BrokerOrderSnapshot>?, linkedElsewhere: Long = 0): BrokerageClient {
+        val account = makeAccount()
+        val fakeClient = mockk<BrokerageClient>()
+        every { orderRepo.findWithLockById(order.id) } returns order
+        every { orderRepo.save(any()) } answers { firstArg() }
+        every { accountRepo.findById(account.id) } returns Optional.of(account)
+        every { settlementRepo.save(any()) } answers { firstArg() }
+        every { fakeClient.findOrders(any(), any(), "005930", "SELL") } returns snapshots
+        every { jdbc.queryForObject(match<String> { it.contains("pg_order_id = ? AND id <> ?") }, eq(Long::class.java), *anyVararg()) } returns linkedElsewhere
+        return fakeClient
+    }
+
+    @Test
+    fun `수동 확정 — 지정한 증권사 주문을 당일 목록에서 다시 찾아 연결하고 체결까지 반영한다`() {
+        val order = makeSellOrder(BrokerageOrderStatus.UNKNOWN).apply { needsReview = true }
+        val client = stubManual(order, listOf(snapshot("B", order.submittedAt), snapshot("A", order.submittedAt)))
+
+        val resolved = serviceWithFakeClient(client).resolveManually(order.id, 9L, "B", notPlaced = false, note = "HTS 내역 대조")
+
+        assertThat(resolved.pgOrderId).isEqualTo("B")
+        assertThat(resolved.status).isEqualTo(BrokerageOrderStatus.FILLED)
+        assertThat(resolved.resolvedBy).isEqualTo(OrderResolution.MANUAL)
+        assertThat(resolved.resolvedByUser).isEqualTo(9L)
+        assertThat(resolved.needsReview).isFalse()
+    }
+
+    @Test
+    fun `수동 확정 — 미접수로 확정할 수 있다`() {
+        val order = makeSellOrder(BrokerageOrderStatus.UNKNOWN)
+        val client = stubManual(order, emptyList())
+
+        val resolved = serviceWithFakeClient(client).resolveManually(order.id, 9L, null, notPlaced = true, note = "증권사 콜센터 확인")
+
+        assertThat(resolved.status).isEqualTo(BrokerageOrderStatus.REJECTED)
+        assertThat(resolved.resolutionNote).isEqualTo("증권사 콜센터 확인")
+        verify(exactly = 0) { client.findOrders(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `수동 확정 — 목록에 없는 번호, 수량이 다른 주문, 이미 연결된 번호는 거부한다`() {
+        val order = makeSellOrder(BrokerageOrderStatus.UNKNOWN)
+        assertThrows<BusinessRuleException> {
+            serviceWithFakeClient(stubManual(order, listOf(snapshot("A", order.submittedAt)))).resolveManually(order.id, 9L, "Z", false, "x")
+        }
+        assertThrows<BusinessRuleException> {
+            serviceWithFakeClient(stubManual(order, listOf(snapshot("A", order.submittedAt).copy(quantity = 3)))).resolveManually(order.id, 9L, "A", false, "x")
+        }
+        assertThrows<BusinessRuleException> {
+            serviceWithFakeClient(stubManual(order, listOf(snapshot("A", order.submittedAt)), linkedElsewhere = 1)).resolveManually(order.id, 9L, "A", false, "x")
+        }
+        assertThat(order.status).isEqualTo(BrokerageOrderStatus.UNKNOWN)
+    }
+
+    @Test
+    fun `수동 확정 — 결과를 아는 주문은 건드리지 않고, 번호와 미접수를 함께 주거나 둘 다 안 주면 거부한다`() {
+        val filled = makeSellOrder(BrokerageOrderStatus.FILLED)
+        assertThrows<BusinessRuleException> { serviceWithFakeClient(stubManual(filled, emptyList())).resolveManually(filled.id, 9L, null, true, "x") }
+        val unknown = makeSellOrder(BrokerageOrderStatus.UNKNOWN)
+        val svc = serviceWithFakeClient(stubManual(unknown, emptyList()))
+        assertThrows<IllegalArgumentException> { svc.resolveManually(unknown.id, 9L, "A", true, "x") }
+        assertThrows<IllegalArgumentException> { svc.resolveManually(unknown.id, 9L, null, false, "x") }
+    }
 }

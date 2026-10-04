@@ -15,7 +15,7 @@ enum class BrokerageOrderStatus {
     val isUnresolved: Boolean get() = this == PENDING_SUBMIT || this == UNKNOWN
 }
 
-enum class OrderResolution { BROKER_LOOKUP, NOT_FOUND }
+enum class OrderResolution { BROKER_LOOKUP, NOT_FOUND, MANUAL }
 enum class OrderSide { BUY, SELL }
 enum class OrderType { MARKET, LIMIT }
 
@@ -97,6 +97,13 @@ class BrokerageOrder(
 
     @Column(name = "next_reconcile_at")
     var nextReconcileAt: Instant? = null,
+
+    // 관리자 수동 확정(resolved_by = MANUAL) — 누가·왜.
+    @Column(name = "resolved_by_user")
+    var resolvedByUser: Long? = null,
+
+    @Column(name = "resolution_note")
+    var resolutionNote: String? = null,
 ) {
     fun markSubmitted(pgOrderId: String, brokerOrderRef: String?) {
         this.pgOrderId      = pgOrderId

@@ -140,4 +140,13 @@ class BrokerageOrderUnknownOutcomeSqlIntegrationTest : PostgresIntegrationTest()
         assertThat(status(recent)).isEqualTo("FAILED")
         assertThat(status(legacy)).isEqualTo("TRIGGERED")
     }
+
+    @Test
+    fun `V54 — 관리자 수동 확정(MANUAL)과 확정자·사유를 기록할 수 있고, 그 밖의 resolved_by 값은 막힌다`() {
+        val (u, a) = fixture()
+        val id = insertOrder(u, a, "REJECTED", null)
+        jdbcTemplate.update("UPDATE brokerage_orders SET resolved_by = 'MANUAL', resolved_by_user = ?, resolution_note = '콜센터 확인' WHERE id = ?", u, id)
+        assertThatThrownBy { jdbcTemplate.update("UPDATE brokerage_orders SET resolved_by = 'GUESS' WHERE id = ?", id) }
+            .isInstanceOf(DataIntegrityViolationException::class.java)
+    }
 }

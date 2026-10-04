@@ -17,6 +17,8 @@ interface BrokerageOrderRepository : JpaRepository<BrokerageOrder, Long> {
     // 페이지네이션 없는 단순 리스트로 충분하다.
     fun findAllByUserIdAndSymbolAndStatusIn(userId: Long, symbol: String, statuses: List<BrokerageOrderStatus>): List<BrokerageOrder>
 
+    fun findAllByStatusInOrderByNeedsReviewDescSubmittedAtAsc(statuses: List<BrokerageOrderStatus>): List<BrokerageOrder>
+
     /** ADR-058 — 리스크 게이트 직전에 상태를 갱신할 같은 종목의 진행 중 주문. */
     fun findAllByAccountIdAndStockIdAndSideAndStatusAndSubmittedAtAfter(
         accountId: Long, stockId: Long, side: OrderSide, status: BrokerageOrderStatus, after: java.time.Instant,

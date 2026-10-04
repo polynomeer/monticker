@@ -296,6 +296,51 @@ class BrokerageService(
         return orderRepo.save(order)
     }
 
+    /**
+     * 결과 불명 주문의 관리자 수동 확정(ADR-056 Note). 대조 잡이 고르지 못한 주문(needs_review — 매칭 후보가 둘 이상)을 운영자가
+     * 증권사 주문번호를 지정하거나([brokerOrderId]) 미접수로([notPlaced]) 확정한다. 그동안 그 사용자의 같은 종목·방향 주문은 막혀 있다.
+     *
+     * 지정한 번호는 믿지 않고 증권사 당일 주문 목록에서 다시 찾는다 — 같은 종목·방향이어야 하고, 수량이 같아야 하며, 이미 다른
+     * 주문에 연결된 번호가 아니어야 한다. 행은 대조 잡과 겹치지 않게 잠그고(대기) 연다.
+     */
+    fun resolveManually(orderId: Long, adminId: Long?, brokerOrderId: String?, notPlaced: Boolean, note: String): BrokerageOrder =
+        requiresNew.execute {
+            require(note.isNotBlank()) { "확정 사유를 입력해주세요." }
+            require((brokerOrderId != null) != notPlaced) { "증권사 주문번호를 지정하거나 미접수로 확정하거나, 둘 중 하나만 하세요." }
+            val order = orderRepo.findWithLockById(orderId) ?: throw NoSuchElementException("주문 없음: $orderId")
+            if (!order.status.isUnresolved) throw BusinessRuleException("결과 불명 주문이 아닙니다: #$orderId (${order.status})")
+
+            if (notPlaced) {
+                order.reject("관리자 확인: 증권사 미접수")
+            } else {
+                val account = accountRepo.findById(order.accountId).orElseThrow()
+                val snapshot = clientRegistry.get(account.provider).findOrders(
+                    requireCredentials(account), order.submittedAt.atZone(KST).toLocalDate(), order.symbol, order.side.name,
+                )?.firstOrNull { it.brokerOrderId == brokerOrderId }
+                    ?: throw BusinessRuleException("증권사 당일 ${order.symbol} ${order.side} 주문 목록에서 $brokerOrderId 를 찾을 수 없습니다(조회 실패 포함).")
+                if (snapshot.quantity != order.quantity) {
+                    throw BusinessRuleException("수량이 다릅니다: 주문 ${order.quantity}주, 증권사 ${snapshot.quantity}주")
+                }
+                val linkedElsewhere = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM brokerage_orders WHERE account_id = ? AND pg_order_id = ? AND id <> ?",
+                    Long::class.java, order.accountId, brokerOrderId, order.id,
+                )!! > 0
+                if (linkedElsewhere) throw BusinessRuleException("$brokerOrderId 는 이미 다른 주문에 연결돼 있습니다.")
+                order.markSubmitted(snapshot.brokerOrderId, snapshot.brokerOrderRef)
+                applyBrokerStatus(account, order, snapshot.status, snapshot.filledQty, snapshot.avgFillPrice)
+            }
+            order.resolvedBy = OrderResolution.MANUAL
+            order.resolvedByUser = adminId
+            order.resolutionNote = note.trim()
+            order.needsReview = false
+            log.warn("결과 불명 주문 수동 확정: orderId={} by={} → {} (pgOrderId={}, note={})", order.id, adminId, order.status, order.pgOrderId, note)
+            orderRepo.save(order)
+        }!!
+
+    /** 운영 화면용 — 아직 결과를 모르는 주문(수동 검토가 필요한 것 먼저). */
+    fun unresolvedOrders(): List<BrokerageOrder> =
+        orderRepo.findAllByStatusInOrderByNeedsReviewDescSubmittedAtAsc(UNRESOLVED_STATUSES)
+
     enum class ReconcileResult { SKIPPED, LOOKUP_FAILED, WAITING, MATCHED, NOT_FOUND, AMBIGUOUS }
 
     /**
