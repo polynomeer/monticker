@@ -1,7 +1,7 @@
 # ADR-047: 모의투자 계좌의 체결 경로를 매칭 엔진 하나로 통일한다
 
 ## Status
-Accepted
+Accepted — "DailyLossRule은 양방향 유지"는 [ADR-063](063-daily-loss-rule-buy-only.md)으로 대체됨
 
 ## Context
 
@@ -122,7 +122,7 @@ POST /api/paper/buy|sell ──▶ PaperTradingService (파사드)
 - **VaRRule을 BUY 전용으로.** 파사드 전환으로 포트폴리오 화면의 매도에도 리스크 게이트가 걸리자, 보유 종목의 VaR가
   한도를 넘으면 **매도까지 막혔다**(로컬 일봉 데이터의 −72% 점프로 재현). 노출 한도는 노출을 늘리는 주문만 막아야 한다
   — 위험한 포지션을 정리하지 못하게 하는 리스크 룰은 자기모순이다. ConcentrationRule·PositionCountRule은 원래
-  BUY 전용이었고 VaR만 아니었다. DailyLossRule은 양방향 유지(당일 손실 후 거래 중단은 흔한 쿨오프 규칙).
+  BUY 전용이었고 VaR만 아니었다. DailyLossRule은 양방향 유지(당일 손실 후 거래 중단은 흔한 쿨오프 규칙). → [ADR-063](063-daily-loss-rule-buy-only.md)에서 매수 전용으로 변경.
 - **파사드의 `remainingCash`는 JDBC로 읽는다.** 사가가 cash를 JDBC로 바꾼 뒤 같은 트랜잭션의 JPA 1차 캐시 엔티티는
   갱신 전 값을 준다 — 첫 라이브에서 1,000만 원 그대로 나왔다.
 
