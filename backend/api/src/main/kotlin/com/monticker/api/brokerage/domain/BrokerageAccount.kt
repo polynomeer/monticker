@@ -61,7 +61,23 @@ class BrokerageAccount(
 
     @Column(name = "connected_at", nullable = false)
     val connectedAt: Instant = Instant.now(),
+
+    // ADR-067 — 사용자가 연동을 해지한 시각. 해지하면 자격증명은 지우고 행(주문·정산 기록의 기준)은 남긴다.
+    @Column(name = "disconnected_at")
+    var disconnectedAt: Instant? = null,
 ) {
+    /** ADR-067 — 저장된 자격증명을 모두 지우고 비활성화한다. 재연동은 새 키 입력으로만 가능하다. */
+    fun disconnect(at: Instant = Instant.now()) {
+        accessToken = null
+        appKey = null
+        appSecret = null
+        tokenExpiresAt = null
+        providerAccountRef = null
+        authFailedAt = null
+        isActive = false
+        disconnectedAt = at
+    }
+
     fun updateToken(token: String, expiresIn: Long) {
         this.accessToken = token
         this.tokenExpiresAt = Instant.now().plusSeconds(expiresIn)

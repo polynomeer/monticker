@@ -119,6 +119,55 @@ class BrokerageService(
         return accountRepo.save(account)
     }
 
+    /**
+     * ADR-067 — 연동 해지. 저장된 앱키·시크릿·토큰을 지우고 계좌를 비활성화하며, 대기 중인 조건부 주문을 취소한다.
+     *
+     * 증권사에서의 결과가 아직 열린 주문(제출 대기·결과 불명·최근 24시간 접수)이나 발동 중인 조건부 주문이 있으면 거부한다 —
+     * 그 주문을 대조·동기화하려면 이 키가 필요하다(ADR-056/061). 키를 지운 뒤에 체결되면 정산·원장이 영영 맞지 않는다.
+     *
+     * 주문 준비([prepareOrder])와 같은 사용자 advisory lock을 잡는다: 해지 확인과 키 삭제 사이에 새 주문이 끼어들 수 없고,
+     * 대기하던 주문 준비는 해지 커밋 뒤 계좌가 없어 증권사 호출 전에 실패한다.
+     */
+    @Transactional
+    fun disconnect(userId: Long): DisconnectResult {
+        jdbc.query("SELECT pg_advisory_xact_lock(?, (? % 2147483647)::int)", { _ -> }, ADVISORY_NS_ORDER, userId)
+        val account = getAccount(userId)
+
+        val openOrders = jdbc.queryForObject(
+            """
+            SELECT COUNT(*) FROM brokerage_orders
+            WHERE account_id = ?
+              AND (status IN ('PENDING_SUBMIT', 'UNKNOWN')
+                   OR (status = 'SUBMITTED' AND submitted_at > now() - interval '24 hours'))
+            """.trimIndent(),
+            Long::class.java, account.id,
+        ) ?: 0L
+        if (openOrders > 0) {
+            throw BusinessRuleException("체결 여부를 증권사에서 아직 확인 중인 주문이 ${openOrders}건 있어 연동을 해지할 수 없습니다. 미체결 주문을 취소하거나 확인이 끝난 뒤 다시 시도해주세요.")
+        }
+
+        // 발동 확인을 취소보다 먼저 한다 — 평가기가 ACTIVE→TRIGGERED로 바꾼 행은 아래 취소에 걸리지 않으므로 여기서 잡는다.
+        // 그 사이에 막 발동된 행은 주문 준비가 이 락을 기다렸다가 계좌 없음으로 실패한다(증권사 호출 없음, ADR-065 알림).
+        val triggered = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM conditional_orders WHERE account_id = ? AND status = 'TRIGGERED'",
+            Long::class.java, account.id,
+        ) ?: 0L
+        if (triggered > 0) {
+            throw BusinessRuleException("지금 발동되어 주문을 내고 있는 조건부 주문이 있어 연동을 해지할 수 없습니다. 잠시 후 다시 시도해주세요.")
+        }
+
+        val cancelled = jdbc.update(
+            "UPDATE conditional_orders SET status = 'CANCELLED', updated_at = now() WHERE account_id = ? AND status = 'ACTIVE'",
+            account.id,
+        )
+
+        account.disconnect()
+        accountRepo.save(account)
+        // 키·토큰 값은 절대 로그에 남기지 않는다
+        log.info("증권사 연동 해지: userId={} accountId={} provider={} cancelledConditionalOrders={}", userId, account.id, account.provider, cancelled)
+        return DisconnectResult(accountId = account.id, cancelledConditionalOrders = cancelled)
+    }
+
     @Transactional(readOnly = true)
     fun getAccount(userId: Long): BrokerageAccount =
         accountRepo.findByUserIdAndIsActiveTrue(userId)
@@ -767,3 +816,6 @@ class BrokerageService(
         fun newClientOrderId(): String = "mt-" + UUID.randomUUID().toString().replace("-", "")
     }
 }
+
+/** ADR-067 — 연동 해지 결과. */
+data class DisconnectResult(val accountId: Long, val cancelledConditionalOrders: Int)

@@ -878,4 +878,71 @@ class BrokerageServiceTest {
         svc.submitOrder(1L, req)
         assertThat(saved.first().costBasisPrice).isEqualByComparingTo(BigDecimal("80000"))
     }
+
+    // ── 연동 해지 (ADR-067) ────────────────────────────────────────────────────
+
+    private fun linkedAccount() = BrokerageAccount(
+        id = 7L, userId = 1L, provider = BrokerageProvider.KIS, accountNumber = "1234567801",
+        accessToken = "tok", appKey = "key", appSecret = "secret", tokenExpiresAt = Instant.now().plusSeconds(3600),
+        providerAccountRef = "ref",
+    )
+
+    private fun stubDisconnect(account: BrokerageAccount, openOrders: Long = 0, triggered: Long = 0) {
+        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
+        every { accountRepo.save(any()) } answers { firstArg() }
+        every { jdbc.queryForObject(match<String> { it.contains("FROM brokerage_orders") && it.contains("COUNT") }, Long::class.java, account.id) } returns openOrders
+        every { jdbc.queryForObject(match<String> { it.contains("FROM conditional_orders") && it.contains("TRIGGERED") }, Long::class.java, account.id) } returns triggered
+        every { jdbc.update(match<String> { it.contains("UPDATE conditional_orders") }, account.id) } returns 2
+    }
+
+    @Test
+    fun `disconnect wipes the stored keys, deactivates the account and cancels its active conditional orders`() {
+        val account = linkedAccount()
+        stubDisconnect(account)
+
+        val result = service.disconnect(1L)
+
+        assertThat(account.isActive).isFalse()
+        assertThat(account.accessToken).isNull()
+        assertThat(account.appKey).isNull()
+        assertThat(account.appSecret).isNull()
+        assertThat(account.tokenExpiresAt).isNull()
+        assertThat(account.providerAccountRef).isNull()
+        assertThat(account.disconnectedAt).isNotNull()
+        assertThat(result.cancelledConditionalOrders).isEqualTo(2)
+        verify { jdbc.update(match<String> { it.contains("SET status = 'CANCELLED'") && it.contains("status = 'ACTIVE'") }, account.id) }
+        verify { accountRepo.save(account) }
+    }
+
+    @Test
+    fun `disconnect takes the same per-user lock as order preparation so no order slips in between`() {
+        stubDisconnect(linkedAccount())
+
+        service.disconnect(1L)
+
+        verify { jdbc.query(match<String> { it.contains("pg_advisory_xact_lock") }, any<org.springframework.jdbc.core.RowCallbackHandler>(), any(), 1L) }
+    }
+
+    @Test
+    fun `disconnect is refused while an order's outcome at the broker is still open — its keys are needed to reconcile it`() {
+        val account = linkedAccount()
+        stubDisconnect(account, openOrders = 1)
+
+        assertThrows<BusinessRuleException> { service.disconnect(1L) }
+
+        assertThat(account.isActive).isTrue()
+        assertThat(account.appKey).isEqualTo("key")
+        verify(exactly = 0) { accountRepo.save(any()) }
+    }
+
+    @Test
+    fun `disconnect is refused while a triggered conditional order is being submitted`() {
+        val account = linkedAccount()
+        stubDisconnect(account, triggered = 1)
+
+        assertThrows<BusinessRuleException> { service.disconnect(1L) }
+
+        assertThat(account.appSecret).isEqualTo("secret")
+        verify(exactly = 0) { accountRepo.save(any()) }
+    }
 }

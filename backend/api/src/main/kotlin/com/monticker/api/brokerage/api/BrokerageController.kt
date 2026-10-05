@@ -2,6 +2,7 @@ package com.monticker.api.brokerage.api
 
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
 import com.monticker.api.brokerage.application.BrokerageService
+import com.monticker.api.brokerage.application.DisconnectResult
 import com.monticker.api.brokerage.application.TradingHaltService
 import com.monticker.api.brokerage.domain.*
 import com.monticker.api.brokerage.infrastructure.BrokerageBalance
@@ -128,6 +129,11 @@ class BrokerageController(
         val halt = tradingHaltService.findActive(provider, userId)
         return ResponseEntity.ok(TradingStatusResponse(halted = halt != null, scope = halt?.scope?.name, message = halt?.userMessage))
     }
+
+    // ADR-067 — 연동 해지: 저장된 키를 지우고 대기 중인 조건부 주문을 취소한다. 결과가 열린 주문이 있으면 409.
+    @DeleteMapping("/account")
+    fun disconnect(@RequestHeader("Authorization") token: String): ResponseEntity<DisconnectResult> =
+        ResponseEntity.ok(brokerageService.disconnect(userId(token)))
 
     // 연동 계좌 조회
     @GetMapping("/account")
