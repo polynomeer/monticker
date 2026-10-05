@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
 import {
-  AutoGrid, Bar, Btn, Chip, Field, IconBtn, Notice, Panel, PanelRow, Pill, PreviewTag, Stat, TerminalPage,
+  AutoGrid, Bar, Btn, Chip, Field, IconBtn, Notice, Panel, PanelRow, Pill, Stat, TerminalPage,
 } from "@/components/terminal";
 import { FrontierChart } from "@/components/analytics/FrontierChart";
+import { usePaperPortfolio } from "@/hooks/usePaperTrade";
+import { getScreenerQuotes } from "@/services/screener";
+import { saveRebalanceDraft, toDraftWeights } from "@/lib/rebalanceDraft";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -14,11 +18,20 @@ interface FrontierPoint {
   targetReturn: number; expectedReturn: number; expectedRisk: number;
   weights: Record<string, number>;
 }
+/** 모의투자 보유를 평가금액 비중으로 바꾼 비교점(분석 종목 안에서 합 1). */
+interface CurrentPortfolioPoint {
+  weights: Record<string, number>;
+  expectedReturn: number; expectedRisk: number;
+  /** 보유 주식 평가금액 중 분석 종목이 차지하는 비율 */
+  coveredValueRatio: number;
+  notHeld: number[];
+}
 interface OptimizationResult {
   stockIds: number[]; weights: Record<string, number>;
   expectedReturn: number; expectedRisk: number;
   currentEqualWeightRisk: number; currentEqualWeightReturn: number;
   suggestion: string;
+  current: CurrentPortfolioPoint | null;
 }
 interface HarvestingCandidate {
   stockId: number; symbol: string; name: string; quantity: number;
@@ -82,6 +95,8 @@ function usePortfolioOptimizer(selected: number[]) {
     queryFn: async () => {
       const params = new URLSearchParams();
       selected.forEach(id => params.append("stockIds", String(id)));
+      // 동일가중과 함께 사용자의 현재(모의투자) 보유 비중도 같은 축에서 비교한다.
+      params.set("compareHoldings", "true");
       const res = await authFetch(`/api/analytics/portfolio/optimize?${params}`);
       // V-L1 — 백엔드가 종목 수·데이터 부족 같은 입력 오류를 이제 200+error 필드가 아니라
       // 400으로 던진다(docs/validation-hardening-plan.md).
@@ -268,15 +283,61 @@ function RegimePanel() {
 
 // ── Page ────────────────────────────────────────────────────────────────────
 
+const MAX_STOCKS = 20;
+
 export default function AnalyticsPage() {
   const [selected, setSelected] = useState<number[]>([2, 3, 5, 6]);
+  // 보유 종목에서 불러온 종목은 고정 목록(STOCKS)에 없을 수 있다 — 이름을 따로 기억한다.
+  const [names, setNames] = useState<Record<number, string>>({});
   const { opt, frontier } = usePortfolioOptimizer(selected);
+  const { data: paper } = usePaperPortfolio();
+  const holdings = (paper?.holdings ?? []).filter(h => h.value > 0);
   const data = opt.data;
+  const held = data?.current ?? null;
   const unselected = STOCKS.filter(s => !selected.includes(s.id));
+  const labelOf = (id: number) => STOCKS.find(x => x.id === id)?.label ?? names[id] ?? `#${id}`;
+
+  const loadHoldings = () => {
+    const top = [...holdings].sort((a, b) => b.value - a.value).slice(0, MAX_STOCKS);
+    setNames(n => ({ ...n, ...Object.fromEntries(top.map(h => [h.stockId, h.name])) }));
+    setSelected(top.map(h => h.stockId));
+  };
 
   const run = () => { opt.refetch(); frontier.refetch(); };
+
+  // 추천 비중을 리밸런싱 화면에 "편집 중 초안"으로 넘긴다. 서버에는 아무것도 저장하지 않는다 —
+  // 목표 저장·미리보기·실행 확인은 리밸런싱 화면에서 사용자가 직접 한다.
+  const router = useRouter();
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const sendToRebalance = async () => {
+    if (!data) return;
+    setSendError(null);
+    setSending(true);
+    try {
+      const weights = toDraftWeights(Object.entries(data.weights).map(([id, w]) => ({ stockId: Number(id), weight: w })));
+      const quotes = await getScreenerQuotes(weights.map(w => w.stockId));
+      const bySymbol = new Map(quotes.map(q => [q.stockId, q]));
+      const missing = weights.filter(w => !bySymbol.has(w.stockId));
+      if (missing.length > 0) throw new Error(`종목 코드를 찾지 못했습니다: ${missing.map(w => labelOf(w.stockId)).join(", ")}`);
+      const ok = saveRebalanceDraft({
+        createdAt: Date.now(),
+        rows: weights.map(w => ({ stockId: w.stockId, symbol: bySymbol.get(w.stockId)!.symbol, name: bySymbol.get(w.stockId)!.name, weightPct: w.weightPct })),
+        expectedReturn: data.expectedReturn,
+        expectedRisk: data.expectedRisk,
+        suggestion: data.suggestion,
+      });
+      if (!ok) throw new Error("초안을 넘기지 못했습니다. 브라우저 저장소 설정을 확인하세요.");
+      router.push("/brokerage/rebalance");
+    } catch (e) {
+      setSendError((e as Error).message);
+    } finally {
+      setSending(false);
+    }
+  };
   const optSharpe = data ? sharpe(data.expectedReturn, data.expectedRisk) : null;
   const eqSharpe = data ? sharpe(data.currentEqualWeightReturn, data.currentEqualWeightRisk) : null;
+  const heldSharpe = held ? sharpe(held.expectedReturn, held.expectedRisk) : null;
 
   return (
     <TerminalPage
@@ -285,22 +346,21 @@ export default function AnalyticsPage() {
       stats={[
         { label: "선택 종목", value: `${selected.length}개` },
         { label: "분석 기간", value: "보유 일봉 전체", tone: "text-tm-soft" },
-        { label: "동일가중 샤프", value: eqSharpe == null ? "—" : eqSharpe.toFixed(2), tone: eqSharpe == null ? "text-tm-muted" : "text-dracula-orange" },
+        held
+          ? { label: "현재 보유 샤프", value: heldSharpe == null ? "—" : heldSharpe.toFixed(2), tone: heldSharpe == null ? "text-tm-muted" : "text-dracula-cyan" }
+          : { label: "동일가중 샤프", value: eqSharpe == null ? "—" : eqSharpe.toFixed(2), tone: eqSharpe == null ? "text-tm-muted" : "text-dracula-orange" },
         { label: "최적 샤프", value: optSharpe == null ? "—" : optSharpe.toFixed(2), tone: optSharpe == null ? "text-tm-muted" : "text-dracula-green" },
       ]}
     >
       <PanelRow>
         <Panel tabs={["효율적 프론티어"]} actions={[]} closable={false} className="flex-[999_1_560px]">
           <div className="flex flex-wrap items-center gap-1.5">
-            {selected.map(id => {
-              const s = STOCKS.find(x => x.id === id);
-              return (
-                <span key={id} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-tm-line2 bg-tm-inner pl-3 pr-1.5 text-13">
-                  {s?.label ?? id}
-                  <IconBtn name="x" label={`${s?.label ?? id} 제거`} size={22} iconSize={11} onClick={() => setSelected(p => p.filter(x => x !== id))} />
-                </span>
-              );
-            })}
+            {selected.map(id => (
+              <span key={id} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-tm-line2 bg-tm-inner pl-3 pr-1.5 text-13">
+                {labelOf(id)}
+                <IconBtn name="x" label={`${labelOf(id)} 제거`} size={22} iconSize={11} onClick={() => setSelected(p => p.filter(x => x !== id))} />
+              </span>
+            ))}
             {unselected.length > 0 && (
               <label className="relative inline-flex h-8 items-center gap-1.5 rounded-lg border border-tm-line2 px-3 text-13 font-semibold text-dracula-fg hover:bg-tm-raised">
                 + 종목 추가
@@ -315,7 +375,17 @@ export default function AnalyticsPage() {
                 </select>
               </label>
             )}
-            <Btn size="sm" className="ml-auto h-8" onClick={run} disabled={selected.length < 2 || opt.isFetching}>
+            <Btn
+              size="sm"
+              kind="ghost"
+              className="ml-auto h-8"
+              onClick={loadHoldings}
+              disabled={holdings.length === 0}
+              title={holdings.length === 0 ? "모의투자 보유 종목이 없습니다" : `보유 ${holdings.length}종목을 분석 대상으로 (평가금액 상위 ${MAX_STOCKS}개까지)`}
+            >
+              보유 종목으로
+            </Btn>
+            <Btn size="sm" className="h-8" onClick={run} disabled={selected.length < 2 || opt.isFetching}>
               {opt.isFetching ? "계산 중..." : "최적 비중 계산"}
             </Btn>
           </div>
@@ -325,7 +395,16 @@ export default function AnalyticsPage() {
             points={(frontier.data ?? []).map(f => ({ risk: f.expectedRisk * 100, ret: f.expectedReturn * 100 }))}
             optimal={data ? { risk: data.expectedRisk * 100, ret: data.expectedReturn * 100 } : undefined}
             current={data ? { risk: data.currentEqualWeightRisk * 100, ret: data.currentEqualWeightReturn * 100 } : undefined}
+            held={held ? { risk: held.expectedRisk * 100, ret: held.expectedReturn * 100 } : undefined}
           />
+          {data && !held && (
+            <span className="text-2xs text-tm-muted">고른 종목 중 모의투자로 보유한 종목이 없어 현재 비중 비교는 생략했습니다.</span>
+          )}
+          {held && held.coveredValueRatio < 0.999 && (
+            <span className="text-2xs text-tm-muted">
+              현재 보유 비중은 고른 종목만 기준입니다 — 보유 주식 평가금액의 {(held.coveredValueRatio * 100).toFixed(0)}%만 포함됐습니다. 현금은 제외합니다.
+            </span>
+          )}
         </Panel>
 
         <Panel tabs={["추천 비중"]} actions={[]} closable={false} className="flex-[1_1_360px]">
@@ -337,14 +416,14 @@ export default function AnalyticsPage() {
           {data ? (
             <div className="flex flex-col gap-2.5">
               {(Object.entries(data.weights) as [string, number][]).map(([stockId, w]) => {
-                const stock = STOCKS.find(s => s.id === Number(stockId));
                 const eq = 100 / Object.keys(data.weights).length;
+                const cur = held ? (held.weights[stockId] ?? 0) * 100 : null;
                 return (
                   <div key={stockId} className="grid items-center gap-2.5 text-xs" style={{ gridTemplateColumns: "84px 1fr 52px 76px" }}>
-                    <span className="truncate">{stock?.label ?? stockId}</span>
+                    <span className="truncate">{labelOf(Number(stockId))}</span>
                     <Bar pct={w * 100} h={8} />
                     <span className="num text-right">{(w * 100).toFixed(0)}%</span>
-                    <span className="num text-right text-tm-muted">동일 {eq.toFixed(0)}%</span>
+                    <span className={`num text-right ${cur == null ? "text-tm-muted" : "text-dracula-cyan"}`}>{cur == null ? `동일 ${eq.toFixed(0)}%` : `현재 ${cur.toFixed(0)}%`}</span>
                   </div>
                 );
               })}
@@ -353,10 +432,11 @@ export default function AnalyticsPage() {
             <p className="m-0 py-4 text-center text-13 text-tm-muted">최적 비중을 계산하면 종목별 추천 비중이 표시됩니다.</p>
           )}
           {data?.suggestion && <Notice tone="info">{data.suggestion}</Notice>}
-          <div className="flex items-center gap-2">
-            <Btn full disabled title="리밸런싱 화면 연동은 준비 중입니다">리밸런싱으로 보내기</Btn>
-            <PreviewTag />
-          </div>
+          <Btn full onClick={sendToRebalance} disabled={!data || sending} title={data ? "추천 비중을 리밸런싱 화면에 초안으로 채웁니다 — 저장·실행은 그 화면에서 직접" : "먼저 최적 비중을 계산하세요"}>
+            {sending ? "넘기는 중..." : "리밸런싱으로 보내기"}
+          </Btn>
+          {sendError && <Notice tone="danger">{sendError}</Notice>}
+          <span className="text-2xs text-tm-muted">실전 계좌 리밸런싱 화면에 초안으로만 채웁니다. 목표 저장과 주문 실행은 그 화면에서 직접 확인해야 하며, 자동으로 주문하지 않습니다.</span>
           <span className="text-2xs text-tm-muted">보유 일봉 수익률 기반 평균-분산 최적화(목표 수익 대비 최소 분산). 샤프는 무위험 수익률 0 가정. 추정치이며 보장되지 않습니다.</span>
         </Panel>
       </PanelRow>

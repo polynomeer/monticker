@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { QuantBacktestResult, RuleSet } from "@monticker/types";
 import { authFetch } from "@/services/api";
 import { Icon, IconBtn, Pill, Sparkline, Stat, fmtPct } from "@/components/terminal";
-import { rulesetStatus } from "./parts";
+import { fmtMatch, fmtMdd, matchTone, rulesetStatus } from "./parts";
 
 /** 상세 화면과 같은 queryKey — 카드에서 받은 결과를 상세 화면이 그대로 재사용한다. */
 export function useRuleSetBacktests(id: string | null | undefined, enabled = true) {
@@ -21,13 +21,15 @@ export function useRuleSetBacktests(id: string | null | undefined, enabled = tru
   });
 }
 
-/** 시안 strat_card — 이름·설명·상태, 최신 백테스트 자산 곡선, CAGR/MDD/포워드 일치. */
+/**
+ * 시안 strat_card — 이름·설명·상태, 최신 백테스트 자산 곡선, CAGR/MDD/포워드 일치.
+ * 성과는 목록 API가 같이 준 요약(ADR-078)을 쓴다 — 카드마다 백테스트를 따로 조회하지 않는다.
+ */
 export function RuleSetCard({ rs, onDelete, deleting }: { rs: RuleSet; onDelete: () => void; deleting?: boolean }) {
   const st = rulesetStatus(rs.status);
-  // 초안은 백테스트가 없으니 조회하지 않는다.
-  const { data: results } = useRuleSetBacktests(rs.id, rs.status !== "DRAFT");
-  const latest = results?.[0];
-  const curve = latest?.equityCurve.map((p) => p.equity) ?? [];
+  const latest = rs.performance?.backtest ?? null;
+  const fw = rs.performance?.forward ?? null;
+  const curve = latest?.curve ?? [];
   const cagr = latest?.annualReturn ?? null;
 
   return (
@@ -55,9 +57,12 @@ export function RuleSetCard({ rs, onDelete, deleting }: { rs: RuleSet; onDelete:
 
       <div className="grid grid-cols-3 gap-2">
         <Stat label="CAGR" value={fmtPct(cagr, 1)} valueClassName={cagr == null ? "text-tm-muted" : cagr >= 0 ? "text-up" : "text-down"} />
-        <Stat label="MDD" value={fmtPct(latest?.mdd ?? null, 1)} valueClassName={latest?.mdd == null ? "text-tm-muted" : Math.abs(latest.mdd) >= 0.05 ? "text-down" : undefined} />
-        {/* 포워드 신호 일치율 — 백엔드에 지표가 없다(설계만 반영) */}
-        <Stat label="포워드 일치" value="—" valueClassName="text-tm-muted" />
+        <Stat label="MDD" value={fmtMdd(latest?.mdd)} valueClassName={latest?.mdd == null ? "text-tm-muted" : latest.mdd > 0.05 ? "text-down" : undefined} />
+        <Stat
+          label="포워드 일치"
+          value={fw ? fmtMatch(fw.matchRate, fw.comparedSignals) : "—"}
+          valueClassName={fw ? matchTone(fw.matchRate) : "text-tm-muted"}
+        />
       </div>
 
       <div className="relative z-10 flex items-center justify-between gap-2 border-t border-tm-line pt-2.5">

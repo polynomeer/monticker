@@ -6,12 +6,17 @@ import type { MarketStrategy } from "@monticker/types";
 import { authFetch } from "@/services/api";
 import { Btn, BtnLink, Notice, Panel, PanelCol, PanelRow, SelectBox, TerminalPage } from "@/components/terminal";
 import { SegOpts } from "@/components/quant/parts";
-import { MarketStrategyCard } from "@/components/strategy-market/MarketStrategyCard";
-import { SubscribedSignalsPanel } from "@/components/strategy-market/SubscribedSignalsPanel";
+import { MarketStrategyCard, forwardWeeks } from "@/components/strategy-market/MarketStrategyCard";
+import { SubscribedSignalsPanel, useSubscribedSignalFeed } from "@/components/strategy-market/SubscribedSignalsPanel";
 
 const PAGE_SIZE = 20;
 type Filter = "popular" | "new" | "verified" | "free" | "subscribed";
 type Sort = "subs" | "recent" | "forward";
+
+function fwWeeks(s: MarketStrategy) {
+  const fw = s.performance?.forward;
+  return fw ? forwardWeeks(fw.startedAt, fw.stoppedAt) : -1;
+}
 
 export default function StrategyMarketPage() {
   const [page, setPage] = useState(0);
@@ -25,6 +30,7 @@ export default function StrategyMarketPage() {
 
   const list = useMemo(() => strategies ?? [], [strategies]);
   const subscribed = list.filter(s => s.isSubscribed);
+  const { data: signalFeed } = useSubscribedSignalFeed(subscribed.length > 0);
 
   const shown = useMemo(() => {
     let l = list;
@@ -35,7 +41,8 @@ export default function StrategyMarketPage() {
     const cmp: Record<Sort, (a: MarketStrategy, b: MarketStrategy) => number> = {
       subs: (a, b) => b.subscribe_count - a.subscribe_count,
       recent: (a, b) => b.created_at.localeCompare(a.created_at),
-      forward: () => 0,
+      // 포워드 기록이 없는 전략은 뒤로. 현재 페이지 안에서만 정렬한다(다른 정렬과 같다).
+      forward: (a, b) => fwWeeks(b) - fwWeeks(a),
     };
     return [...l].sort(cmp[key]);
   }, [list, filter, sort]);
@@ -48,7 +55,7 @@ export default function StrategyMarketPage() {
         { label: "공유 전략", value: isLoading ? "—" : `${list.length}${list.length === PAGE_SIZE ? "+" : ""}개` },
         { label: "검증 배지", value: "—", tone: "text-tm-muted" },
         { label: "구독 중", value: `${subscribed.length}개` },
-        { label: "이번 달 신호", value: "—", tone: "text-tm-muted" },
+        { label: "이번 달 신호", value: subscribed.length === 0 ? "0건" : signalFeed ? `${signalFeed.thisMonthCount}건` : "—", tone: signalFeed || subscribed.length === 0 ? undefined : "text-tm-muted" },
       ]}
     >
       <PanelRow>
@@ -71,7 +78,7 @@ export default function StrategyMarketPage() {
               <SelectBox aria-label="정렬" value={sort} onChange={e => setSort(e.target.value as Sort)} className="min-h-[34px] w-auto py-0" disabled={filter === "popular" || filter === "new"}>
                 <option value="subs">구독자 많은 순</option>
                 <option value="recent">최근 등록 순</option>
-                <option value="forward" disabled>포워드 기간 긴 순 (준비 중)</option>
+                <option value="forward">포워드 기간 긴 순</option>
               </SelectBox>
               <BtnLink href="/quant-lab" kind="ghost" icon="share" className="h-[34px]">내 전략 공유</BtnLink>
             </div>

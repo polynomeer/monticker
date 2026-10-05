@@ -51,6 +51,12 @@ class CreatorEarningsService(
             log.debug("무료 전략 구독: strategyId={} subscriberId={}", strategyId, subscriberId)
             return null
         }
+        // ADR-080 — 유료 전략 결제는 닫혀 있다. 아래 경로는 주문 ID·결제 기록·결과 불명 처리 없이
+        // pgClient.requestPayment를 부르고 곧바로 출금 가능한 수익을 적립한다. 호출자가 실수로 열어도
+        // 돈이 움직이지 않도록 여기서 한 번 더 막는다(fail-closed).
+        if (price.signum() != 0) {
+            throw com.monticker.api.common.exception.BusinessRuleException("유료 전략 구독 결제는 아직 열리지 않았습니다.")
+        }
 
         val result = pgClient.requestPayment(
             PaymentRequest(userId = subscriberId, planCode = "STRATEGY_$strategyCode", amount = price)
@@ -101,6 +107,27 @@ class CreatorEarningsService(
                 totalNet   = row[1] as BigDecimal,
             )
         }
+
+    /** 제작자 대시보드 월별 차트용 — [since] 이후 월(KST)별 순수익(취소 제외). 수익이 없는 달은 빠진다. */
+    @Transactional(readOnly = true)
+    fun getMonthlyNet(creatorId: Long, since: java.time.Instant): List<MonthlyNet> =
+        earningRepo.sumMonthlyNet(creatorId, since).map { row ->
+            MonthlyNet(month = row[0] as String, net = toBigDecimal(row[1]))
+        }
+
+    /** 전략별 누적·[since] 이후 순수익(취소 제외). 키는 strategy_market.id */
+    @Transactional(readOnly = true)
+    fun getStrategyNet(creatorId: Long, since: java.time.Instant): Map<Long, StrategyNet> =
+        earningRepo.sumNetByStrategy(creatorId, since).associate { row ->
+            (row[0] as Number).toLong() to StrategyNet(total = toBigDecimal(row[1]), sinceNet = toBigDecimal(row[2]))
+        }
+
+    private fun toBigDecimal(v: Any?): BigDecimal = when (v) {
+        null -> BigDecimal.ZERO
+        is BigDecimal -> v
+        is Number -> BigDecimal(v.toString())
+        else -> BigDecimal(v.toString())
+    }
 
     // ── 출금 ──────────────────────────────────────────────────────────────────
 
@@ -169,3 +196,10 @@ class CreatorEarningsService(
 }
 
 data class StrategyEarningSummary(val strategyId: Long, val totalNet: BigDecimal)
+
+/** quant 모듈(제작자 대시보드)이 받는 집계 타입 — 서비스와 함께 공개한다. */
+@NamedInterface("api")
+data class MonthlyNet(val month: String, val net: BigDecimal)
+
+@NamedInterface("api")
+data class StrategyNet(val total: BigDecimal, val sinceNet: BigDecimal)

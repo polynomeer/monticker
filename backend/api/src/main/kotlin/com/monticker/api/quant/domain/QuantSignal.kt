@@ -1,6 +1,7 @@
 package com.monticker.api.quant.domain
 
 import jakarta.persistence.*
+import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 
@@ -34,6 +35,10 @@ class QuantSignal(
 
     @Column(nullable = false)
     val mode: String = "FORWARD_TEST",
+
+    /** 신호가 난 평가일 종가(V76). 구독자 신호 이력에 쓴다. 이전 신호는 null */
+    @Column(name = "price")
+    val price: BigDecimal? = null,
 
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant = Instant.now(),

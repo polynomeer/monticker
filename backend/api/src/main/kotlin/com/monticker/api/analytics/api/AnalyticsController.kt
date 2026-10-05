@@ -1,5 +1,7 @@
 package com.monticker.api.analytics.api
 
+import com.monticker.api.analytics.application.CurrentPortfolioPoint
+import com.monticker.api.analytics.application.HoldingsComparisonService
 import com.monticker.api.analytics.application.OptimizationResult
 import com.monticker.api.analytics.application.PatternRecognizerService
 import com.monticker.api.analytics.application.PortfolioOptimizerService
@@ -18,6 +20,7 @@ class AnalyticsController(
     private val portfolioOptimizerService: PortfolioOptimizerService,
     private val taxOptimizerService: TaxOptimizerService,
     private val positionSizerService: PositionSizerService,
+    private val holdingsComparisonService: HoldingsComparisonService,
 ) {
     private fun userId(): Long =
         SecurityContextHolder.getContext().authentication.principal as Long
@@ -26,12 +29,16 @@ class AnalyticsController(
     fun optimizePortfolio(
         @RequestParam stockIds: List<Long>,
         @RequestParam(required = false) targetReturn: Double?,
-    ): ResponseEntity<OptimizationResult> {
-        val result = portfolioOptimizerService.optimize(userId(), stockIds, targetReturn)
+        // 사용자의 모의투자 보유 비중을 같은 축에서 비교한다. 결과(최적화)는 캐시하지만 보유는 매번 읽는다.
+        @RequestParam(defaultValue = "false") compareHoldings: Boolean,
+    ): ResponseEntity<OptimizeResponse> {
+        val uid = userId()
+        val result = portfolioOptimizerService.optimize(uid, stockIds, targetReturn)
         // V-L1 — 종목 수·데이터 부족 같은 입력 오류를 200 + error 필드로 돌려보내면 호출자가
         // error를 확인하지 않는 한 weights={}를 성공으로 취급한다. 400으로 명확히 던진다.
         if (result.error != null) throw IllegalArgumentException(result.error)
-        return ResponseEntity.ok(result)
+        val current = if (compareHoldings) holdingsComparisonService.compare(uid, result.stockIds) else null
+        return ResponseEntity.ok(OptimizeResponse(result, current))
     }
 
     @GetMapping("/portfolio/frontier")
@@ -50,6 +57,12 @@ class AnalyticsController(
     fun calculateKellyManual(@RequestBody req: KellyRequest) =
         ResponseEntity.ok(positionSizerService.calculateKelly(req.winRate, req.avgWinPct, req.avgLossPct))
 }
+
+/** OptimizationResult 필드를 그대로 펼치고, 요청 시 현재 보유 비교점을 붙인다(기존 클라이언트 호환). */
+data class OptimizeResponse(
+    @get:com.fasterxml.jackson.annotation.JsonUnwrapped val result: OptimizationResult,
+    val current: CurrentPortfolioPoint?,
+)
 
 data class KellyRequest(
     val winRate: Double,

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { EarningsSummaryResponse, EarningSummary, CreatorEarning, CreatorPayout, PageResponse } from "@monticker/types";
+import type { CreatorDashboard, CreatorEarning, CreatorPayout, CreatorStrategyRow, EarningsSummaryResponse, MonthlyNetPoint, PageResponse } from "@monticker/types";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
 import {
@@ -27,6 +27,29 @@ const EARNING_STATUS: Record<string, { label: string; tone: Tone }> = {
 };
 
 const BANKS = ["KB국민은행", "신한은행", "우리은행", "하나은행", "NH농협은행", "IBK기업은행", "SC제일은행", "카카오뱅크", "토스뱅크", "케이뱅크", "새마을금고", "우체국", "수협은행", "부산은행", "대구은행"];
+
+/** 월별 순수익 막대 — 최근 12개월(KST). 터미널 키트에 막대 차트가 없어 여기 둔다. */
+function MonthlyBars({ points }: { points: MonthlyNetPoint[] }) {
+  const max = Math.max(...points.map(p => p.net), 0);
+  if (max <= 0) {
+    return (
+      <div className="grid h-[180px] place-items-center rounded-lg border border-dashed border-tm-line2 text-center text-13 text-tm-muted">
+        최근 12개월 동안 적립된 수익이 없습니다.
+      </div>
+    );
+  }
+  return (
+    <div role="img" aria-label="최근 12개월 월별 순수익" className="flex h-[180px] items-end gap-1.5 pt-2">
+      {points.map(p => (
+        <div key={p.month} className="flex h-full flex-1 flex-col items-center justify-end gap-1" title={`${p.month} ${won(p.net)}`}>
+          <span className="num text-[0.625rem] text-tm-muted">{p.net > 0 ? `${Math.round(p.net / 1000).toLocaleString("ko-KR")}k` : ""}</span>
+          <div className="w-full rounded-t bg-dracula-purple" style={{ height: `${(p.net / max) * 130}px`, minHeight: p.net > 0 ? 2 : 0 }} />
+          <span className="num text-[0.625rem] text-tm-muted">{Number(p.month.slice(5))}월</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 type PayoutForm = { amount: number; bankName: string; accountNumber: string; accountHolder: string };
 
@@ -106,8 +129,18 @@ export default function EarningsPage() {
     queryFn: () => authFetch("/api/settlement/strategy/earnings/summary").then(r => r.json()),
   });
   const balance = summary?.availableBalance ?? 0;
-  const byStrategy = summary?.byStrategy ?? [];
-  const totalNet = byStrategy.reduce((a, r) => a + r.totalNet, 0);
+
+  // 월별·이번 달·구독자·전략별 지표(이름 포함) — 수익은 취소분 제외
+  const { data: dash, isError: dashError } = useQuery<CreatorDashboard>({
+    queryKey: ["earnings", "dashboard"],
+    queryFn: async () => {
+      const r = await authFetch("/api/quant/market/creator/dashboard");
+      if (!r.ok) throw new Error("대시보드 집계를 불러오지 못했습니다.");
+      return r.json();
+    },
+  });
+  const strategies = dash?.strategies ?? [];
+  const nameOf = (id: number) => strategies.find(s => s.marketId === id)?.name ?? `전략 #${id}`;
 
   const { data: earningsData } = useQuery<PageResponse<CreatorEarning>>({
     queryKey: ["earnings", "list", earningPage],
@@ -140,16 +173,19 @@ export default function EarningsPage() {
     onError: (e: Error) => toast({ type: "error", title: "출금 신청 실패", message: e.message }),
   });
 
-  const strategyCols: Column<EarningSummary>[] = [
-    { key: "s", header: "전략", cell: r => <span className="font-semibold">전략 #{r.strategyId}</span> },
-    { key: "subs", header: "구독자", align: "right", cell: () => <span className="num text-tm-muted">—</span> },
-    { key: "month", header: "이번 달 순수익", align: "right", cell: () => <span className="num text-tm-muted">—</span> },
-    { key: "total", header: "누적 순수익", align: "right", cell: r => <span className="num text-up">{won(r.totalNet)}</span> },
-    { key: "churn", header: "이탈률", align: "right", cell: () => <span className="num text-tm-muted">—</span> },
-    { key: "st", header: "상태", cell: () => <span className="text-tm-muted">—</span> },
+  const strategyCols: Column<CreatorStrategyRow>[] = [
+    { key: "s", header: "전략", cell: r => <span className="font-semibold">{r.name}</span> },
+    { key: "subs", header: "구독자", align: "right", cell: r => <span className="num">{r.subscribers.toLocaleString("ko-KR")}</span> },
+    { key: "month", header: "이번 달 순수익", align: "right", cell: r => <span className={`num ${r.thisMonthNet > 0 ? "text-up" : "text-tm-muted"}`}>{won(r.thisMonthNet)}</span> },
+    { key: "total", header: "누적 순수익", align: "right", cell: r => <span className={`num ${r.totalNet > 0 ? "text-up" : "text-tm-muted"}`}>{won(r.totalNet)}</span> },
+    // 구독 해지는 이력 없이 지워져(DELETE) 이탈률을 계산할 수 없다.
+    { key: "churn", header: "이탈률", align: "right", cell: () => <span className="num text-tm-muted" title="구독 해지 이력을 아직 기록하지 않습니다">—</span> },
+    { key: "st", header: "상태", cell: r => r.price > 0
+      ? <Pill tone="orange">유료 · 결제 미개방</Pill>
+      : <Pill tone="green">무료 공개</Pill> },
   ];
   const earningCols: Column<CreatorEarning>[] = [
-    { key: "s", header: "전략", cell: e => <span className="font-medium">#{e.strategyId}</span> },
+    { key: "s", header: "전략", cell: e => <span className="font-medium">{nameOf(e.strategyId)}</span> },
     { key: "d", header: "날짜", cell: e => <span className="num text-tm-muted">{new Date(e.earnedAt).toLocaleDateString("ko-KR")}</span> },
     { key: "g", header: "총액", align: "right", cell: e => <span className="num">{won(e.grossAmount)}</span> },
     { key: "f", header: "수수료", align: "right", cell: e => <span className="num text-tm-muted">-{won(e.platformFee)}</span> },
@@ -177,8 +213,8 @@ export default function EarningsPage() {
       title="제작자 수익 대시보드"
       crumb="전략 마켓"
       stats={[
-        { label: "판매 전략", value: `${byStrategy.length}개` },
-        { label: "구독자", value: "—", tone: "text-tm-muted" },
+        { label: "공유 전략", value: dash ? `${strategies.length}개` : "—", tone: dash ? undefined : "text-tm-muted" },
+        { label: "구독자", value: dash ? `${dash.activeSubscribers.toLocaleString("ko-KR")}명` : "—", tone: dash ? undefined : "text-tm-muted" },
         { label: "평균 별점", value: "—", tone: "text-tm-muted" },
         { label: "다음 정산", value: "—", tone: "text-tm-muted" },
       ]}
@@ -186,16 +222,20 @@ export default function EarningsPage() {
       <PanelRow>
         <PanelCol className="flex-[999_1_620px]">
           <AutoGrid min={180} gap={8}>
-            <Tile><Stat big label="누적 순수익" value={won(totalNet)} sub="플랫폼 수수료 차감 후" /></Tile>
-            <Tile><Stat big label="이번 달" value="—" valueClassName="text-tm-muted" sub="월별 집계 준비 중" /></Tile>
-            <Tile><Stat big label="활성 구독자" value="—" valueClassName="text-tm-muted" sub="집계 준비 중" /></Tile>
+            <Tile><Stat big label="누적 순수익" value={dash ? won(dash.totalNet) : "—"} valueClassName={dash ? undefined : "text-tm-muted"} sub="플랫폼 수수료 차감 후 · 취소 제외" /></Tile>
+            <Tile><Stat big label="이번 달" value={dash ? won(dash.thisMonthNet) : "—"} valueClassName={dash ? (dash.thisMonthNet > 0 ? "text-up" : undefined) : "text-tm-muted"} sub={`${new Date().getMonth() + 1}월 · KST 기준`} /></Tile>
+            <Tile><Stat big label="활성 구독자" value={dash ? `${dash.activeSubscribers.toLocaleString("ko-KR")}명` : "—"} valueClassName={dash ? undefined : "text-tm-muted"} sub="내 공유 전략 전체" /></Tile>
             <Tile><Stat big label="출금 가능" value={won(balance)} valueClassName="text-dracula-purple" sub="최소 10,000원" /></Tile>
           </AutoGrid>
 
-          <Panel tabs={["월별 수익"]} actions={[]} closable={false} preview>
-            <div className="grid h-[180px] place-items-center rounded-lg border border-dashed border-tm-line2 text-center text-13 text-tm-muted">
-              <div>월별 순수익 차트는 월 단위 집계 API가 준비되면 표시됩니다.<br />개별 수익 내역은 아래 &lsquo;수익 내역&rsquo; 탭에서 볼 수 있습니다.</div>
-            </div>
+          <Panel tabs={["월별 수익"]} actions={[]} closable={false}>
+            {dashError ? (
+              <Notice tone="danger">월별 집계를 불러오지 못했습니다.</Notice>
+            ) : dash ? (
+              <MonthlyBars points={dash.monthly} />
+            ) : (
+              <div className="h-[180px] animate-pulse rounded-lg bg-tm-inner" />
+            )}
           </Panel>
 
           <Panel
@@ -207,13 +247,13 @@ export default function EarningsPage() {
             bodyClassName="px-1.5 pb-1.5 pt-1"
           >
             {tab === "overview" && (
-              byStrategy.length === 0 ? (
+              strategies.length === 0 ? (
                 <div className="flex flex-col items-center gap-3 py-12 text-center">
-                  <p className="m-0 text-13 text-tm-muted">아직 수익이 없습니다. 전략을 공유하고 구독자를 모아보세요.</p>
+                  <p className="m-0 text-13 text-tm-muted">아직 공유한 전략이 없습니다. 전략을 공유하고 구독자를 모아보세요.</p>
                   <BtnLink href="/quant-lab/builder" size="sm">룰셋 만들기 →</BtnLink>
                 </div>
               ) : (
-                <DataTable columns={strategyCols} rows={byStrategy} rowKey={r => r.strategyId} minWidth={640} />
+                <DataTable columns={strategyCols} rows={strategies} rowKey={r => r.marketId} minWidth={640} />
               )
             )}
             {tab === "earnings" && (

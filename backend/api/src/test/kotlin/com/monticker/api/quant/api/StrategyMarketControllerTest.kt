@@ -22,7 +22,8 @@ class StrategyMarketControllerTest {
     private val jwtTokenProvider = mockk<JwtTokenProvider>()
     private val creatorEarningsService = mockk<CreatorEarningsService>()
     private val ruleSetRepository = mockk<RuleSetRepository>()
-    private val controller = StrategyMarketController(jdbc, jwtTokenProvider, creatorEarningsService, ruleSetRepository)
+    private val performanceQuery = mockk<com.monticker.api.quant.application.StrategyPerformanceQuery>()
+    private val controller = StrategyMarketController(jdbc, jwtTokenProvider, creatorEarningsService, ruleSetRepository, performanceQuery)
 
     private fun doc(userId: Long, status: String) =
         RuleSetDocument(id = "rs1", userId = userId, name = "test", status = status)
@@ -87,6 +88,19 @@ class StrategyMarketControllerTest {
             linkedMapOf<String, Any?>("id" to marketId, "ruleset_id" to "rs1", "description" to null, "price" to BigDecimal("5000"), "subscribe_count" to 3, "created_at" to null, "author_email" to "a@b.com")
         )
         every { ruleSetRepository.findAllById(listOf("rs1")) } returns listOf(doc(1L, RuleSetStatus.BACKTESTED.name))
+        every { performanceQuery.summarize(listOf("rs1")) } returns mapOf(
+            "rs1" to com.monticker.api.quant.application.StrategyPerformance(backtest = null, forward = null),
+        )
+    }
+
+    @Test
+    fun `list carries the performance summary for each shared strategy`() {
+        stubListRows()
+
+        val row = controller.list(auth = null, page = 0, size = 20).body!!.first()
+
+        assertThat(row["performance"]).isEqualTo(com.monticker.api.quant.application.StrategyPerformance(null, null))
+        assertThat(row).doesNotContainKey("ruleDefinition")
     }
 
     @Test
@@ -109,5 +123,26 @@ class StrategyMarketControllerTest {
         val response = controller.list(auth = "Bearer token", page = 0, size = 20)
 
         assertThat(response.body!!.first()["isSubscribed"]).isEqualTo(true)
+    }
+
+    // ── ADR-080 유료 전략 구독은 서버에서 닫혀 있다 ───────────────────────────────
+
+    @Test
+    fun `subscribe to a paid strategy is refused before any subscription row or payment`() {
+        every { jwtTokenProvider.getUserId("token") } returns 9L
+        every { jdbc.queryForMap(match<String> { it.contains("FROM strategy_market WHERE id = ?") }, 1L) } returns
+            mapOf("creator_id" to 1L, "price" to BigDecimal("5000"), "ruleset_id" to "rs1")
+
+        assertThrows<com.monticker.api.common.exception.BusinessRuleException> { controller.subscribe("Bearer token", 1L) }
+        verify(exactly = 0) { jdbc.update(any<String>(), *anyVararg()) }
+        verify(exactly = 0) { creatorEarningsService.onStrategySubscribed(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `share rejects a negative or fractional price`() {
+        every { jwtTokenProvider.getUserId("token") } returns 1L
+
+        assertThrows<IllegalArgumentException> { controller.share("Bearer token", StrategyShareRequest(rulesetId = "rs1", price = BigDecimal("-1"))) }
+        assertThrows<IllegalArgumentException> { controller.share("Bearer token", StrategyShareRequest(rulesetId = "rs1", price = BigDecimal("100.5"))) }
     }
 }
