@@ -15,7 +15,7 @@ enum class WatchRuleExecutionStatus {
 
 /**
  * 룰 발동 기록. 성공뿐 아니라 거부·건너뜀도 남긴다 — 사용자가 "왜 안 샀지"를 확인할 수 있어야 한다.
- * (watch_rule_id, stock_event_id) 유니크가 멱등 키다(V49).
+ * (watch_rule_id, stock_event_id) 유니크가 멱등 키다(V49). 퀀트 신호 발동은 (watch_rule_id, quant_signal_id)(V69).
  */
 @Entity
 @Table(name = "watch_rule_executions")
@@ -29,8 +29,13 @@ class WatchRuleExecution(
     @Column(name = "user_id", nullable = false)
     val userId: Long,
 
-    @Column(name = "stock_event_id", nullable = false)
-    val stockEventId: Long,
+    /** 이벤트 발동이면 stock_events.id. 퀀트 신호 발동이면 null이고 [quantSignalId]가 있다(V69 CHECK: 둘 중 하나). */
+    @Column(name = "stock_event_id")
+    val stockEventId: Long?,
+
+    /** ADR-077 — 퀀트 신호 발동의 quant_signals.id */
+    @Column(name = "quant_signal_id")
+    val quantSignalId: Long? = null,
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

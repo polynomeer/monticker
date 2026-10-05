@@ -5,9 +5,11 @@
  * matching::submit 파사드로 모의투자 주문을 낸다. 이벤트 탐지 로직에는 손대지 않는다 —
  * 소비자를 하나 더 붙이는 방향이다.
  *
+ * ADR-077 — 퀀트랩 전략 신호(quant::events)도 발동 원인이 된다. 신호 접근 판정은 quant::api(StrategySignalAccess).
+ *
  * 실브로커 모듈(brokerage)에 의존하지 않는다. 모의투자 전용이라는 경계를 의존성으로 고정한다.
  */
 @org.springframework.modulith.ApplicationModule(
-    allowedDependencies = {"common", "auth::api", "matching::submit"}
+    allowedDependencies = {"common", "auth::api", "matching::submit", "quant::api", "quant::events"}
 )
 package com.monticker.api.watchrule;

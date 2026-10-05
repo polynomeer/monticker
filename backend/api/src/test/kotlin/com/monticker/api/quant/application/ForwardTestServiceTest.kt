@@ -22,9 +22,11 @@ class ForwardTestServiceTest {
     private val equityRepository = mockk<QuantForwardTestEquityRepository>(relaxed = true)
     private val messagingTemplate = mockk<SimpMessagingTemplate>(relaxed = true)
 
+    private val eventPublisher = mockk<org.springframework.context.ApplicationEventPublisher>(relaxed = true)
+
     private val service = ForwardTestService(
         ruleSetRepository, ruleSetService, forwardTestRepository,
-        signalRepository, equityRepository, messagingTemplate,
+        signalRepository, equityRepository, messagingTemplate, eventPublisher,
     )
 
     private fun candle(date: LocalDate, close: Double) = DailyCandle(

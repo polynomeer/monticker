@@ -23,7 +23,7 @@ class WatchRule(
     @Column(name = "stock_id", nullable = false)
     val stockId: Long,
 
-    /** worker의 `DetectedEventType` 이름 — PRICE_SPIKE / PRICE_DROP / VOLUME_SURGE. */
+    /** worker의 `DetectedEventType` 이름 — PRICE_SPIKE / PRICE_DROP / VOLUME_SURGE — 또는 QUANT_SIGNAL(ADR-077). */
     @Column(name = "event_type", nullable = false, length = 50)
     val eventType: String,
 
@@ -45,13 +45,39 @@ class WatchRule(
     @Column(name = "is_active", nullable = false)
     var isActive: Boolean = true,
 
+    /** ADR-077 — 사용자가 붙인 규칙 이름(없으면 화면이 종목·조건으로 만든다). */
+    @Column(length = 100)
+    var name: String? = null,
+
+    /** ADR-077 — eventType = QUANT_SIGNAL일 때 이 전략(룰셋)의 신호에 발동한다. */
+    @Column(name = "rule_set_id", length = 24)
+    val ruleSetId: String? = null,
+
+    /** ADR-077 — QUANT_SIGNAL 규칙이 반응하는 신호 방향(BUY·SELL). */
+    @Column(name = "signal_direction", length = 4)
+    val signalDirection: String? = null,
+
+    /** ADR-077 — 복합 조건: 주 이벤트 앞 [conditionWindowSec] 안에 함께 감지됐어야 하는 이벤트 유형(쉼표 구분). */
+    @Column(name = "required_event_types", length = 200)
+    val requiredEventTypes: String? = null,
+
+    @Column(name = "condition_window_sec")
+    val conditionWindowSec: Int? = null,
+
+    /** ADR-077 — 하루(KST) 최대 체결 횟수. null이면 제한 없음. */
+    @Column(name = "daily_limit")
+    var dailyLimit: Int? = null,
+
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant = Instant.now(),
 
     @Column(name = "updated_at", nullable = false)
     var updatedAt: Instant = Instant.now(),
 ) {
-    fun update(quantity: Int?, minImportanceScore: Int?, cooldownSec: Int?, isActive: Boolean?) {
+    /** [dailyLimit]: null = 그대로, 0 = 제한 해제, 1 이상 = 새 한도. [name]: null = 그대로, 빈 문자열 = 지움. */
+    fun update(quantity: Int?, minImportanceScore: Int?, cooldownSec: Int?, isActive: Boolean?, name: String? = null, dailyLimit: Int? = null) {
+        name?.let { this.name = it.trim().ifBlank { null } }
+        dailyLimit?.let { this.dailyLimit = if (it == 0) null else it }
         quantity?.let { this.quantity = it }
         minImportanceScore?.let { this.minImportanceScore = it }
         cooldownSec?.let { this.cooldownSec = it }
@@ -61,4 +87,14 @@ class WatchRule(
 
     /** 이벤트 강도가 이 룰의 하한을 넘는가. */
     fun acceptsImportance(score: Int): Boolean = score >= minImportanceScore
+
+    val isQuantSignalRule: Boolean get() = eventType == QUANT_SIGNAL
+
+    /** 복합 조건의 동반 이벤트 유형 목록. */
+    fun requiredTypes(): List<String> =
+        requiredEventTypes?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
+
+    companion object {
+        const val QUANT_SIGNAL = "QUANT_SIGNAL"
+    }
 }

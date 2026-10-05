@@ -10,7 +10,9 @@ import com.monticker.api.quant.infrastructure.QuantForwardTestEquityRepository
 import com.monticker.api.quant.infrastructure.QuantForwardTestRepository
 import com.monticker.api.quant.infrastructure.QuantSignalRepository
 import com.monticker.api.quant.infrastructure.RuleSetRepository
+import com.monticker.api.quant.events.QuantSignalEmittedEvent
 import org.slf4j.LoggerFactory
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -30,6 +32,7 @@ class ForwardTestService(
     private val signalRepository: QuantSignalRepository,
     private val equityRepository: QuantForwardTestEquityRepository,
     private val messagingTemplate: SimpMessagingTemplate,
+    private val eventPublisher: ApplicationEventPublisher,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -153,7 +156,7 @@ class ForwardTestService(
         )
 
         if (signal != null) {
-            signalRepository.save(
+            val saved = signalRepository.save(
                 QuantSignal(
                     forwardTestId = ft.id,
                     ruleSetId     = ft.ruleSetId,
@@ -164,6 +167,11 @@ class ForwardTestService(
                 )
             )
             log.info("포워드 테스트 신호 발생: forwardTestId={} direction={} price={}", ft.id, signal, price)
+            // ADR-077 — 같은 트랜잭션에서 발행: 신호가 롤백되면 이벤트도 없다. watchrule의 "전략 신호" 규칙이 구독한다.
+            eventPublisher.publishEvent(QuantSignalEmittedEvent(
+                signalId = saved.id, ruleSetId = saved.ruleSetId, stockId = saved.stockId,
+                direction = saved.direction.name, signalTime = saved.signalTime,
+            ))
             messagingTemplate.convertAndSend(
                 "/topic/rulesets/${ft.ruleSetId}/signals",
                 mapOf(
