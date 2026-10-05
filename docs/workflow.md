@@ -49,7 +49,7 @@ monticker/
 │   └── pull_request_template.md
 ├── CLAUDE.md
 ├── CONTRIBUTING.md
-├── dev.sh
+├── scripts/          # dev/(up·down·status·doctor) · check.sh · data/ · ci/ — scripts/README.md
 ├── docker-compose.yml
 └── Makefile
 ```

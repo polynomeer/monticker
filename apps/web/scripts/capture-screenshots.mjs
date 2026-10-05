@@ -2,7 +2,7 @@
 //
 //   pnpm --filter @monticker/web exec node scripts/capture-screenshots.mjs [name ...]
 //
-// 전제: API·Worker·Web이 떠 있고(./dev.sh), EMAIL/PASSWORD 계정이 있으며 그 계좌에
+// 전제: API·Worker·Web이 떠 있고(scripts/dev/up.sh), EMAIL/PASSWORD 계정이 있으며 그 계좌에
 // 모의투자 보유종목·룰셋·백테스트 결과가 이미 있어야 화면이 비어 보이지 않는다.
 // 인자로 이름을 주면 그 화면만 다시 찍는다. 환경변수로 대상 서버를 바꿀 수 있다.
 import { chromium } from "@playwright/test";

@@ -20,7 +20,7 @@ GATEWAY=/tmp/mg WORKER=http://localhost:8081 KAFKA_BROKERS=localhost:29092 DB_UR
 
 ```bash
 # API 서버가 실행 중이어야 합니다
-./dev.sh   # 또는 백엔드만: cd backend/api && ./gradlew bootRun
+scripts/dev/up.sh   # 또는 백엔드만: cd backend/api && ./gradlew bootRun
 
 # 기본 smoke 테스트 (1분)
 ./bench/run.sh

@@ -40,7 +40,7 @@ echo -e "  시나리오: ${YELLOW}${SCENARIO}${NC}"
 # API health check
 if ! /usr/bin/curl -sf "${API_URL}/actuator/health" > /dev/null 2>&1; then
   echo -e "\n${RED}API가 실행되지 않고 있습니다: ${API_URL}${NC}"
-  echo "  ./dev.sh 로 먼저 서버를 실행해 주세요."
+  echo "  scripts/dev/up.sh 로 먼저 서버를 실행해 주세요."
   exit 1
 fi
 echo -e "  API 상태: ${GREEN}정상${NC}"
