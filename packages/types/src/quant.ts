@@ -125,6 +125,8 @@ export interface QuantBacktestResult {
   avgHoldingDays: number | null;
   benchmarkReturn: number | null;
   excessReturn: number | null;
+  /** ADR-079 — 연환산 샤프(무위험 3%). 이전 결과·계산 불가면 null */
+  sharpe?: number | null;
   reliabilityScore: string | null;
   createdAt: string;
   trades: QuantTradeRecord[];
