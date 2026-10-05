@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Icon, IconBtn, Panel, fmtNum } from "@/components/terminal";
 import StockChart from "./chart/StockChart";
-import type { Drawing, DrawingTool, IndicatorKey, OrderLine } from "./chart/types";
+import type { Drawing, DrawingTool, IndicatorKey, OrderLine, SentimentMarker, SignalMarker } from "./chart/types";
 import IndicatorChart from "./IndicatorChart";
 import VolumeChart from "./VolumeChart";
 import SummaryPanel from "./SummaryPanel";
@@ -33,12 +33,12 @@ export const CHART_TABS: { key: ChartTab; label: string }[] = [
   { key: "watchlist", label: "관심종목" },
 ];
 
-/** 시안의 타임프레임 7개 + 기존에 있던 장기 범위 2개. 3분·15분·1시간 봉은 서버에 아직 없다. */
+/** 시안의 타임프레임 7개 + 기존에 있던 장기 범위 2개. 3분·15분·1시간은 서버가 분봉을 묶어 준다(ADR-076). */
 const INTERVALS: { label: string; value: string | null }[] = [
   { label: "1분", value: "1m" },
-  { label: "3분", value: null },
-  { label: "15분", value: null },
-  { label: "1시간", value: null },
+  { label: "3분", value: "3m" },
+  { label: "15분", value: "15m" },
+  { label: "1시간", value: "1h" },
   { label: "일", value: "1d" },
   { label: "주", value: "1w" },
   { label: "월", value: "1M" },
@@ -55,14 +55,18 @@ const INDICATORS: { key: IndicatorKey; label: string }[] = [
 
 type SubPane = "none" | "volume" | "rsi" | "macd";
 
-const LAYERS: { key: EventLayer | "quant" | "sentiment"; label: string; color: string; ready: boolean }[] = [
-  { key: "disclosure", label: "공시", color: "#ffb86c", ready: true },
-  { key: "news", label: "뉴스", color: "#8be9fd", ready: true },
-  { key: "volume", label: "거래량", color: "#bd93f9", ready: true },
-  { key: "price", label: "급등락", color: "#50fa7b", ready: true },
-  { key: "quant", label: "퀀트 시그널", color: "#50fa7b", ready: false },
-  { key: "sentiment", label: "감성", color: "#ff79c6", ready: false },
+type ChartLayer = EventLayer | "quant" | "sentiment";
+
+const LAYERS: { key: ChartLayer; label: string; color: string }[] = [
+  { key: "disclosure", label: "공시", color: "#ffb86c" },
+  { key: "news", label: "뉴스", color: "#8be9fd" },
+  { key: "volume", label: "거래량", color: "#bd93f9" },
+  { key: "price", label: "급등락", color: "#50fa7b" },
+  { key: "quant", label: "퀀트 시그널", color: "#50fa7b" },
+  { key: "sentiment", label: "감성", color: "#ff79c6" },
 ];
+
+interface StockSignal { id: number; ruleSetId: string; ruleSetName: string; origin: "OWNED" | "SUBSCRIBED"; direction: "BUY" | "SELL"; signalTime: string; mode: string }
 
 interface Props {
   stockId: number;
@@ -122,7 +126,8 @@ function ChartBody({ stockId, symbol, stockName, currentPrice, dayChange, dayCha
   const [showVwap, setShowVwap] = useState(false);
   const [subPane, setSubPane] = useState<SubPane>("none");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [layers, setLayers] = useState<Record<EventLayer, boolean>>({ disclosure: true, news: true, volume: true, price: true });
+  const [layers, setLayers] = useState<Record<ChartLayer, boolean>>({ disclosure: true, news: true, volume: true, price: true, quant: false, sentiment: false });
+  const { isLoggedIn } = useAuth();
   const [activeDrawingTool, setActiveDrawingTool] = useState<DrawingTool | null>(null);
   const [drawings, setDrawings] = useState<Drawing[]>([]);
   const [hideDrawings, setHideDrawings] = useState(false);
@@ -160,6 +165,28 @@ function ChartBody({ stockId, symbol, stockName, currentPrice, dayChange, dayCha
     () => events.filter((e) => layers[(EVENT_META[e.eventType]?.layer ?? "price") as EventLayer]),
     [events, layers],
   );
+
+  // 퀀트 시그널 레이어 — 내 전략·구독 전략의 이 종목 신호(로그인 필요). 켤 때만 불러온다.
+  const { data: signals = [] } = useQuery<StockSignal[]>({
+    queryKey: ["quant", "stock-signals", stockId],
+    queryFn: async () => {
+      const r = await authFetch(`/api/quant/stocks/${stockId}/signals?days=1095`);
+      if (!r.ok) throw new Error("퀀트 시그널 조회 실패");
+      return r.json();
+    },
+    enabled: isLoggedIn && layers.quant,
+    staleTime: 60_000,
+  });
+  const signalMarkers: SignalMarker[] = useMemo(
+    () => (layers.quant ? signals.map((s) => ({ id: s.id, time: Math.floor(new Date(s.signalTime).getTime() / 1000), direction: s.direction, label: s.ruleSetName })) : []),
+    [signals, layers.quant],
+  );
+  // 감성 레이어 — 감성 점수가 있는 이벤트(주로 뉴스)
+  const sentimentMarkers: SentimentMarker[] = useMemo(
+    () => (layers.sentiment ? events.filter((e) => e.sentimentScore != null).map((e) => ({ id: e.id, time: e.time, score: e.sentimentScore as number, title: e.title })) : []),
+    [events, layers.sentiment],
+  );
+  const layerCount: Partial<Record<ChartLayer, number>> = { quant: signals.length, sentiment: events.filter((e) => e.sentimentScore != null).length };
 
   const last = candles[candles.length - 1];
   const intervalLabel = INTERVALS.find((i) => i.value === interval)?.label ?? interval;
@@ -238,23 +265,31 @@ function ChartBody({ stockId, symbol, stockName, currentPrice, dayChange, dayCha
         </button>
         <div className="ml-auto flex flex-wrap gap-1.5" role="group" aria-label="이벤트 레이어">
           {LAYERS.map((l) => {
-            const on = l.ready && layers[l.key as EventLayer];
+            // 퀀트 시그널은 내 전략·구독 전략이라 로그인해야 볼 수 있다
+            const ready = l.key !== "quant" || isLoggedIn;
+            const on = ready && layers[l.key];
+            const count = on ? layerCount[l.key] : undefined;
             return (
               <button
                 key={l.key}
                 type="button"
                 aria-pressed={on}
-                disabled={!l.ready}
-                title={l.ready ? undefined : `${l.label} 레이어 (준비 중)`}
-                onClick={() => l.ready && setLayers((s) => ({ ...s, [l.key]: !s[l.key as EventLayer] }))}
+                disabled={!ready}
+                title={
+                  !ready ? "로그인하면 내 전략·구독 전략의 신호를 볼 수 있어요"
+                    : l.key === "quant" ? "내 전략·구독 전략의 이 종목 신호"
+                      : l.key === "sentiment" ? "뉴스 감성 점수(초록 긍정·빨강 부정)" : undefined
+                }
+                onClick={() => ready && setLayers((s) => ({ ...s, [l.key]: !s[l.key] }))}
                 className={cn(
                   "inline-flex h-[26px] items-center gap-1.5 whitespace-nowrap rounded-full border border-tm-line2 px-2.5 text-xs font-medium",
                   on ? "text-dracula-fg" : "text-tm-muted",
-                  !l.ready && "cursor-not-allowed opacity-50",
+                  !ready && "cursor-not-allowed opacity-50",
                 )}
               >
                 <span className="h-[7px] w-[7px] rounded-full" style={{ background: on ? l.color : "#44475a" }} />
                 {l.label}
+                {count != null && <span className="num text-tm-muted">{count}</span>}
               </button>
             );
           })}
@@ -309,6 +344,8 @@ function ChartBody({ stockId, symbol, stockName, currentPrice, dayChange, dayCha
               enabledIndicators={enabledIndicators}
               orderLines={orderLines}
               onCancelOrderLine={onCancelOrderLine}
+              signalMarkers={signalMarkers}
+              sentimentMarkers={sentimentMarkers}
               activeDrawingTool={activeDrawingTool}
               drawings={hideDrawings ? [] : drawings}
               onDrawingsChange={persistDrawings}

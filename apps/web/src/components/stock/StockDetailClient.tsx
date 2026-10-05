@@ -12,6 +12,8 @@ import WatchlistAddButton from "./WatchlistAddButton";
 import OrderBook from "./OrderBook";
 import OrderForm from "./OrderForm";
 import PositionsPanel from "./PositionsPanel";
+import PaperConditionalPanel from "./PaperConditionalPanel";
+import RecentTrades from "./RecentTrades";
 import StockScoreCard from "./StockScoreCard";
 import { fmtKrwCompact, fmtShares, useQuotes } from "./parts";
 import { useStockChart } from "@/hooks/useStockChart";
@@ -19,7 +21,7 @@ import { useStockPrice } from "@/hooks/useStockPrice";
 import { useRecentlyViewedStocks } from "@/hooks/useRecentlyViewedStocks";
 import { useActiveBrokerageOrdersForSymbol, useBrokerageAccount, useCancelBrokerageOrder } from "@/hooks/useBrokerage";
 import { useToast } from "@/hooks/useToast";
-import { usePaperPortfolio } from "@/hooks/usePaperTrade";
+import { usePaperOpenOrders, usePaperOrder, usePaperPortfolio } from "@/hooks/usePaperTrade";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
@@ -75,26 +77,45 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
   }, []);
   const showEvents = useCallback(() => setEventsTab("events"), []);
 
-  // 실전투자 미체결 주문을 차트 위 주문선으로 — 모의투자는 시장가 즉시체결이라 "미체결"이 없다(paper 모듈).
+  // 미체결 주문을 차트 위 주문선으로 — 실전(brokerage)과 모의 지정가(ADR-074, 매칭 엔진 orders) 둘 다.
+  const { isLoggedIn } = useAuth();
   const { data: brokerageAccount } = useBrokerageAccount();
   const brokerageConnected = !!brokerageAccount;
   const { data: activeOrders = [] } = useActiveBrokerageOrdersForSymbol(symbol, brokerageConnected);
   const cancelOrder = useCancelBrokerageOrder();
+  const { data: paperOpenAll = [] } = usePaperOpenOrders(isLoggedIn);
+  const paperOpen = useMemo(() => paperOpenAll.filter(o => o.stockId === stockId), [paperOpenAll, stockId]);
+  const { cancel: cancelPaper } = usePaperOrder();
   // react-query 데이터가 그대로면 같은 배열을 넘긴다 — 새 배열이면 EChartsAdapter가 차트를 통째로 다시 만든다.
-  const orderLines: OrderLine[] = useMemo(() => activeOrders
-    .filter(o => o.limitPrice != null)
-    .map(o => ({ id: o.id, price: o.limitPrice as number, side: o.side, label: o.side === "BUY" ? "매수 대기" : "매도 대기" })), [activeOrders]);
+  // 주문선 id: 실전은 양수, 모의는 음수(-orderId) — 차트의 취소 콜백 하나로 두 계좌를 구분한다.
+  const orderLines: OrderLine[] = useMemo(() => [
+    ...activeOrders
+      .filter(o => o.limitPrice != null)
+      .map(o => ({ id: o.id, price: o.limitPrice as number, side: o.side, label: o.side === "BUY" ? "실전 매수 대기" : "실전 매도 대기" })),
+    ...paperOpen
+      .filter(o => o.limitPrice != null)
+      .map(o => ({ id: -o.id, price: o.limitPrice as number, side: o.side, label: o.side === "BUY" ? "모의 매수 대기" : "모의 매도 대기" })),
+  ], [activeOrders, paperOpen]);
   const handleCancelOrder = useCallback((orderId: number) => {
     cancelOrder.mutate(orderId, {
       onSuccess: () => toast({ type: "success", title: "주문 취소", message: "미체결 주문이 취소되었습니다." }),
       onError:   (e) => toast({ type: "error", title: "취소 실패", message: (e as Error).message }),
     });
   }, [cancelOrder, toast]);
+  const handleCancelPaperOrder = useCallback((orderId: number) => {
+    cancelPaper.mutate(orderId, {
+      onSuccess: () => toast({ type: "success", title: "주문 취소", message: "모의투자 지정가 주문이 취소되었습니다." }),
+      onError:   (e) => toast({ type: "error", title: "취소 실패", message: (e as Error).message }),
+    });
+  }, [cancelPaper, toast]);
+  const handleCancelOrderLine = useCallback((id: number) => {
+    if (id < 0) handleCancelPaperOrder(-id);
+    else handleCancelOrder(id);
+  }, [handleCancelOrder, handleCancelPaperOrder]);
 
   const { candles: dailyCandles, events } = useStockChart(stockId, "1d");
   const { price: livePrice } = useStockPrice(stockId);
   const quote = useQuotes([stockId])[stockId];
-  const { isLoggedIn } = useAuth();
   const { data: paper } = usePaperPortfolio();
 
   const latestDaily = dailyCandles[dailyCandles.length - 1];
@@ -141,17 +162,25 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
             tabs={[{ key: "order", label: "주문" }, { key: "conditional", label: "조건부" }, { key: "alert", label: "가격 알림" }]}
             active={orderTab}
             onTabChange={(k) => setOrderTab(k as OrderTab)}
-            preview={orderTab === "conditional"}
             className={cn("transition-shadow duration-300", alertHighlight && "ring-2 ring-dracula-purple")}
           >
             {orderTab === "order" && (
               <OrderForm stock={{ id: stockId, symbol, name: stockName }} currentPrice={currentPrice} brokerageConnected={brokerageConnected} />
             )}
             {orderTab === "conditional" && (
-              <Notice tone="info">
-                모의투자에는 아직 조건부 주문(익절·손절·OCO)이 없습니다. 실전 계좌의 조건부 주문은{" "}
-                <Link href="/brokerage/conditional-orders">실전투자 · 조건부 주문</Link>에서 만들 수 있고, 아래 &lsquo;조건부 주문&rsquo; 탭에 이 종목 것이 보입니다.
-              </Notice>
+              isLoggedIn ? (
+                <>
+                  <PaperConditionalPanel stockId={stockId} currentPrice={currentPrice} />
+                  {brokerageConnected && (
+                    <Notice tone="info">
+                      여기서 거는 조건부 주문은 모의투자 전용입니다. 실전 계좌의 조건부 주문은{" "}
+                      <Link href="/brokerage/conditional-orders">실전투자 · 조건부 주문</Link>에서 만듭니다.
+                    </Notice>
+                  )}
+                </>
+              ) : (
+                <p className="m-0 py-8 text-center text-13 text-tm-muted">로그인하면 모의투자 조건부 주문(익절·손절·OCO)을 걸 수 있어요.</p>
+              )
             )}
             {orderTab === "alert" && <AlertPanel stockId={stockId} symbol={symbol} bare />}
           </Panel>
@@ -178,12 +207,11 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
           active={bookTab}
           onTabChange={(k) => setBookTab(k as BookTab)}
           actions={["plus", "sliders", "expand"]}
-          preview={bookTab === "ticks"}
           className="flex-[0_1_290px]"
           bodyClassName={bookTab === "book" ? "px-0 pb-3 pt-2.5" : undefined}
         >
           {bookTab === "book" && <OrderBook stockId={stockId} prevClose={prevClose} />}
-          {bookTab === "ticks" && <p className="m-0 py-8 text-center text-13 text-tm-muted">실시간 체결(틱) 목록은 준비 중입니다.</p>}
+          {bookTab === "ticks" && <RecentTrades stockId={stockId} />}
           {bookTab === "summary" && (
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-2">
@@ -214,16 +242,20 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
           onEventClick={handleEventMarkerClick}
           onShowEvents={showEvents}
           orderLines={orderLines}
-          onCancelOrderLine={handleCancelOrder}
+          onCancelOrderLine={handleCancelOrderLine}
         />
       </PanelRow>
 
       <PositionsPanel
         symbol={symbol}
+        stockId={stockId}
         brokerageConnected={brokerageConnected}
         activeOrders={activeOrders}
         onCancelOrder={handleCancelOrder}
         cancelPending={cancelOrder.isPending}
+        paperOrders={paperOpen}
+        onCancelPaperOrder={handleCancelPaperOrder}
+        paperCancelPending={cancelPaper.isPending}
       />
     </TerminalPage>
   );

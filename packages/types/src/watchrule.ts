@@ -2,7 +2,10 @@
 // 백엔드 com.monticker.api.watchrule.api 의 요청·응답과 형태를 맞춘다.
 
 /** worker DetectedEventType 과 같은 값. 탐지기가 늘면 여기에 추가한다. */
-export type WatchRuleEventType = "PRICE_SPIKE" | "PRICE_DROP" | "VOLUME_SURGE";
+export type WatchRuleDetectedEventType = "PRICE_SPIKE" | "PRICE_DROP" | "VOLUME_SURGE";
+
+/** 감지 원인 — 탐지 이벤트 또는 퀀트랩 전략 신호(ADR-077). */
+export type WatchRuleEventType = WatchRuleDetectedEventType | "QUANT_SIGNAL";
 
 export type WatchRuleSide = "BUY" | "SELL";
 
@@ -24,6 +27,19 @@ export interface WatchRuleResponse {
   cooldownSec: number;
   isActive: boolean;
   createdAt: string;
+  /** ADR-077 — 사용자가 붙인 이름 */
+  name?: string | null;
+  /** eventType = QUANT_SIGNAL일 때 전략(룰셋) id·이름과 신호 방향 */
+  ruleSetId?: string | null;
+  ruleSetName?: string | null;
+  signalDirection?: WatchRuleSide | null;
+  /** 복합 조건 — 주 이벤트 앞 conditionWindowSec 안에 함께 감지됐어야 하는 유형 */
+  requiredEventTypes?: WatchRuleDetectedEventType[];
+  conditionWindowSec?: number | null;
+  /** 하루(KST) 최대 체결 횟수. null이면 제한 없음 */
+  dailyLimit?: number | null;
+  /** 오늘(KST) 체결 수 — 서버가 한도를 집행하는 카운터 */
+  todayExecutions?: number;
 }
 
 export interface CreateWatchRuleRequest {
@@ -33,6 +49,12 @@ export interface CreateWatchRuleRequest {
   quantity: number;
   minImportanceScore?: number;
   cooldownSec?: number;
+  name?: string;
+  ruleSetId?: string;
+  signalDirection?: WatchRuleSide;
+  requiredEventTypes?: WatchRuleDetectedEventType[];
+  conditionWindowSec?: number;
+  dailyLimit?: number;
 }
 
 export interface UpdateWatchRuleRequest {
@@ -40,12 +62,18 @@ export interface UpdateWatchRuleRequest {
   minImportanceScore?: number;
   cooldownSec?: number;
   isActive?: boolean;
+  /** 빈 문자열이면 이름을 지운다 */
+  name?: string;
+  /** 0이면 제한 해제 */
+  dailyLimit?: number;
 }
 
 export interface WatchRuleExecutionResponse {
   id: number;
   watchRuleId: number;
-  stockEventId: number;
+  /** 이벤트 발동이면 stock_events.id, 전략 신호 발동이면 null(quantSignalId가 있다) */
+  stockEventId: number | null;
+  quantSignalId?: number | null;
   status: WatchRuleExecutionStatus;
   orderId: number | null;
   fillPrice: number | null;

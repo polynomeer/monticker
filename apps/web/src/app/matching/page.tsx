@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import OrderProposalCard from "@/components/ai/OrderProposalCard";
 import { getAccessToken } from "@/services/auth";
 import { ClobBook } from "@/components/matching/ClobBook";
+import RecentTrades from "@/components/stock/RecentTrades";
 import { OrderForm } from "@/components/matching/OrderForm";
 import { OrdersPanel } from "@/components/matching/OrdersPanel";
 import { STOCKS, useActiveOrders, useMyFills, useOrderbook } from "@/components/matching/data";
@@ -14,6 +15,7 @@ import { Panel, PanelCol, PanelRow, TerminalPage, fmtNum, type TopStat } from "@
 export default function MatchingPage() {
   const [stockId, setStockId] = useState(2);
   const [presetSide, setPresetSide] = useState<"BUY" | "SELL" | undefined>(undefined);
+  const [tapeTab, setTapeTab] = useState<"market" | "mine">("market");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
 
@@ -50,15 +52,17 @@ export default function MatchingPage() {
           <ClobBook book={book} loading={bookLoading} myOrders={orders} />
         </Panel>
         <Panel
-          tabs={["체결 테이프"]}
+          tabs={[{ key: "market", label: "시장 체결" }, { key: "mine", label: "내 체결" }]}
+          active={tapeTab}
+          onTabChange={(k) => setTapeTab(k as "market" | "mine")}
           actions={["expand"]}
-          preview
-          right={<span className="text-2xs text-tm-muted">내 체결</span>}
           className="flex-[1_1_260px]"
           bodyClassName="px-0 py-2"
         >
-          {/* 시장 전체 체결 테이프 API는 아직 없다 — 이 종목의 내 체결만 시간순으로 보여 준다 */}
-          {tape.length === 0 ? (
+          {/* 시장 체결: 이 종목의 실시간 체결 틱(서버 링 버퍼). 내 체결: 이 종목의 내 모의 체결 */}
+          {tapeTab === "market" ? (
+            <RecentTrades stockId={stockId} limit={50} maxRows={30} />
+          ) : tape.length === 0 ? (
             <p className="m-0 px-2.5 py-8 text-center text-13 text-tm-muted">이 종목의 내 체결이 아직 없습니다.</p>
           ) : (
             <ul className="m-0 list-none p-0" aria-label="체결 테이프">

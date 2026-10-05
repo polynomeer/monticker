@@ -10,6 +10,7 @@ import com.monticker.api.quant.infrastructure.QuantForwardTestEquityRepository
 import com.monticker.api.quant.infrastructure.QuantForwardTestRepository
 import com.monticker.api.quant.infrastructure.QuantSignalRepository
 import com.monticker.api.quant.infrastructure.RuleSetRepository
+import com.monticker.api.quant.events.QuantSignalEmittedEvent
 import org.slf4j.LoggerFactory
 import com.monticker.api.common.notification.NotificationCategory
 import com.monticker.api.common.notification.UserNotificationCommand
@@ -161,7 +162,7 @@ class ForwardTestService(
         )
 
         if (signal != null) {
-            signalRepository.save(
+            val saved = signalRepository.save(
                 QuantSignal(
                     forwardTestId = ft.id,
                     ruleSetId     = ft.ruleSetId,
@@ -173,6 +174,11 @@ class ForwardTestService(
                 )
             )
             log.info("포워드 테스트 신호 발생: forwardTestId={} direction={} price={}", ft.id, signal, price)
+            // ADR-077 — 같은 트랜잭션에서 발행: 신호가 롤백되면 이벤트도 없다. watchrule의 "전략 신호" 규칙이 구독한다.
+            events.publishEvent(QuantSignalEmittedEvent(
+                signalId = saved.id, ruleSetId = saved.ruleSetId, stockId = saved.stockId,
+                direction = saved.direction.name, signalTime = saved.signalTime,
+            ))
             // ADR-082 — 룰셋 주인에게 알린다(알림 설정 "퀀트 시그널"). 이 트랜잭션이 커밋돼야 나간다. 하루·방향당 한 번.
             events.publishEvent(
                 UserNotificationCommand(

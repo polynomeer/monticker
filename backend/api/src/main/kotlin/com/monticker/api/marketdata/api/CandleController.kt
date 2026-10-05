@@ -12,6 +12,18 @@ import java.time.Instant
 @RequestMapping("/api/stocks/{stockId}/candles")
 class CandleController(private val candleService: CandleService) {
 
+    /** 과거 하루(KST)의 1분봉 전부 — 주문 리플레이 재생용. */
+    @GetMapping("/intraday")
+    fun getIntraday(
+        @PathVariable stockId: Long,
+        @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) date: java.time.LocalDate,
+    ): ResponseEntity<List<CandleResponse>> =
+        try {
+            ResponseEntity.ok(candleService.getIntradayCandles(stockId, date).map { CandleResponse.from(it) })
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.badRequest().build()
+        }
+
     @GetMapping
     fun getCandles(
         @PathVariable stockId: Long,

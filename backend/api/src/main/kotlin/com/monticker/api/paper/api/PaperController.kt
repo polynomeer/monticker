@@ -1,6 +1,8 @@
 package com.monticker.api.paper.api
 
 import com.monticker.api.common.aop.RateLimited
+import com.monticker.api.paper.application.PaperOrderRequest
+import com.monticker.api.paper.application.PaperOrderResponse
 import com.monticker.api.paper.application.PaperPortfolioQueryService
 import com.monticker.api.paper.application.PaperTradingService
 import com.monticker.api.paper.application.TradeResultResponse
@@ -31,6 +33,12 @@ class PaperController(
     @RateLimited(limit = 60, windowSec = 60, keyPrefix = "paper.sell")
     fun sell(@RequestBody req: TradeRequest): ResponseEntity<TradeResultResponse> =
         ResponseEntity.ok(tradingService.sell(userId(), req.stockId, req.quantity))
+
+    /** ADR-074 — 시장가·지정가 공용 주문. 미체결 지정가의 조회·취소는 `/api/matching/orders`(같은 계좌)다. */
+    @PostMapping("/orders")
+    @RateLimited(limit = 60, windowSec = 60, keyPrefix = "paper.order")
+    fun placeOrder(@RequestBody req: PaperOrderRequest): ResponseEntity<PaperOrderResponse> =
+        ResponseEntity.ok(tradingService.placeOrder(userId(), req))
 
     @GetMapping("/history")
     fun getHistory(

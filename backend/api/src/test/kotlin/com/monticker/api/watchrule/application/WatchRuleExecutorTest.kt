@@ -33,6 +33,8 @@ class WatchRuleExecutorTest {
     private val ruleRepo = mockk<WatchRuleRepository>()
     private val execRepo = mockk<WatchRuleExecutionRepository>(relaxed = true)
     private val submitter = mockk<OrderSubmitter>()
+    private val guards = mockk<WatchRuleGuards>(relaxed = true)
+    private val signalAccess = mockk<com.monticker.api.quant.application.StrategySignalAccess>()
     private lateinit var executor: WatchRuleExecutor
 
     private val userId = 7L
@@ -41,7 +43,9 @@ class WatchRuleExecutorTest {
 
     @BeforeEach
     fun setUp() {
-        executor = WatchRuleExecutor(ruleRepo, execRepo, submitter, SimpleMeterRegistry())
+        executor = WatchRuleExecutor(ruleRepo, execRepo, submitter, SimpleMeterRegistry(), guards, signalAccess)
+        every { guards.claimDailySlot(any(), any()) } returns true
+        every { guards.missingRequiredEvents(any(), any(), any(), any()) } returns emptyList()
         every { execRepo.existsByWatchRuleIdAndStockEventId(any(), any()) } returns false
         every { execRepo.existsSince(any(), any(), any()) } returns false
         // relaxed 목의 제네릭 save()는 Object를 돌려줘 캐스트가 터진다. 예전엔 onEvent가 그 예외까지 삼켜
@@ -264,5 +268,112 @@ class WatchRuleExecutorTest {
         executor.onEvent(event())
 
         verify { submitter.submitMarket(userId, stockId, "SELL", 10, "WR:1:$eventId") }
+    }
+
+    // ── ADR-077 ───────────────────────────────────────────────────────────
+
+    @Test
+    fun `a rule at its daily limit is skipped without touching the order path`() {
+        givenRules(rule().apply { dailyLimit = 2 })
+        every { guards.claimDailySlot(1L, 2) } returns false
+
+        executor.onEvent(event())
+
+        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any()) }
+        val e = savedExecution()
+        assertThat(e.status).isEqualTo(WatchRuleExecutionStatus.SKIPPED)
+        assertThat(e.reason).contains("하루 최대 발동 2회")
+    }
+
+    @Test
+    fun `a rejected order gives its daily slot back`() {
+        givenRules(rule().apply { dailyLimit = 2 })
+        every { submitter.submitMarket(any(), any(), any(), any(), any()) } throws RiskLimitException("DailyLossRule")
+
+        executor.onEvent(event())
+
+        verify { guards.releaseDailySlot(1L) }
+    }
+
+    @Test
+    fun `an executed order keeps its daily slot`() {
+        givenRules(rule())
+        every { submitter.submitMarket(any(), any(), any(), any(), any()) } returns fill()
+
+        executor.onEvent(event())
+
+        verify { guards.claimDailySlot(1L, null) }
+        verify(exactly = 0) { guards.releaseDailySlot(any()) }
+    }
+
+    @Test
+    fun `an infrastructure failure also gives the slot back before rethrowing`() {
+        givenRules(rule())
+        every { submitter.submitMarket(any(), any(), any(), any(), any()) } throws org.springframework.dao.QueryTimeoutException("db")
+
+        assertThatThrownBy { executor.onEvent(event()) }.isInstanceOf(org.springframework.dao.QueryTimeoutException::class.java)
+        verify { guards.releaseDailySlot(1L) }
+    }
+
+    @Test
+    fun `a compound rule whose companion event is missing is skipped with the missing type`() {
+        val compound = WatchRule(
+            id = 1L, userId = userId, stockId = stockId, eventType = "VOLUME_SURGE", side = WatchRuleSide.BUY, quantity = 10,
+            requiredEventTypes = "PRICE_SPIKE", conditionWindowSec = 1800,
+        )
+        givenRules(compound)
+        every { guards.missingRequiredEvents(stockId, listOf("PRICE_SPIKE"), any(), 1800) } returns listOf("PRICE_SPIKE")
+
+        executor.onEvent(event())
+
+        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any()) }
+        assertThat(savedExecution().reason).contains("복합 조건 미충족").contains("PRICE_SPIKE")
+    }
+
+    private fun signalRule(direction: String = "BUY") = WatchRule(
+        id = 5L, userId = userId, stockId = stockId, eventType = WatchRule.QUANT_SIGNAL, side = WatchRuleSide.BUY, quantity = 3,
+        ruleSetId = "rs1", signalDirection = direction, cooldownSec = 0,
+    )
+
+    private fun signal() = com.monticker.api.quant.events.QuantSignalEmittedEvent(
+        signalId = 77L, ruleSetId = "rs1", stockId = stockId, direction = "BUY", signalTime = Instant.now(),
+    )
+
+    @Test
+    fun `a strategy signal fires its rule with a signal idempotency key and records the signal`() {
+        every { ruleRepo.findAllByStockIdAndEventTypeAndRuleSetIdAndIsActiveTrue(stockId, WatchRule.QUANT_SIGNAL, "rs1") } returns listOf(signalRule())
+        every { execRepo.existsByWatchRuleIdAndQuantSignalId(5L, 77L) } returns false
+        every { signalAccess.canAccess(userId, "rs1") } returns true
+        every { submitter.submitMarket(userId, stockId, "BUY", 3, "WR:5:Q77") } returns fill()
+
+        executor.onQuantSignal(signal())
+
+        val e = savedExecution()
+        assertThat(e.status).isEqualTo(WatchRuleExecutionStatus.EXECUTED)
+        assertThat(e.quantSignalId).isEqualTo(77L)
+        assertThat(e.stockEventId).isNull()
+    }
+
+    @Test
+    fun `a signal in the other direction does not fire`() {
+        every { ruleRepo.findAllByStockIdAndEventTypeAndRuleSetIdAndIsActiveTrue(stockId, WatchRule.QUANT_SIGNAL, "rs1") } returns listOf(signalRule("SELL"))
+
+        executor.onQuantSignal(signal())
+
+        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { execRepo.save(any()) }
+    }
+
+    // ADR-035 — 구독을 끊은 전략의 신호로는 주문하지 않는다.
+    @Test
+    fun `a strategy signal the user can no longer see is skipped`() {
+        every { ruleRepo.findAllByStockIdAndEventTypeAndRuleSetIdAndIsActiveTrue(stockId, WatchRule.QUANT_SIGNAL, "rs1") } returns listOf(signalRule())
+        every { execRepo.existsByWatchRuleIdAndQuantSignalId(5L, 77L) } returns false
+        every { signalAccess.canAccess(userId, "rs1") } returns false
+
+        executor.onQuantSignal(signal())
+
+        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any()) }
+        assertThat(savedExecution().status).isEqualTo(WatchRuleExecutionStatus.SKIPPED)
     }
 }

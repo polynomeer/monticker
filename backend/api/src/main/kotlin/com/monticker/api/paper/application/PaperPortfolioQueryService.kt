@@ -77,11 +77,22 @@ class PaperPortfolioQueryService(
         return PortfolioResponse(account.cash.amount, totalValue, pnl, pnlRate, holdings)
     }
 
+    /**
+     * 거래 내역 + "경로". 경로는 체결을 만든 매칭 주문의 멱등 키에서 읽는다(ADR-047 fill_id 링크 → fills → orders):
+     * `WR:{ruleId}:{eventId}` = Watch Rule(ADR-051), `PCO:{id}` = 조건부 주문(ADR-075), 그 외 = 직접 주문.
+     * 별도 컬럼을 두지 않은 이유: 키가 이미 단일 진실이고, 조인으로 과거 거래까지 한 번에 채워진다.
+     * fill_id가 없는 ADR-047 이전 거래는 직접 주문(구 페이퍼 경로)이었다.
+     */
     fun getHistory(userId: Long, page: Int = 0, size: Int = 20): List<TradeHistoryResponse> {
+        data class Row(val t: com.monticker.api.paper.domain.PaperTrade, val key: String?, val orderType: String?)
         val trades = jdbc.query(
-            """SELECT pt.id, pt.side, pt.stock_id, pt.quantity, pt.price, pt.amount, pt.traded_at
-               FROM paper_trades pt WHERE pt.user_id = ? ORDER BY pt.traded_at DESC LIMIT ? OFFSET ?""",
-            { rs, _ -> com.monticker.api.paper.domain.PaperTrade(
+            """SELECT pt.id, pt.side, pt.stock_id, pt.quantity, pt.price, pt.amount, pt.traded_at,
+                      o.idempotency_key, o.order_type
+               FROM paper_trades pt
+               LEFT JOIN fills f  ON f.id = pt.fill_id
+               LEFT JOIN orders o ON o.id = f.order_id
+               WHERE pt.user_id = ? ORDER BY pt.traded_at DESC LIMIT ? OFFSET ?""",
+            { rs, _ -> Row(com.monticker.api.paper.domain.PaperTrade(
                 id       = rs.getLong("id"),
                 userId   = userId,
                 stockId  = rs.getLong("stock_id"),
@@ -90,14 +101,20 @@ class PaperPortfolioQueryService(
                 price    = rs.getBigDecimal("price"),
                 amount   = rs.getBigDecimal("amount"),
                 tradedAt = rs.getTimestamp("traded_at").toInstant(),
-            )},
+            ), rs.getString("idempotency_key"), rs.getString("order_type")) },
             userId, size, page * size,
         )
         if (trades.isEmpty()) return emptyList()
-        val infoMap = stockInfoMap(trades.map { it.stockId }.distinct())
-        return trades.mapNotNull { t ->
+        val infoMap = stockInfoMap(trades.map { it.t.stockId }.distinct())
+        return trades.mapNotNull { r ->
+            val t = r.t
             val (symbol, name) = infoMap[t.stockId] ?: return@mapNotNull null
-            TradeHistoryResponse(t.id, t.side, t.stockId, symbol, name, t.quantity, t.price, t.amount, t.tradedAt)
+            val route = TradeRoute.of(r.key)
+            TradeHistoryResponse(
+                t.id, t.side, t.stockId, symbol, name, t.quantity, t.price, t.amount, t.tradedAt,
+                source = route.source, watchRuleId = route.watchRuleId, conditionalOrderId = route.conditionalOrderId,
+                orderType = r.orderType ?: "MARKET",
+            )
         }
     }
 
