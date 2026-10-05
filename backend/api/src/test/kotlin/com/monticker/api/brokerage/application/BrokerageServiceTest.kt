@@ -160,6 +160,9 @@ class BrokerageServiceTest {
         val settlement = settlSlot.captured
         assertThat(settlement.settleDate).isAfter(LocalDate.now())
         assertThat(settlement.fee).isGreaterThan(BigDecimal.ZERO)
+        // ADR-082 — 끌 수 있는 체결 알림(FILLS)이 한 번
+        verify(exactly = 1) { events.publishEvent(match<Any> { it is com.monticker.api.common.notification.UserNotificationCommand &&
+            it.category == com.monticker.api.common.notification.NotificationCategory.FILLS && it.dedupKey == "brokerage-order-filled:${order.id}" }) }
     }
 
     @Test

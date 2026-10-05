@@ -334,11 +334,15 @@ class BrokerageService(
     }
 
     /** 증권사가 알려준 상태를 주문에 반영한다. 제출 직후·수동 동기화·대조 잡이 같은 규칙을 쓴다. */
-    private fun applyBrokerStatus(account: BrokerageAccount, order: BrokerageOrder, status: String, filledQty: Int, avgFillPrice: BigDecimal?) {
+    // notifyFill=false: 결과 불명 해소 경로 — 해소 알림(outcomeNotices.resolved)이 체결을 이미 알린다.
+    private fun applyBrokerStatus(
+        account: BrokerageAccount, order: BrokerageOrder, status: String, filledQty: Int, avgFillPrice: BigDecimal?, notifyFill: Boolean = true,
+    ) {
         when (status) {
             "FILLED" -> if (avgFillPrice != null && order.status != BrokerageOrderStatus.FILLED) {
                 order.fill(filledQty, avgFillPrice)
                 createSettlementFromFill(account, order, avgFillPrice)
+                if (notifyFill) outcomeNotices.filled(order)   // ADR-082 — 같은 트랜잭션: 커밋돼야 나간다
             }
             "CANCELLED" -> order.cancel()
             "REJECTED"  -> order.reject("증권사 거부")
@@ -411,7 +415,7 @@ class BrokerageService(
                 )!! > 0
                 if (linkedElsewhere) throw BusinessRuleException("$brokerOrderId 는 이미 다른 주문에 연결돼 있습니다.")
                 order.markSubmitted(snapshot.brokerOrderId, snapshot.brokerOrderRef)
-                applyBrokerStatus(account, order, snapshot.status, snapshot.filledQty, snapshot.avgFillPrice)
+                applyBrokerStatus(account, order, snapshot.status, snapshot.filledQty, snapshot.avgFillPrice, notifyFill = false)
             }
             order.resolvedBy = OrderResolution.MANUAL
             order.resolvedByUser = adminId
@@ -555,7 +559,7 @@ class BrokerageService(
                 order.markSubmitted(d.snapshot.brokerOrderId, d.snapshot.brokerOrderRef)
                 order.resolvedBy = OrderResolution.BROKER_LOOKUP
                 order.needsReview = false
-                applyBrokerStatus(account, order, d.snapshot.status, d.snapshot.filledQty, d.snapshot.avgFillPrice)
+                applyBrokerStatus(account, order, d.snapshot.status, d.snapshot.filledQty, d.snapshot.avgFillPrice, notifyFill = false)
                 ReconcileResult.MATCHED
             }
         }
@@ -628,6 +632,7 @@ class BrokerageService(
             side         = settlement.side,
             netAmount    = settlement.netAmount,
         )
+        outcomeNotices.settled(settlement)   // ADR-082
         log.info("증권사 정산 완료: id={} symbol={} side={} qty={}", settlement.id, settlement.symbol, settlement.side, settlement.quantity)
     }
 
