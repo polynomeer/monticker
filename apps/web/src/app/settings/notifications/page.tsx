@@ -62,15 +62,6 @@ function Row({ title, sub, preview, children, extra }: { title: string; sub: Rea
   );
 }
 
-/** 시안 요소 — 서버 설정 항목이 아직 없는 알림 종류 */
-function PreviewRow({ title, sub, on = true }: { title: string; sub: string; on?: boolean }) {
-  return (
-    <Row title={title} sub={sub} preview>
-      <Toggle checked={on} label={title} disabled />
-    </Row>
-  );
-}
-
 /** 끌 수 없는 알림 — 놓치면 이중 주문 같은 실제 손해로 이어지는 것(서버가 항상 보낸다) */
 function AlwaysOnRow({ title, sub }: { title: string; sub: string }) {
   return (
@@ -194,7 +185,7 @@ export default function NotificationSettingsPage() {
                 <Row title="체결·정산" sub="실전 주문 체결, T+2 정산 완료" extra={fills.channels}>
                   <Toggle checked={fills.on} onChange={fills.toggle} label="체결·정산" />
                 </Row>
-                <PreviewRow title="리스크 경고" sub="한도 80% 도달 · 주문 차단" />
+                <AlwaysOnRow title="리스크 경고" sub="한도의 80%에 이르면 하루 한 번(항목별) · 끌 수 없음" />
                 <AlwaysOnRow title="‘결과 확인 중’ 주문" sub="증권사 응답이 없을 때, 그리고 결과가 확인됐을 때 알림 · 끌 수 없음" />
               </div>
 
