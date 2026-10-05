@@ -78,8 +78,7 @@ export function MarketStrategyCard({ strategy }: { strategy: MarketStrategy }) {
     onError: () => toast({ type: "error", title: "해제 실패", message: "다시 시도해주세요." }),
   });
 
-  // ADR-035 — 유료 결제(PG 연동)는 아직 준비되지 않았다. 실패하는 결제를 실제로 시도하게
-  // 두는 대신, 무료 전략만 구독 가능하게 하고 유료는 명확히 "준비 중"으로 표시한다.
+  // ADR-080 — 유료 전략 결제는 서버에서도 닫혀 있다(409). 무료 전략만 구독할 수 있다.
   const isPaid = strategy.price > 0;
 
   return (
@@ -136,7 +135,7 @@ export function MarketStrategyCard({ strategy }: { strategy: MarketStrategy }) {
               </Btn>
             </>
           ) : isPaid ? (
-            <Btn size="sm" className="h-8 px-3 text-13" disabled title="유료 구독 결제 연동 준비 중입니다.">준비 중</Btn>
+            <Btn size="sm" className="h-8 px-3 text-13" disabled title="유료 전략 구독 결제는 아직 열리지 않았습니다.">준비 중</Btn>
           ) : (
             <Btn size="sm" className="h-8 px-3 text-13" onClick={() => subscribeMutation.mutate()} disabled={subscribeMutation.isPending}>
               {subscribeMutation.isPending ? "..." : "구독"}

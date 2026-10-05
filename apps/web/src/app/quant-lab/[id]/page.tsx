@@ -363,7 +363,10 @@ export default function QuantLabDetailPage() {
                 className="resize-y rounded-[10px] border border-tm-line2 bg-tm-inner p-3 text-sm leading-relaxed text-dracula-fg outline-none placeholder:text-[#8b92b8] focus:border-dracula-purple"
               />
             </label>
-            <Field label="월 구독료 (0이면 무료)" unit="원" type="number" min={0} value={sharePrice} onChange={e => setSharePrice(Math.max(0, +e.target.value))} />
+            <Field label="월 구독료 (0이면 무료)" unit="원" type="number" min={0} max={1000000} step={1000} value={sharePrice} onChange={e => setSharePrice(Math.min(1_000_000, Math.max(0, Math.floor(+e.target.value))))} />
+            {sharePrice > 0 && (
+              <Notice tone="warn">유료 구독 결제는 아직 열리지 않았습니다. 가격은 표시되지만 구독자는 결제가 열릴 때까지 이 전략을 구독할 수 없습니다.</Notice>
+            )}
             <div className="flex flex-col gap-2">
               <div className="flex items-start gap-2">
                 <Checkbox checked={false} disabled label="포워드 테스트 12주 이상 — 검증 배지 신청" sub={fwRunning ? `현재 ${weeksSince(forwardTest!.startedAt)}주 · 일치율 ${fmtMatch(forwardTest!.matchRate, forwardTest!.comparedSignals)}` : "포워드 테스트 중이 아닙니다"} />
