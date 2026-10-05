@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import { useConsentStatus } from "@/hooks/useConsents";
 import { Icon, type IconName } from "./Icon";
 import { IconBtn } from "./ui";
 
@@ -214,6 +215,20 @@ function TopBar({ left, stats, account }: { left: ReactNode; stats: TopStat[]; a
   );
 }
 
+/**
+ * ADR-068 — 가입 필수 동의가 빠진 사용자(소셜 가입, 약관 개정)는 앱 화면 대신 동의 화면으로 보낸다.
+ * 서버는 동의 없이도 조회 API를 막지 않으므로 이 화면 단계가 실제 게이트다.
+ */
+function useConsentGate() {
+  const { isLoggedIn } = useAuth();
+  const { data } = useConsentStatus(isLoggedIn);
+  const router = useRouter();
+  const pathname = usePathname() ?? "/";
+  useEffect(() => {
+    if (data && data.missingRequired.length > 0) router.replace(`/consent?next=${encodeURIComponent(pathname)}`);
+  }, [data, pathname, router]);
+}
+
 /** ⌘K / Ctrl+K → 검색. 입력 중일 때는 가로채지 않는다. */
 function useSearchShortcut() {
   const router = useRouter();
@@ -246,6 +261,7 @@ export function TerminalPage({
   className?: string;
 }) {
   useSearchShortcut();
+  useConsentGate();
   return (
     <div className="flex min-h-screen flex-col bg-tm-page text-13 text-dracula-fg">
       <TopBar left={left ?? <TitleBlock title={title} crumb={crumb} />} stats={stats} account={account} />

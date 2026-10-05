@@ -12,12 +12,15 @@ export interface AuthTokens {
   accessToken: string;
 }
 
-export async function signup(email: string, password: string, nickname: string): Promise<AuthTokens> {
+/** ADR-068 — 가입 동의 항목. TERMS·PRIVACY·AGE_OVER_19 필수, MARKETING 선택. */
+export type SignupConsent = "TERMS" | "PRIVACY" | "AGE_OVER_19" | "MARKETING";
+
+export async function signup(email: string, password: string, nickname: string, consents: SignupConsent[]): Promise<AuthTokens> {
   const res = await fetch(`${API}/api/auth/signup`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ email, password, nickname }),
+    body: JSON.stringify({ email, password, nickname, consents }),
   });
   if (!res.ok) throw new Error(await res.text());
   return res.json();

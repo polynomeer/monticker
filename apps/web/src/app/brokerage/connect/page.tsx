@@ -11,7 +11,7 @@ import { Btn, BtnLink, Checkbox, Icon, Notice, Panel, PanelRow, PreviewTag, Term
 import { LoginRequired, maskAccount } from "@/components/brokerage/shared";
 import { BROKERAGE_PROVIDER_LABELS, brokerageProviderLabel } from "@/lib/brokerageProvider";
 import { cn } from "@/lib/utils";
-import type { BrokerageProviderId } from "@monticker/types";
+import type { BrokerageConsent, BrokerageProviderId } from "@monticker/types";
 
 const PROVIDER_META: Record<BrokerageProviderId, {
   sub: string;
@@ -47,6 +47,9 @@ const PROVIDER_META: Record<BrokerageProviderId, {
 
 const PROVIDERS = Object.keys(PROVIDER_META) as BrokerageProviderId[];
 const STEPS = ["증권사 선택", "API 키 등록", "권한 확인", "완료"];
+
+/** ADR-068 — 아래 CONSENTS 문구와 같은 순서. 서버가 셋 모두 있어야 연동한다. */
+const CONSENT_CODES: BrokerageConsent[] = ["BROKERAGE_DELEGATION", "BROKERAGE_NO_CUSTODY", "BROKERAGE_LOSS_ATTRIBUTION"];
 
 const CONSENTS = [
   "본인 명의 계좌의 API 키이며, 주문 권한을 monticker에 위임하는 것에 동의합니다",
@@ -113,13 +116,15 @@ export default function BrokerageConnectPage() {
   const allConsented = consents.every(Boolean);
   const isValid = fieldsFilled && allConsented;
   const needsReconnect = !!account && !account.tokenValid;
+  // 해지에 성공하면 계좌가 사라져 해지 패널도 사라진다 — 결과는 토스트로 남긴다
+  const onDisconnected = () => toast({ type: "success", title: "연동 해지", message: "저장된 키를 지우고 연동을 해지했습니다." });
   // 진행 표시 — 증권사는 기본 선택돼 있으니 1단계는 항상 완료. 서버가 토큰을 발급해 보는 동안이 "권한 확인".
   const step = connect.isPending ? 2 : 1;
 
   const handleSubmit = async () => {
     // 비밀값은 상태에만 두고 로그·토스트에 절대 싣지 않는다.
     try {
-      await connect.mutateAsync({ provider, appKey: appKey.trim(), appSecret: appSecret.trim(), accountNumber: accountNumber.trim() });
+      await connect.mutateAsync({ provider, appKey: appKey.trim(), appSecret: appSecret.trim(), accountNumber: accountNumber.trim(), consents: CONSENT_CODES });
       setAppKey("");
       setAppSecret("");
       toast({ type: "success", title: "연동 완료", message: "증권사 계좌가 연동되었습니다." });
@@ -149,7 +154,7 @@ export default function BrokerageConnectPage() {
           <BtnLink href="/brokerage">대시보드로 이동</BtnLink>
         </Panel>
         <div className="mt-2">
-          <DisconnectPanel />
+          <DisconnectPanel onDone={onDisconnected} />
         </div>
       </div>
     </TerminalPage>
@@ -282,7 +287,7 @@ export default function BrokerageConnectPage() {
         {/* 재인증이 필요한 계좌도 해지할 수 있어야 한다 — 키가 무효여도 저장된 값은 지워야 한다 */}
         {account && (
           <div className="flex-[1_1_340px] self-start">
-            <DisconnectPanel />
+            <DisconnectPanel onDone={onDisconnected} />
           </div>
         )}
       </PanelRow>
