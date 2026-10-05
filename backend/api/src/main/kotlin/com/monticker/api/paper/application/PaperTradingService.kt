@@ -172,4 +172,26 @@ data class PaperOrderResponse(
 data class PortfolioResponse(val cash: BigDecimal, val totalValue: BigDecimal, val totalPnl: BigDecimal, val totalPnlRate: Double, val holdings: List<HoldingResponse>)
 data class HoldingResponse(val stockId: Long, val symbol: String, val name: String, val quantity: Int, val avgPrice: BigDecimal, val currentPrice: BigDecimal, val value: BigDecimal, val pnl: BigDecimal, val pnlRate: Double)
 data class TradeResultResponse(val side: String, val stockId: Long, val quantity: Int, val price: BigDecimal, val amount: BigDecimal, val remainingCash: BigDecimal, val tradeId: Long = 0)
-data class TradeHistoryResponse(val id: Long, val side: String, val stockId: Long, val symbol: String, val name: String, val quantity: Int, val price: BigDecimal, val amount: BigDecimal, val tradedAt: java.time.Instant)
+data class TradeHistoryResponse(
+    val id: Long, val side: String, val stockId: Long, val symbol: String, val name: String,
+    val quantity: Int, val price: BigDecimal, val amount: BigDecimal, val tradedAt: java.time.Instant,
+    /** 경로: MANUAL(직접) · WATCH_RULE · CONDITIONAL */
+    val source: String = "MANUAL",
+    val watchRuleId: Long? = null,
+    val conditionalOrderId: Long? = null,
+    val orderType: String = "MARKET",
+)
+
+/** 매칭 주문 멱등 키 → 거래 경로. 키 형식은 WatchRuleExecutor.idempotencyKey·PaperConditionalOrderFirer와 같다. */
+data class TradeRoute(val source: String, val watchRuleId: Long? = null, val conditionalOrderId: Long? = null) {
+    companion object {
+        fun of(idempotencyKey: String?): TradeRoute {
+            val parts = idempotencyKey?.split(':') ?: return TradeRoute("MANUAL")
+            return when (parts.firstOrNull()) {
+                "WR" -> TradeRoute("WATCH_RULE", watchRuleId = parts.getOrNull(1)?.toLongOrNull())
+                "PCO" -> TradeRoute("CONDITIONAL", conditionalOrderId = parts.getOrNull(1)?.toLongOrNull())
+                else -> TradeRoute("MANUAL")
+            }
+        }
+    }
+}
