@@ -7,12 +7,13 @@ import { getAccessToken } from "@/services/auth";
 import { useToast } from "@/hooks/useToast";
 import { usePaperPortfolio } from "@/hooks/usePaperTrade";
 import { useRiskExposure, type RiskLimits } from "@/components/risk/useRiskExposure";
+import { cancelPayload, describePending, fmtKst, limitsPayload, pendingFor } from "@/components/risk/limitChanges";
 import { RiskGauges, RiskLevel, LEVELS, levelOf, type Gauge } from "@/components/risk/RiskGauges";
 import { useStockMeta } from "@/components/portfolio/useStockMeta";
 import { useSectorSlices } from "@/components/portfolio/Insights";
 import { LoginRequired, Skeleton } from "@/components/portfolio/PaperStates";
 import {
-  Btn, DataTable, Field, Panel, PanelRow, PreviewTag, SelectBox, TerminalPage, Toggle, fmtNum, fmtPct, type TopStat,
+  Btn, DataTable, Field, Panel, PanelRow, SelectBox, TerminalPage, Toggle, fmtNum, fmtPct, type TopStat,
 } from "@/components/terminal";
 
 type NumKey = "dailyLossLimitPct" | "concentrationLimitPct" | "varLimitPct" | "maxPositionCount" | "maxHourlyOrders";
@@ -21,8 +22,8 @@ const FIELDS: { key: NumKey; label: string; unit: string; step: number; int?: bo
   { key: "varLimitPct", label: "1일 VaR 한도", unit: "%", step: 0.5, max: 100 },
   { key: "concentrationLimitPct", label: "단일 종목 최대 비중", unit: "%", step: 0.5, max: 100 },
   { key: "dailyLossLimitPct", label: "일일 최대 손실", unit: "%", step: 0.5, max: 100 },
-  { key: "maxPositionCount", label: "최대 보유 종목 수", unit: "개", step: 1, int: true },
-  { key: "maxHourlyOrders", label: "1시간 최대 주문 수", unit: "회", step: 1, int: true },
+  { key: "maxPositionCount", label: "최대 보유 종목 수", unit: "개", step: 1, int: true, max: 1000 },
+  { key: "maxHourlyOrders", label: "1시간 최대 주문 수", unit: "회", step: 1, int: true, max: 1000 },
 ];
 
 /** 저장 전 검증 — NaN·0·음수·소수 개수를 서버로 보내지 않는다 */
@@ -59,31 +60,52 @@ export default function RiskPage() {
   const limits = draft ?? exposure?.limits;
 
   const updateMutation = useMutation({
-    mutationFn: async (payload: RiskLimits) => {
+    mutationFn: async (body: Record<string, number | boolean>): Promise<RiskLimits> => {
       const r = await authFetch("/api/risk/limits", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, clearSectorConcentrationLimit: payload.sectorConcentrationLimitPct == null }),
+        body: JSON.stringify(body),
       });
-      if (!r.ok) throw new Error("한도 업데이트 실패");
+      if (!r.ok) {
+        const msg = await r.json().then((j) => j?.message as string | undefined).catch(() => undefined);
+        throw new Error(msg ?? "한도 업데이트 실패");
+      }
       return r.json();
     },
-    onSuccess: () => {
+    onSuccess: (saved, body) => {
       qc.invalidateQueries({ queryKey: ["risk"] });
       setDraft(null);
-      toast({ type: "success", title: "한도를 저장했습니다" });
+      const delayed = pendingFor(body, saved.pendingChanges ?? []);
+      if (delayed.length > 0) {
+        toast({
+          type: "success",
+          title: "완화한 한도는 24시간 뒤에 적용됩니다",
+          message: delayed.map((p) => `${describePending(saved, p)} · ${fmtKst(p.effectiveAt)} 적용`).join(" / "),
+        });
+      } else {
+        toast({ type: "success", title: "한도를 저장했습니다" });
+      }
     },
     onError: (e) => toast({ type: "error", title: "한도 저장 실패", message: (e as Error).message }),
   });
 
   const save = () => {
-    if (!draft) return;
+    if (!draft || !exposure) return;
     const err = validate(draft);
     setFormError(err);
-    if (!err) updateMutation.mutate(draft);
+    if (err) return;
+    const body = limitsPayload(exposure.limits, draft);
+    if (Object.keys(body).length === 0) { setDraft(null); return; }
+    updateMutation.mutate(body);
   };
 
-  const title = { title: "리스크 한도", crumb: "모의투자 · 주문 전 실시간 체크" };
+  const cancelPending = (field: string) => {
+    if (!exposure) return;
+    const body = cancelPayload(exposure.limits, field);
+    if (body) updateMutation.mutate(body);
+  };
+
+  const title = { title: "리스크 한도", crumb: "모의투자·실거래 · 주문 전 실시간 체크" };
   if (!isLoggedIn) {
     return (
       <TerminalPage {...title}>
@@ -171,9 +193,11 @@ export default function RiskPage() {
           ) : (
             <>
               <div className="flex items-center justify-between gap-3">
-                <span className="flex items-center gap-1.5 font-semibold">리스크 체크 활성화 <PreviewTag /></span>
-                {/* PUT /api/risk/limits가 isActive를 받지 않는다 — 현재 값만 보여 준다 */}
-                <Toggle checked={limits.isActive} label="리스크 체크" disabled />
+                <span className="flex flex-col gap-0.5">
+                  <span className="font-semibold">리스크 체크 활성화</span>
+                  <span className="text-2xs text-tm-muted">끄면 모의투자 주문만 한도 점검을 건너뜁니다. 실거래는 항상 점검합니다.</span>
+                </span>
+                <Toggle checked={limits.isActive} label="리스크 체크" onChange={(v) => setDraft({ ...limits, isActive: v })} />
               </div>
               {FIELDS.slice(0, 2).map((f) => (
                 <Field key={f.key} label={f.label} aria-label={f.label} unit={f.unit} type="number" step={f.step} min={0} max={f.max} value={Number.isFinite(limits[f.key]) ? limits[f.key] : ""} onChange={(e) => set(f.key, parseFloat(e.target.value))} className="flex-none" />
@@ -204,7 +228,24 @@ export default function RiskPage() {
                 </Btn>
                 {draft && <Btn kind="ghost" size="lg" onClick={() => { setDraft(null); setFormError(null); }}>취소</Btn>}
               </div>
-              <span className="text-2xs text-tm-muted">한도는 모의투자 전용 리스크 게이트입니다. 한도를 넘는 주문은 체결되지 않습니다. 실제 투자에는 적용되지 않습니다.</span>
+              {exposure && exposure.limits.pendingChanges.length > 0 && (
+                <div className="flex flex-col gap-1.5 rounded-lg border border-tm-line bg-tm-inner p-2.5" aria-label="적용 대기 중인 변경">
+                  <span className="text-xs font-semibold text-dracula-yellow">적용 대기 중</span>
+                  {exposure.limits.pendingChanges.map((p) => (
+                    <div key={p.field} className="flex items-center justify-between gap-2 text-xs">
+                      <span className="flex flex-col">
+                        <span>{describePending(exposure.limits, p)}</span>
+                        <span className="num text-2xs text-tm-muted">{fmtKst(p.effectiveAt)} 적용</span>
+                      </span>
+                      <Btn kind="ghost" size="sm" onClick={() => cancelPending(p.field)} disabled={updateMutation.isPending}>취소</Btn>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <span className="text-2xs text-tm-muted">
+                한도를 넘는 매수 주문은 차단됩니다. 같은 한도가 모의투자와 실거래 주문에 함께 적용됩니다. 한도를 낮추면 바로,
+                올리거나 해제하거나 체크를 끄면 {exposure?.limits.coolingOffHours ?? 24}시간 뒤에 적용됩니다.
+              </span>
             </>
           )}
         </Panel>
