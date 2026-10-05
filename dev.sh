@@ -62,6 +62,9 @@ die() {
     echo "전체 로그: $logfile"
   fi
   kill "$API_PID" "$WORKER_PID" "$WEB_PID" 2>/dev/null || true
+  # bootRun JVM은 Gradle 데몬이 띄워서 위 PID(셸·gradlew 클라이언트)를 죽여도 남는다 — 포트를 쥔 고아가 된다.
+  pkill -f "$ROOT/backend/api/build" 2>/dev/null || true
+  pkill -f "$ROOT/backend/worker/build" 2>/dev/null || true
   exit 1
 }
 
@@ -158,7 +161,10 @@ wait_for() {
 
     if [ $((elapsed % 10)) -eq 0 ]; then
       echo -e "  ${YELLOW}  still waiting... ${elapsed}s / ${timeout}s${NC}"
-      if grep -qiE "BUILD FAILED|Exception|ERROR.*Application run failed" "$logfile" 2>/dev/null; then
+      # 기동 실패를 뜻하는 표식만 본다. "Exception" 같은 넓은 패턴은 기동을 막지 않는 경고성 스택트레이스
+      # (예: 기본 모드엔 Kafka가 없어 KafkaAdmin이 남기는 TimeoutException)에도 걸려, 정상 기동 10초 전에
+      # 실패로 판정하고 있었다.
+      if grep -qE "BUILD FAILED|APPLICATION FAILED TO START|Application run failed" "$logfile" 2>/dev/null; then
         die "${name} 시작 중 오류 감지" "$logfile"
       fi
     fi
