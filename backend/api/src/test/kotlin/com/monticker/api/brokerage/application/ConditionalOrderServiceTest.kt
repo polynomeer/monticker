@@ -37,6 +37,7 @@ class ConditionalOrderServiceTest {
     private fun stubAccountAndStock() {
         every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(makeAccount())
         every { jdbc.queryForObject("SELECT id FROM stocks WHERE symbol = ?", Long::class.java, "005930") } returns 1L
+        every { jdbc.queryForList("SELECT market FROM stocks WHERE id = ?", String::class.java, 1L) } returns listOf("KOSPI")
     }
 
     @Test
@@ -164,5 +165,14 @@ class ConditionalOrderServiceTest {
 
         verify(exactly = 1) { conditionalOrderRepo.save(any()) }
         verify(exactly = 0) { priceFeedMonitor.isCovered(any()) }
+    }
+
+    @Test
+    fun `ADR-081 KRX 지정가가 호가 단위에 맞지 않으면 등록할 때 거부한다`() {
+        stubAccountAndStock()
+
+        assertThatThrownBy {
+            service.create(1L, "005930", OrderSide.SELL, 10, ConditionalOrderLeg(ConditionalTriggerType.STOP_LOSS, BigDecimal("70000"), OrderType.LIMIT, BigDecimal("69950")))
+        }.isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("호가 단위")
     }
 }

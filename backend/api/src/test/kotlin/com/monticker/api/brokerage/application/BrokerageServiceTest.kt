@@ -67,9 +67,10 @@ class BrokerageServiceTest {
     private val consentService = mockk<ConsentService>(relaxed = true)
     private val events = mockk<org.springframework.context.ApplicationEventPublisher>(relaxed = true)
     private val outcomeNotices = OrderOutcomeNotices(events)
+    private val priceGuard = mockk<OrderPriceGuard>(relaxed = true)
     private val connectConsents = listOf("BROKERAGE_DELEGATION", "BROKERAGE_NO_CUSTODY", "BROKERAGE_LOSS_ATTRIBUTION")
 
-    private val service = BrokerageService(clientRegistry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService, outcomeNotices)
+    private val service = BrokerageService(clientRegistry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService, outcomeNotices, priceGuard)
 
     private val approvedRisk = RiskCheckResult(approved = true, blockedBy = null, severity = "APPROVED", checks = emptyList())
 
@@ -211,6 +212,25 @@ class BrokerageServiceTest {
         verify(exactly = 0) { orderRepo.save(any()) }
     }
 
+    @Test
+    fun `ADR-081 호가 단위·가격제한폭 위반이면 의도 행도 증권사 호출도 없이 400으로 거부한다`() {
+        val broker = mockk<BrokerageClient>(relaxed = true) { every { movesRealMoney } returns true }
+        val account = makeAccount(tokenExpiresAt = Instant.now().minusSeconds(60))   // 토큰 만료 — 재발급(증권사 인증 호출) 전에 막혀야 한다
+        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
+        stubStockLookup(stockId = 7L)
+        every { priceGuard.check(7L, any(), any(), any()) } throws IllegalArgumentException("호가 단위에 맞지 않는 가격입니다")
+        val svc = BrokerageService(BrokerageClientRegistry(BrokerageProvider.entries.associateWith { broker }), accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService, outcomeNotices, priceGuard)
+
+        assertThrows<IllegalArgumentException> {
+            svc.submitOrder(1L, BrokerageOrderRequest("005930", "BUY", "LIMIT", 1, BigDecimal("70050")))
+        }
+
+        verify(exactly = 0) { broker.issueToken(any(), any()) }
+        verify(exactly = 0) { broker.submitOrder(any(), any(), any()) }
+        verify(exactly = 0) { orderRepo.save(any()) }
+        verify(exactly = 0) { riskChecker.checkBrokerageOrder(any(), any(), any(), any(), any(), any()) }
+    }
+
     // ── settle ────────────────────────────────────────────────────────────────
 
     @Test
@@ -308,7 +328,7 @@ class BrokerageServiceTest {
 
     private fun serviceWithFakeClient(fakeClient: BrokerageClient): BrokerageService {
         val registry = BrokerageClientRegistry(BrokerageProvider.entries.associateWith { fakeClient })
-        return BrokerageService(registry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService, outcomeNotices)
+        return BrokerageService(registry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService, outcomeNotices, priceGuard)
     }
 
     @Test
@@ -958,7 +978,7 @@ class BrokerageServiceTest {
     @Test
     fun `connect is refused before calling the broker when the notice consents are missing (ADR-068)`() {
         val brokerClient = mockk<BrokerageClient>()
-        val svc = BrokerageService(BrokerageClientRegistry(BrokerageProvider.entries.associateWith { brokerClient }), accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService, outcomeNotices)
+        val svc = BrokerageService(BrokerageClientRegistry(BrokerageProvider.entries.associateWith { brokerClient }), accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService, outcomeNotices, priceGuard)
         every { consentService.requireAndRecord(1L, ConsentGroup.BROKERAGE_CONNECT, emptyList(), ConsentSource.BROKERAGE_CONNECT) } throws IllegalArgumentException("필수 동의 항목이 빠졌습니다")
 
         assertThrows<IllegalArgumentException> {

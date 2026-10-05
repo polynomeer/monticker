@@ -65,6 +65,7 @@ class BrokerageService(
     private val pendingBuyQuery: PendingBuyQuery,
     private val consentService: ConsentService,
     private val outcomeNotices: OrderOutcomeNotices,
+    private val priceGuard: OrderPriceGuard,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -241,7 +242,6 @@ class BrokerageService(
             throw halt.toException()
         }
         val client = clientRegistry.get(account.provider)
-        val credentials = requireCredentials(account)
         if (request.orderType == "LIMIT" && request.limitPrice == null) {
             throw IllegalArgumentException("지정가 주문에는 가격이 필요합니다.")
         }
@@ -250,6 +250,9 @@ class BrokerageService(
         // 우회 수단이었다(docs/validation-hardening-plan.md V-C1) — 건너뛰지 않고 거부한다.
         val stockId = resolveStockId(request.symbol)
             ?: throw IllegalArgumentException("등록되지 않은 종목입니다: ${request.symbol}")
+        // ADR-081 — KRX 호가 단위·가격제한폭. 자격증명 재발급(증권사 인증 호출)보다도 먼저 — 입력 오류는 어떤 증권사 호출도 부르지 않는다.
+        priceGuard.check(stockId, request, { client.movesRealMoney })
+        val credentials = requireCredentials(account)
 
         // ADR-056 — 결과를 모르는 같은 종목·방향 주문이 있으면 새 주문을 받지 않는다. 이중 주문의 가장 흔한 경로는
         // "실패한 줄 알고 다시 누르기"다. 해소(보통 1~2분)되면 다시 낼 수 있다.

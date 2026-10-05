@@ -1,5 +1,6 @@
 package com.monticker.api.brokerage.application
 
+import com.monticker.api.brokerage.domain.KrxPriceRules
 import com.monticker.api.brokerage.domain.BrokerageAccount
 import com.monticker.api.brokerage.domain.ConditionalOrder
 import com.monticker.api.brokerage.domain.ConditionalOrderStatus
@@ -48,7 +49,7 @@ class ConditionalOrderService(
         val account = activeAccount(userId)
         val stockId = resolveStockId(symbol) ?: throw IllegalArgumentException("존재하지 않는 종목입니다: $symbol")
         requireRealtimeFeed(account, stockId, symbol)
-        validateLeg(leg)
+        validateLeg(leg, stockId)
 
         val order = conditionalOrderRepo.save(
             ConditionalOrder(
@@ -70,7 +71,7 @@ class ConditionalOrderService(
         val account = activeAccount(userId)
         val stockId = resolveStockId(symbol) ?: throw IllegalArgumentException("존재하지 않는 종목입니다: $symbol")
         requireRealtimeFeed(account, stockId, symbol)
-        legs.forEach { validateLeg(it) }
+        legs.forEach { validateLeg(it, stockId) }
 
         val groupId = UUID.randomUUID()
         val expiresAt = defaultExpiry()
@@ -106,10 +107,18 @@ class ConditionalOrderService(
         accountRepo.findByUserIdAndIsActiveTrue(userId)
             .orElseThrow { IllegalStateException("연동된 증권사 계좌가 없습니다.") }
 
-    private fun validateLeg(leg: ConditionalOrderLeg) {
+    private fun validateLeg(leg: ConditionalOrderLeg, stockId: Long) {
         require(leg.triggerPrice > BigDecimal.ZERO) { "트리거 가격은 0보다 커야 합니다." }
         if (leg.orderType == OrderType.LIMIT) {
             require(leg.limitPrice != null && leg.limitPrice > BigDecimal.ZERO) { "지정가 주문에는 가격이 필요합니다." }
+            // ADR-081 — 호가 단위는 발동 시점과 무관한 규칙이라 등록할 때 막는다(발동 때 거부되면 보호가 조용히 사라진다).
+            // 가격제한폭은 발동하는 날의 기준가로 판정해야 하므로 여기서 보지 않는다 — 발동 시 주문 준비가 본다.
+            val market = jdbc.queryForList("SELECT market FROM stocks WHERE id = ?", String::class.java, stockId).firstOrNull()
+            if (KrxPriceRules.isKrxMarket(market)) {
+                require(KrxPriceRules.isOnTick(leg.limitPrice)) {
+                    "호가 단위에 맞지 않는 지정가입니다: ${leg.limitPrice.stripTrailingZeros().toPlainString()}원(이 가격대의 호가 단위 ${KrxPriceRules.tickSize(leg.limitPrice).toPlainString()}원)."
+                }
+            }
         }
     }
 
