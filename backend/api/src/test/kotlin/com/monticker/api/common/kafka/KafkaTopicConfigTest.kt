@@ -48,6 +48,7 @@ class KafkaTopicConfigTest {
             "market.ticks-retry-0", "market.ticks-retry-1", "market.ticks-dlt",
             "market.tick-processed-retry-0", "market.tick-processed-retry-1", "market.tick-processed-dlt",
             "notify.commands-retry-0", "notify.commands-retry-1", "notify.commands-dlt",
+            "notify.user-retry-0", "notify.user-retry-1", "notify.user-dlt",   // ADR-065
             "search.index-dlt",   // ADR-042 — 배치 컨슈머는 블로킹 재시도라 retry 토픽 없이 DLT만
             // ADR-051 — watch rule 컨슈머. DLT 로 간 이벤트는 자동 재처리하지 않는다(사람이 본다).
             "market.event-detected-retry-0", "market.event-detected-retry-1", "market.event-detected-dlt",
@@ -55,6 +56,6 @@ class KafkaTopicConfigTest {
         // ADR-049: order-filled 패밀리는 소비자(quant-engine)와 함께 제거.
         // auto-create 가 꺼져 있어(ADR-040) 여기 빠진 토픽은 런타임에 조용히 재시도가 무력화된다 —
         // 그래서 개수까지 고정한다. @RetryableTopic 을 추가하면 이 숫자도 같이 올린다.
-        assertThat(declared).hasSize(13)
+        assertThat(declared).hasSize(16)
     }
 }

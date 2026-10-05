@@ -23,7 +23,7 @@ import java.time.Duration
  * 선언 위치가 backend/api 하나인 이유: 토픽 소유자가 둘이면 어긋난다. 다른 서비스(worker 등)는 api가
  * 먼저 기동해 토픽을 만들어 두는 것을 전제한다 — 그 전까지 프로듀서는 재시도/큐잉한다.
  *
- * @RetryableTopic(autoCreateTopics = "false")인 컨슈머 3곳의 재시도/DLT 토픽도 여기서 만든다.
+ * @RetryableTopic(autoCreateTopics = "false")인 컨슈머들의 재시도/DLT 토픽도 여기서 만든다.
  * auto-create만 끄고 이걸 놓치면 ADR-006의 재시도 전략이 조용히 통째로 무력화된다.
  * attempts 값은 어노테이션과 이중 관리다 — RetryFamilies의 상수를 바꾸면 어노테이션도 바꿔야 한다.
  */
@@ -36,6 +36,7 @@ class KafkaTopicConfig(private val props: KafkaTopicProperties) {
         const val MARKET_TICKS_ATTEMPTS = 3          // worker TickKafkaConsumer
         const val TICK_PROCESSED_ATTEMPTS = 3        // worker AlertKafkaConsumer
         const val NOTIFY_ATTEMPTS = 3                // worker NotifyKafkaConsumer (ADR-044)
+        const val NOTIFY_USER_ATTEMPTS = 3           // worker UserNotifyKafkaConsumer (ADR-065)
         const val SEARCH_INDEX_ATTEMPTS = 1          // api SearchIndexConsumer (ADR-042) — 배치 리스너라 블로킹 재시도 + -dlt만
         const val EVENT_DETECTED_ATTEMPTS = 3        // api WatchRuleConsumer (ADR-051)
 
@@ -43,6 +44,7 @@ class KafkaTopicConfig(private val props: KafkaTopicProperties) {
             "market.ticks" to MARKET_TICKS_ATTEMPTS,
             "market.tick-processed" to TICK_PROCESSED_ATTEMPTS,
             "notify.commands" to NOTIFY_ATTEMPTS,
+            "notify.user" to NOTIFY_USER_ATTEMPTS,
             "search.index" to SEARCH_INDEX_ATTEMPTS,
             "market.event-detected" to EVENT_DETECTED_ATTEMPTS,
         )
@@ -66,6 +68,8 @@ class KafkaTopicConfig(private val props: KafkaTopicProperties) {
     @Bean fun tickProcessedTopic()    = topic("market.tick-processed", props.partitions.tickProcessed,  Duration.ofHours(1))
     // ADR-044 — 평가→발송 분리. 키 = ruleId. 발송 워커가 느려도 틱 파이프라인이 밀리지 않는다.
     @Bean fun notifyCommandsTopic()   = topic("notify.commands",       props.partitions.tickProcessed,  Duration.ofDays(1))
+    // ADR-065 — api → 사용자 알림(조건부 주문 발동 실패 등). Modulith 아웃박스로 외부화, 키 = userId. worker가 발송한다.
+    @Bean fun notifyUserTopic()       = topic("notify.user",            props.partitions.trading,       Duration.ofDays(1))
     // 유실 불가 — 복제 계수가 2 이상일 때만 minIsr가 의미 있다(단일 브로커에서 minIsr=2면 쓰기가 막힌다).
     @Bean fun orderFilledTopic()      = topic("trading.order-filled",   props.partitions.trading, Duration.ofDays(30), minIsrIfReplicated())
     // ADR-042 — ES 인덱싱 아웃박스. 키 = "{index}:{docId}" 라 같은 문서의 색인/삭제 순서가 보장된다. 7일 = 재색인 되감기 창.

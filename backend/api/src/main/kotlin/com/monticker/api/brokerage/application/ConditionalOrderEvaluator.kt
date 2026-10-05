@@ -45,6 +45,7 @@ class ConditionalOrderEvaluator(
     private val meterRegistry: MeterRegistry,
     private val tradingHaltService: TradingHaltService,
     private val clientRegistry: BrokerageClientRegistry,
+    private val failures: ConditionalOrderFailures,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -133,7 +134,7 @@ class ConditionalOrderEvaluator(
             )
             when {
                 order.status == BrokerageOrderStatus.REJECTED -> {
-                    markFailed(row.id, order.rejectReason ?: "증권사 거부", order.id)
+                    failures.markFailed(row.id, "증권사가 주문을 거부했습니다(${order.rejectReason ?: "사유 없음"})", order.id)
                     log.warn("[ConditionalOrderEvaluator] 증권사 거부: id={} userId={} reason={}", row.id, row.userId, order.rejectReason)
                 }
                 order.status.isUnresolved -> keepTriggered(row, order.id)
@@ -160,9 +161,14 @@ class ConditionalOrderEvaluator(
             row.ocoGroupId?.let { cancelOcoSiblings(it, row.id) }
         } catch (e: Exception) {
             // ADR-032 — 실패 시 재시도하지 않는다(조건을 계속 만족하는 동안 매 틱마다
-            // 재시도하면 같은 실패 요청이 반복 발사될 수 있다). 사용자가 재등록해야 한다.
+            // 재시도하면 같은 실패 요청이 반복 발사될 수 있다). 사용자가 재등록해야 한다 — 그래서 알린다(ADR-065).
             // ADR-056 — OrderOutcomeUnknownException이 아닌 예외는 의도 커밋 전에 났다 → 증권사 호출이 없었다.
-            markFailed(row.id, e.message?.take(500) ?: "알 수 없는 오류")
+            val reason = when (e) {
+                is UnresolvedOrderInProgressException ->
+                    "증권사 확인 중인 같은 방향 주문(#${e.pendingOrderId})이 있어 새 주문을 낼 수 없었습니다"
+                else -> e.message?.take(500) ?: "알 수 없는 오류"
+            }
+            failures.markFailed(row.id, reason)
             log.warn("[ConditionalOrderEvaluator] 발동 실패: id={} userId={} reason={}", row.id, row.userId, e.message)
             row.ocoGroupId?.let { cancelOcoSiblings(it, row.id) }
         }
@@ -175,13 +181,6 @@ class ConditionalOrderEvaluator(
             orderId, Timestamp.from(Instant.now()), row.id,
         )
         log.warn("[ConditionalOrderEvaluator] 발동 — 주문 결과 확인 중: id={} userId={} orderId={}", row.id, row.userId, orderId)
-    }
-
-    private fun markFailed(id: Long, reason: String, executedOrderId: Long? = null) {
-        jdbc.update(
-            "UPDATE conditional_orders SET status = 'FAILED', fail_reason = ?, executed_order_id = ?, updated_at = ? WHERE id = ?",
-            reason, executedOrderId, Timestamp.from(Instant.now()), id,
-        )
     }
 
     private fun cancelOcoSiblings(groupId: UUID, executedId: Long) {

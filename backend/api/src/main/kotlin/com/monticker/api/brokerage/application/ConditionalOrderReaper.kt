@@ -20,6 +20,7 @@ import java.time.Instant
 @Component
 class ConditionalOrderReaper(
     private val jdbc: JdbcTemplate,
+    private val failures: ConditionalOrderFailures,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -46,21 +47,25 @@ class ConditionalOrderReaper(
             ConditionalOrderEvaluator.clientOrderIdFor(conditionalOrderId),
         ).firstOrNull()
 
-        val now = Timestamp.from(Instant.now())
-        val (status, reason) = when {
-            order == null -> "FAILED" to "발동 중 중단 — 주문 미전송 확인"
+        val reason = when {
+            order == null -> "발동 중 중단 — 주문 미전송 확인"
             order.second.isUnresolved -> return   // 대조 잡이 주문을 해소하면 다음 주기에 따라간다
             order.second == BrokerageOrderStatus.REJECTED || order.second == BrokerageOrderStatus.CANCELLED ->
-                "FAILED" to "주문 ${order.second}"
-            else -> "EXECUTED" to null
+                "주문 ${order.second}"
+            else -> null
         }
-        val updated = jdbc.update(
-            "UPDATE conditional_orders SET status = ?, fail_reason = ?, executed_order_id = ?, updated_at = ? WHERE id = ? AND status = 'TRIGGERED'",
-            status, reason, order?.first, now, conditionalOrderId,
-        )
-        if (updated == 1) {
+        // ADR-065 — FAILED는 사용자에게 알린다(보호가 사라졌다).
+        val updated = if (reason != null) {
+            failures.markFailed(conditionalOrderId, reason, order?.first)
+        } else {
+            jdbc.update(
+                "UPDATE conditional_orders SET status = 'EXECUTED', executed_order_id = ?, updated_at = ? WHERE id = ? AND status = 'TRIGGERED'",
+                order!!.first, Timestamp.from(Instant.now()), conditionalOrderId,
+            ) == 1
+        }
+        if (updated) {
             log.warn("[ConditionalOrderReaper] TRIGGERED 정리: id={} → {} (orderId={}, reason={})",
-                conditionalOrderId, status, order?.first, reason)
+                conditionalOrderId, if (reason != null) "FAILED" else "EXECUTED", order?.first, reason)
         }
     }
 }
