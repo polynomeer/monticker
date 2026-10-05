@@ -25,7 +25,7 @@
 |---|---|---|---|---|---|
 | 0-1 | /signup | 약관·개인정보·연령 동의 기록 | 화면에서는 필수 동의를 체크하지 않으면 가입을 막는다. 하지만 **서버에 기록되지 않는다** | `SignupRequest`에 동의 항목·약관 버전·시각을 추가하고 `user_consents` 테이블을 만든다. 철회 이력도 남긴다 | |
 | 0-2 | /brokerage/connect | 연동 동의 3개(위임·자금 미보관·손실 귀속) 기록 | 3개를 모두 체크해야 연동 버튼이 켜진다. 서버 기록은 없다 | connect 요청에 동의 버전·시각을 저장한다(법무 증빙). 0-1과 같은 consent 모델을 쓴다 | |
-| 0-3 | /brokerage/connect | 연동 해지(API 키 즉시 파기) | 보안 설명 패널에 "준비 중"으로 표시. **해지 API가 없다** | `DELETE /api/brokerage/account`: 키 파기, 계좌 비활성화, 조건부 주문 정리. 프론트는 확인 단계를 둔다. 약관 제3조("해지 시 즉시 파기")와 지금 동작이 어긋난다 | |
+| 0-3 | /brokerage/connect | 연동 해지(API 키 즉시 파기) | 보안 설명 패널에 "준비 중"으로 표시. **해지 API가 없다** | `DELETE /api/brokerage/account`: 키 파기, 계좌 비활성화, 조건부 주문 정리. 프론트는 확인 단계를 둔다. 약관 제3조("해지 시 즉시 파기")와 지금 동작이 어긋난다 | ✅ [ADR-067](decisions/067-brokerage-disconnect.md) — 결과가 열린 주문이 있으면 거부. 갈아타기로 비활성화된 계좌의 키 정리는 후속 |
 | 0-4 | /quant-lab/earnings | 출금 안내(본인 명의·지급 기한·원천징수) | 확인되지 않은 정책이라 "운영 검토 후 지급, 정산 정책을 따름"으로 완화해 두었다 | 정산·원천징수 정책 확정, 법무 검토, 예금주 본인확인을 서버에서 검증 | |
 | 0-5 | /settings/notifications | 리스크 경고·"결과 확인 중" 주문 알림 | 비활성 토글 | 알림 발송 경로를 [ADR-065](decisions/065-user-notifications-from-api.md)의 `notify.user`로 연결한다. 결과 불명 주문([ADR-056](decisions/056-brokerage-order-unknown-outcome.md))은 방해 금지 시간에도 전달한다 | |
 
