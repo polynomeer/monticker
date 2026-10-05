@@ -7,6 +7,7 @@ package com.monticker.worker.notification
 enum class NotificationCategory(val alwaysOn: Boolean = false) {
     ORDER_OUTCOME(alwaysOn = true),
     CONDITIONAL_ORDER(alwaysOn = true),
+    RISK_WARNING(alwaysOn = true),
     FILLS,
     QUANT_SIGNAL,
     STRATEGY_MARKET,
@@ -51,7 +52,7 @@ data class NotificationPreference(
         NotificationCategory.QUANT_SIGNAL -> quantSignalPush to quantSignalEmail
         NotificationCategory.FILLS -> fillsPush to fillsEmail
         NotificationCategory.STRATEGY_MARKET -> strategyMarketNewsPush to strategyMarketNewsEmail
-        NotificationCategory.ORDER_OUTCOME, NotificationCategory.CONDITIONAL_ORDER -> true to false
+        NotificationCategory.ORDER_OUTCOME, NotificationCategory.CONDITIONAL_ORDER, NotificationCategory.RISK_WARNING -> true to false
     }
 }
 
