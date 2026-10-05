@@ -26,9 +26,9 @@ class MarketDataController(
         } catch (e: NoSuchElementException) {
             return ResponseEntity.notFound().build()
         }
-        val tick = marketDataService.getLatestPrice(stockId, stock.symbol)
+        val view = marketDataService.getPriceView(stockId, stock.symbol, stock.market.name)
             ?: return ResponseEntity.ok(PriceResponse.noData(stockId, stock.symbol))
-        return ResponseEntity.ok(PriceResponse.from(tick))
+        return ResponseEntity.ok(PriceResponse.from(view))
     }
 
     @GetMapping("/{stockId}/vwap")
@@ -47,15 +47,21 @@ data class PriceResponse(
     val volume: Long?,
     val tradeTime: Instant?,
     val hasData: Boolean,
+    /** 전 거래일 종가(KRX만). 모르면 null. */
+    val prevClose: BigDecimal? = null,
+    /** 전 거래일 대비 등락률(%, 소수 둘째 자리). prevClose가 없으면 null. */
+    val changeRate: Double? = null,
 ) {
     companion object {
-        fun from(tick: com.monticker.api.marketdata.domain.PriceTick) = PriceResponse(
-            stockId = tick.stockId,
-            symbol = tick.symbol,
-            price = tick.price,
-            volume = tick.volume,
-            tradeTime = tick.tradeTime,
+        fun from(view: com.monticker.api.marketdata.application.PriceView) = PriceResponse(
+            stockId = view.tick.stockId,
+            symbol = view.tick.symbol,
+            price = view.tick.price,
+            volume = view.tick.volume,
+            tradeTime = view.tick.tradeTime,
             hasData = true,
+            prevClose = view.prevClose,
+            changeRate = view.changeRate,
         )
         fun noData(stockId: Long, symbol: String) = PriceResponse(
             stockId = stockId,
