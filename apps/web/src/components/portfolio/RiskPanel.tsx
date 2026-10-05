@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Panel, Tile } from "@/components/terminal";
+import { Skeleton } from "./PaperStates";
 
 interface RiskMetrics {
   sharpeRatio: number;
@@ -29,11 +31,11 @@ function RiskBadge({
   colorClass?: string;
 }) {
   return (
-    <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
-      <p className="text-[10px] text-gray-500 mb-0.5">{label}</p>
-      <p className={`text-lg font-bold font-mono ${colorClass ?? "text-gray-900 dark:text-gray-100"}`}>{value}</p>
-      {desc && <p className="text-[10px] text-gray-400 mt-0.5">{desc}</p>}
-    </div>
+    <Tile className="gap-1 p-3">
+      <span className="text-2xs text-tm-muted">{label}</span>
+      <span className={`num text-lg font-semibold ${colorClass ?? "text-dracula-fg"}`}>{value}</span>
+      {desc && <span className="text-2xs text-tm-muted">{desc}</span>}
+    </Tile>
   );
 }
 
@@ -47,8 +49,8 @@ function ReturnBarChart({ data }: { data: Array<{ date: string; returnPct: numbe
   const barW = Math.max(1, Math.floor(W / values.length) - gap);
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="none">
-      <line x1={0} y1={H / 2} x2={W} y2={H / 2} stroke="#9ca3af" strokeWidth={0.5} />
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="none" aria-hidden>
+      <line x1={0} y1={H / 2} x2={W} y2={H / 2} stroke="#44475a" strokeWidth={0.5} />
       {values.map((v, i) => {
         const barH = Math.max(1, (Math.abs(v) / max) * (H / 2 - 2));
         const x = i * (barW + gap);
@@ -60,7 +62,7 @@ function ReturnBarChart({ data }: { data: Array<{ date: string; returnPct: numbe
             y={y}
             width={barW}
             height={barH}
-            fill={v >= 0 ? "#0ecb81" : "#f6465d"}
+            fill={v >= 0 ? "rgb(var(--mt-up))" : "rgb(var(--mt-down))"}
             opacity={0.85}
           />
         );
@@ -89,9 +91,9 @@ function DrawdownChart({ data }: { data: Array<{ date: string; drawdown: number 
   const areaPath = `M${first.x},${first.y} ${pts.map((p) => `L${p.x},${p.y}`).join(" ")} L${last.x},${H} L${first.x},${H} Z`;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="none">
-      <path d={areaPath} fill="#f6465d20" />
-      <polyline points={polyPts} fill="none" stroke="#f6465d" strokeWidth={1.5} />
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="none" aria-hidden>
+      <path d={areaPath} fill="rgb(var(--mt-down) / 0.12)" />
+      <polyline points={polyPts} fill="none" stroke="rgb(var(--mt-down))" strokeWidth={1.5} />
     </svg>
   );
 }
@@ -117,14 +119,11 @@ export default function RiskPanel() {
 
   if (loading) {
     return (
-      <div className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 rounded-xl p-5 shadow-sm">
-        <div className="h-4 w-32 bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-gray-700/50 dark:via-gray-600/50 dark:to-gray-700/50 bg-[length:200%_100%] animate-shimmer rounded mb-3" />
-        <div className="grid grid-cols-3 gap-2">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="h-16 bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-gray-700/50 dark:via-gray-600/50 dark:to-gray-700/50 bg-[length:200%_100%] animate-shimmer rounded-lg" />
-          ))}
+      <Panel tabs={["리스크 지표"]} actions={["refresh"]} onAction={() => fetchRisk()}>
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+          {[1, 2, 3, 4, 5, 6].map((i) => <Skeleton key={i} className="h-16" />)}
         </div>
-      </div>
+      </Panel>
     );
   }
 
@@ -132,90 +131,55 @@ export default function RiskPanel() {
 
   if (!data.hasEnoughData) {
     return (
-      <div className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 rounded-xl p-5">
-        <h2 className="text-sm font-semibold mb-2">리스크 지표</h2>
-        <p className="text-sm text-gray-500">{data.message}</p>
-      </div>
+      <Panel tabs={["리스크 지표"]} actions={["refresh"]} onAction={() => fetchRisk()}>
+        <p className="m-0 text-13 text-tm-muted">{data.message}</p>
+      </Panel>
     );
   }
 
-  const sharpeColor =
-    data.sharpeRatio >= 1
-      ? "text-market-up"
-      : data.sharpeRatio >= 0
-        ? "text-gray-900 dark:text-gray-100"
-        : "text-market-down";
-  const betaColor = data.beta <= 1.2 ? "text-gray-900 dark:text-gray-100" : "text-market-down";
+  const sharpeColor = data.sharpeRatio >= 1 ? "text-up" : data.sharpeRatio >= 0 ? "text-dracula-fg" : "text-down";
+  const betaColor = data.beta <= 1.2 ? "text-dracula-fg" : "text-down";
 
   return (
-    <div className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 rounded-xl p-5 space-y-4 shadow-sm animate-fade-up">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold">리스크 지표</h2>
-        <span className="text-[10px] text-gray-400">보유 종목 일봉 기준</span>
-      </div>
-
-      {/* 지표 카드 */}
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-        <RiskBadge
-          label="Sharpe Ratio"
-          value={data.sharpeRatio.toFixed(2)}
-          desc="1 이상 양호"
-          colorClass={sharpeColor}
-        />
-        <RiskBadge
-          label="Beta"
-          value={data.beta.toFixed(2)}
-          desc="시장 민감도"
-          colorClass={betaColor}
-        />
-        <RiskBadge
-          label="MDD"
-          value={`${data.maxDrawdown.toFixed(1)}%`}
-          desc="최대 낙폭"
-          colorClass="text-market-down"
-        />
+    <Panel tabs={["리스크 지표"]} actions={["refresh"]} onAction={() => fetchRisk()} right={<span className="text-2xs text-tm-muted">보유 종목 일봉 기준</span>}>
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+        <RiskBadge label="Sharpe Ratio" value={data.sharpeRatio.toFixed(2)} desc="1 이상 양호" colorClass={sharpeColor} />
+        <RiskBadge label="Beta" value={data.beta.toFixed(2)} desc="시장 민감도" colorClass={betaColor} />
+        <RiskBadge label="MDD" value={`${data.maxDrawdown.toFixed(1)}%`} desc="최대 낙폭" colorClass="text-down" />
         <RiskBadge label="연변동성" value={`${data.volatility.toFixed(1)}%`} desc="연환산 σ" />
-        <RiskBadge
-          label="VaR (95%)"
-          value={`${data.var95.toFixed(1)}%`}
-          desc="1일 최대손실"
-          colorClass="text-market-down"
-        />
+        <RiskBadge label="VaR (95%)" value={`${data.var95.toFixed(1)}%`} desc="1일 최대손실" colorClass="text-down" />
         <RiskBadge
           label="승률"
           value={`${data.winRate.toFixed(1)}%`}
           desc={`${data.totalTrades}건 거래`}
-          colorClass={data.winRate >= 50 ? "text-market-up" : "text-market-down"}
+          colorClass={data.winRate >= 50 ? "text-up" : "text-down"}
         />
       </div>
 
-      {/* 일수익률 바차트 */}
       {data.dailyReturns.length > 0 && (
-        <div>
-          <p className="text-[10px] text-gray-400 mb-1">일별 수익률</p>
-          <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-950 p-1">
+        <div className="flex flex-col gap-1">
+          <span className="text-2xs text-tm-muted">일별 수익률</span>
+          <div className="overflow-hidden rounded-lg bg-tm-inner p-1">
             <ReturnBarChart data={data.dailyReturns} />
           </div>
         </div>
       )}
 
-      {/* MDD 곡선 */}
       {data.drawdownSeries.length > 1 && (
-        <div>
-          <p className="text-[10px] text-gray-400 mb-1">낙폭 (Drawdown)</p>
-          <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-950 p-1">
+        <div className="flex flex-col gap-1">
+          <span className="text-2xs text-tm-muted">낙폭 (Drawdown)</span>
+          <div className="overflow-hidden rounded-lg bg-tm-inner p-1">
             <DrawdownChart data={data.drawdownSeries} />
           </div>
         </div>
       )}
 
-      {/* 범례 */}
-      <div className="text-[10px] text-gray-400 flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3 text-2xs text-tm-muted">
         <span>Sharpe ≥ 1: 우수</span>
         <span>MDD: 낮을수록 안정적</span>
         <span>Beta ≈ 1: 시장과 동행</span>
         <span>VaR: 하루 최대 손실 예상</span>
       </div>
-    </div>
+    </Panel>
   );
 }

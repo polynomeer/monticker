@@ -1,9 +1,7 @@
 "use client";
 
-import { ClockCounterClockwise } from "@phosphor-icons/react";
 import type { WatchRuleExecutionResponse, WatchRuleExecutionStatus, WatchRuleResponse } from "@monticker/types";
-import EmptyState from "@/components/common/EmptyState";
-import { Badge } from "@/components/ui/Badge";
+import { Icon, Pill, type Tone } from "@/components/terminal";
 import { EVENT_LABEL } from "./WatchRuleRow";
 
 const STATUS_LABEL: Record<WatchRuleExecutionStatus, string> = {
@@ -12,10 +10,10 @@ const STATUS_LABEL: Record<WatchRuleExecutionStatus, string> = {
   SKIPPED: "건너뜀",
 };
 
-const STATUS_VARIANT: Record<WatchRuleExecutionStatus, "up" | "down" | "neutral"> = {
-  EXECUTED: "up",
-  REJECTED: "down",
-  SKIPPED: "neutral",
+const STATUS_TONE: Record<WatchRuleExecutionStatus, Tone> = {
+  EXECUTED: "green",
+  REJECTED: "red",
+  SKIPPED: "muted",
 };
 
 interface Props {
@@ -27,48 +25,36 @@ interface Props {
 export function WatchRuleExecutionList({ executions, ruleLabels }: Props) {
   if (!executions.length) {
     return (
-      <EmptyState
-        icon={ClockCounterClockwise}
-        title="아직 발동한 규칙이 없습니다"
-        description="이벤트가 감지되면 여기에 체결·거부·건너뜀이 이유와 함께 기록됩니다."
-      />
+      <div className="flex flex-col items-center gap-2 py-10 text-center">
+        <Icon name="clock" size={22} className="text-tm-muted" />
+        <p className="m-0 text-sm font-semibold">아직 발동한 규칙이 없습니다</p>
+        <p className="m-0 text-xs text-tm-muted">이벤트가 감지되면 여기에 체결·거부·건너뜀이 이유와 함께 기록됩니다.</p>
+      </div>
     );
   }
 
   return (
-    <ul className="divide-y divide-gray-100 dark:divide-dracula-line/40">
+    <ul className="m-0 flex list-none flex-col p-0">
       {executions.map((e) => {
         const meta = ruleLabels.get(e.watchRuleId);
         return (
-          <li key={e.id} className="flex items-start justify-between gap-3 px-4 py-3">
-            <div className="min-w-0 flex-1">
+          <li key={e.id} className="flex items-start justify-between gap-3 border-b border-tm-line px-1 py-3">
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-sm font-medium text-gray-900 dark:text-dracula-fg">
-                  {meta?.stockLabel ?? `규칙 #${e.watchRuleId}`}
-                </span>
-                {meta && (
-                  <span className="text-xs text-gray-500 dark:text-dracula-comment">
-                    {EVENT_LABEL[meta.rule.eventType]}
-                  </span>
-                )}
+                <span className="text-13 font-semibold">{meta?.stockLabel ?? `규칙 #${e.watchRuleId}`}</span>
+                {meta && <span className="text-xs text-tm-muted">{EVENT_LABEL[meta.rule.eventType]}</span>}
               </div>
               {e.status === "EXECUTED" && e.quantity != null && (
-                <p className="mt-0.5 text-xs text-gray-600 dark:text-dracula-fg">
+                <p className="num m-0 text-xs text-tm-soft">
                   {e.quantity}주
                   {e.fillPrice != null && ` @ ${e.fillPrice.toLocaleString("ko-KR")}원`}
                 </p>
               )}
               {/* 거부·건너뜀은 이유가 핵심이다 — "왜 안 샀지"에 답하는 자리다. */}
-              {e.reason && (
-                <p className="mt-0.5 text-xs text-gray-500 dark:text-dracula-comment">{e.reason}</p>
-              )}
-              <p className="mt-0.5 text-xs text-gray-400 dark:text-dracula-line">
-                {new Date(e.createdAt).toLocaleString("ko-KR")}
-              </p>
+              {e.reason && <p className="m-0 text-xs text-tm-muted">{e.reason}</p>}
+              <p className="num m-0 text-2xs text-tm-muted">{new Date(e.createdAt).toLocaleString("ko-KR")}</p>
             </div>
-            <Badge variant={STATUS_VARIANT[e.status]} className="mt-0.5 shrink-0">
-              {STATUS_LABEL[e.status]}
-            </Badge>
+            <Pill tone={STATUS_TONE[e.status]} className="mt-0.5 shrink-0">{STATUS_LABEL[e.status]}</Pill>
           </li>
         );
       })}

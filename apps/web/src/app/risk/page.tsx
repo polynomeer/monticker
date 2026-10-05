@@ -1,88 +1,56 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
-import { Card } from "@/components/ui/Card";
+import { getAccessToken } from "@/services/auth";
+import { useToast } from "@/hooks/useToast";
+import { usePaperPortfolio } from "@/hooks/usePaperTrade";
+import { useRiskExposure, type RiskLimits } from "@/components/risk/useRiskExposure";
+import { RiskGauges, RiskLevel, LEVELS, levelOf, type Gauge } from "@/components/risk/RiskGauges";
+import { useStockMeta } from "@/components/portfolio/useStockMeta";
+import { useSectorSlices } from "@/components/portfolio/Insights";
+import { LoginRequired, Skeleton } from "@/components/portfolio/PaperStates";
+import {
+  Btn, DataTable, Field, Panel, PanelRow, PreviewTag, SelectBox, TerminalPage, Toggle, fmtNum, fmtPct, type TopStat,
+} from "@/components/terminal";
 
-interface RiskLimits {
-  dailyLossLimitPct: number;
-  concentrationLimitPct: number;
-  varLimitPct: number;
-  maxPositionCount: number;
-  maxHourlyOrders: number;
-  isActive: boolean;
-}
+type NumKey = "dailyLossLimitPct" | "concentrationLimitPct" | "varLimitPct" | "maxPositionCount" | "maxHourlyOrders";
 
-interface ConcentrationItem { stockId: number; symbol: string; valuePct: number; }
+const FIELDS: { key: NumKey; label: string; unit: string; step: number; int?: boolean; max?: number }[] = [
+  { key: "varLimitPct", label: "1일 VaR 한도", unit: "%", step: 0.5, max: 100 },
+  { key: "concentrationLimitPct", label: "단일 종목 최대 비중", unit: "%", step: 0.5, max: 100 },
+  { key: "dailyLossLimitPct", label: "일일 최대 손실", unit: "%", step: 0.5, max: 100 },
+  { key: "maxPositionCount", label: "최대 보유 종목 수", unit: "개", step: 1, int: true },
+  { key: "maxHourlyOrders", label: "1시간 최대 주문 수", unit: "회", step: 1, int: true },
+];
 
-interface RiskExposure {
-  totalAssets: number;
-  availableCash: number;
-  dailyPnl: number;
-  dailyPnlPct: number;
-  topConcentration: ConcentrationItem | null;
-  estimatedVaR: number;
-  activeOrderCount: number;
-  hourlyOrderCount: number;
-  limits: RiskLimits;
-}
-
-function GaugeMeter({ label, current, limit, unit = "%", invert = false }: {
-  label: string; current: number; limit: number; unit?: string; invert?: boolean;
-}) {
-  // invert=true: current가 낮을수록 좋음 (손실, VaR)
-  const ratio = limit > 0 ? Math.min(current / limit, 1) : 0;
-  const danger = invert ? ratio > 0.8 : ratio > 0.8;
-  const warn   = invert ? ratio > 0.5 : ratio > 0.5;
-  const color  = danger ? "bg-dracula-red" : warn ? "bg-dracula-orange" : "bg-dracula-green";
-
-  return (
-    <Card className="p-4">
-      <div className="flex justify-between items-center mb-2">
-        <span className="text-xs text-gray-500 dark:text-dracula-comment">{label}</span>
-        <span className={`text-xs font-semibold tabular-nums ${danger ? "text-dracula-red" : warn ? "text-dracula-orange" : "text-dracula-green"}`}>
-          {current.toFixed(2)}{unit} / {limit}{unit}
-        </span>
-      </div>
-      <div className="h-2 rounded-full bg-gray-200 dark:bg-dracula-line overflow-hidden">
-        <div className={`h-full rounded-full transition-all duration-300 ${color}`} style={{ width: `${ratio * 100}%` }} />
-      </div>
-    </Card>
-  );
-}
-
-function LimitInput({ label, value, onChange, step = 0.5, min = 0, max = 100, suffix = "%" }: {
-  label: string; value: number; onChange: (v: number) => void;
-  step?: number; min?: number; max?: number; suffix?: string;
-}) {
-  return (
-    <div>
-      <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">{label}</label>
-      <div className="flex items-center gap-2">
-        <input type="number" value={value} step={step} min={min} max={max}
-          onChange={e => onChange(parseFloat(e.target.value))}
-          className="flex-1 rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg text-sm px-3 py-2 transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50" />
-        <span className="text-xs text-gray-500 dark:text-dracula-comment w-6">{suffix}</span>
-      </div>
-    </div>
-  );
+/** 저장 전 검증 — NaN·0·음수·소수 개수를 서버로 보내지 않는다 */
+function validate(l: RiskLimits): string | null {
+  for (const f of FIELDS) {
+    const v = l[f.key];
+    if (!Number.isFinite(v) || v <= 0) return `${f.label}은(는) 0보다 커야 합니다.`;
+    if (f.int && !Number.isInteger(v)) return `${f.label}은(는) 정수여야 합니다.`;
+    if (f.max != null && v > f.max) return `${f.label}은(는) ${f.max}${f.unit} 이하여야 합니다.`;
+  }
+  return null;
 }
 
 export default function RiskPage() {
   const qc = useQueryClient();
+  const { toast } = useToast();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
 
-  const { data: exposure, isLoading } = useQuery<RiskExposure>({
-    queryKey: ["risk", "exposure"],
-    queryFn: async () => {
-      const r = await authFetch("/api/risk/exposure");
-      if (!r.ok) throw new Error("노출도 조회 실패");
-      return r.json();
-    },
-    refetchInterval: 15_000,
-  });
+  const { data: exposure, isLoading, isError, refetch } = useRiskExposure(isLoggedIn);
+  const { data: portfolio } = usePaperPortfolio();
+  const holdings = useMemo(() => portfolio?.holdings ?? [], [portfolio]);
+  const meta = useStockMeta(holdings.map((h) => h.stockId));
+  const { top: topSector, slices } = useSectorSlices(holdings, portfolio?.cash ?? 0, meta);
+  const sectorPct = slices.find((s) => s.name === topSector)?.pct ?? null;
 
   const [draft, setDraft] = useState<RiskLimits | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const limits = draft ?? exposure?.limits;
 
   const updateMutation = useMutation({
@@ -98,125 +66,125 @@ export default function RiskPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["risk"] });
       setDraft(null);
+      toast({ type: "success", title: "한도를 저장했습니다" });
     },
+    onError: (e) => toast({ type: "error", title: "한도 저장 실패", message: (e as Error).message }),
   });
 
-  const won = (n: number) => n.toLocaleString("ko-KR");
+  const save = () => {
+    if (!draft) return;
+    const err = validate(draft);
+    setFormError(err);
+    if (!err) updateMutation.mutate(draft);
+  };
 
-  if (isLoading) return (
-    <div className="max-w-3xl mx-auto px-4 py-6 sm:py-8 space-y-3">
-      {[1,2,3].map(i => <div key={i} className="h-16 rounded-xl bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15 bg-[length:200%_100%] animate-shimmer" />)}
-    </div>
-  );
+  const title = { title: "리스크 한도", crumb: "모의투자 · 주문 전 실시간 체크" };
+  if (!isLoggedIn) {
+    return (
+      <TerminalPage {...title}>
+        <LoginRequired message="리스크 한도를 보려면 로그인이 필요합니다." icon="shield" />
+      </TerminalPage>
+    );
+  }
+
+  const gauges: Gauge[] = [];
+  let level = 0;
+  if (exposure) {
+    const L = exposure.limits;
+    const varRatio = L.varLimitPct > 0 ? exposure.estimatedVaR / L.varLimitPct : 0;
+    const varWon = (exposure.totalAssets * exposure.estimatedVaR) / 100;
+    const conc = exposure.topConcentration;
+    const concRatio = conc && L.concentrationLimitPct > 0 ? conc.valuePct / L.concentrationLimitPct : 0;
+    const lossPct = Math.abs(Math.min(exposure.dailyPnlPct, 0));
+    const lossRatio = L.dailyLossLimitPct > 0 ? lossPct / L.dailyLossLimitPct : 0;
+    const hourRatio = L.maxHourlyOrders > 0 ? exposure.hourlyOrderCount / L.maxHourlyOrders : 0;
+    gauges.push(
+      { name: "1일 VaR (95%)", value: `${exposure.estimatedVaR.toFixed(2)}%`, limit: `${L.varLimitPct}%`, ratio: varRatio, sub: `약 ${fmtNum(varWon)}원 — 하루에 이 이상 잃을 확률 5%` },
+      { name: "단일 종목 집중도", value: conc ? `${conc.valuePct.toFixed(1)}%` : "—", limit: `${L.concentrationLimitPct}%`, ratio: concRatio, sub: conc ? conc.symbol : "보유 종목 없음" },
+      // 섹터 한도는 백엔드 리스크 규칙에 아직 없다 — 비중만 계산해 보여 준다
+      { name: "섹터 집중도", value: sectorPct != null ? `${sectorPct.toFixed(1)}%` : "—", limit: "미설정", ratio: null, sub: topSector ? `${topSector} — 섹터 한도 준비 중` : "보유 종목 없음", preview: true },
+      { name: "일일 손실", value: fmtPct(exposure.dailyPnlPct), limit: `-${L.dailyLossLimitPct}%`, ratio: lossRatio, sub: "오늘 실현+평가 손익 기준" },
+      { name: "1시간 주문 빈도", value: `${exposure.hourlyOrderCount}회`, limit: `${L.maxHourlyOrders}회`, ratio: hourRatio, sub: `미체결 주문 ${exposure.activeOrderCount}건` },
+    );
+    level = Math.max(...[varRatio, concRatio, lossRatio, hourRatio].map(levelOf));
+  }
+  const varUse = exposure && exposure.limits.varLimitPct > 0 ? (exposure.estimatedVaR / exposure.limits.varLimitPct) * 100 : null;
+
+  const stats: TopStat[] = exposure
+    ? [
+        { label: "리스크 수준", value: LEVELS[level].name, tone: LEVELS[level].text },
+        { label: "VaR 사용", value: varUse != null ? `${varUse.toFixed(0)}%` : "—" },
+        { label: "섹터 최대", value: topSector && sectorPct != null ? `${topSector} ${sectorPct.toFixed(0)}%` : "—" },
+        { label: "이번 달 차단", value: "—", tone: "text-tm-muted" },
+      ]
+    : [];
+
+  const set = (k: NumKey, v: number) => limits && setDraft({ ...limits, [k]: v });
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 sm:py-8 animate-fade-up">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-dracula-fg">리스크 한도</h1>
-        <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">
-          주문 전 자동 체크 — 한도 초과 시 주문이 거부됩니다
-        </p>
-      </div>
+    <TerminalPage {...title} stats={stats}>
+      <Panel tabs={["현재 리스크"]} actions={["refresh", "expand"]} onAction={(a) => a === "refresh" && refetch()}>
+        {isLoading ? (
+          <Skeleton className="h-40" />
+        ) : isError || !exposure ? (
+          <p role="alert" className="m-0 py-8 text-center text-13 text-[#ff8a8a]">리스크 노출도를 불러오지 못했습니다.</p>
+        ) : (
+          <>
+            <RiskLevel level={level} />
+            <RiskGauges gauges={gauges} />
+          </>
+        )}
+      </Panel>
 
-      {exposure && (
-        <>
-          {/* 총 자산 / 일일 P&L */}
-          <div className="grid grid-cols-3 gap-3 mb-6">
-            {[
-              { label: "총 자산",    value: `${won(exposure.totalAssets)}원` },
-              { label: "오늘 손익",
-                value: `${exposure.dailyPnl >= 0 ? "+" : ""}${won(exposure.dailyPnl)}원`,
-                color: exposure.dailyPnl >= 0 ? "text-dracula-green" : "text-dracula-red" },
-              { label: "미체결 주문", value: `${exposure.activeOrderCount}건` },
-            ].map(c => (
-              <Card key={c.label} className="p-3">
-                <p className="text-xs text-gray-500 dark:text-dracula-comment mb-1">{c.label}</p>
-                <p className={`text-sm font-bold tabular-nums ${c.color ?? "text-gray-900 dark:text-dracula-fg"}`}>{c.value}</p>
-              </Card>
-            ))}
-          </div>
+      <PanelRow>
+        <Panel tabs={["차단·경고 기록"]} actions={[]} preview className="flex-[999_1_600px]" bodyClassName="px-1.5 pb-1.5 pt-1">
+          {/* 리스크 게이트 판정 이력 API가 아직 없다 — 표 머리만 시안대로 두고 비워 둔다 */}
+          <DataTable
+            columns={[
+              { key: "t", header: "시각", cell: () => null },
+              { key: "o", header: "주문", cell: () => null },
+              { key: "r", header: "사유", cell: () => null },
+              { key: "x", header: "결과", cell: () => null },
+            ]}
+            rows={[]}
+            rowKey={(_, i) => i}
+            minWidth={640}
+            empty="차단·경고 기록은 준비 중입니다. 지금은 주문 화면에서 거부 사유를 바로 보여 줍니다."
+          />
+        </Panel>
 
-          {/* 리스크 게이지 */}
-          <div className="space-y-3 mb-6">
-            <h2 className="text-sm font-semibold text-gray-900 dark:text-dracula-fg">현재 리스크 수준</h2>
-
-            <GaugeMeter label="일일 손실률"
-              current={Math.abs(Math.min(exposure.dailyPnlPct, 0))}
-              limit={exposure.limits.dailyLossLimitPct}
-              invert />
-
-            {exposure.topConcentration && (
-              <GaugeMeter label={`최대 집중도 (${exposure.topConcentration.symbol})`}
-                current={exposure.topConcentration.valuePct}
-                limit={exposure.limits.concentrationLimitPct}
-                invert />
-            )}
-
-            <GaugeMeter label="추정 VaR (95%)"
-              current={exposure.estimatedVaR}
-              limit={exposure.limits.varLimitPct}
-              invert />
-
-            <GaugeMeter label="1시간 주문 빈도"
-              current={exposure.hourlyOrderCount}
-              limit={exposure.limits.maxHourlyOrders}
-              unit="회" invert />
-          </div>
-        </>
-      )}
-
-      {/* 한도 설정 */}
-      {limits && (
-        <Card className="p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-dracula-fg">한도 설정</h2>
-
-          <div className="grid grid-cols-2 gap-4">
-            <LimitInput label="일일 손실 한도 (%)"
-              value={limits.dailyLossLimitPct}
-              onChange={v => setDraft(d => ({ ...(d ?? limits), dailyLossLimitPct: v }))} />
-            <LimitInput label="종목당 최대 비중 (%)"
-              value={limits.concentrationLimitPct}
-              onChange={v => setDraft(d => ({ ...(d ?? limits), concentrationLimitPct: v }))} />
-            <LimitInput label="VaR 한도 (%)"
-              value={limits.varLimitPct}
-              onChange={v => setDraft(d => ({ ...(d ?? limits), varLimitPct: v }))} />
-            <LimitInput label="최대 보유 종목 수"
-              value={limits.maxPositionCount}
-              onChange={v => setDraft(d => ({ ...(d ?? limits), maxPositionCount: v }))}
-              step={1} suffix="개" />
-            <LimitInput label="1시간 최대 주문 수"
-              value={limits.maxHourlyOrders}
-              onChange={v => setDraft(d => ({ ...(d ?? limits), maxHourlyOrders: v }))}
-              step={1} suffix="회" />
-            <div className="flex items-end">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={limits.isActive}
-                  onChange={e => setDraft(d => ({ ...(d ?? limits), isActive: e.target.checked }))}
-                  className="w-4 h-4 accent-dracula-purple" />
-                <span className="text-sm text-gray-900 dark:text-dracula-fg">리스크 체크 활성화</span>
-              </label>
-            </div>
-          </div>
-
-          {draft && (
-            <div className="flex gap-2">
-              <button onClick={() => updateMutation.mutate(draft)}
-                disabled={updateMutation.isPending}
-                className="flex-1 py-2.5 rounded-xl bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100">
-                {updateMutation.isPending ? "저장 중..." : "한도 저장"}
-              </button>
-              <button onClick={() => setDraft(null)}
-                className="px-4 py-2.5 rounded-xl border border-gray-300 dark:border-dracula-line text-gray-500 dark:text-dracula-comment text-sm hover:text-gray-900 dark:hover:text-dracula-fg active:scale-[0.98] transition-all duration-150">
-                취소
-              </button>
-            </div>
+        <Panel tabs={["한도 설정"]} actions={[]} className="flex-[1_1_340px]">
+          {!limits ? (
+            <Skeleton className="h-64" />
+          ) : (
+            <>
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-1.5 font-semibold">리스크 체크 활성화 <PreviewTag /></span>
+                {/* PUT /api/risk/limits가 isActive를 받지 않는다 — 현재 값만 보여 준다 */}
+                <Toggle checked={limits.isActive} label="리스크 체크" disabled />
+              </div>
+              {FIELDS.slice(0, 2).map((f) => (
+                <Field key={f.key} label={f.label} aria-label={f.label} unit={f.unit} type="number" step={f.step} min={0} max={f.max} value={Number.isFinite(limits[f.key]) ? limits[f.key] : ""} onChange={(e) => set(f.key, parseFloat(e.target.value))} className="flex-none" />
+              ))}
+              <Field label="섹터 최대 비중 (준비 중)" unit="%" placeholder="—" disabled className="flex-none opacity-60" />
+              {FIELDS.slice(2).map((f) => (
+                <Field key={f.key} label={f.label} aria-label={f.label} unit={f.unit} type="number" step={f.step} min={0} max={f.max} value={Number.isFinite(limits[f.key]) ? limits[f.key] : ""} onChange={(e) => set(f.key, parseFloat(e.target.value))} className="flex-none" />
+              ))}
+              <SelectBox label="한도 초과 시" value="BLOCK" disabled className="opacity-70">
+                <option value="BLOCK">주문 차단</option>
+              </SelectBox>
+              {formError && <p role="alert" className="m-0 text-xs text-[#ff8a8a]">{formError}</p>}
+              <div className="flex gap-2">
+                <Btn kind="primary" size="lg" className="flex-1" onClick={save} disabled={!draft || updateMutation.isPending}>
+                  {updateMutation.isPending ? "저장 중..." : "한도 저장"}
+                </Btn>
+                {draft && <Btn kind="ghost" size="lg" onClick={() => { setDraft(null); setFormError(null); }}>취소</Btn>}
+              </div>
+              <span className="text-2xs text-tm-muted">한도는 모의투자 전용 리스크 게이트입니다. 한도를 넘는 주문은 체결되지 않습니다. 실제 투자에는 적용되지 않습니다.</span>
+            </>
           )}
-        </Card>
-      )}
-
-      <p className="mt-6 text-xs text-gray-400 dark:text-dracula-comment text-center">
-        한도는 모의투자 전용 리스크 게이트입니다. 실제 투자에는 적용되지 않습니다.
-      </p>
-    </div>
+        </Panel>
+      </PanelRow>
+    </TerminalPage>
   );
 }

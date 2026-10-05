@@ -1,22 +1,29 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
-import { type Icon, ArrowLeft, ArrowLineDown, ArrowLineUp, Money, Bank, Receipt, Circle } from "@phosphor-icons/react";
+import { useEffect, useMemo, useState } from "react";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
-import { Card } from "@/components/ui/Card";
+import { getAccessToken } from "@/services/auth";
+import { emotionLabel } from "@/components/wallet/emotions";
+import { EmptyNote, LoginRequired, Skeleton } from "@/components/portfolio/PaperStates";
+import { fmtTime } from "@/components/portfolio/format";
+import {
+  AutoGrid, Icon, IconBtn, Panel, PanelCol, PanelRow, PreviewTag, Seg, Stat, TerminalPage, dirClass, fmtNum, fmtSigned,
+} from "@/components/terminal";
+import { cn } from "@/lib/utils";
 
+/** 백엔드 ReplayEvent — 필드 이름이 qty, 종목명은 없고 심볼만 온다. 예전 응답 모양(quantity·stockName)도 받아 준다. */
 interface ReplayEvent {
   time: string;
   type: string;
   stockSymbol: string | null;
-  stockName: string | null;
-  quantity: number | null;
+  stockName?: string | null;
+  qty?: number | null;
+  quantity?: number | null;
   price: number | null;
-  amount: number | null;
+  amount?: number | null;
   pnlPct: number | null;
-  description: string | null;
+  description?: string | null;
 }
 
 interface DailyReplay {
@@ -25,137 +32,288 @@ interface DailyReplay {
   summary: {
     totalPnl: number;
     tradeCount: number;
-    bestTrade: string | null;
-    worstTrade: string | null;
+    /** 백엔드는 ReplayEvent 객체를 준다 */
+    bestTrade: ReplayEvent | string | null;
+    worstTrade: ReplayEvent | string | null;
   };
 }
 
-const TYPE_META: Record<string, { icon: Icon; color: string; label: string }> = {
-  BUY:        { icon: ArrowLineDown, color: "text-dracula-green", label: "매수" },
-  SELL:       { icon: ArrowLineUp, color: "text-dracula-red", label: "매도" },
-  DEPOSIT:    { icon: Money, color: "text-dracula-purple", label: "입금" },
-  WITHDRAWAL: { icon: Bank, color: "text-gray-500 dark:text-dracula-comment", label: "출금" },
-  FEE:        { icon: Receipt, color: "text-gray-500 dark:text-dracula-comment", label: "수수료" },
-};
+interface EmotionStat { emotion: string; count: number; avgReturnPct: number | null; }
 
-function won(n: number) { return n.toLocaleString("ko-KR") + "원"; }
+const TYPE_LABEL: Record<string, string> = { BUY: "매수", SELL: "매도", DEPOSIT: "입금", WITHDRAWAL: "출금", FEE: "수수료" };
+const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
+const EMO_COLORS = ["#50fa7b", "#bd93f9", "#ff79c6", "#ffb86c", "#8be9fd", "#f1fa8c"];
+
+/** 로컬 날짜 YYYY-MM-DD (toISOString은 UTC라 KST 오전에 하루 전 날짜가 된다) */
+function ymd(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function parseYmd(s: string) {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+/** 기준일 이전 영업일(주말 제외) n개 + 기준일, 오래된 순 */
+function businessDays(anchor: string, n = 6) {
+  const out: Date[] = [];
+  const d = parseYmd(anchor);
+  while (out.length < n) {
+    if (d.getDay() !== 0 && d.getDay() !== 6) out.unshift(new Date(d));
+    d.setDate(d.getDate() - 1);
+  }
+  return out;
+}
+function shiftBusiness(anchor: string, delta: number) {
+  const d = parseYmd(anchor);
+  let left = Math.abs(delta);
+  while (left > 0) {
+    d.setDate(d.getDate() + Math.sign(delta));
+    if (d.getDay() !== 0 && d.getDay() !== 6) left--;
+  }
+  return ymd(d);
+}
+/** +44,900 → "+4.5만" */
+function compactWon(v: number) {
+  if (Math.abs(v) < 10_000) return fmtSigned(v);
+  return `${v > 0 ? "+" : "-"}${(Math.abs(v) / 10_000).toFixed(1)}만`;
+}
+function tradeName(t: ReplayEvent | string | null | undefined) {
+  if (!t) return null;
+  if (typeof t === "string") return t;
+  return t.stockName ?? t.stockSymbol ?? null;
+}
+
+async function fetchReplay(date: string): Promise<DailyReplay> {
+  const res = await authFetch(`/api/wallet/replay?date=${date}`);
+  if (!res.ok) throw new Error("리플레이 조회 실패");
+  return res.json();
+}
+
+/** 장중(09:00–15:30) 시간축 위에 그날 주문을 찍는다 — 캔들 리플레이(재생)는 준비 중 */
+function DayTimeline({ events }: { events: ReplayEvent[] }) {
+  const trades = events.filter((e) => e.type === "BUY" || e.type === "SELL");
+  const open = 9 * 60;
+  const close = 15 * 60 + 30;
+  const x = (iso: string) => {
+    const d = new Date(iso);
+    const m = d.getHours() * 60 + d.getMinutes();
+    return Math.min(100, Math.max(0, ((m - open) / (close - open)) * 100));
+  };
+  return (
+    <div className="flex flex-col gap-2 rounded-lg bg-tm-inner p-3">
+      <div className="relative h-[200px]" role="img" aria-label={`장중 주문 ${trades.length}건의 시각 분포`}>
+        {[0, 25, 50, 75, 100].map((p) => (
+          <div key={p} className="absolute bottom-6 top-0 border-l border-dashed border-tm-line" style={{ left: `${p}%` }} />
+        ))}
+        <div className="absolute bottom-6 left-0 right-0 h-px bg-tm-line2" />
+        {trades.map((e, i) => {
+          const buy = e.type === "BUY";
+          return (
+            <span
+              key={i}
+              title={`${fmtTime(e.time, false)} ${e.stockName ?? e.stockSymbol ?? ""} ${TYPE_LABEL[e.type]}`}
+              className={cn(
+                "absolute grid h-[18px] w-[18px] -translate-x-1/2 place-items-center rounded text-2xs font-bold text-tm-page",
+                buy ? "bg-up" : "bg-down",
+              )}
+              style={{ left: `${x(e.time)}%`, bottom: `${32 + (i % 6) * 26}px` }}
+            >
+              {buy ? "B" : "S"}
+            </span>
+          );
+        })}
+        {trades.length === 0 && <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-13 text-tm-muted">이날 장중 주문이 없습니다.</span>}
+        <div className="num absolute bottom-0 left-0 right-0 flex justify-between text-2xs text-tm-muted">
+          {["09:00", "10:37", "12:15", "13:52", "15:30"].map((t) => <span key={t}>{t}</span>)}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ReplayPage() {
-  const router = useRouter();
-  const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [date, setDate] = useState(() => ymd(new Date()));
+  const [anchor, setAnchor] = useState(date);
+
+  useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
 
   const { data, isLoading, error } = useQuery<DailyReplay>({
     queryKey: ["wallet", "replay", date],
-    queryFn: async () => {
-      const res = await authFetch(`/api/wallet/replay?date=${date}`);
-      if (!res.ok) throw new Error("리플레이 조회 실패");
-      return res.json();
-    },
+    queryFn: () => fetchReplay(date),
+    enabled: isLoggedIn,
   });
 
+  const days = useMemo(() => businessDays(anchor), [anchor]);
+  const dayQueries = useQueries({
+    queries: days.map((d) => ({ queryKey: ["wallet", "replay", ymd(d)], queryFn: () => fetchReplay(ymd(d)), enabled: isLoggedIn, staleTime: 60_000 })),
+  });
+
+  const { data: emotions } = useQuery<{ stats: EmotionStat[] }>({
+    queryKey: ["wallet", "emotion-analysis"],
+    queryFn: async () => {
+      const r = await authFetch("/api/wallet/emotion-analysis");
+      if (!r.ok) throw new Error("감정 분석 조회 실패");
+      return r.json();
+    },
+    enabled: isLoggedIn,
+  });
+
+  const sel = parseYmd(date);
+  const selLabel = `${sel.getFullYear()}.${String(sel.getMonth() + 1).padStart(2, "0")}.${String(sel.getDate()).padStart(2, "0")} (${WEEKDAY[sel.getDay()]})`;
+  const title = { title: "주문 리플레이", crumb: "지갑 · 하루 투자 복기" };
+
+  if (!isLoggedIn) {
+    return (
+      <TerminalPage {...title}>
+        <LoginRequired message="주문 리플레이를 보려면 로그인이 필요합니다." icon="play" />
+      </TerminalPage>
+    );
+  }
+
+  const pnl = data?.summary.totalPnl ?? null;
+  const best = tradeName(data?.summary.bestTrade);
+  const bestPnl = data && typeof data.summary.bestTrade === "object" && data.summary.bestTrade ? data.summary.bestTrade.pnlPct : null;
+  const emoStats = (emotions?.stats ?? []).filter((s) => s.count > 0).sort((a, b) => b.count - a.count);
+  const emoTotal = emoStats.reduce((a, s) => a + s.count, 0);
+
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 sm:py-8 animate-fade-up">
-      <div className="flex items-center gap-3 mb-6">
-        <button
-          onClick={() => router.back()}
-          aria-label="뒤로가기"
-          className="inline-flex items-center justify-center w-8 h-8 -ml-1 text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg text-sm transition-colors active:scale-95"
-        ><ArrowLeft size={18} weight="bold" aria-hidden /></button>
-        <h1 className="text-xl font-bold text-gray-900 dark:text-dracula-fg">주문 리플레이</h1>
-      </div>
+    <TerminalPage
+      {...title}
+      stats={[
+        { label: "선택일", value: selLabel },
+        { label: "총 손익", value: pnl == null ? "—" : fmtSigned(pnl), tone: dirClass(pnl) },
+        { label: "거래", value: data ? `${data.summary.tradeCount}회` : "—" },
+        { label: "계획 준수율", value: "—", tone: "text-tm-muted" },
+      ]}
+    >
+      <Panel tabs={["날짜 선택"]} actions={[]} closable={false}>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <IconBtn name="chevl" label="이전 주" size={36} onClick={() => setAnchor((a) => shiftBusiness(a, -5))} />
+          {days.map((d, i) => {
+            const key = ymd(d);
+            const on = key === date;
+            const v = dayQueries[i]?.data?.summary.totalPnl;
+            return (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={on}
+                aria-label={`${d.getMonth() + 1}월 ${d.getDate()}일 복기`}
+                onClick={() => setDate(key)}
+                className={cn("flex w-[58px] flex-col items-center gap-0.5 rounded-lg py-2", on ? "bg-dracula-purple text-tm-page" : "bg-tm-inner text-dracula-fg hover:bg-tm-raised")}
+              >
+                <span className="text-2xs opacity-80">{WEEKDAY[d.getDay()]}</span>
+                <span className="num text-13 font-semibold">{`${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`}</span>
+                <span className={cn("num text-[0.625rem]", !on && dirClass(v))}>{v == null ? "—" : v === 0 ? "0" : compactWon(v)}</span>
+              </button>
+            );
+          })}
+          <IconBtn name="chevr" label="다음 주" size={36} onClick={() => setAnchor((a) => shiftBusiness(a, 5))} />
+          <label className="ml-auto inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-tm-line2 px-3 text-sm font-semibold hover:bg-tm-raised">
+            <Icon name="calendar" size={16} />
+            <span>달력</span>
+            <input
+              type="date"
+              aria-label="복기할 날짜"
+              value={date}
+              max={ymd(new Date())}
+              onChange={(e) => { if (e.target.value) { setDate(e.target.value); setAnchor(e.target.value); } }}
+              className="w-[118px] bg-transparent text-xs text-tm-muted outline-none [color-scheme:dark]"
+            />
+          </label>
+        </div>
+      </Panel>
 
-      {/* 날짜 선택 */}
-      <div className="mb-6 flex items-center gap-3">
-        <input type="date" value={date} onChange={e => setDate(e.target.value)}
-          aria-label="복기할 날짜"
-          className="rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
-        />
-        <span className="text-xs text-gray-500 dark:text-dracula-comment">선택한 날짜의 투자 기록을 복기합니다</span>
-      </div>
+      <PanelRow>
+        <Panel tabs={["리플레이"]} actions={["expand"]} preview className="flex-[999_1_620px]">
+          {isLoading ? <Skeleton className="h-[230px]" /> : <DayTimeline events={data?.events ?? []} />}
+          {/* 캔들 재생 컨트롤 — 시안 요소. 당일 분봉 히스토리 + 재생 엔진이 생기면 연결한다 */}
+          <div className="flex flex-wrap items-center gap-2.5" aria-disabled="true">
+            <IconBtn name="skipb" label="처음으로 (준비 중)" size={36} disabled className="disabled:opacity-50" />
+            <button type="button" aria-label="재생 (준비 중)" disabled className="grid h-11 w-11 place-items-center rounded-full bg-dracula-purple text-tm-page opacity-50">
+              <Icon name="play" size={18} strokeWidth={2.4} />
+            </button>
+            <IconBtn name="skipf" label="다음 주문으로 (준비 중)" size={36} disabled className="disabled:opacity-50" />
+            <div className="relative h-1 min-w-[160px] flex-1 rounded-full bg-tm-inner" />
+            <span className="num text-xs text-tm-muted">09:00 / 15:30</span>
+            <Seg options={[{ value: "1", label: "1×" }, { value: "4", label: "4×" }, { value: "16", label: "16×" }]} value="1" size="lg" className="opacity-50" />
+            <PreviewTag />
+          </div>
+        </Panel>
 
-      {isLoading && (
-        <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-14 rounded-xl bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15 bg-[length:200%_100%] animate-shimmer" />)}</div>
-      )}
-
-      {error && <p className="text-dracula-red text-sm text-center py-8">데이터를 불러올 수 없습니다.</p>}
-
-      {data && (
-        <>
-          {/* 일일 요약 */}
-          {data.events.length > 0 && (
-            <Card className="grid grid-cols-2 gap-3 p-4" outerClassName="mb-6">
-              <div>
-                <p className="text-xs text-gray-500 dark:text-dracula-comment">총 손익</p>
-                <p className={`text-lg font-bold ${data.summary.totalPnl >= 0 ? "text-dracula-green" : "text-dracula-red"}`}>
-                  {data.summary.totalPnl >= 0 ? "+" : ""}{won(data.summary.totalPnl)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 dark:text-dracula-comment">거래 횟수</p>
-                <p className="text-lg font-bold text-gray-900 dark:text-dracula-fg">{data.summary.tradeCount}회</p>
-              </div>
-              {data.summary.bestTrade && (
-                <div className="col-span-2">
-                  <p className="text-xs text-gray-500 dark:text-dracula-comment">최고 거래</p>
-                  <p className="text-sm text-dracula-green">{data.summary.bestTrade}</p>
-                </div>
-              )}
-            </Card>
-          )}
-
-          {/* 이벤트 타임라인 */}
-          {data.events.length === 0 ? (
-            <div className="text-center py-16 border border-dashed border-gray-300 dark:border-dracula-line rounded-xl text-gray-500 dark:text-dracula-comment text-sm">
-              이날의 거래 기록이 없습니다.
-            </div>
-          ) : (
-            <div className="relative pl-6">
-              {/* 세로선 */}
-              <div className="absolute left-2 top-0 bottom-0 w-px bg-gray-200 dark:bg-dracula-line" />
-              <div className="space-y-4">
-                {data.events.map((ev: ReplayEvent, i: number) => {
-                  const meta = TYPE_META[ev.type] ?? { icon: Circle, color: "text-gray-900 dark:text-dracula-fg", label: ev.type };
-                  return (
-                    <div key={i} className="relative">
-                      {/* 점 */}
-                      <div className="absolute -left-[18px] top-3 w-3 h-3 rounded-full bg-gray-300 dark:bg-dracula-line border-2 border-white dark:border-dracula-bg" />
-                      <Card className="p-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <meta.icon size={14} weight="bold" className={meta.color} aria-hidden />
-                            <span className={`text-xs font-medium ${meta.color}`}>{meta.label}</span>
-                            {ev.stockSymbol && (
-                              <span className="text-xs text-gray-900 dark:text-dracula-fg font-semibold">{ev.stockName ?? ev.stockSymbol}</span>
-                            )}
-                            {ev.quantity && <span className="text-xs text-gray-500 dark:text-dracula-comment">{ev.quantity}주</span>}
-                          </div>
-                          <span className="text-xs text-gray-500 dark:text-dracula-comment">
-                            {new Date(ev.time).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                          </span>
-                        </div>
-                        <div className="mt-1 flex items-center justify-between">
-                          {ev.price && <span className="text-xs text-gray-500 dark:text-dracula-comment">@{ev.price.toLocaleString()}원</span>}
-                          {ev.amount != null && (
-                            <span className={`text-sm font-semibold ${ev.amount >= 0 ? "text-dracula-green" : "text-dracula-red"}`}>
-                              {ev.amount >= 0 ? "+" : ""}{won(Math.abs(ev.amount))}
-                            </span>
-                          )}
-                          {ev.pnlPct != null && (
-                            <span className={`text-xs font-medium ${ev.pnlPct >= 0 ? "text-dracula-green" : "text-dracula-red"}`}>
-                              {ev.pnlPct >= 0 ? "+" : ""}{ev.pnlPct.toFixed(2)}%
-                            </span>
-                          )}
-                        </div>
-                        {ev.description && <p className="text-xs text-gray-500 dark:text-dracula-comment mt-1">{ev.description}</p>}
-                      </Card>
+        <PanelCol className="flex-[1_1_320px]">
+          <Panel tabs={["오늘 요약"]} actions={[]}>
+            {isLoading ? (
+              <Skeleton className="h-24" />
+            ) : error ? (
+              <p role="alert" className="m-0 text-13 text-[#ff8a8a]">데이터를 불러올 수 없습니다.</p>
+            ) : (
+              <AutoGrid min={120}>
+                <Stat big label="총 손익" value={pnl == null ? "—" : fmtSigned(pnl)} valueClassName={dirClass(pnl)} />
+                <Stat big label="거래 횟수" value={data ? `${data.summary.tradeCount}회` : "—"} />
+                <Stat label="최고 거래" value={best ?? "—"} sub={bestPnl != null ? `${bestPnl > 0 ? "+" : ""}${bestPnl.toFixed(2)}%` : undefined} />
+                <Stat label={<span className="inline-flex items-center gap-1">계획 외 주문 <PreviewTag /></span>} value="—" valueClassName="text-tm-muted" />
+              </AutoGrid>
+            )}
+          </Panel>
+          <Panel tabs={["감정 분포"]} actions={[]} right={<span className="text-2xs text-tm-muted">전체 기간</span>}>
+            {emoStats.length === 0 ? (
+              <EmptyNote className="py-4">아직 감정 태그를 남긴 거래가 없습니다.</EmptyNote>
+            ) : (
+              emoStats.map((s, i) => {
+                const p = (s.count / emoTotal) * 100;
+                return (
+                  <div key={s.emotion} className="flex flex-col gap-[5px]">
+                    <div className="flex justify-between text-xs">
+                      <span>{emotionLabel(s.emotion)}</span>
+                      <span className="num text-tm-muted">
+                        {p.toFixed(0)}%{s.avgReturnPct != null && ` · 평균 ${s.avgReturnPct > 0 ? "+" : ""}${s.avgReturnPct.toFixed(1)}%`}
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </>
-      )}
-    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-tm-inner">
+                      <div className="h-full rounded-full" style={{ width: `${Math.min(100, p * 2)}%`, background: EMO_COLORS[i % EMO_COLORS.length] }} />
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </Panel>
+        </PanelCol>
+      </PanelRow>
+
+      <Panel tabs={["주문 복기"]} actions={[]}>
+        {isLoading ? (
+          <Skeleton className="h-24" />
+        ) : !data || data.events.length === 0 ? (
+          <EmptyNote>이날의 거래 기록이 없습니다.</EmptyNote>
+        ) : (
+          <ol className="m-0 list-none p-0">
+            {data.events.map((ev, i) => {
+              const q = ev.qty ?? ev.quantity;
+              const buy = ev.type === "BUY";
+              const sell = ev.type === "SELL";
+              return (
+                <li key={i} className="flex gap-3 border-b border-tm-line px-1 py-3">
+                  <span className="num w-10 flex-none text-xs text-tm-muted">{fmtTime(ev.time, false)}</span>
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {(ev.stockName || ev.stockSymbol) && <b>{ev.stockName ?? ev.stockSymbol}</b>}
+                      <span className={buy ? "text-up" : sell ? "text-down" : "text-tm-soft"}>{TYPE_LABEL[ev.type] ?? ev.type}</span>
+                      {q != null && <span className="num text-tm-soft">{fmtNum(q)}주{ev.price != null && ` ${fmtNum(ev.price)}`}</span>}
+                    </div>
+                    {ev.description && <span className="text-xs leading-normal text-tm-muted">{ev.description}</span>}
+                  </div>
+                  {ev.pnlPct != null ? (
+                    <span className={`num font-semibold ${dirClass(ev.pnlPct)}`}>{`${ev.pnlPct > 0 ? "+" : ""}${ev.pnlPct.toFixed(2)}%`}</span>
+                  ) : ev.amount != null ? (
+                    <span className={`num font-semibold ${dirClass(ev.amount)}`}>{fmtSigned(ev.amount)}</span>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </Panel>
+    </TerminalPage>
   );
 }
