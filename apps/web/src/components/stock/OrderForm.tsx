@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { BtnLink, BuySell, Btn, Chip, Field, Icon, PreviewTag, SelectBox, fmtNum } from "@/components/terminal";
+import { BtnLink, BuySell, Btn, Chip, Field, Icon, SelectBox, fmtNum } from "@/components/terminal";
 import TradeReceipt from "@/components/wallet/TradeReceipt";
 import { sellableQuantity, usePaperOpenOrders, usePaperOrder, usePaperPortfolio } from "@/hooks/usePaperTrade";
 import { useAuth } from "@/hooks/useAuth";
@@ -63,6 +63,8 @@ export default function OrderForm({ stock, currentPrice, brokerageConnected }: P
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
   const [orderType, setOrderType] = useState<"MARKET" | "LIMIT">("MARKET");
   const [limitInput, setLimitInput] = useState("");
+  const [tpInput, setTpInput] = useState("");
+  const [slInput, setSlInput] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [error, setError] = useState("");
   const [emotionKey, setEmotionKey] = useState<string | null>(null);
@@ -88,6 +90,18 @@ export default function OrderForm({ stock, currentPrice, brokerageConnected }: P
   const max = isBuy ? maxBuy : sellable;
   const isValid = Number.isInteger(quantity) && quantity > 0 && quantity <= max && limitValid;
   const isPending = place.isPending;
+  // ADR-075 — 매수 체결 시 익절/손절 자동 등록(OCO). 기준가 = 지정가 또는 현재가. 서버가 같은 규칙으로 다시 검증한다.
+  const tp = tpInput.trim() ? Number(tpInput.replace(/,/g, "")) : null;
+  const sl = slInput.trim() ? Number(slInput.replace(/,/g, "")) : null;
+  const bracketRef = unitPrice;
+  const bracketError = !isBuy
+    ? null
+    : tp != null && !(tp > bracketRef)
+      ? "익절가는 기준가보다 높아야 합니다"
+      : sl != null && !(sl > 0 && sl < bracketRef)
+        ? "손절가는 0보다 크고 기준가보다 낮아야 합니다"
+        : null;
+  const canSubmit = isValid && !bracketError;
   // 지정가가 이미 교차하면 즉시 체결된다(서버 사가와 같은 판정)
   const crossesNow = isLimit && limitValid && currentPrice > 0 && (isBuy ? limitPrice >= currentPrice : limitPrice <= currentPrice);
   const ratio = max > 0 ? Math.min(100, Math.round((quantity / max) * 100)) : 0;
@@ -128,7 +142,19 @@ export default function OrderForm({ stock, currentPrice, brokerageConnected }: P
     try {
       const result = await place.mutateAsync({
         stockId: stock.id, side, orderType, quantity, ...(isLimit ? { limitPrice } : {}),
+        ...(isBuy && tp != null ? { takeProfitPrice: tp } : {}),
+        ...(isBuy && sl != null ? { stopLossPrice: sl } : {}),
       });
+      const legs = result.conditionalOrderIds?.length ?? 0;
+      if (legs > 0) {
+        setTpInput("");
+        setSlInput("");
+        toast({
+          type: "success",
+          title: "익절/손절 등록",
+          message: result.status === "PENDING" ? "매수가 체결되면 감시를 시작합니다. '조건부' 탭에서 볼 수 있어요." : "감시를 시작했습니다. '조건부' 탭에서 볼 수 있어요.",
+        });
+      }
       if (result.status === "PENDING") {
         toast({
           type: "success",
@@ -271,10 +297,13 @@ export default function OrderForm({ stock, currentPrice, brokerageConnected }: P
 
           <div className="flex flex-col gap-1">
             <div className="flex gap-2">
-              <Field label="익절가" unit="원" placeholder="—" disabled inputClassName="text-up" />
-              <Field label="손절가" unit="원" placeholder="—" disabled inputClassName="text-down" />
+              <Field label="익절가" unit="원" placeholder="—" type="number" inputMode="decimal" min={0} step="any" disabled={!isBuy} value={isBuy ? tpInput : ""} onChange={(e) => setTpInput(e.target.value)} inputClassName="text-up" />
+              <Field label="손절가" unit="원" placeholder="—" type="number" inputMode="decimal" min={0} step="any" disabled={!isBuy} value={isBuy ? slInput : ""} onChange={(e) => setSlInput(e.target.value)} inputClassName="text-down" />
             </div>
-            <span className="flex items-center gap-1.5 text-2xs text-tm-muted"><PreviewTag />체결 시 익절/손절 자동 등록은 모의투자에 아직 없습니다</span>
+            <span className="text-2xs text-tm-muted">
+              {isBuy ? "체결 시 익절/손절 매도를 자동 등록합니다(한쪽이 체결되면 다른 쪽 취소)." : "매도 주문에는 익절/손절을 붙이지 않습니다. '조건부' 탭에서 따로 걸 수 있어요."}
+            </span>
+            {bracketError && <span className="text-2xs text-[#ff8a8a]">{bracketError}</span>}
           </div>
 
           <div className="flex flex-col gap-[7px] rounded-lg bg-tm-inner px-3 py-2.5">
@@ -325,7 +354,7 @@ export default function OrderForm({ stock, currentPrice, brokerageConnected }: P
                 ? `${fmtNum(currentPrice)}원 시장가로 ${fmtNum(quantity)}주 ${isBuy ? "매수" : "매도"} · 즉시 체결(모의투자)`
                 : "현재가를 불러오는 중입니다"}
           </p>
-          <Btn kind={isBuy ? "buy" : "sell"} full className="h-[46px]" onClick={handleSubmit} disabled={!isValid || isPending || (!isLimit && currentPrice <= 0)}>
+          <Btn kind={isBuy ? "buy" : "sell"} full className="h-[46px]" onClick={handleSubmit} disabled={!canSubmit || isPending || (!isLimit && currentPrice <= 0)}>
             {isPending ? "처리 중..." : `${stock.name} ${isBuy ? "매수" : "매도"}`}
           </Btn>
         </>

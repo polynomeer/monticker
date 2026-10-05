@@ -108,12 +108,14 @@ export interface PaperOpenOrder {
 
 export interface PaperOrderInput {
   stockId: number; side: "BUY" | "SELL"; orderType: "MARKET" | "LIMIT"; quantity: number; limitPrice?: number;
+  /** ADR-075 — 매수 체결 시 자동 등록할 익절가·손절가(OCO) */
+  takeProfitPrice?: number; stopLossPrice?: number;
 }
 
 export interface PaperOrderResult {
   orderId: number | null; status: "FILLED" | "PENDING" | string; orderType: string; side: string;
   stockId: number; quantity: number; limitPrice: number | null; price: number | null; amount: number | null;
-  remainingCash: number; tradeId: number | null;
+  remainingCash: number; tradeId: number | null; conditionalOrderIds?: number[];
 }
 
 /** 미체결 지정가 — 매칭 화면과 같은 query key를 써서 한쪽에서 취소하면 양쪽이 같이 갱신된다. */
@@ -163,6 +165,61 @@ export function usePaperOrder() {
   });
 
   return { place, cancel };
+}
+
+/** ADR-075 — 모의투자 조건부 주문(익절·손절·가격 도달, OCO). 발동은 모의 매칭 엔진 시장가 주문뿐이다. */
+export type PaperTriggerType = "STOP_LOSS" | "TAKE_PROFIT" | "PRICE_ABOVE" | "PRICE_BELOW";
+export interface PaperConditionalOrder {
+  id: number; stockId: number; side: "BUY" | "SELL"; triggerType: PaperTriggerType; triggerPrice: number;
+  quantity: number; ocoGroupId: string | null; parentOrderId: number | null;
+  status: "WAITING_PARENT" | "ACTIVE" | "EXECUTED" | "CANCELLED" | "FAILED";
+  failReason: string | null; executedOrderId: number | null; createdAt: string; triggeredAt: string | null;
+}
+export interface PaperConditionalInput {
+  stockId: number; side: "BUY" | "SELL"; quantity: number;
+  legs: { triggerType: PaperTriggerType; triggerPrice: number }[];
+}
+
+export function usePaperConditionalOrders(stockId: number | null, enabled = true) {
+  return useQuery<PaperConditionalOrder[]>({
+    queryKey: ["paper", "conditional", stockId],
+    queryFn: async () => {
+      const r = await authFetch(`/api/paper/conditional-orders${stockId != null ? `?stockId=${stockId}` : ""}`);
+      if (!r.ok) throw new Error("조건부 주문 조회 실패");
+      return r.json();
+    },
+    refetchInterval: 5_000,
+    enabled,
+  });
+}
+
+export function usePaperConditionalMutations() {
+  const qc = useQueryClient();
+  const refresh = () => qc.invalidateQueries({ queryKey: ["paper", "conditional"] });
+  const create = useMutation({
+    mutationFn: async (input: PaperConditionalInput): Promise<PaperConditionalOrder[]> => {
+      const r = await authFetch("/api/paper/conditional-orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      const body = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(body?.message ?? "조건부 주문 등록 실패");
+      return body;
+    },
+    onSuccess: refresh,
+  });
+  const cancel = useMutation({
+    mutationFn: async (id: number) => {
+      const r = await authFetch(`/api/paper/conditional-orders/${id}`, { method: "DELETE" });
+      if (!r.ok) {
+        const body = await r.json().catch(() => null);
+        throw new Error(body?.message ?? "취소 실패");
+      }
+    },
+    onSuccess: refresh,
+  });
+  return { create, cancel };
 }
 
 /** 매도 가능 수량 = 보유 − 미체결 매도 잔량(서버 사가와 같은 규칙, ADR-074). */

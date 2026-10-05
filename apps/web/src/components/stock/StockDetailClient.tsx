@@ -12,6 +12,7 @@ import WatchlistAddButton from "./WatchlistAddButton";
 import OrderBook from "./OrderBook";
 import OrderForm from "./OrderForm";
 import PositionsPanel from "./PositionsPanel";
+import PaperConditionalPanel from "./PaperConditionalPanel";
 import StockScoreCard from "./StockScoreCard";
 import { fmtKrwCompact, fmtShares, useQuotes } from "./parts";
 import { useStockChart } from "@/hooks/useStockChart";
@@ -160,17 +161,25 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
             tabs={[{ key: "order", label: "주문" }, { key: "conditional", label: "조건부" }, { key: "alert", label: "가격 알림" }]}
             active={orderTab}
             onTabChange={(k) => setOrderTab(k as OrderTab)}
-            preview={orderTab === "conditional"}
             className={cn("transition-shadow duration-300", alertHighlight && "ring-2 ring-dracula-purple")}
           >
             {orderTab === "order" && (
               <OrderForm stock={{ id: stockId, symbol, name: stockName }} currentPrice={currentPrice} brokerageConnected={brokerageConnected} />
             )}
             {orderTab === "conditional" && (
-              <Notice tone="info">
-                모의투자에는 아직 조건부 주문(익절·손절·OCO)이 없습니다. 실전 계좌의 조건부 주문은{" "}
-                <Link href="/brokerage/conditional-orders">실전투자 · 조건부 주문</Link>에서 만들 수 있고, 아래 &lsquo;조건부 주문&rsquo; 탭에 이 종목 것이 보입니다.
-              </Notice>
+              isLoggedIn ? (
+                <>
+                  <PaperConditionalPanel stockId={stockId} currentPrice={currentPrice} />
+                  {brokerageConnected && (
+                    <Notice tone="info">
+                      여기서 거는 조건부 주문은 모의투자 전용입니다. 실전 계좌의 조건부 주문은{" "}
+                      <Link href="/brokerage/conditional-orders">실전투자 · 조건부 주문</Link>에서 만듭니다.
+                    </Notice>
+                  )}
+                </>
+              ) : (
+                <p className="m-0 py-8 text-center text-13 text-tm-muted">로그인하면 모의투자 조건부 주문(익절·손절·OCO)을 걸 수 있어요.</p>
+              )
             )}
             {orderTab === "alert" && <AlertPanel stockId={stockId} symbol={symbol} bare />}
           </Panel>
@@ -239,6 +248,7 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
 
       <PositionsPanel
         symbol={symbol}
+        stockId={stockId}
         brokerageConnected={brokerageConnected}
         activeOrders={activeOrders}
         onCancelOrder={handleCancelOrder}

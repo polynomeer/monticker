@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import type { BrokerageOrderResponse, ConditionalOrderResponse } from "@monticker/types";
 import { ChgNum, DataTable, Panel, Pill, StockCell, dirClass, fmtNum, fmtSigned, type Column } from "@/components/terminal";
-import { usePaperHistory, usePaperPortfolio, type Holding, type PaperOpenOrder, type TradeHistory } from "@/hooks/usePaperTrade";
+import { usePaperConditionalMutations, usePaperConditionalOrders, usePaperHistory, usePaperPortfolio, type Holding, type PaperConditionalOrder, type PaperOpenOrder, type TradeHistory } from "@/hooks/usePaperTrade";
+import { PAPER_COND_STATUS, PAPER_TRIGGER_LABEL } from "./PaperConditionalPanel";
 import { useConditionalOrders } from "@/hooks/useBrokerage";
 import { useAuth } from "@/hooks/useAuth";
 import { authFetch } from "@/services/api";
@@ -26,6 +27,7 @@ type Tab = "holdings" | "open" | "conditional" | "fills" | "settlement";
 
 interface Props {
   symbol: string;
+  stockId: number;
   /** 실전 계좌 연동 여부 — 실전 미체결·조건부 주문 표시용 */
   brokerageConnected: boolean;
   activeOrders: BrokerageOrderResponse[];
@@ -55,7 +57,7 @@ const COND_STATUS: Record<string, { label: string; tone: "green" | "muted" | "or
 };
 
 /** 시안 Main 하단 패널 — 보유 종목 / 미체결 / 조건부 / 체결 내역 / 정산 대기 */
-export default function PositionsPanel({ symbol, brokerageConnected, activeOrders, onCancelOrder, cancelPending, paperOrders, onCancelPaperOrder, paperCancelPending }: Props) {
+export default function PositionsPanel({ symbol, stockId, brokerageConnected, activeOrders, onCancelOrder, cancelPending, paperOrders, onCancelPaperOrder, paperCancelPending }: Props) {
   const [tab, setTab] = useState<Tab>("holdings");
   const { isLoggedIn } = useAuth();
 
@@ -79,7 +81,10 @@ export default function PositionsPanel({ symbol, brokerageConnected, activeOrder
           {brokerageConnected && <OpenOrders connected symbol={symbol} orders={activeOrders} onCancel={onCancelOrder} cancelPending={cancelPending} />}
         </>
       ) : tab === "conditional" ? (
-        <Conditional connected={brokerageConnected} symbol={symbol} />
+        <>
+          <PaperConditional stockId={stockId} symbol={symbol} />
+          {brokerageConnected && <Conditional connected symbol={symbol} />}
+        </>
       ) : tab === "fills" ? (
         <Fills />
       ) : (
@@ -165,6 +170,29 @@ function OpenOrders({ connected, symbol, orders, onCancel, cancelPending }: { co
     },
   ];
   return <DataTable columns={cols} rows={orders} rowKey={(o) => o.id} minWidth={760} empty={`${symbol} 미체결 실전 주문이 없습니다.`} />;
+}
+
+function PaperConditional({ stockId, symbol }: { stockId: number; symbol: string }) {
+  const { data = [], isLoading } = usePaperConditionalOrders(stockId);
+  const { cancel } = usePaperConditionalMutations();
+  const cols: Column<PaperConditionalOrder>[] = [
+    { key: "acc", header: "계좌", cell: () => <Pill tone="yellow">모의</Pill> },
+    { key: "side", header: "구분", cell: (c) => SIDE(c.side) },
+    { key: "trig", header: "조건", cell: (c) => <span>{PAPER_TRIGGER_LABEL[c.triggerType]} <span className="num">{fmtNum(c.triggerPrice)}</span></span> },
+    { key: "ord", header: "주문", cell: () => "시장가" },
+    { key: "qty", header: "수량", align: "right", cell: (c) => <span className="num">{fmtNum(c.quantity)}</span> },
+    { key: "oco", header: "OCO", cell: (c) => (c.ocoGroupId ? <Pill tone="purple">OCO</Pill> : <span className="text-tm-muted">—</span>) },
+    { key: "st", header: "상태", cell: (c) => { const m = PAPER_COND_STATUS[c.status]; return <span title={c.failReason ?? undefined}><Pill tone={m.tone}>{m.label}</Pill></span>; } },
+    { key: "at", header: "등록", cell: (c) => <span className="num text-tm-muted">{when(c.createdAt)}</span> },
+    {
+      key: "x", header: "", align: "right",
+      cell: (c) => (c.status === "ACTIVE" || c.status === "WAITING_PARENT") ? (
+        <button type="button" disabled={cancel.isPending} onClick={() => cancel.mutate(c.id)} className="text-xs text-[#ff8a8a] hover:underline disabled:opacity-40">취소</button>
+      ) : null,
+    },
+  ];
+  if (isLoading) return <div className="m-1.5 h-24 animate-pulse rounded-lg bg-tm-inner" />;
+  return <DataTable columns={cols} rows={data} rowKey={(c) => c.id} minWidth={760} empty={`${symbol} 모의투자 조건부 주문이 없습니다.`} />;
 }
 
 function Conditional({ connected, symbol }: { connected: boolean; symbol: string }) {
