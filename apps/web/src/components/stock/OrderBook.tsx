@@ -19,6 +19,16 @@ interface Props {
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
+/** 같은 가격 호가를 하나로 합친다 — 공급원이 중복 레벨을 보내도 행 key가 겹치지 않게(React key 중복 경고·행 누락 방지). */
+export function mergeLevels(levels: OrderBookLevel[]): OrderBookLevel[] {
+  const byPrice = new Map<number, OrderBookLevel>();
+  for (const l of levels) {
+    const prev = byPrice.get(l.price);
+    byPrice.set(l.price, prev ? { price: l.price, quantity: prev.quantity + l.quantity, amount: prev.amount + l.amount } : { ...l });
+  }
+  return [...byPrice.values()];
+}
+
 /**
  * 시안의 호가 패널 본문 — 매도 호가(위, 하락색) · 현재가 줄 · 매수 호가(아래, 상승색) · 잔량 합계 막대.
  * 1초 폴링. 호가 데이터만 바뀌므로 이 컴포넌트 안에서만 다시 그려진다(부모는 리렌더되지 않는다).
@@ -28,7 +38,9 @@ function OrderBook({ stockId, prevClose }: Props) {
     queryKey: stockKeys.orderbook(stockId),
     queryFn: async () => {
       const res = await fetch(`/api/stocks/${stockId}/orderbook`);
-      return res.ok ? res.json() : null;
+      if (!res.ok) return null;
+      const raw: OrderBookData = await res.json();
+      return { ...raw, asks: mergeLevels(raw.asks), bids: mergeLevels(raw.bids) };
     },
     refetchInterval: 1000,
     staleTime: 1000,

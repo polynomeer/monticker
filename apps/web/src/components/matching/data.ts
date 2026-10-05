@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
+import { mergeLevels } from "@/components/stock/OrderBook";
 
 export const STOCKS = [
   { id: 2, label: "삼성전자" }, { id: 3, label: "SK하이닉스" },
@@ -35,7 +36,10 @@ export function useOrderbook(stockId: number) {
     queryKey: ["stocks", stockId, "orderbook"],
     queryFn: async () => {
       const r = await fetch(`/api/stocks/${stockId}/orderbook`);
-      return r.ok ? r.json() : null;
+      if (!r.ok) return null;
+      // 종목 화면 OrderBook과 같은 query key를 쓰므로 같은 정규화를 거친다(같은 가격 레벨 병합)
+      const raw: OrderBookData = await r.json();
+      return { ...raw, asks: mergeLevels(raw.asks), bids: mergeLevels(raw.bids) };
     },
     refetchInterval: 1000,
   });
