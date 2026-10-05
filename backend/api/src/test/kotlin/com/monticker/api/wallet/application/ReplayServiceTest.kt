@@ -137,16 +137,45 @@ class ReplayServiceTest {
     }
 
     @Test
-    fun `summary totalPnl is settlement proceeds minus absolute fill cost`() {
+    fun `summary totalPnl is zero on a day with only buys — buying is not a loss`() {
         every { ledgerService.getLedgerForDate(1L, date) } returns listOf(
-            ledgerEvent("FILL", BigDecimal("-500000")),
-            ledgerEvent("SETTLEMENT", BigDecimal("550000")),
+            ledgerEvent("FILL", BigDecimal("-500000"), paperTradeId = 10L, stockId = 100L),
         )
+        every { jdbc.queryForMap("SELECT symbol FROM stocks WHERE id = ?", 100L) } returns mapOf("symbol" to "005930")
+        every {
+            jdbc.queryForMap("SELECT quantity, price FROM paper_trades WHERE id = ?", 10L)
+        } returns mapOf("quantity" to 10, "price" to BigDecimal("50000"))
 
         val result = service.getDailyReplay(1L, date)
 
-        // 550000 - |-500000| = 50000
-        assertThat(result.summary.totalPnl).isEqualByComparingTo(BigDecimal("50000"))
+        // 이전 구현은 정산 − |체결|이라 매수만 한 날 -500,000이 손익으로 보였다
+        assertThat(result.summary.totalPnl).isEqualByComparingTo(BigDecimal.ZERO)
+    }
+
+    @Test
+    fun `summary totalPnl is the realized pnl of the day's sells against the average buy price`() {
+        every { ledgerService.getLedgerForDate(1L, date) } returns listOf(
+            ledgerEvent("FILL", BigDecimal("-500000"), paperTradeId = 10L, stockId = 200L),
+            ledgerEvent("SETTLEMENT", BigDecimal("770000"), paperTradeId = 11L, stockId = 100L),
+        )
+        every { jdbc.queryForMap("SELECT symbol FROM stocks WHERE id = ?", any()) } returns mapOf("symbol" to "X")
+        every {
+            jdbc.queryForMap("SELECT quantity, price FROM paper_trades WHERE id = ?", 10L)
+        } returns mapOf("quantity" to 10, "price" to BigDecimal("50000"))
+        every {
+            jdbc.queryForMap("SELECT quantity, price FROM paper_trades WHERE id = ?", 11L)
+        } returns mapOf("quantity" to 10, "price" to BigDecimal("77000"))
+        every {
+            jdbc.queryForObject(
+                "SELECT AVG(price) FROM paper_trades WHERE user_id=? AND stock_id=? AND side='BUY'",
+                BigDecimal::class.java, 1L, 100L,
+            )
+        } returns BigDecimal("70000")
+
+        val result = service.getDailyReplay(1L, date)
+
+        // 10주 × (77,000 − 70,000) = 70,000. 같은 날 다른 종목 매수는 손익이 아니다
+        assertThat(result.summary.totalPnl).isEqualByComparingTo(BigDecimal("70000"))
     }
 
     @Test

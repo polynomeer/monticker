@@ -40,6 +40,9 @@ class ReplayService(
     fun getDailyReplay(userId: Long, date: LocalDate): DailyReplayResponse {
         val ledgerEvents = ledgerService.getLedgerForDate(userId, date)
 
+        // 매도 체결의 실현 손익(원) — 요약 totalPnl용. 매수는 손익이 아니므로 담지 않는다
+        var realizedPnl = BigDecimal.ZERO
+
         val events = ledgerEvents.mapNotNull { event ->
             val type = when (event.eventType) {
                 "FILL" -> "BUY"
@@ -71,6 +74,7 @@ class ReplayService(
                         )
                     }.getOrNull()
                     if (avgBuy != null && avgBuy > BigDecimal.ZERO) {
+                        if (tradeQty != null) realizedPnl += tradePrice.subtract(avgBuy).multiply(BigDecimal(tradeQty))
                         tradePrice.subtract(avgBuy).divide(avgBuy, 4, java.math.RoundingMode.HALF_UP)
                             .multiply(BigDecimal("100")).toDouble()
                     } else null
@@ -92,13 +96,8 @@ class ReplayService(
         }
 
         val tradePnls = events.filter { it.pnlPct != null }
-        val totalPnl = ledgerEvents
-            .filter { it.eventType == "SETTLEMENT" }
-            .fold(BigDecimal.ZERO) { acc, e -> acc + e.amount }
-            .subtract(
-                ledgerEvents.filter { it.eventType == "FILL" }
-                    .fold(BigDecimal.ZERO) { acc, e -> acc + e.amount.abs() }
-            )
+        // 그날의 실현 손익 — 이전엔 정산 − |체결| 현금 흐름이라 매수만 한 날이 손실로 보였다(리스크 일간 손실과 같은 결함)
+        val totalPnl = realizedPnl
 
         val summary = ReplaySummary(
             totalPnl = totalPnl,
