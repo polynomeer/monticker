@@ -1,6 +1,7 @@
 package com.monticker.api.common.config
 
 import com.monticker.api.common.redis.RedisGuard
+import com.monticker.api.common.redis.WindowCounter
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -59,8 +60,6 @@ class RateLimitFilter(
     // 이 필터는 /api/** 전체에 걸리므로, 여기서 예외가 새면 Redis 장애 = 전면 장애가 된다.
     private fun isRateLimited(key: String, limit: Int, window: Duration): Boolean =
         guard.failOpen(op = "rate_limit", fallback = false) {
-            val count = redis.opsForValue().increment("rate:$key") ?: 1L
-            if (count == 1L) redis.expire("rate:$key", window)
-            count > limit
+            WindowCounter.incrementInWindow(redis, "rate:$key", window) > limit
         }
 }

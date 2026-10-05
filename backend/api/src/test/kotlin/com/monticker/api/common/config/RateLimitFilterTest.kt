@@ -9,6 +9,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.data.redis.RedisConnectionFailureException
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.data.redis.core.script.RedisScript
 import org.springframework.data.redis.core.ValueOperations
 import org.springframework.mock.web.MockFilterChain
 import org.springframework.mock.web.MockHttpServletRequest
@@ -35,7 +36,7 @@ class RateLimitFilterTest {
 
     @Test
     fun `Redis 연결 실패 시 요청을 통과시킨다 (fail-open)`() {
-        every { valueOps.increment(any<String>()) } throws RedisConnectionFailureException("down")
+        every { redis.execute(any<RedisScript<Long>>(), any<List<String>>(), any<String>()) } throws RedisConnectionFailureException("down")
         val res = MockHttpServletResponse()
         val chain = MockFilterChain()
 
@@ -49,7 +50,7 @@ class RateLimitFilterTest {
 
     @Test
     fun `한도 초과 시 429`() {
-        every { valueOps.increment(any<String>()) } returns 301L
+        every { redis.execute(any<RedisScript<Long>>(), any<List<String>>(), any<String>()) } returns 301L
         val res = MockHttpServletResponse()
 
         filter().doFilter(request("/api/stocks/1"), res, MockFilterChain())
@@ -59,13 +60,13 @@ class RateLimitFilterTest {
 
     @Test
     fun `bench bypass가 꺼져 있으면 X-Bench 헤더가 있어도 레이트리밋을 적용한다`() {
-        every { valueOps.increment(any<String>()) } returns 301L
+        every { redis.execute(any<RedisScript<Long>>(), any<List<String>>(), any<String>()) } returns 301L
         val res = MockHttpServletResponse()
 
         filter(benchBypass = false).doFilter(request("/api/stocks/1", "X-Bench" to "true"), res, MockFilterChain())
 
         assertThat(res.status).isEqualTo(429)
-        verify(exactly = 1) { valueOps.increment(any<String>()) }
+        verify(exactly = 1) { redis.execute(any<RedisScript<Long>>(), any<List<String>>(), any<String>()) }
     }
 
     @Test
@@ -75,6 +76,6 @@ class RateLimitFilterTest {
         filter(benchBypass = true).doFilter(request("/api/stocks/1", "X-Bench" to "true"), res, MockFilterChain())
 
         assertThat(res.status).isEqualTo(200)
-        verify(exactly = 0) { valueOps.increment(any<String>()) }
+        verify(exactly = 0) { redis.execute(any<RedisScript<Long>>(), any<List<String>>(), any<String>()) }
     }
 }
