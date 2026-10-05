@@ -1,8 +1,6 @@
 package com.monticker.api.risk.application
 
 import com.monticker.api.common.notification.UserNotificationCommand
-import com.monticker.api.risk.domain.RiskLimit
-import com.monticker.api.risk.infrastructure.RiskLimitRepository
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -33,7 +31,7 @@ class RiskLimitNearWarningJob(
     private val tx: TransactionTemplate,
     private val events: ApplicationEventPublisher,
     private val usage: PaperRiskUsage,
-    private val riskLimitRepo: RiskLimitRepository,
+    private val limitService: RiskLimitService,
     private val registry: MeterRegistry,
     @Value("\${app.risk.near-limit.enabled:true}") private val enabled: Boolean = true,
     @Value("\${app.risk.near-limit.threshold:0.8}") private val threshold: Double = 0.8,
@@ -65,7 +63,7 @@ class RiskLimitNearWarningJob(
 
     /** @return 이번에 새로 발행한 알림 수 */
     fun evaluateUser(userId: Long, today: LocalDate): Int {
-        val limits = riskLimitRepo.findByUserId(userId).orElseGet { RiskLimit(userId = userId) }
+        val limits = limitService.effective(userId)
         if (!limits.isActive) return 0
         val near = usage.evaluate(userId, limits).filter { it.limit > 0 && it.ratio >= threshold }
         if (near.isEmpty()) return 0

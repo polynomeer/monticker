@@ -59,17 +59,8 @@ class RiskRuleQueryService(
         val checks = mutableListOf<RuleResult>()
         val accountCash = snapshot.cash
 
-        // 0. Quantity Guard — 음수/0 수량은 집중도·VaR 계산을 newHoldingValue≈0으로 무력화시켜
-        // 실노출과 무관하게 통과시킨다(V-H3). 어떤 side든 상류 검증을 못 믿는다는 가정 하에 여기서도 거부한다.
-        if (qty <= 0) {
-            checks.add(RuleResult(
-                rule    = "QuantityRule",
-                passed  = false,
-                detail  = "주문 수량은 0보다 커야 합니다: $qty",
-                current = qty.toDouble(),
-                limit   = 0.0,
-            ))
-        }
+        // 0. Quantity Guard
+        checks.addAll(quantityGuard(qty))
 
         // 1. Daily Loss Rule (BUY only — ADR-063) — 한도 기준 금액은 실거래면 증권사 총평가액(KIS 예수금은 정산 전 매수 대금이
         // 남아 부푼다), 모의투자면 현금(체결 즉시 줄어든다).
@@ -180,6 +171,14 @@ class RiskRuleQueryService(
 
         return checks
     }
+
+    /**
+     * 음수/0 수량은 집중도·VaR 계산을 newHoldingValue≈0으로 무력화시켜 실노출과 무관하게 통과시킨다(V-H3).
+     * 어떤 side든 상류 검증을 못 믿는다는 가정 하에 여기서도 거부한다. 리스크 체크를 꺼도(ADR-069) 남는 유일한 규칙이다.
+     */
+    fun quantityGuard(qty: Int): List<RuleResult> =
+        if (qty > 0) emptyList()
+        else listOf(RuleResult(rule = "QuantityRule", passed = false, detail = "주문 수량은 0보다 커야 합니다: $qty", current = qty.toDouble(), limit = 0.0))
 
     /**
      * 보유 종목들의 1일 역사적 VaR(95%, %) — 최근 20개 확정 일봉 수익률의 5% 분위수. 매수 게이트(VaRRule)와 한도 근접 경고
