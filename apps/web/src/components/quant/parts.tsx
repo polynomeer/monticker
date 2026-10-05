@@ -19,6 +19,28 @@ export function rulesetStatus(s: string | undefined) {
   return RULESET_STATUS[s ?? ""] ?? RULESET_STATUS.DRAFT;
 }
 
+/**
+ * ADR-078 포워드 일치율 표기. 비교한 신호가 0건이면 100%로 보이지 않게 "신호 없음",
+ * 아직 계산 전이면 "—".
+ */
+export function fmtMatch(rate: number | null | undefined, compared: number | null | undefined): string {
+  if (rate != null) return `${Math.round(rate * 100)}%`;
+  if (compared === 0) return "신호 없음";
+  return "—";
+}
+
+export function matchTone(rate: number | null | undefined): string {
+  if (rate == null) return "text-tm-muted";
+  return rate >= 0.85 ? "text-dracula-green" : rate >= 0.6 ? "text-dracula-orange" : "text-down";
+}
+
+/** 백엔드 MDD는 양수 %(고점 대비 낙폭)다 — 손실로 읽히게 음수로 표기한다. */
+export function fmtMdd(mdd: number | null | undefined, digits = 1): string {
+  if (mdd == null || Number.isNaN(mdd)) return "—";
+  const v = Math.abs(mdd);
+  return v < 0.5 * 10 ** -digits ? `${(0).toFixed(digits)}%` : `-${v.toFixed(digits)}%`;
+}
+
 /** 일부 옵션을 "준비 중"으로 막아 둘 수 있는 세그먼트 — 키트의 Seg와 같은 모양. */
 export function SegOpts<T extends string>({
   options, value, onChange, size = "md", className, label,

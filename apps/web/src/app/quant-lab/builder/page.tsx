@@ -10,7 +10,7 @@ import {
   AutoGrid, Btn, BtnLink, Divider, Field, H2, Icon, LineChart, Notice, Panel, PanelCol, PanelRow,
   PreviewTag, Stat, TerminalPage, TitleBlock, fmtNum, fmtPct, type IconName,
 } from "@/components/terminal";
-import { SegOpts, rulesetStatus } from "@/components/quant/parts";
+import { SegOpts, fmtMdd, rulesetStatus } from "@/components/quant/parts";
 import { ChipNumber, ChipSelect, CondShell, JoinTag, NumField } from "@/components/quant/builderParts";
 import { useRuleSetBacktests } from "@/components/quant/RuleSetCard";
 
@@ -486,7 +486,7 @@ export default function BuilderPage() {
               <>
                 <AutoGrid min={110}>
                   <Stat big label="CAGR" value={fmtPct(latest.annualReturn, 1)} valueClassName={(latest.annualReturn ?? 0) >= 0 ? "text-up" : "text-down"} />
-                  <Stat big label="MDD" value={fmtPct(latest.mdd, 1)} valueClassName={Math.abs(latest.mdd ?? 0) >= 0.05 ? "text-down" : undefined} />
+                  <Stat big label="MDD" value={fmtMdd(latest.mdd)} valueClassName={(latest.mdd ?? 0) > 0.05 ? "text-down" : undefined} />
                   <Stat big label="샤프" value="—" valueClassName="text-tm-muted" />
                   <Stat big label="거래 수" value={fmtNum(latest.tradeCount)} />
                 </AutoGrid>
