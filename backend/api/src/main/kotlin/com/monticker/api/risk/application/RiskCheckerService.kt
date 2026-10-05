@@ -139,7 +139,7 @@ class RiskCheckerService(
         }
 
         auditLogger.record(userId, stockId, side, qty, approved, blockedBy, checks, accountType)
-        // Trading 대시보드 "리스크 거부율" — 감사 로그는 DB에만 있어 추이를 볼 수 없었다. 룰 라벨은 5개로 유계.
+        // Trading 대시보드 "리스크 거부율" — 감사 로그는 DB에만 있어 추이를 볼 수 없었다. 룰 라벨은 규칙 수(7개)로 유계.
         registry.counter("risk_check_total", "account", accountType, "side", side,
             "result", if (approved) "approved" else "blocked", "rule", blockedBy ?: "none").increment()
 

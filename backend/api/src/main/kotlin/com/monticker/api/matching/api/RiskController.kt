@@ -21,6 +21,8 @@ data class RiskLimitsDto(
     val varLimitPct: BigDecimal,
     val maxPositionCount: Int,
     val maxHourlyOrders: Int,
+    /** ADR-069 — null = 섹터 한도 미설정 */
+    val sectorConcentrationLimitPct: BigDecimal?,
     val isActive: Boolean,
 )
 
@@ -30,6 +32,9 @@ data class UpdateRiskLimitsRequest(
     val varLimitPct: BigDecimal?,
     val maxPositionCount: Int?,
     val maxHourlyOrders: Int?,
+    val sectorConcentrationLimitPct: BigDecimal? = null,
+    /** true면 섹터 한도를 해제한다(미설정). JSON null은 "변경 없음"이라 해제를 따로 표현한다. */
+    val clearSectorConcentrationLimit: Boolean = false,
 )
 
 data class DryRunCheckRequest(
@@ -86,6 +91,11 @@ class RiskController(
         req.varLimitPct?.let { limits.varLimitPct = it }
         req.maxPositionCount?.let { limits.maxPositionCount = it }
         req.maxHourlyOrders?.let { limits.maxHourlyOrders = it }
+        req.sectorConcentrationLimitPct?.let {
+            require(it > BigDecimal.ZERO && it <= BigDecimal("100")) { "섹터 최대 비중은 0 초과 100 이하여야 합니다." }
+            limits.sectorConcentrationLimitPct = it
+        }
+        if (req.clearSectorConcentrationLimit) limits.sectorConcentrationLimitPct = null
         limits.updatedAt = Instant.now()
         return ResponseEntity.ok(riskLimitRepo.save(limits).toDto())
     }
@@ -203,6 +213,7 @@ class RiskController(
         varLimitPct = varLimitPct,
         maxPositionCount = maxPositionCount,
         maxHourlyOrders = maxHourlyOrders,
+        sectorConcentrationLimitPct = sectorConcentrationLimitPct,
         isActive = isActive,
     )
 }

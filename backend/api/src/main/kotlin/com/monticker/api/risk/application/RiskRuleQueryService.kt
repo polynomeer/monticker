@@ -130,6 +130,12 @@ class RiskRuleQueryService(
             }
         }
 
+        // 2-1. Sector Concentration Rule (BUY only, 한도 설정 시 — ADR-069)
+        val sectorLimit = limits.sectorConcentrationLimitPct
+        if (side == "BUY" && sectorLimit != null) {
+            checks.add(sectorConcentration(stockId, qty, estimatedPrice, sectorLimit.toDouble(), snapshot))
+        }
+
         // 3. VaR Rule (BUY only — ADR-047)
         // 노출 한도는 위험을 늘리는 주문만 막아야 한다. 매도는 노출을 줄이는데, 이전엔 보유 종목의 VaR가 한도를 넘으면
         // 매도까지 막혀 "위험한 포지션을 정리할 수 없는" 상태가 됐다(로컬 데이터의 −72% 일봉으로 재현). 파사드 전환으로
@@ -223,6 +229,60 @@ class RiskRuleQueryService(
             { rs, _ -> rs.getBigDecimal("close") },
             stockId,
         ).firstOrNull() ?: BigDecimal.ZERO
+
+    /**
+     * ADR-069 — 주문 종목이 속한 섹터의 합산 비중(보유 + 진행 중 매수 + 이번 주문) / 총자산 ≤ 한도.
+     * 단일 종목 집중도와 같은 분모·같은 "모르면 막는다" 원칙(V-H3)을 쓴다. 단 섹터가 미분류인 종목은 어떤 섹터 합에도 들어가지
+     * 않으므로 이 규칙의 대상이 아니다(통과, 사유에 명시).
+     */
+    private fun sectorConcentration(
+        stockId: Long,
+        qty: Int,
+        estimatedPrice: BigDecimal,
+        limit: Double,
+        snapshot: PortfolioSnapshot,
+    ): RuleResult {
+        fun result(passed: Boolean, detail: String, current: Double = 0.0) =
+            RuleResult(rule = "SectorConcentrationRule", passed = passed, detail = detail, current = current, limit = limit)
+
+        val sector = sectorsOf(listOf(stockId))[stockId]
+            ?: return result(true, "섹터 미분류 종목 — 섹터 한도 대상이 아닙니다.")
+        if (estimatedPrice <= BigDecimal.ZERO) return result(false, "추정가를 확인할 수 없어 섹터 집중도를 판정할 수 없습니다.")
+
+        val held = snapshot.holdings.groupBy { it.stockId }.mapValues { (_, v) -> v.sumOf { it.qty } }
+        val ids = (held.keys + snapshot.pendingBuys.keys + stockId).distinct()
+        val sectors = sectorsOf(ids)
+        val prices = mutableMapOf<Long, BigDecimal>()
+        fun priceOf(id: Long) = prices.getOrPut(id) { if (id == stockId) estimatedPrice else currentPrice(id) }
+
+        // 분모 — 단일 종목 집중도와 같다: 실거래는 증권사 총평가액, 모의투자는 현금 + 보유 평가액.
+        val totalAssets = snapshot.totalAssets?.toDouble()
+            ?: (snapshot.cash.toDouble() + held.entries.sumOf { (id, q) -> currentPrice(id).multiply(BigDecimal(q)).toDouble() })
+        if (totalAssets <= 0) return result(false, "총자산을 확인할 수 없어 섹터 집중도를 판정할 수 없습니다.")
+
+        var sectorValue = 0.0
+        for (id in ids.filter { sectors[it] == sector }) {
+            val q = (held[id] ?: 0) + (snapshot.pendingBuys[id] ?: 0) + (if (id == stockId) qty else 0)
+            if (q <= 0) continue
+            val p = priceOf(id)
+            // 같은 섹터 보유의 가격을 모르면 합을 과소평가해 통과시키게 된다 — 막는다.
+            if (p <= BigDecimal.ZERO) return result(false, "같은 섹터 보유 종목의 가격을 확인할 수 없어 섹터 집중도를 판정할 수 없습니다.")
+            sectorValue += p.multiply(BigDecimal(q)).toDouble()
+        }
+        val pct = sectorValue / totalAssets * 100
+        return result(pct <= limit, "섹터($sector) 집중도 ${String.format("%.2f", pct)}% / 한도 ${limit}%", pct)
+    }
+
+    /** 종목 → 섹터. 섹터가 비어 있는 종목은 결과에 없다(미분류). */
+    internal fun sectorsOf(stockIds: Collection<Long>): Map<Long, String> {
+        if (stockIds.isEmpty()) return emptyMap()
+        val ids = stockIds.distinct()
+        return jdbc.query(
+            "SELECT id, sector FROM stocks WHERE id IN (${ids.joinToString(",") { "?" }}) AND sector IS NOT NULL AND sector <> ''",
+            { rs, _ -> rs.getLong("id") to rs.getString("sector") },
+            *ids.toTypedArray(),
+        ).toMap()
+    }
 
     internal fun symbolOf(stockId: Long): String? =
         jdbc.query("SELECT symbol FROM stocks WHERE id = ?", { rs, _ -> rs.getString(1) }, stockId).firstOrNull()

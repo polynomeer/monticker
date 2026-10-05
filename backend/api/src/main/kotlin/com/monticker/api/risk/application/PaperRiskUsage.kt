@@ -51,6 +51,16 @@ class PaperRiskUsage(
             "CONCENTRATION", "단일 종목 집중도", top.value / total * 100, limits.concentrationLimitPct.toDouble(),
             subject = rules.symbolOf(top.key),
         )
+
+        // 섹터 집중도 — 한도를 설정한 경우만(ADR-069). 미분류 종목은 어떤 섹터에도 넣지 않는다.
+        limits.sectorConcentrationLimitPct?.let { sectorLimit ->
+            val sectors = rules.sectorsOf(values.keys)
+            values.entries.filter { it.key in sectors }
+                .groupBy({ sectors.getValue(it.key) }, { it.value })
+                .mapValues { it.value.sum() }
+                .maxByOrNull { it.value }
+                ?.let { (sector, v) -> out += RuleUsage("SECTOR_CONCENTRATION", "섹터 집중도", v / total * 100, sectorLimit.toDouble(), sector) }
+        }
         return out
     }
 }
