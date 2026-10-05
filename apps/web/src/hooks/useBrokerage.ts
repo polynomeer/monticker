@@ -27,8 +27,7 @@ import {
   saveRebalanceTarget,
   getTradingStatus,
   submitBrokerageOrder,
-  syncBrokerageOrder,
-} from "@/services/brokerage";
+  syncBrokerageOrder, disconnectBrokerage } from "@/services/brokerage";
 
 /** ADR-056 — 증권사에서의 상태를 아직 모른다. 같은 종목·방향 주문이 서버에서 막히고, 목록은 자동 갱신한다. */
 export const isUnresolvedOrderStatus = (s: BrokerageOrderStatus) => s === "PENDING_SUBMIT" || s === "UNKNOWN";
@@ -82,6 +81,17 @@ export function useConnectBrokerage() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (req: ConnectBrokerageRequest) => connectBrokerage(req),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brokerage"] });
+    },
+  });
+}
+
+/** ADR-067 — 연동 해지. 성공하면 계좌·잔고·조건부 주문 캐시를 모두 버린다. */
+export function useDisconnectBrokerage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => disconnectBrokerage(),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["brokerage"] });
     },

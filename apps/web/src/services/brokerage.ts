@@ -47,6 +47,15 @@ export async function connectBrokerage(req: ConnectBrokerageRequest): Promise<Br
   return res.json();
 }
 
+/** ADR-067 — 연동 해지. 결과가 열린 주문이 있으면 409(메시지에 사유). */
+export interface DisconnectBrokerageResponse { accountId: number; cancelledConditionalOrders: number }
+
+export async function disconnectBrokerage(): Promise<DisconnectBrokerageResponse> {
+  const res = await authFetch("/api/brokerage/account", { method: "DELETE" });
+  await throwIfNotOk(res);
+  return res.json();
+}
+
 export async function getBrokerageBalance(): Promise<BrokerageBalanceResponse> {
   const res = await authFetch("/api/brokerage/account/balance");
   await throwIfNotOk(res);
