@@ -337,6 +337,25 @@ log.info("[MockKIS] 토큰 발급: appKey={}", appKey)
 **개선방안**: `resendVerification`도 `forgotPassword`와 동일하게 이메일 존재 여부와 무관한
 제네릭 응답으로 통일.
 
+### H5 — 모의거래 감정 태그 API에 소유권 검사가 없었다(IDOR) — ✅ 수정(2026-10-05)
+
+**근거**: `EmotionTagService.saveTag(userId, tradeId, ...)`는 `paper_trades.user_id`를 확인하지 않고
+`findByPaperTradeId(tradeId)`로 기존 태그를 지운 뒤 새 태그를 저장했고, `getTag(tradeId)`는 `userId`를
+받지조차 않았다. `GET/POST /api/paper/trades/{id}/emotion`(`TradeReceiptController`)을 통해 **로그인한
+사용자 누구나 id를 순회하며 다른 사용자의 감정 태그·자유 메모를 읽거나 덮어쓸 수 있었다.** 메모는 매매
+당시 심리를 적는 사적인 텍스트라 노출 자체가 피해다. §6의 "소유권 체크는 예외 없이 한다"는 판단은 이
+서비스를 놓친 것이었다.
+
+**조치**: 두 메서드 모두 먼저 `PaperTradeQueryService.findById`로 거래 소유자를 확인하고, 남의 거래는
+존재하지 않는 거래와 **같은 `NoSuchElementException` → 404, 같은 메시지**로 응답한다(403/400으로 구분하면
+거래 id 존재 여부를 열거할 수 있다). 수정 전에 다른 사용자가 심어둔 태그가 남아 있을 수 있어 `getTag`는
+태그 쪽 `user_id`도 호출자와 일치할 때만 반환한다. `TradeEmotionControllerTest`가 실제 서비스와
+`GlobalExceptionHandler`를 거쳐 소유자 읽기/쓰기 200, 타 사용자 읽기/쓰기 404(삭제·저장 미발생), 남의 거래와
+없는 거래의 응답 동일성을 고정한다.
+
+**남은 것**: `ReceiptService.getReceipt`는 소유권을 확인하지만 `require(...)`라서 남의 거래는 400, 없는
+거래는 404로 갈린다 — 내용은 새지 않지만 id 존재 여부가 드러난다. 같은 404 패턴으로 맞출 것.
+
 ---
 
 ## 4. Medium
@@ -373,6 +392,7 @@ log.info("[MockKIS] 토큰 발급: appKey={}", appKey)
   `SecurityContext`(JWT)에서만 가져온다 — 전체 `@RestController`를 grep해서 확인. 리소스를
   다루는 서비스 메서드는 예외 없이 `require(order.userId == userId)` 류의 소유권 체크를 한다
   (`BrokerageService`, `WatchlistService`, `ConditionalOrderService` 등).
+  _(2026-10-05 정정: "예외 없이"는 틀렸다 — `EmotionTagService`가 빠져 있었다. §3 H5 참고.)_
 - **JWT 서명 검증 자체는 안전**: `Jwts.parser().verifyWith(key).build().parseSignedClaims(...)`
   구조상 `alg: none`이나 서명 없는 토큰을 원천적으로 거부한다. 문제는 키 값이지 검증 로직이 아니다.
 - **Refresh token은 서버 사이드에서 해시 저장 + 회전 + 폐기**: SHA-256 해시로만 DB에 저장,
