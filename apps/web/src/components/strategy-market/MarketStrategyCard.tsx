@@ -6,7 +6,8 @@ import type { MarketStrategy, SignalDirection } from "@monticker/types";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
 import { useForwardTestSignalsWs } from "@/hooks/useForwardTestSignalsWs";
-import { Btn, Pill, Stat } from "@/components/terminal";
+import { Btn, Pill, Sparkline, Stat, fmtPct } from "@/components/terminal";
+import { fmtMatch, fmtMdd, matchTone } from "@/components/quant/parts";
 
 interface SignalEvent { direction: SignalDirection; stockId: number; price: number; evalDate: string; }
 
@@ -44,8 +45,15 @@ function SignalFeed({ rulesetId }: { rulesetId: string }) {
   );
 }
 
-/** 시안 market()의 mcard — 성과 지표는 마켓 API가 아직 주지 않아 "—"로 둔다. */
+export function forwardWeeks(startedAt: string, stoppedAt?: string | null) {
+  const end = stoppedAt ? new Date(stoppedAt).getTime() : Date.now();
+  return Math.max(0, Math.floor((end - new Date(startedAt).getTime()) / (7 * 86400_000)));
+}
+
+/** 시안 market()의 mcard — 성과는 마켓 목록 API가 같이 준 요약(ADR-078)을 쓴다. */
 export function MarketStrategyCard({ strategy }: { strategy: MarketStrategy }) {
+  const bt = strategy.performance?.backtest ?? null;
+  const fw = strategy.performance?.forward ?? null;
   const qc = useQueryClient();
   const { toast } = useToast();
   const [showSignals, setShowSignals] = useState(false);
@@ -86,16 +94,29 @@ export function MarketStrategyCard({ strategy }: { strategy: MarketStrategy }) {
         <Pill tone="muted">검증 전</Pill>
       </div>
 
-      {strategy.description ? (
+      {strategy.description && (
         <p className="m-0 line-clamp-2 min-h-[2.6em] text-xs leading-relaxed text-tm-soft">{strategy.description}</p>
+      )}
+      {bt && bt.curve.length > 1 ? (
+        <Sparkline values={bt.curve} color="#bd93f9" width={290} height={56} stretch />
       ) : (
-        <div className="grid h-14 place-items-center rounded-lg bg-tm-inner text-2xs text-tm-muted">성과 곡선 준비 중</div>
+        <div className="grid h-14 place-items-center rounded-lg bg-tm-inner text-2xs text-tm-muted">백테스트 곡선 없음</div>
       )}
 
       <div className="grid grid-cols-3 gap-2">
-        <Stat label="CAGR" value="—" valueClassName="text-tm-muted" />
-        <Stat label="MDD" value="—" valueClassName="text-tm-muted" />
-        <Stat label="포워드" value="—" valueClassName="text-tm-muted" />
+        <Stat
+          label="CAGR"
+          value={fmtPct(bt?.annualReturn ?? null, 1)}
+          valueClassName={bt?.annualReturn == null ? "text-tm-muted" : bt.annualReturn >= 0 ? "text-up" : "text-down"}
+          sub={bt ? `${bt.startDate.slice(0, 7)}~${bt.endDate.slice(0, 7)}` : undefined}
+        />
+        <Stat label="MDD" value={fmtMdd(bt?.mdd)} valueClassName={bt?.mdd == null ? "text-tm-muted" : bt.mdd > 0.05 ? "text-down" : undefined} sub={bt?.sharpe != null ? `샤프 ${bt.sharpe.toFixed(2)}` : undefined} />
+        <Stat
+          label="포워드"
+          value={fw ? `${forwardWeeks(fw.startedAt, fw.stoppedAt)}주` : "—"}
+          valueClassName={fw ? undefined : "text-tm-muted"}
+          sub={fw ? <span className={matchTone(fw.matchRate)}>일치 {fmtMatch(fw.matchRate, fw.comparedSignals)}</span> : "포워드 기록 없음"}
+        />
       </div>
 
       <div className="flex items-center justify-between gap-2 border-t border-tm-line pt-2.5">
