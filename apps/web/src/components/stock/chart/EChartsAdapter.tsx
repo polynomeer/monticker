@@ -42,12 +42,17 @@ function calcBollingerBands(data: CandleData[], period = 20) {
 }
 
 // ── 이벤트 타입 색상 ─────────────────────────────────────────
+// 터미널 시안의 이벤트 색·글자(components/stock/parts.tsx EVENT_META와 같은 값)
 const EVENT_COLORS: Record<string, string> = {
-  PRICE_SPIKE:          "#0ecb81",
-  PRICE_DROP:           "#f6465d",
-  VOLUME_SURGE:         "#f1fa8c",
-  DISCLOSURE_PUBLISHED: "#bd93f9",
-  default:              "#6272a4",
+  PRICE_SPIKE:          "#50fa7b",
+  PRICE_DROP:           "#ff79c6",
+  VOLUME_SURGE:         "#bd93f9",
+  NEWS_PUBLISHED:       "#8be9fd",
+  DISCLOSURE_PUBLISHED: "#ffb86c",
+  default:              "#c3c8e2",
+};
+const EVENT_LETTERS: Record<string, string> = {
+  PRICE_SPIKE: "P", PRICE_DROP: "P", VOLUME_SURGE: "V", NEWS_PUBLISHED: "N", DISCLOSURE_PUBLISHED: "D", SECTOR_MOVE: "S",
 };
 
 // ── 숫자 포맷 ────────────────────────────────────────────────
@@ -123,12 +128,15 @@ export default function EChartsAdapter({
         .map(e => {
           const idx = candles.findIndex(c => Math.abs(c.time - e.time) < 90);
           if (idx < 0) return null;
+          const color = EVENT_COLORS[e.eventType] ?? EVENT_COLORS.default;
           return {
-            name:  e.eventType,
+            name:  e.title,
             coord: [dates[idx], candles[idx].high],
-            value: e.title.slice(0, 6),
-            itemStyle: { color: EVENT_COLORS[e.eventType] ?? EVENT_COLORS.default },
-            symbolSize: e.importanceScore > 70 ? 14 : 9,
+            value: EVENT_LETTERS[e.eventType] ?? "E",
+            // 시안의 원형 마커 — 페이지 배경 원 + 이벤트 색 테두리 + 글자
+            itemStyle: { color: "#1b1c24", borderColor: color, borderWidth: 2 },
+            label: { color },
+            symbolSize: e.importanceScore > 70 ? 22 : 18,
             // markPoint 데이터 항목에 자유 필드를 얹어두면 클릭 이벤트의 params.data로
             // 그대로 돌아온다 — 이벤트 타임라인으로 점프할 때 이 id로 정확히 매칭한다.
             eventId: e.id,
@@ -318,10 +326,10 @@ export default function EChartsAdapter({
               borderWidth: 1,
             },
             markPoint: {
-              symbol: "pin",
-              symbolSize: 28,
+              symbol: "circle",
+              symbolOffset: [0, -16],
               data: markData as never[],
-              label: { show: true, fontSize: 8, color: "#fff", fontWeight: "bold" },
+              label: { show: true, fontSize: 10, fontWeight: "bold", fontFamily: "JetBrains Mono, monospace" },
             },
             markLine: {
               symbol: ["none", "none"],

@@ -67,10 +67,10 @@ export default function IndicatorChart({ candles, showRSI = false, showMACD = fa
       if (disposed || !containerRef.current) return;
       if (chartRef.current) chartRef.current.dispose();
 
-      const isDark = resolvedTheme === "dark";
-      const bg     = isDark ? "#1e1f29" : "#ffffff";
-      const grid   = isDark ? "#44475a" : "#e5e7eb";
-      const text   = isDark ? "#6272a4" : "#6b7280";
+      const isDark = true; // 터미널 디자인은 다크 전용
+      const bg     = isDark ? "#282a36" : "#ffffff";
+      const grid   = isDark ? "#34364a" : "#e5e7eb";
+      const text   = isDark ? "#a4abcf" : "#6b7280";
       const dates  = candles.map(c => new Date(c.time * 1000).toISOString().slice(0, 10));
 
       const grids: object[]   = [];
@@ -143,7 +143,7 @@ export default function IndicatorChart({ candles, showRSI = false, showMACD = fa
       chart.setOption({
         backgroundColor: bg, animation: false,
         legend: { top: 4, right: 80, textStyle: { color: text, fontSize: 10 }, itemWidth: 12, itemHeight: 2 },
-        tooltip: { trigger: "axis", backgroundColor: isDark ? "#282a36" : "#fff", borderColor: grid, textStyle: { color: text, fontSize: 11 } },
+        tooltip: { trigger: "axis", backgroundColor: isDark ? "#21222c" : "#fff", borderColor: grid, textStyle: { color: text, fontSize: 11 } },
         grid: grids, xAxis: xAxes, yAxis: yAxes, series, dataZoom,
       });
 
@@ -169,7 +169,7 @@ export default function IndicatorChart({ candles, showRSI = false, showMACD = fa
   return (
     <div
       ref={containerRef}
-      className="w-full rounded-lg border border-gray-200 dark:border-dracula-line overflow-hidden"
+      className="w-full rounded-lg border border-tm-line overflow-hidden"
       style={{ height }}
     />
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check } from "@phosphor-icons/react";
+import { Icon } from "@/components/terminal";
 import { authFetch } from "@/services/api";
 import { getAccessToken } from "@/services/auth";
 
@@ -56,22 +56,24 @@ export default function WatchlistAddButton({ stockId }: Props) {
   };
 
   return (
-    <div className="flex gap-2 items-center">
+    <div className="flex items-center gap-1.5">
       <select
+        aria-label="관심 그룹"
         value={selectedGroup ?? ""}
         onChange={e => setSelectedGroup(Number(e.target.value))}
-        className="border border-gray-200 dark:border-dracula-line bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg rounded px-3 py-1.5 text-sm flex-1 transition-colors hover:border-gray-300 dark:hover:border-dracula-comment"
+        className="h-9 max-w-[140px] rounded-lg border border-tm-line2 bg-tm-page px-2.5 text-13 text-dracula-fg outline-none focus:border-dracula-purple [&>option]:bg-tm-panel"
       >
         {groups.map(g => (
           <option key={g.id} value={g.id}>{g.name}</option>
         ))}
       </select>
       <button
+        type="button"
         onClick={handleAdd}
         disabled={loading}
-        className="border border-blue-500 dark:border-dracula-purple text-blue-600 dark:text-dracula-purple rounded px-4 py-1.5 text-sm font-medium hover:bg-blue-50 dark:hover:bg-dracula-purple/10 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 whitespace-nowrap transition-all duration-150 inline-flex items-center gap-1"
+        className="inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg border border-tm-line2 px-3 text-13 font-semibold text-dracula-fg hover:bg-tm-raised disabled:opacity-50"
       >
-        {added ? <><Check size={14} weight="bold" aria-hidden /> 추가됨</> : loading ? "추가 중..." : "관심종목 추가"}
+        {added ? <><Icon name="check" size={14} className="text-dracula-green" /> 추가됨</> : loading ? "추가 중..." : <><Icon name="star" size={14} className="text-dracula-yellow" />관심종목 추가</>}
       </button>
     </div>
   );

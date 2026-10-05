@@ -1,11 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Newspaper } from "@phosphor-icons/react";
-import { Badge } from "@/components/ui/Badge";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { Skeleton } from "@/components/ui/Skeleton";
-import { Card } from "@/components/ui/Card";
+import { Pill, type Tone } from "@/components/terminal";
+import { Muted, SkeletonRows } from "./parts";
 
 interface NewsArticle {
   id: number;
@@ -17,12 +14,10 @@ interface NewsArticle {
   sentiment: string | null;
 }
 
-type BadgeVariant = "up" | "down" | "neutral";
-
-const SENTIMENT_BADGE: Record<string, BadgeVariant> = {
-  POSITIVE: "up",
-  NEGATIVE: "down",
-  NEUTRAL: "neutral",
+const SENTIMENT_TONE: Record<string, Tone> = {
+  POSITIVE: "green",
+  NEGATIVE: "red",
+  NEUTRAL: "muted",
 };
 
 const SENTIMENT_LABEL: Record<string, string> = {
@@ -33,7 +28,7 @@ const SENTIMENT_LABEL: Record<string, string> = {
 
 interface Props {
   stockId: number;
-  /** 카드 테두리/제목 없이 내용만 렌더링 (탭 전환형 컨테이너에 임베드할 때) */
+  /** 테두리/제목 없이 내용만 렌더링 (탭 전환형 컨테이너에 임베드할 때) */
   bare?: boolean;
 }
 
@@ -53,49 +48,35 @@ export default function NewsPanel({ stockId, bare = false }: Props) {
 
   const content = (
     <>
-      {!bare && <h3 className="font-semibold text-gray-900 dark:text-dracula-fg mb-3">관련 뉴스</h3>}
+      {!bare && <h3 className="m-0 mb-2 text-15 font-bold text-dracula-fg">관련 뉴스</h3>}
 
-      {loading && (
-        <div className="space-y-2">
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full rounded-lg" />)}
-        </div>
-      )}
+      {loading && <SkeletonRows n={3} h="h-16" />}
 
-      {!loading && articles.length === 0 && (
-        <EmptyState
-          icon={Newspaper}
-          title="관련 뉴스 없음"
-          description="이 종목에 대한 최근 뉴스가 없습니다."
-        />
-      )}
+      {!loading && articles.length === 0 && <Muted>이 종목에 대한 최근 뉴스가 없습니다.</Muted>}
 
       {!loading && articles.length > 0 && (
-        <ul className="space-y-2">
+        <ul className="m-0 list-none p-0">
           {articles.map(a => (
-            <li key={a.id}>
+            <li key={a.id} className="border-b border-tm-line">
               <a
                 href={a.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block p-3 rounded-lg border border-gray-200 dark:border-dracula-line/60 bg-gray-50 dark:bg-dracula-bg hover:border-gray-300 dark:hover:border-dracula-comment/60 transition-colors"
+                className="flex flex-col gap-1 px-1 py-2.5 text-dracula-fg hover:bg-tm-raised/40 hover:text-dracula-fg"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <span className="text-sm font-medium text-gray-900 dark:text-dracula-fg line-clamp-2">
-                    {a.title}
-                  </span>
+                <span className="flex items-start justify-between gap-2">
+                  <span className="line-clamp-2 text-13 font-semibold">{a.title}</span>
                   {a.sentiment && (
-                    <Badge variant={SENTIMENT_BADGE[a.sentiment] ?? "neutral"} className="shrink-0">
+                    <Pill tone={SENTIMENT_TONE[a.sentiment] ?? "muted"} className="flex-none">
                       {SENTIMENT_LABEL[a.sentiment] ?? a.sentiment}
-                    </Badge>
+                    </Pill>
                   )}
-                </div>
-                {a.description && (
-                  <p className="text-xs mt-1 text-gray-500 dark:text-dracula-comment line-clamp-2">{a.description}</p>
-                )}
-                <div className="flex items-center gap-2 mt-1.5 text-xs text-gray-500 dark:text-dracula-comment">
+                </span>
+                {a.description && <span className="line-clamp-2 text-xs text-tm-muted">{a.description}</span>}
+                <span className="flex items-center gap-2 text-2xs text-tm-muted">
                   {a.source && <span>{a.source}</span>}
-                  <span>{new Date(a.publishedAt).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
-                </div>
+                  <span className="num">{new Date(a.publishedAt).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                </span>
               </a>
             </li>
           ))}
@@ -105,5 +86,5 @@ export default function NewsPanel({ stockId, bare = false }: Props) {
   );
 
   if (bare) return <div>{content}</div>;
-  return <Card className="p-4">{content}</Card>;
+  return <div className="rounded-[10px] bg-tm-panel p-3.5">{content}</div>;
 }
