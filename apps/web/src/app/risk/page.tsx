@@ -7,6 +7,7 @@ import { getAccessToken } from "@/services/auth";
 import { useToast } from "@/hooks/useToast";
 import { usePaperPortfolio } from "@/hooks/usePaperTrade";
 import { useRiskExposure, type RiskLimits } from "@/components/risk/useRiskExposure";
+import { RULE_LABELS, useRiskDecisionSummary, useRiskDecisions, type RiskDecision } from "@/components/risk/useRiskDecisions";
 import { cancelPayload, describePending, fmtKst, limitsPayload, pendingFor } from "@/components/risk/limitChanges";
 import { RiskGauges, RiskLevel, LEVELS, levelOf, type Gauge } from "@/components/risk/RiskGauges";
 import { useStockMeta } from "@/components/portfolio/useStockMeta";
@@ -54,6 +55,10 @@ export default function RiskPage() {
   const topSlice = slices.find((s) => s.name !== "현금" && s.name !== "미분류") ?? null;
   const topSector = topSlice?.name ?? null;
   const sectorPct = topSlice?.pct ?? null;
+
+  const [decisionPage, setDecisionPage] = useState(0);
+  const { data: decisions, isLoading: decisionsLoading, isError: decisionsError, refetch: refetchDecisions } = useRiskDecisions(decisionPage, isLoggedIn);
+  const { data: summary } = useRiskDecisionSummary(isLoggedIn);
 
   const [draft, setDraft] = useState<RiskLimits | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -149,7 +154,11 @@ export default function RiskPage() {
         { label: "리스크 수준", value: LEVELS[level].name, tone: LEVELS[level].text },
         { label: "VaR 사용", value: varUse != null ? `${varUse.toFixed(0)}%` : "—" },
         { label: "섹터 최대", value: topSector && sectorPct != null ? `${topSector} ${sectorPct.toFixed(0)}%` : "—" },
-        { label: "이번 달 차단", value: "—", tone: "text-tm-muted" },
+        {
+          label: "이번 달 차단",
+          value: summary ? `${fmtNum(summary.blockedThisMonth)}건` : "—",
+          tone: summary && summary.blockedThisMonth > 0 ? "text-[#ff8a8a]" : summary ? undefined : "text-tm-muted",
+        },
       ]
     : [];
 
@@ -171,20 +180,55 @@ export default function RiskPage() {
       </Panel>
 
       <PanelRow>
-        <Panel tabs={["차단·경고 기록"]} actions={[]} preview className="flex-[999_1_600px]" bodyClassName="px-1.5 pb-1.5 pt-1">
-          {/* 리스크 게이트 판정 이력 API가 아직 없다 — 표 머리만 시안대로 두고 비워 둔다 */}
+        <Panel
+          tabs={["차단 기록"]}
+          actions={["refresh"]}
+          onAction={(a) => a === "refresh" && refetchDecisions()}
+          className="flex-[999_1_600px]"
+          bodyClassName="px-1.5 pb-1.5 pt-1"
+        >
+          {/* 리스크 게이트가 막은 주문(모의·실거래). "경고 후 진행" 모드가 아직 없어 경고 기록은 없다(P2). */}
           <DataTable
             columns={[
-              { key: "t", header: "시각", cell: () => null },
-              { key: "o", header: "주문", cell: () => null },
-              { key: "r", header: "사유", cell: () => null },
-              { key: "x", header: "결과", cell: () => null },
+              { key: "t", header: "시각", cell: (d: RiskDecision) => <span className="num text-tm-soft">{fmtKst(d.createdAt)}</span> },
+              {
+                key: "o",
+                header: "주문",
+                cell: (d: RiskDecision) => (
+                  <span className="flex flex-col">
+                    <span className="font-semibold">
+                      {d.stockName ?? d.symbol ?? "—"}{" "}
+                      <span className={d.side === "BUY" ? "text-up" : "text-down"}>{d.side === "BUY" ? "매수" : d.side === "SELL" ? "매도" : ""}</span>{" "}
+                      {d.quantity != null && <span className="num">{fmtNum(d.quantity)}주</span>}
+                    </span>
+                    <span className="text-2xs text-tm-muted">{d.accountType === "REAL" ? "실거래" : "모의투자"}{d.symbol ? ` · ${d.symbol}` : ""}</span>
+                  </span>
+                ),
+              },
+              {
+                key: "r",
+                header: "사유",
+                cell: (d: RiskDecision) => (
+                  <span className="flex flex-col">
+                    <span>{d.blockedBy ? RULE_LABELS[d.blockedBy] ?? d.blockedBy : "—"}</span>
+                    {d.detail && <span className="text-2xs text-tm-muted">{d.detail}</span>}
+                  </span>
+                ),
+              },
+              { key: "x", header: "결과", align: "right", cell: () => <span className="font-semibold text-[#ff8a8a]">차단</span> },
             ]}
-            rows={[]}
-            rowKey={(_, i) => i}
+            rows={decisions?.items ?? []}
+            rowKey={(d) => d.id}
             minWidth={640}
-            empty="차단·경고 기록은 준비 중입니다. 지금은 주문 화면에서 거부 사유를 바로 보여 줍니다."
+            empty={decisionsError ? "차단 기록을 불러오지 못했습니다." : decisionsLoading ? "불러오는 중..." : "리스크 한도로 막힌 주문이 없습니다."}
           />
+          {decisions && (decisionPage > 0 || decisions.hasNext) && (
+            <div className="flex items-center justify-end gap-2 px-1.5 pt-2 text-xs text-tm-muted">
+              <Btn kind="ghost" size="sm" disabled={decisionPage === 0} onClick={() => setDecisionPage((p) => Math.max(0, p - 1))}>이전</Btn>
+              <span className="num">{decisionPage + 1}쪽</span>
+              <Btn kind="ghost" size="sm" disabled={!decisions.hasNext} onClick={() => setDecisionPage((p) => p + 1)}>다음</Btn>
+            </div>
+          )}
         </Panel>
 
         <Panel tabs={["한도 설정"]} actions={[]} className="flex-[1_1_340px]">
