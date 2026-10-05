@@ -1,12 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { X, FloppyDisk, Eye } from "@phosphor-icons/react";
-import type { RuleCondition, RuleOperator } from "@monticker/types";
+import type { RuleCondition, RuleOperator, RuleSet } from "@monticker/types";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
+import {
+  AutoGrid, Btn, BtnLink, Divider, Field, H2, Icon, LineChart, Notice, Panel, PanelCol, PanelRow,
+  PreviewTag, Stat, TerminalPage, TitleBlock, fmtNum, fmtPct, type IconName,
+} from "@/components/terminal";
+import { SegOpts, rulesetStatus } from "@/components/quant/parts";
+import { ChipNumber, ChipSelect, CondShell, JoinTag, NumField } from "@/components/quant/builderParts";
+import { useRuleSetBacktests } from "@/components/quant/RuleSetCard";
 
 // ── 상수 ───────────────────────────────────────────────────────────────────────
 
@@ -54,6 +60,22 @@ const DEFAULT_EXIT: Condition[] = [
   { id: "x2", indicator: "LOSS_RATE",   comparator: "LTE", params: {}, value: -4 },
 ];
 
+/** 조건 블록 팔레트 — 누르면 매수 조건에 추가된다. 엔진에 없는 지표는 준비 중으로 막아 둔다. */
+const BLOCKS: { label: string; icon: IconName; make?: () => Omit<Condition, "id"> }[] = [
+  { label: "거래량",     icon: "filter",  make: () => ({ indicator: "VOLUME_RATIO",   comparator: "GT", params: { period: 20 }, value: 2 }) },
+  { label: "가격 변동",  icon: "trend",   make: () => ({ indicator: "PRICE_CHANGE",   comparator: "GT", params: { period: 5 },  value: 3 }) },
+  { label: "이동평균",   icon: "line",    make: () => ({ indicator: "CLOSE_VS_MA",    comparator: "GT", params: { period: 20 } }) },
+  { label: "RSI",        icon: "bars",    make: () => ({ indicator: "RSI",            comparator: "LT", params: { period: 14 }, value: 30 }) },
+  { label: "MACD",       icon: "compare", make: () => ({ indicator: "MACD_CROSS",     comparator: "GOLDEN", params: {} }) },
+  { label: "볼린저밴드", icon: "hlines",  make: () => ({ indicator: "BOLLINGER_BAND", comparator: "BELOW_LOWER", params: { period: 20 } }) },
+  { label: "뉴스 감성",  icon: "news" },
+  { label: "공시 유형",  icon: "doc" },
+  { label: "시가총액",   icon: "pie" },
+  { label: "배당",       icon: "card" },
+];
+
+const COND_COLORS = ["text-dracula-purple", "text-dracula-cyan", "text-dracula-pink", "text-dracula-orange", "text-dracula-green"];
+
 interface ParsedRuleDefinition {
   entryRules?: { operator?: RuleOperator; conditions?: RuleCondition[] };
   exitRules?: { operator?: RuleOperator; conditions?: RuleCondition[] };
@@ -88,96 +110,77 @@ function condToText(c: Condition): string {
   return `${label}${periodStr}  ${cmpLabel} ${val}`;
 }
 
-// ── CSS 공통 ──────────────────────────────────────────────────────────────────
+// ── 조건 행 — 시안 cond(): [지표] [기간] [비교] [값] × ─────────────────────────
 
-const inputCls = "w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg px-3 py-2 text-xs transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50";
-const selectCls = "rounded-md bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none focus:ring-1 focus:ring-dracula-purple";
-
-// ── 조건 행 컴포넌트 ──────────────────────────────────────────────────────────
-
-function ConditionRow({ cond, onChange, onRemove }: {
+function ConditionRow({ cond, color, onChange, onRemove, exitMode }: {
   cond: Condition;
+  color: string;
   onChange: (c: Condition) => void;
   onRemove: () => void;
+  exitMode?: boolean;
 }) {
   const meta = INDICATORS.find(i => i.value === cond.indicator);
+  const options = INDICATORS.filter(i => exitMode || !("exitOnly" in i && i.exitOnly));
 
   return (
-    <div className="flex flex-wrap gap-2 items-center p-3 rounded-lg bg-gray-50 dark:bg-dracula-bg border border-gray-200 dark:border-dracula-line">
-      <select
+    <CondShell onRemove={onRemove}>
+      <ChipSelect
+        aria-label="지표"
+        colorClass={color}
         value={cond.indicator}
         onChange={e => {
           const m = INDICATORS.find(i => i.value === e.target.value)!;
           onChange({ ...cond, indicator: e.target.value, comparator: m.comparators[0], params: {}, value: undefined });
         }}
-        className={selectCls}
       >
-        {INDICATORS.map(i => <option key={i.value} value={i.value}>{i.label}</option>)}
-      </select>
+        {options.map(i => <option key={i.value} value={i.value}>{i.label}</option>)}
+      </ChipSelect>
 
       {(meta?.params as readonly string[] | undefined)?.includes("period") && (
-        <input
-          type="number"
+        <ChipNumber
+          aria-label="기간"
+          suffix="일"
           value={cond.params.period ?? 20}
           onChange={e => onChange({ ...cond, params: { ...cond.params, period: +e.target.value } })}
-          className="w-16 rounded-md bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none focus:ring-1 focus:ring-dracula-purple"
           min={1}
         />
       )}
 
-      <select
-        value={cond.comparator}
-        onChange={e => onChange({ ...cond, comparator: e.target.value })}
-        className={selectCls}
-      >
+      <ChipSelect aria-label="비교" value={cond.comparator} onChange={e => onChange({ ...cond, comparator: e.target.value })}>
         {meta?.comparators.map(c => (
           <option key={c} value={c}>{COMPARATOR_LABEL[c] ?? c}</option>
         ))}
-      </select>
+      </ChipSelect>
 
       {indicatorHasValue(meta) && cond.comparator === "BETWEEN" ? (
         <>
-          <input
-            type="number"
+          <ChipNumber
+            aria-label="하한"
             value={Array.isArray(cond.value) ? cond.value[0] : 30}
             onChange={e => onChange({ ...cond, value: [+e.target.value, Array.isArray(cond.value) ? cond.value[1] : 70] })}
-            className="w-16 rounded-md bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none"
           />
-          <span className="text-gray-500 dark:text-dracula-comment text-xs">~</span>
-          <input
-            type="number"
+          <span className="text-xs text-tm-muted">~</span>
+          <ChipNumber
+            aria-label="상한"
             value={Array.isArray(cond.value) ? cond.value[1] : 70}
             onChange={e => onChange({ ...cond, value: [Array.isArray(cond.value) ? cond.value[0] : 30, +e.target.value] })}
-            className="w-16 rounded-md bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none"
           />
         </>
       ) : indicatorHasValue(meta) ? (
-        <input
-          type="number"
+        <ChipNumber
+          aria-label="값"
           value={typeof cond.value === "number" ? cond.value : ""}
           onChange={e => onChange({ ...cond, value: +e.target.value })}
-          className="w-20 rounded-md bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg text-xs px-2 py-1.5 border border-gray-300 dark:border-none focus:outline-none focus:ring-1 focus:ring-dracula-purple"
         />
       ) : null}
-
-      <button
-        onClick={onRemove}
-        aria-label="조건 삭제"
-        className="ml-auto inline-flex items-center justify-center w-6 h-6 text-dracula-red hover:opacity-70 active:scale-90 transition-transform"
-      ><X size={14} weight="bold" aria-hidden /></button>
-    </div>
+    </CondShell>
   );
 }
 
-// ── 섹션 헤더 ─────────────────────────────────────────────────────────────────
-
-function SectionHeader({ label }: { label: string }) {
-  return (
-    <h2 className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-dracula-comment mb-3">
-      {label}
-    </h2>
-  );
-}
+const OP_OPTIONS = [
+  { value: "AND" as const, label: "모두 충족 시" },
+  { value: "OR" as const, label: "하나라도 충족 시" },
+];
 
 // ── 메인 페이지 ───────────────────────────────────────────────────────────────
 
@@ -188,9 +191,6 @@ export default function BuilderPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  // 모바일에서 에디터/미리보기 전환
-  const [mobileTab, setMobileTab] = useState<"edit" | "preview">("edit");
-
   const [name,                   setName]                   = useState("");
   const [description,            setDescription]            = useState("");
   const [entryOp,                setEntryOp]                = useState<"AND" | "OR">("AND");
@@ -200,8 +200,9 @@ export default function BuilderPage() {
   const [positionPct,            setPositionPct]            = useState(10);
   const [universeMarket,         setUniverseMarket]         = useState("all");
   const [universeMarketCapTier,  setUniverseMarketCapTier]  = useState("all");
+  const [blockQuery,             setBlockQuery]             = useState("");
 
-  const { data: existing } = useQuery({
+  const { data: existing } = useQuery<RuleSet>({
     queryKey: ["quant", "ruleset", editId],
     queryFn: async () => {
       const res = await authFetch(`/api/quant/rulesets/${editId}`);
@@ -211,12 +212,15 @@ export default function BuilderPage() {
     enabled: !!editId,
   });
 
+  const { data: backtests, refetch: refetchBacktests, isFetching: btFetching } = useRuleSetBacktests(editId);
+  const latest = backtests?.[0];
+
   useEffect(() => {
     if (!existing) return;
     setName(existing.name);
     setDescription(existing.description ?? "");
     try {
-      const def: ParsedRuleDefinition = JSON.parse(existing.ruleDefinition);
+      const def: ParsedRuleDefinition = JSON.parse(existing.ruleDefinition ?? "{}");
       setEntryOp(def.entryRules?.operator ?? "AND");
       setExitOp(def.exitRules?.operator ?? "OR");
       setEntry(def.entryRules?.conditions?.map((c, i) => ({ ...c, id: `e${i}`, params: (c as Condition).params ?? {} })) ?? []);
@@ -234,8 +238,8 @@ export default function BuilderPage() {
     name,
     description: description || null,
     ruleDefinition: {
-      entryRules:    { operator: entryOp, conditions: entry.map(({ id, ...c }) => c) },
-      exitRules:     { operator: exitOp,  conditions: exit.map(({ id, ...c }) => c) },
+      entryRules:    { operator: entryOp, conditions: entry.map(({ id: _id, ...c }) => c) },
+      exitRules:     { operator: exitOp,  conditions: exit.map(({ id: _id, ...c }) => c) },
       positionSizing: { type: "FIXED_RATIO", value: positionPct },
     },
     universeJson: { market: universeMarket, marketCapTier: universeMarketCapTier },
@@ -264,9 +268,20 @@ export default function BuilderPage() {
   const canSave = name.trim().length > 0 && entry.length > 0 && exit.length > 0;
 
   const addEntry = () => setEntry(p => [...p, { id: uid(), indicator: "CLOSE_VS_MA",  comparator: "GT",  params: { period: 20 } }]);
-  const addExit  = () => setExit(p => [...p,  { id: uid(), indicator: "PROFIT_RATE",  comparator: "GTE", params: {},            value: 8 }]);
+  const addExit  = () => setExit(p => [...p,  { id: uid(), indicator: "CLOSE_VS_MA",  comparator: "LT",  params: { period: 20 } }]);
 
-  // ── 미리보기 패널 ────────────────────────────────────────────────────────────
+  // 손절·익절 칸은 첫 LOSS_RATE / PROFIT_RATE 조건에 묶는다. 나머지 청산 조건은 아래 목록으로.
+  const lossCond = exit.find(c => c.indicator === "LOSS_RATE");
+  const profitCond = exit.find(c => c.indicator === "PROFIT_RATE");
+  const otherExits = exit.filter(c => c !== lossCond && c !== profitCond);
+  const setBound = (indicator: "LOSS_RATE" | "PROFIT_RATE", v: number | null) => {
+    setExit(p => {
+      const cur = p.find(c => c.indicator === indicator);
+      if (v == null) return cur ? p.filter(c => c !== cur) : p;
+      if (cur) return p.map(c => (c === cur ? { ...c, value: v } : c));
+      return [...p, { id: uid(), indicator, comparator: indicator === "LOSS_RATE" ? "LTE" : "GTE", params: {}, value: v }];
+    });
+  };
 
   const universeLabel = [
     UNIVERSE_MARKETS.find(m => m.key === universeMarket)?.label ?? "전체",
@@ -275,326 +290,225 @@ export default function BuilderPage() {
       : undefined,
   ].filter(Boolean).join(" · ");
 
-  const PreviewPanel = () => (
-    <div className="flex flex-col h-full">
-      <div className="flex-none px-4 py-3 border-b border-gray-100 dark:border-white/5 flex items-center gap-2">
-        <Eye size={14} weight="bold" className="text-dracula-purple" aria-hidden />
-        <span className="text-[11px] font-bold uppercase tracking-wider text-dracula-purple">전략 미리보기</span>
-      </div>
+  const blocks = BLOCKS.filter(b => b.label.toLowerCase().includes(blockQuery.trim().toLowerCase()));
+  const st = existing ? rulesetStatus(existing.status) : null;
+  const reliabilityTone = latest?.reliabilityScore === "A" || latest?.reliabilityScore === "B" ? "text-dracula-green" : latest?.reliabilityScore ? "text-dracula-orange" : "text-tm-muted";
+  const lastSaved = existing ? new Date(existing.updatedAt) : null;
+  const curve = useMemo(() => latest?.equityCurve.map(p => p.equity) ?? [], [latest]);
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 [scrollbar-width:thin]">
-        {/* 전략 이름 */}
-        <div>
-          <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-dracula-comment mb-1">전략명</p>
-          <p className="text-sm font-bold text-gray-900 dark:text-dracula-fg">
-            {name.trim() || <span className="text-gray-300 dark:text-dracula-line italic">미입력</span>}
-          </p>
-          {description && (
-            <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5 line-clamp-2">{description}</p>
-          )}
-        </div>
-
-        {/* 유니버스 */}
-        <div>
-          <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-dracula-comment mb-1">유니버스</p>
-          <span className="inline-block text-xs font-medium px-2 py-0.5 rounded bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg">
-            {universeLabel}
-          </span>
-        </div>
-
-        {/* 매수 조건 */}
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-[10px] uppercase tracking-wider text-dracula-green font-bold">매수 조건</span>
-            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-dracula-green/15 text-dracula-green">{entryOp}</span>
-          </div>
-          {entry.length === 0 ? (
-            <p className="text-[11px] text-gray-400 dark:text-dracula-comment italic">조건 없음</p>
-          ) : (
-            <ol className="space-y-1.5">
-              {entry.map((c, i) => (
-                <li key={c.id} className="flex items-start gap-2 text-[11px]">
-                  <span className="shrink-0 w-4 text-right text-gray-300 dark:text-dracula-line tabular-nums">{i + 1}.</span>
-                  <span className="font-mono text-gray-800 dark:text-dracula-fg leading-snug">{condToText(c)}</span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
-
-        {/* 매도 조건 */}
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-[10px] uppercase tracking-wider text-dracula-red font-bold">매도 조건</span>
-            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-dracula-red/15 text-dracula-red">{exitOp}</span>
-          </div>
-          {exit.length === 0 ? (
-            <p className="text-[11px] text-gray-400 dark:text-dracula-comment italic">조건 없음</p>
-          ) : (
-            <ol className="space-y-1.5">
-              {exit.map((c, i) => (
-                <li key={c.id} className="flex items-start gap-2 text-[11px]">
-                  <span className="shrink-0 w-4 text-right text-gray-300 dark:text-dracula-line tabular-nums">{i + 1}.</span>
-                  <span className="font-mono text-gray-800 dark:text-dracula-fg leading-snug">{condToText(c)}</span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
-
-        {/* 포지션 사이징 */}
-        <div>
-          <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-dracula-comment mb-1">포지션 사이징</p>
-          <p className="text-xs font-mono text-gray-800 dark:text-dracula-fg">
-            1회 매수 = 총 자본의 <strong>{positionPct}%</strong>
-          </p>
-        </div>
-
-        {/* 경고 */}
-        {!canSave && (
-          <div className="p-2.5 rounded-lg bg-dracula-orange/10 border border-dracula-orange/30 text-[11px] text-dracula-orange">
-            {!name.trim() && "· 전략 이름을 입력하세요\n"}
-            {entry.length === 0 && "· 매수 조건을 1개 이상 추가하세요\n"}
-            {exit.length === 0 && "· 매도 조건을 1개 이상 추가하세요"}
-          </div>
-        )}
-      </div>
-
-      {/* 저장 버튼 */}
-      <div className="flex-none px-4 py-4 border-t border-gray-100 dark:border-white/5">
-        <button
-          onClick={() => saveMutation.mutate()}
-          disabled={!canSave || saveMutation.isPending}
-          className="w-full py-2.5 rounded-xl bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100 inline-flex items-center justify-center gap-1.5"
-        >
-          <FloppyDisk size={14} weight="bold" aria-hidden />
-          {saveMutation.isPending ? "저장 중..." : editId ? "룰셋 업데이트" : "룰셋 저장"}
-        </button>
-        <p className="mt-2 text-[10px] text-gray-400 dark:text-dracula-comment text-center">
-          저장 후 바로 백테스트 화면으로 이동합니다
-        </p>
-      </div>
-    </div>
-  );
+  // ── 전략 미리보기 문장 ──────────────────────────────────────────────────────
+  const joinNodes = (conds: Condition[], sep: string, offset = 0): ReactNode[] =>
+    conds.flatMap((c, i) => [
+      i > 0 ? <span key={`s${c.id}`}>{sep}</span> : null,
+      <span key={c.id} className={COND_COLORS[(i + offset) % COND_COLORS.length]}>{condToText(c)}</span>,
+    ]);
 
   return (
-    <div className="flex flex-col animate-fade-up">
-      {/* ── 헤더 바 ────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-white/5
-                      bg-white dark:bg-dracula-bg">
-        <button
-          onClick={() => router.back()}
-          className="text-gray-400 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg text-xs transition-colors shrink-0"
-        >
-          ← 뒤로
-        </button>
-        <div className="w-px h-5 bg-gray-200 dark:bg-dracula-line" />
-        <h1 className="text-sm font-bold text-gray-900 dark:text-dracula-fg">
-          {editId ? "룰셋 수정" : "새 룰셋 만들기"}
-        </h1>
+    <TerminalPage
+      left={
+        <TitleBlock
+          crumb="퀀트랩 / 룰셋 빌더"
+          title={<>{name.trim() || (editId ? "룰셋 수정" : "새 룰셋")}{existing && <> <span className="num text-dracula-purple">v{existing.version}</span></>}</>}
+        />
+      }
+      stats={[
+        { label: "상태", value: st?.label ?? "작성 중", tone: existing?.status === "RUNNING" ? "text-dracula-green" : undefined },
+        { label: "마지막 저장", value: lastSaved ? `${String(lastSaved.getMonth() + 1).padStart(2, "0")}.${String(lastSaved.getDate()).padStart(2, "0")} ${String(lastSaved.getHours()).padStart(2, "0")}:${String(lastSaved.getMinutes()).padStart(2, "0")}` : "—", tone: lastSaved ? undefined : "text-tm-muted" },
+        { label: "조건", value: `진입 ${entry.length} · 청산 ${exit.length}` },
+        { label: "검증", value: latest?.reliabilityScore ? `신뢰도 ${latest.reliabilityScore}` : "—", tone: reliabilityTone },
+      ]}
+    >
+      <PanelRow>
+        {/* ── 조건 블록 팔레트 ─────────────────────────────── */}
+        <Panel tabs={["조건 블록"]} actions={[]} closable={false} className="flex-[0_1_260px]">
+          <label className="flex h-9 items-center gap-2 rounded-lg bg-tm-inner px-2.5 text-tm-muted">
+            <Icon name="search" size={15} />
+            <input
+              type="search"
+              aria-label="지표 검색"
+              placeholder="지표 검색"
+              value={blockQuery}
+              onChange={e => setBlockQuery(e.target.value)}
+              className="min-w-0 flex-1 bg-transparent text-13 text-dracula-fg outline-none"
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-1.5">
+            {blocks.map(b => (
+              <button
+                key={b.label}
+                type="button"
+                disabled={!b.make}
+                title={b.make ? `${b.label} 조건을 매수 조건에 추가` : "준비 중인 지표입니다"}
+                onClick={() => b.make && setEntry(p => [...p, { id: uid(), ...b.make!() }])}
+                className="flex h-[38px] items-center gap-2 rounded-lg border border-tm-line bg-tm-inner px-2.5 text-left text-13 text-tm-soft hover:border-tm-line2 hover:text-dracula-fg disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Icon name={b.icon} size={15} />
+                <span className="min-w-0 truncate">{b.label}</span>
+              </button>
+            ))}
+          </div>
+          <span className="text-2xs text-tm-muted">블록을 누르면 오른쪽 매수 조건에 추가됩니다. 흐린 블록은 준비 중입니다.</span>
+        </Panel>
 
-        {/* 모바일 탭 전환 */}
-        <div className="ml-auto lg:hidden flex items-center gap-0.5 p-0.5 rounded-lg bg-gray-100 dark:bg-dracula-line/30">
-          {(["edit", "preview"] as const).map(t => (
-            <button
-              key={t}
-              onClick={() => setMobileTab(t)}
-              className={`px-3 py-1 rounded-md text-[11px] font-medium transition-all duration-150 ${
-                mobileTab === t
-                  ? "bg-white dark:bg-dracula-bg text-gray-900 dark:text-dracula-fg shadow-sm"
-                  : "text-gray-500 dark:text-dracula-comment"
-              }`}
-            >
-              {t === "edit" ? "에디터" : "미리보기"}
-            </button>
+        {/* ── 캔버스 ─────────────────────────────────────── */}
+        <Panel tabs={[name.trim() || "새 전략"]} actions={[]} className="flex-[999_1_520px]">
+          <div className="flex flex-wrap gap-2">
+            <Field label="전략 이름" mono={false} placeholder="예: 거래량 돌파 단기 전략" value={name} onChange={e => setName(e.target.value)} className="flex-[2_1_220px]" />
+            <Field label="전략 설명 (선택)" mono={false} placeholder="한 줄 설명" value={description} onChange={e => setDescription(e.target.value)} className="flex-[3_1_260px]" />
+          </div>
+          <Divider />
+
+          <H2 sub={<SegOpts label="매수 조건 결합" value={entryOp} onChange={setEntryOp} options={OP_OPTIONS} />}>매수 조건</H2>
+          {entry.length === 0 && <p className="m-0 text-13 text-tm-muted">매수 조건이 없습니다 — 왼쪽 블록을 누르거나 조건을 추가하세요.</p>}
+          {entry.map((c, i) => (
+            <div key={c.id} className="flex flex-col gap-3">
+              {i > 0 && <JoinTag op={entryOp} />}
+              <ConditionRow
+                cond={c}
+                color={COND_COLORS[i % COND_COLORS.length]}
+                onChange={nc => setEntry(p => p.map(x => x.id === nc.id ? nc : x))}
+                onRemove={() => setEntry(p => p.filter(x => x.id !== c.id))}
+              />
+            </div>
           ))}
-        </div>
-      </div>
+          <button type="button" onClick={addEntry} className="h-10 rounded-lg border border-dashed border-tm-line2 text-13 text-tm-soft hover:text-dracula-fg">
+            + 조건 추가
+          </button>
+          <Divider />
 
-      {/* ── 분할 레이아웃: [에디터 | 미리보기] ─────────────────────────────── */}
-      <div className="flex flex-col lg:flex-row lg:divide-x dark:lg:divide-white/5
-                      lg:min-h-[calc(100vh-108px)]">
-
-        {/* ===== 좌측: 에디터 ===== */}
-        <div className={`flex-1 min-w-0 overflow-y-auto px-4 py-5 space-y-5
-                         ${mobileTab === "preview" ? "hidden lg:block" : ""}`}>
-
-          {/* 기본 정보 */}
-          <section>
-            <SectionHeader label="기본 정보" />
-            <div className="space-y-3">
-              <input
-                type="text"
-                aria-label="전략 이름"
-                placeholder="전략 이름 (예: 거래량 돌파 단기 전략)"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg placeholder-gray-400 dark:placeholder-dracula-comment px-4 py-2.5 text-sm transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
-              />
-              <textarea
-                aria-label="전략 설명"
-                placeholder="전략 설명 (선택)"
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                rows={2}
-                className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg placeholder-gray-400 dark:placeholder-dracula-comment px-4 py-2.5 text-sm resize-none transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
+          <H2 sub={<SegOpts label="매도 조건 결합" value={exitOp} onChange={setExitOp} options={OP_OPTIONS} />}>매도 조건</H2>
+          <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))" }}>
+            <NumField label="손절" unit="%" value={typeof lossCond?.value === "number" ? lossCond.value : null} onCommit={v => setBound("LOSS_RATE", v)} placeholder="예: -4" inputClassName="text-down" />
+            <NumField label="익절" unit="%" value={typeof profitCond?.value === "number" ? profitCond.value : null} onCommit={v => setBound("PROFIT_RATE", v)} placeholder="예: 8" inputClassName="text-up" />
+            <Field label="최대 보유" unit="거래일" placeholder="준비 중" disabled className="opacity-60" />
+            <Field label="트레일링" unit="%" placeholder="준비 중" disabled className="opacity-60" />
+          </div>
+          {otherExits.map((c, i) => (
+            <div key={c.id} className="flex flex-col gap-3">
+              {i > 0 && <JoinTag op={exitOp} />}
+              <ConditionRow
+                exitMode
+                cond={c}
+                color={COND_COLORS[(i + 2) % COND_COLORS.length]}
+                onChange={nc => setExit(p => p.map(x => x.id === nc.id ? nc : x))}
+                onRemove={() => setExit(p => p.filter(x => x.id !== c.id))}
               />
             </div>
-          </section>
+          ))}
+          <button type="button" onClick={addExit} className="h-10 rounded-lg border border-dashed border-tm-line2 text-13 text-tm-soft hover:text-dracula-fg">
+            + 청산 조건 추가
+          </button>
+          <Divider />
 
-          <div className="border-t dark:border-dracula-line/60" />
+          <H2>포지션 사이징</H2>
+          <div className="flex flex-wrap items-center gap-2">
+            <SegOpts
+              label="사이징 방식"
+              size="lg"
+              value="FIXED"
+              options={[
+                { value: "FIXED", label: "고정 비중" },
+                { value: "VOL", label: "변동성 역가중", disabled: true },
+                { value: "KELLY", label: "켈리 1/2", disabled: true },
+              ]}
+            />
+            <Field label="1회 투입" unit="% / 계좌" type="number" min={1} max={100} value={positionPct} onChange={e => setPositionPct(+e.target.value)} className="flex-[1_1_140px]" />
+            <Field label="최대 동시 보유" unit="종목" placeholder="준비 중" disabled className="flex-[1_1_140px] opacity-60" />
+          </div>
+          <Divider />
 
-          {/* 유니버스 */}
-          <section>
-            <SectionHeader label="유니버스 설정" />
-            <p className="text-[11px] text-gray-500 dark:text-dracula-comment mb-3">
-              이 전략이 대상으로 하는 종목군입니다.
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">시장</label>
-                <select
-                  value={universeMarket}
-                  onChange={e => {
-                    setUniverseMarket(e.target.value);
-                    if (e.target.value === "overseas") setUniverseMarketCapTier("all");
-                  }}
-                  className={inputCls}
-                >
-                  {UNIVERSE_MARKETS.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
-                </select>
-              </div>
-              {universeMarket !== "overseas" && (
-                <div>
-                  <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">시가총액</label>
-                  <select
-                    value={universeMarketCapTier}
-                    onChange={e => setUniverseMarketCapTier(e.target.value)}
-                    className={inputCls}
-                  >
-                    {UNIVERSE_MARKET_CAP_TIERS.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
-                  </select>
-                </div>
-              )}
-            </div>
-          </section>
-
-          <div className="border-t dark:border-dracula-line/60" />
-
-          {/* 매수 조건 */}
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-[11px] font-bold uppercase tracking-wider text-dracula-green">
-                매수 조건
-              </h2>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-gray-400 dark:text-dracula-comment">조건 연산자</span>
-                {(["AND","OR"] as const).map(op => (
-                  <button
-                    key={op}
-                    onClick={() => setEntryOp(op)}
-                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all duration-150 active:scale-95 ${
-                      entryOp === op
-                        ? "bg-dracula-green text-dracula-bg"
-                        : "bg-gray-100 dark:bg-dracula-line text-gray-500 dark:text-dracula-comment hover:opacity-80"
-                    }`}
-                  >
-                    {op}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-2">
-              {entry.map(c => (
-                <ConditionRow
-                  key={c.id}
-                  cond={c}
-                  onChange={nc => setEntry(p => p.map(x => x.id === nc.id ? nc : x))}
-                  onRemove={() => setEntry(p => p.filter(x => x.id !== c.id))}
-                />
-              ))}
-            </div>
-            <button onClick={addEntry} className="mt-3 text-xs text-dracula-green hover:opacity-70 transition-opacity">
-              + 매수 조건 추가
-            </button>
-          </section>
-
-          <div className="border-t dark:border-dracula-line/60" />
-
-          {/* 매도 조건 */}
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-[11px] font-bold uppercase tracking-wider text-dracula-red">
-                매도 조건
-              </h2>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-gray-400 dark:text-dracula-comment">조건 연산자</span>
-                {(["AND","OR"] as const).map(op => (
-                  <button
-                    key={op}
-                    onClick={() => setExitOp(op)}
-                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all duration-150 active:scale-95 ${
-                      exitOp === op
-                        ? "bg-dracula-red text-white"
-                        : "bg-gray-100 dark:bg-dracula-line text-gray-500 dark:text-dracula-comment hover:opacity-80"
-                    }`}
-                  >
-                    {op}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-2">
-              {exit.map(c => (
-                <ConditionRow
-                  key={c.id}
-                  cond={c}
-                  onChange={nc => setExit(p => p.map(x => x.id === nc.id ? nc : x))}
-                  onRemove={() => setExit(p => p.filter(x => x.id !== c.id))}
-                />
-              ))}
-            </div>
-            <button onClick={addExit} className="mt-3 text-xs text-dracula-red hover:opacity-70 transition-opacity">
-              + 매도 조건 추가
-            </button>
-          </section>
-
-          <div className="border-t dark:border-dracula-line/60" />
-
-          {/* 포지션 사이징 */}
-          <section>
-            <SectionHeader label="포지션 사이징" />
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-gray-500 dark:text-dracula-comment">1회 매수에 총 자본의</span>
-              <input
-                type="number"
-                value={positionPct}
-                onChange={e => setPositionPct(+e.target.value)}
-                min={1} max={100}
-                className="w-20 rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg px-3 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
-              />
-              <span className="text-sm text-gray-500 dark:text-dracula-comment">% 사용</span>
-            </div>
-          </section>
-
-          {/* 모바일 저장 버튼 (lg 미만에서만) */}
-          <div className="lg:hidden pb-4">
-            <button
-              onClick={() => saveMutation.mutate()}
-              disabled={!canSave || saveMutation.isPending}
-              className="w-full py-3 rounded-xl bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100"
+          <H2 sub="이 전략이 대상으로 하는 종목군">유니버스</H2>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <ChipSelect
+              aria-label="시장"
+              value={universeMarket}
+              onChange={e => {
+                setUniverseMarket(e.target.value);
+                if (e.target.value === "overseas") setUniverseMarketCapTier("all");
+              }}
+              className="h-[30px] rounded-full border-0 bg-tm-raised"
+              colorClass="text-tm-soft"
             >
-              {saveMutation.isPending ? "저장 중..." : editId ? "룰셋 업데이트 →" : "룰셋 저장 →"}
+              {UNIVERSE_MARKETS.map(m => <option key={m.key} value={m.key}>시장 · {m.label}</option>)}
+            </ChipSelect>
+            {universeMarket !== "overseas" && (
+              <ChipSelect
+                aria-label="시가총액"
+                value={universeMarketCapTier}
+                onChange={e => setUniverseMarketCapTier(e.target.value)}
+                className="h-[30px] rounded-full border-0 bg-tm-raised"
+                colorClass="text-tm-soft"
+              >
+                {UNIVERSE_MARKET_CAP_TIERS.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+              </ChipSelect>
+            )}
+            <button type="button" disabled title="준비 중인 기능입니다" className="inline-flex h-[30px] cursor-not-allowed items-center gap-1.5 rounded-full border border-tm-line2 px-2.5 text-xs text-tm-muted">
+              + 필터 <PreviewTag />
             </button>
           </div>
-        </div>
+        </Panel>
 
-        {/* ===== 우측: 라이브 미리보기 (데스크톱 상시 | 모바일 탭 전환) ===== */}
-        <div className={`lg:w-[300px] lg:flex-none dark:bg-[#1e202a]
-                         ${mobileTab === "edit" ? "hidden lg:flex lg:flex-col" : "flex flex-col min-h-[60vh]"}`}>
-          <PreviewPanel />
-        </div>
-      </div>
-    </div>
+        {/* ── 오른쪽: 미리보기 + 빠른 백테스트 ───────────────── */}
+        <PanelCol className="flex-[1_1_360px]">
+          <Panel tabs={["전략 미리보기"]} actions={[]} closable={false}>
+            <p className="m-0 text-sm leading-[1.75] text-tm-soft">
+              <b className="text-dracula-fg">{universeLabel}</b> 종목에서,{" "}
+              {entry.length === 0 ? <span className="text-tm-muted">(매수 조건 없음)</span> : joinNodes(entry, entryOp === "AND" ? " 그리고 " : " 또는 ")}
+              {entry.length > 1 ? (entryOp === "AND" ? " 조건을 모두 충족하면" : " 중 하나라도 충족하면") : " 이면"}{" "}
+              계좌의 <span className="num text-dracula-fg">{positionPct}%</span>로 매수합니다.{" "}
+              {exit.length === 0 ? <span className="text-tm-muted">(매도 조건 없음)</span> : joinNodes(exit, ", ", 2)}
+              {exit.length > 1 ? (exitOp === "OR" ? " 중 하나라도 충족하면" : " 을 모두 충족하면") : " 이면"} 청산합니다.
+            </p>
+            {!canSave && (
+              <Notice tone="warn">
+                {!name.trim() && <div>· 전략 이름을 입력하세요</div>}
+                {entry.length === 0 && <div>· 매수 조건을 1개 이상 추가하세요</div>}
+                {exit.length === 0 && <div>· 매도 조건을 1개 이상 추가하세요</div>}
+              </Notice>
+            )}
+            <Btn icon="check" full size="lg" onClick={() => saveMutation.mutate()} disabled={!canSave || saveMutation.isPending}>
+              {saveMutation.isPending ? "저장 중..." : editId ? "룰셋 업데이트" : "룰셋 저장"}
+            </Btn>
+            <span className="text-center text-2xs text-tm-muted">저장 후 바로 백테스트 화면으로 이동합니다</span>
+          </Panel>
+
+          <Panel
+            tabs={["빠른 백테스트"]}
+            actions={editId ? ["refresh"] : []}
+            onAction={a => a === "refresh" && refetchBacktests()}
+            right={latest ? <span className="num text-2xs text-tm-muted">{latest.startDate} ~ {latest.endDate}</span> : undefined}
+          >
+            {!editId ? (
+              <p className="m-0 py-4 text-center text-13 text-tm-muted">룰셋을 저장하면 백테스트를 실행할 수 있습니다.</p>
+            ) : !latest ? (
+              <p className="m-0 py-4 text-center text-13 text-tm-muted">{btFetching ? "불러오는 중…" : "아직 백테스트 결과가 없습니다."}</p>
+            ) : (
+              <>
+                <AutoGrid min={110}>
+                  <Stat big label="CAGR" value={fmtPct(latest.annualReturn, 1)} valueClassName={(latest.annualReturn ?? 0) >= 0 ? "text-up" : "text-down"} />
+                  <Stat big label="MDD" value={fmtPct(latest.mdd, 1)} valueClassName="text-down" />
+                  <Stat big label="샤프" value="—" valueClassName="text-tm-muted" />
+                  <Stat big label="거래 수" value={fmtNum(latest.tradeCount)} />
+                </AutoGrid>
+                {curve.length > 1 && <LineChart series={[{ values: curve, color: "#bd93f9", fill: true }]} width={360} height={150} label="빠른 백테스트 수익 곡선" xLabels={[[0, latest.startDate.slice(0, 7)], [0.85, latest.endDate.slice(0, 7)]]} />}
+              </>
+            )}
+            <div className="flex gap-2">
+              {editId ? (
+                <>
+                  <BtnLink href={`/quant-lab/${editId}`} kind="ghost" className="flex-1">상세 백테스트</BtnLink>
+                  <BtnLink href={`/quant-lab/${editId}#forward-test`} className="flex-1">포워드 시작</BtnLink>
+                </>
+              ) : (
+                <>
+                  <Btn kind="ghost" disabled className="flex-1">상세 백테스트</Btn>
+                  <Btn disabled className="flex-1">포워드 시작</Btn>
+                </>
+              )}
+            </div>
+          </Panel>
+        </PanelCol>
+      </PanelRow>
+    </TerminalPage>
   );
 }

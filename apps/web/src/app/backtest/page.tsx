@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import BacktestResultView from "@/components/backtest/BacktestResultView";
-import { Card } from "@/components/ui/Card";
+import BacktestResultView, { type BacktestResult } from "@/components/backtest/BacktestResultView";
+import { Btn, Checkbox, Field, Notice, Panel, PanelCol, PanelRow, PreviewTag, SelectBox, TerminalPage } from "@/components/terminal";
 
 const STOCKS = [
   { id: 2, symbol: "005930", name: "삼성전자" },
@@ -18,25 +19,6 @@ const STRATEGIES = [
   { key: "EMA_BREAKOUT", label: "EMA 돌파 전략",       desc: "거래량 급증 + 상승 추세 돌파 시 매수" },
 ];
 
-interface BacktestResult {
-  symbol: string; strategy: string;
-  fromDate: string; toDate: string;
-  initialCapital: number; finalCapital: number;
-  metrics: {
-    totalReturn: number; annualizedReturn: number;
-    sharpeRatio: number; maxDrawdown: number;
-    winRate: number; totalTrades: number;
-    profitTrades: number; avgHoldingDays: number;
-    avgPnlPct: number; profitFactor: number;
-  };
-  trades: Array<{
-    entryDate: string; exitDate: string;
-    entryPrice: number; exitPrice: number;
-    quantity: number; pnl: number; pnlPct: number; exitReason: string;
-  }>;
-  equityCurve: Array<{ date: string; equity: number; drawdown: number }>;
-}
-
 export default function BacktestPage() {
   const [stockId,    setStockId]    = useState(2);
   const [strategy,   setStrategy]   = useState("MA_CROSSOVER");
@@ -46,6 +28,7 @@ export default function BacktestPage() {
   const [stopLoss,   setStopLoss]   = useState(5);
   const [takeProfit, setTakeProfit] = useState(10);
   const [submitted,  setSubmitted]  = useState<object | null>(null);
+  const [ranAt,      setRanAt]      = useState<Date | null>(null);
 
   const { data, isLoading, error } = useQuery<BacktestResult>({
     queryKey: ["backtest", submitted],
@@ -68,87 +51,64 @@ export default function BacktestPage() {
       initialCapital: capital,
       stopLossPct: stopLoss, takeProfitPct: takeProfit,
     });
+    setRanAt(new Date());
   };
 
+  const stock = STOCKS.find(s => s.id === stockId);
+  const strat = STRATEGIES.find(s => s.key === strategy);
+  const years = (new Date(toDate).getTime() - new Date(fromDate).getTime()) / (365.25 * 86400_000);
+
   return (
-    <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-6 animate-fade-up">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-dracula-fg">백테스팅</h1>
-        <p className="text-sm text-gray-500 dark:text-dracula-comment mt-1">
-          과거 데이터에 전략을 적용해 가상 수익률을 검증합니다.
-        </p>
-      </div>
-
-      {/* 설정 패널 */}
-      <Card className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {/* 종목 */}
-        <div>
-          <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">종목</label>
-          <select value={stockId} onChange={e => setStockId(Number(e.target.value))}
-            className="w-full border-gray-300 dark:border-dracula-line bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg rounded-lg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-dracula-comment">
-            {STOCKS.map(s => <option key={s.id} value={s.id}>{s.name} ({s.symbol})</option>)}
-          </select>
-        </div>
-
-        {/* 전략 */}
-        <div>
-          <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">전략</label>
-          <select value={strategy} onChange={e => setStrategy(e.target.value)}
-            className="w-full border-gray-300 dark:border-dracula-line bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg rounded-lg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-dracula-comment">
+    <TerminalPage
+      title="빠른 백테스트"
+      crumb="퀀트랩"
+      stats={[
+        { label: "종목", value: stock?.name ?? "—" },
+        { label: "전략", value: strat?.label ?? "—" },
+        { label: "기간", value: Number.isFinite(years) && years > 0 ? (years >= 1 ? `${years.toFixed(1)}년` : `${Math.round(years * 365.25)}일`) : "—" },
+        { label: "마지막 실행", value: ranAt ? `${String(ranAt.getHours()).padStart(2, "0")}:${String(ranAt.getMinutes()).padStart(2, "0")}` : "—", tone: ranAt ? undefined : "text-tm-muted" },
+      ]}
+    >
+      <PanelRow>
+        <Panel tabs={["설정"]} actions={[]} closable={false} className="flex-[0_1_320px] self-start">
+          <SelectBox label="종목" value={stockId} onChange={e => setStockId(Number(e.target.value))}>
+            {STOCKS.map(s => <option key={s.id} value={s.id}>{s.name} {s.symbol}</option>)}
+          </SelectBox>
+          <SelectBox label="전략" value={strategy} onChange={e => setStrategy(e.target.value)}>
             {STRATEGIES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-          </select>
-          <p className="text-[10px] text-gray-400 dark:text-dracula-comment mt-0.5">
-            {STRATEGIES.find(s => s.key === strategy)?.desc}
-          </p>
-        </div>
-
-        {/* 날짜 */}
-        <div>
-          <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">시작일</label>
-          <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
-            className="w-full border-gray-300 dark:border-dracula-line bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg rounded-lg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-dracula-comment" />
-        </div>
-        <div>
-          <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">종료일</label>
-          <input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
-            className="w-full border-gray-300 dark:border-dracula-line bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg rounded-lg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-dracula-comment" />
-        </div>
-
-        {/* 초기 자본 */}
-        <div>
-          <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">초기 자본 (원)</label>
-          <input type="number" value={capital} onChange={e => setCapital(Number(e.target.value))}
-            step={1000000} className="w-full border-gray-300 dark:border-dracula-line bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg rounded-lg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-dracula-comment" />
-        </div>
-
-        {/* 손절/익절 */}
-        <div className="flex gap-3">
-          <div className="flex-1">
-            <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">손절 (%)</label>
-            <input type="number" value={stopLoss} onChange={e => setStopLoss(Number(e.target.value))}
-              step={1} min={1} max={50}
-              className="w-full border-gray-300 dark:border-dracula-line bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg rounded-lg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-dracula-comment" />
+          </SelectBox>
+          <span className="-mt-1.5 text-2xs text-tm-muted">{strat?.desc}</span>
+          <div className="flex gap-2">
+            <Field label="시작일" type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} />
+            <Field label="종료일" type="date" value={toDate} onChange={e => setToDate(e.target.value)} />
           </div>
-          <div className="flex-1">
-            <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">익절 (%)</label>
-            <input type="number" value={takeProfit} onChange={e => setTakeProfit(Number(e.target.value))}
-              step={1} min={1} max={200}
-              className="w-full border-gray-300 dark:border-dracula-line bg-white dark:bg-dracula-line text-gray-900 dark:text-dracula-fg rounded-lg px-3 py-2 text-sm transition-colors hover:border-gray-400 dark:hover:border-dracula-comment" />
+          <Field label="초기 자본" unit="원" type="number" step={1000000} value={capital} onChange={e => setCapital(Number(e.target.value))} />
+          <div className="flex gap-2">
+            <Field label="손절" unit="%" type="number" step={1} min={1} max={50} value={stopLoss} onChange={e => setStopLoss(Number(e.target.value))} inputClassName="text-down" />
+            <Field label="익절" unit="%" type="number" step={1} min={1} max={200} value={takeProfit} onChange={e => setTakeProfit(Number(e.target.value))} inputClassName="text-up" />
           </div>
-        </div>
-
-        {/* 실행 버튼 */}
-        <div className="sm:col-span-2">
-          <button onClick={handleRun} disabled={isLoading}
-            className="w-full py-2.5 rounded-lg font-semibold text-sm bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:active:scale-100">
+          {/* 단순 백테스트 엔진(/api/backtest)은 아직 비용을 반영하지 않는다 — 룰셋 백테스트만 반영 */}
+          <div className="flex items-start gap-2"><Checkbox checked={false} disabled label="수수료 0.015% · 세금 0.18% 반영" /><PreviewTag className="mt-0.5" /></div>
+          <div className="flex items-start gap-2"><Checkbox checked={false} disabled label="슬리피지 0.05% 반영" /><PreviewTag className="mt-0.5" /></div>
+          <Btn icon="play" full size="lg" onClick={handleRun} disabled={isLoading}>
             {isLoading ? "시뮬레이션 중..." : "백테스트 실행"}
-          </button>
-          {error && <p className="text-xs text-red-500 dark:text-market-down mt-1 text-center">{(error as Error).message}</p>}
-        </div>
-      </Card>
+          </Btn>
+          {error && <Notice tone="danger">{(error as Error).message}</Notice>}
+          <Link href="/quant-lab/builder" className="text-xs text-dracula-purple hover:underline">복잡한 조건은 룰셋 빌더에서 →</Link>
+        </Panel>
 
-      {/* 결과 */}
-      {data && <BacktestResultView result={data} />}
-    </div>
+        <PanelCol className="flex-[999_1_640px]">
+          {data ? (
+            <BacktestResultView result={data} />
+          ) : (
+            <Panel tabs={["결과 차트"]} actions={[]} closable={false}>
+              <div className="grid h-72 place-items-center rounded-lg border border-dashed border-tm-line2 text-center text-13 text-tm-muted">
+                {isLoading ? "시뮬레이션 중..." : <div>왼쪽에서 종목·전략·기간을 정하고<br />백테스트를 실행하세요.</div>}
+              </div>
+            </Panel>
+          )}
+        </PanelCol>
+      </PanelRow>
+    </TerminalPage>
   );
 }

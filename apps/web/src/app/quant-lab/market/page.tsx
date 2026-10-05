@@ -1,199 +1,125 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { MarketStrategy, SignalDirection } from "@monticker/types";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import type { MarketStrategy } from "@monticker/types";
 import { authFetch } from "@/services/api";
-import { useToast } from "@/hooks/useToast";
-import { useForwardTestSignalsWs } from "@/hooks/useForwardTestSignalsWs";
-import { Card } from "@/components/ui/Card";
-import { Storefront, Radio } from "@phosphor-icons/react";
-import Link from "next/link";
+import { Btn, BtnLink, Notice, Panel, PanelCol, PanelRow, SelectBox, TerminalPage } from "@/components/terminal";
+import { SegOpts } from "@/components/quant/parts";
+import { MarketStrategyCard } from "@/components/strategy-market/MarketStrategyCard";
+import { SubscribedSignalsPanel } from "@/components/strategy-market/SubscribedSignalsPanel";
 
-interface SignalEvent { direction: SignalDirection; stockId: number; price: number; evalDate: string; }
-
-function fmtWon(n: number) { return n.toLocaleString("ko-KR", { maximumFractionDigits: 0 }); }
-
-function SignalFeed({ rulesetId }: { rulesetId: string }) {
-  const [signals, setSignals] = useState<SignalEvent[]>([]);
-  const { connected, denied } = useForwardTestSignalsWs(rulesetId, event => {
-    setSignals(prev => [{ direction: event.direction, stockId: event.stockId, price: event.price, evalDate: event.evalDate }, ...prev].slice(0, 10));
-  });
-
-  return (
-    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-dracula-line/50">
-      <div className="flex items-center gap-1.5 mb-2">
-        <Radio size={12} weight="bold" className={denied ? "text-dracula-red" : connected ? "text-dracula-green" : "text-gray-400 dark:text-dracula-comment"} aria-hidden />
-        <span className={`text-[11px] ${denied ? "text-dracula-red" : "text-gray-500 dark:text-dracula-comment"}`}>
-          {denied ? "구독 권한이 없어 신호를 받을 수 없습니다" : connected ? "실시간 신호 연결됨" : "연결 중..."}
-        </span>
-      </div>
-      {denied ? null : signals.length === 0 ? (
-        <p className="text-xs text-gray-400 dark:text-dracula-comment">아직 발생한 신호가 없습니다 — 새 신호가 오면 여기 표시됩니다.</p>
-      ) : (
-        <div className="space-y-1">
-          {signals.map((s, i) => (
-            <div key={i} className="flex items-center justify-between text-xs">
-              <span className={s.direction === "BUY" ? "text-dracula-red font-medium" : "text-dracula-cyan font-medium"}>
-                {s.direction === "BUY" ? "매수" : "매도"} 신호
-              </span>
-              <span className="font-mono text-gray-500 dark:text-dracula-comment">₩{fmtWon(s.price)} · {s.evalDate}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function StrategyCard({ strategy }: { strategy: MarketStrategy }) {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const [showSignals, setShowSignals] = useState(false);
-
-  const subscribeMutation = useMutation({
-    mutationFn: () => authFetch(`/api/quant/market/${strategy.id}/subscribe`, { method: "POST" }).then(r => r.json()),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["quant", "market"] });
-      toast({ type: "success", title: "구독 완료", message: `"${strategy.name}" 전략을 구독했습니다.` });
-    },
-    onError: () => toast({ type: "error", title: "구독 실패", message: "다시 시도해주세요." }),
-  });
-
-  const unsubscribeMutation = useMutation({
-    mutationFn: () => authFetch(`/api/quant/market/${strategy.id}/subscribe`, { method: "DELETE" }).then(r => r.json()),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["quant", "market"] });
-      setShowSignals(false);
-      toast({ type: "success", title: "구독 해제됨", message: `"${strategy.name}" 구독을 해제했습니다.` });
-    },
-    onError: () => toast({ type: "error", title: "해제 실패", message: "다시 시도해주세요." }),
-  });
-
-  // ADR-035 — 유료 결제(PG 연동)는 아직 준비되지 않았다. 실패하는 결제를 실제로 시도하게
-  // 두는 대신, 무료 전략만 구독 가능하게 하고 유료는 명확히 "준비 중"으로 표시한다.
-  const isPaid = strategy.price > 0;
-
-  return (
-    <Card className="p-5" hover>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-semibold text-gray-900 dark:text-dracula-fg truncate">{strategy.name}</h3>
-            <span className={`text-[11px] font-mono shrink-0 ${isPaid ? "text-gray-500 dark:text-dracula-comment" : "text-dracula-green"}`}>
-              {isPaid ? `₩${fmtWon(strategy.price)}` : "무료"}
-            </span>
-          </div>
-          {strategy.description && (
-            <p className="text-xs text-gray-500 dark:text-dracula-comment mt-1 line-clamp-2">{strategy.description}</p>
-          )}
-          <p className="text-xs text-gray-400 dark:text-dracula-line mt-2">
-            by {strategy.author_email.split("@")[0]} · 구독자 {strategy.subscribe_count.toLocaleString()}명
-          </p>
-        </div>
-
-        {strategy.isSubscribed ? (
-          <div className="flex flex-col items-end gap-1.5 shrink-0">
-            <button
-              onClick={() => setShowSignals(v => !v)}
-              className="px-3 py-1.5 rounded-lg bg-dracula-green/10 text-dracula-green text-xs font-medium hover:bg-dracula-green/20 active:scale-95 transition-all duration-150 border border-dracula-green/30"
-            >
-              {showSignals ? "신호 닫기" : "신호 보기"}
-            </button>
-            <button
-              onClick={() => unsubscribeMutation.mutate()}
-              disabled={unsubscribeMutation.isPending}
-              className="text-[11px] text-gray-400 dark:text-dracula-comment hover:text-dracula-red transition-colors disabled:opacity-40"
-            >
-              구독 해제
-            </button>
-          </div>
-        ) : isPaid ? (
-          <button
-            disabled
-            title="유료 구독 결제 연동 준비 중입니다."
-            className="shrink-0 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-dracula-line/30 text-gray-400 dark:text-dracula-comment text-xs font-medium border border-gray-200 dark:border-dracula-line cursor-not-allowed"
-          >
-            준비 중
-          </button>
-        ) : (
-          <button
-            onClick={() => subscribeMutation.mutate()}
-            disabled={subscribeMutation.isPending}
-            className="shrink-0 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-dracula-purple/10 text-blue-600 dark:text-dracula-purple text-xs font-medium hover:bg-blue-100 dark:hover:bg-dracula-purple/20 active:scale-95 transition-all duration-150 disabled:opacity-40 border border-blue-200 dark:border-dracula-purple/30"
-          >
-            {subscribeMutation.isPending ? "..." : "구독"}
-          </button>
-        )}
-      </div>
-
-      {showSignals && strategy.isSubscribed && <SignalFeed rulesetId={strategy.ruleset_id} />}
-    </Card>
-  );
-}
+const PAGE_SIZE = 20;
+type Filter = "popular" | "new" | "verified" | "free" | "subscribed";
+type Sort = "subs" | "recent" | "forward";
 
 export default function StrategyMarketPage() {
   const [page, setPage] = useState(0);
+  const [filter, setFilter] = useState<Filter>("popular");
+  const [sort, setSort] = useState<Sort>("subs");
 
-  const { data: strategies, isLoading } = useQuery<MarketStrategy[]>({
+  const { data: strategies, isLoading, isError } = useQuery<MarketStrategy[]>({
     queryKey: ["quant", "market", page],
-    queryFn: () => authFetch(`/api/quant/market?page=${page}&size=20`).then(r => r.json()),
+    queryFn: () => authFetch(`/api/quant/market?page=${page}&size=${PAGE_SIZE}`).then(r => r.json()),
   });
 
-  return (
-    <div className="animate-fade-up">
-      <div className="flex items-center gap-3 px-4 sm:px-6 py-4 border-b border-gray-100 dark:border-white/5 bg-white dark:bg-dracula-bg">
-        <Link href="/quant-lab" className="text-gray-400 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg text-xs transition-colors shrink-0">← Quant Lab</Link>
-        <div className="w-px h-5 bg-gray-200 dark:bg-dracula-line" />
-        <h1 className="text-sm font-bold text-gray-900 dark:text-dracula-fg">전략 마켓</h1>
-        <span className="text-xs text-gray-400 dark:text-dracula-comment">커뮤니티 공유 전략</span>
-      </div>
+  const list = useMemo(() => strategies ?? [], [strategies]);
+  const subscribed = list.filter(s => s.isSubscribed);
 
-      <div className="px-4 sm:px-6 py-5">
-      {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-28 rounded-xl bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15 bg-[length:200%_100%] animate-shimmer" />
-          ))}
-        </div>
-      ) : (strategies ?? []).length === 0 ? (
-        <div className="text-center py-20 space-y-3">
-          <div className="flex justify-center text-gray-400 dark:text-dracula-comment"><Storefront size={40} weight="duotone" aria-hidden /></div>
-          <p className="font-semibold text-gray-900 dark:text-dracula-fg">아직 공유된 전략이 없습니다</p>
-          <p className="text-sm text-gray-500 dark:text-dracula-comment">내 룰셋을 공유해서 커뮤니티와 함께하세요</p>
-          <Link
-            href="/quant-lab/builder"
-            className="inline-block mt-2 px-5 py-2 rounded-lg bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg font-semibold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150"
-          >
-            룰셋 만들기
-          </Link>
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-            {(strategies ?? []).map((s: MarketStrategy) => <StrategyCard key={s.id} strategy={s} />)}
+  const shown = useMemo(() => {
+    let l = list;
+    if (filter === "free") l = l.filter(s => s.price === 0);
+    if (filter === "subscribed") l = l.filter(s => s.isSubscribed);
+    if (filter === "verified") l = [];
+    const key: Sort = filter === "popular" ? "subs" : filter === "new" ? "recent" : sort;
+    const cmp: Record<Sort, (a: MarketStrategy, b: MarketStrategy) => number> = {
+      subs: (a, b) => b.subscribe_count - a.subscribe_count,
+      recent: (a, b) => b.created_at.localeCompare(a.created_at),
+      forward: () => 0,
+    };
+    return [...l].sort(cmp[key]);
+  }, [list, filter, sort]);
+
+  return (
+    <TerminalPage
+      title="전략 마켓"
+      crumb="커뮤니티 공유 전략"
+      stats={[
+        { label: "공유 전략", value: isLoading ? "—" : `${list.length}${list.length === PAGE_SIZE ? "+" : ""}개` },
+        { label: "검증 배지", value: "—", tone: "text-tm-muted" },
+        { label: "구독 중", value: `${subscribed.length}개` },
+        { label: "이번 달 신호", value: "—", tone: "text-tm-muted" },
+      ]}
+    >
+      <PanelRow>
+        <PanelCol className="flex-[999_1_640px] p-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <SegOpts<Filter>
+              label="전략 필터"
+              size="lg"
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: "popular", label: "인기" },
+                { value: "new", label: "신규" },
+                { value: "verified", label: "검증 배지", disabled: true },
+                { value: "free", label: "무료" },
+                { value: "subscribed", label: `구독 중 ${subscribed.length}` },
+              ]}
+            />
+            <div className="ml-auto flex items-center gap-2">
+              <SelectBox aria-label="정렬" value={sort} onChange={e => setSort(e.target.value as Sort)} className="min-h-[34px] w-auto py-0" disabled={filter === "popular" || filter === "new"}>
+                <option value="subs">구독자 많은 순</option>
+                <option value="recent">최근 등록 순</option>
+                <option value="forward" disabled>포워드 기간 긴 순 (준비 중)</option>
+              </SelectBox>
+              <BtnLink href="/quant-lab" kind="ghost" icon="share" className="h-[34px]">내 전략 공유</BtnLink>
+            </div>
           </div>
-          <div className="flex justify-center gap-3 mt-8">
-            {page > 0 && (
-              <button
-                onClick={() => setPage(p => p - 1)}
-                className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg text-sm font-medium hover:bg-gray-200 dark:hover:bg-dracula-comment active:scale-[0.98] transition-all duration-150"
-              >
-                이전
-              </button>
-            )}
-            {(strategies ?? []).length === 20 && (
-              <button
-                onClick={() => setPage(p => p + 1)}
-                className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg text-sm font-medium hover:bg-gray-200 dark:hover:bg-dracula-comment active:scale-[0.98] transition-all duration-150"
-              >
-                다음
-              </button>
-            )}
-          </div>
-        </>
-      )}
-      </div>
-    </div>
+
+          {isError && <Notice tone="danger">전략 목록을 불러오지 못했습니다.</Notice>}
+
+          {isLoading ? (
+            <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(290px,1fr))" }}>
+              {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-[230px] animate-pulse rounded-xl bg-tm-panel" />)}
+            </div>
+          ) : list.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-tm-line2 py-16 text-center">
+              <p className="m-0 font-semibold">아직 공유된 전략이 없습니다</p>
+              <p className="m-0 text-13 text-tm-muted">내 룰셋을 공유해서 커뮤니티와 함께하세요</p>
+              <BtnLink href="/quant-lab/builder" icon="plus">룰셋 만들기</BtnLink>
+            </div>
+          ) : shown.length === 0 ? (
+            <p className="m-0 py-10 text-center text-13 text-tm-muted">
+              {filter === "verified" ? "검증 배지 심사는 준비 중입니다." : "조건에 맞는 전략이 없습니다."}
+            </p>
+          ) : (
+            <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(290px,1fr))" }}>
+              {shown.map(s => <MarketStrategyCard key={s.id} strategy={s} />)}
+            </div>
+          )}
+
+          {(page > 0 || list.length === PAGE_SIZE) && (
+            <div className="flex justify-center gap-2 pt-2">
+              {page > 0 && <Btn kind="soft" size="sm" onClick={() => setPage(p => p - 1)}>이전</Btn>}
+              {list.length === PAGE_SIZE && <Btn kind="soft" size="sm" onClick={() => setPage(p => p + 1)}>다음</Btn>}
+            </div>
+          )}
+        </PanelCol>
+
+        <PanelCol className="flex-[1_1_320px]">
+          <SubscribedSignalsPanel subscribed={subscribed} />
+          <Panel tabs={["검증 배지란?"]} actions={[]} closable={false} preview>
+            <p className="m-0 text-13 leading-[1.7] text-tm-soft">
+              백테스트만이 아니라 <b className="text-dracula-fg">12주 이상 실시간 포워드 테스트</b>에서 신호 일치율 85% 이상을 유지한 전략에 부여할 예정입니다. 룰셋은 서버에서만 실행되어 구독자에게 조건식이 노출되지 않습니다.
+            </p>
+          </Panel>
+          <Panel tabs={["제작자"]} actions={[]} closable={false}>
+            <p className="m-0 text-13 text-tm-soft">내 전략의 구독 수익과 출금은 제작자 수익 대시보드에서 관리합니다.</p>
+            <BtnLink href="/quant-lab/earnings" kind="ghost" icon="wallet" full>제작자 수익 대시보드</BtnLink>
+          </Panel>
+        </PanelCol>
+      </PanelRow>
+    </TerminalPage>
   );
 }

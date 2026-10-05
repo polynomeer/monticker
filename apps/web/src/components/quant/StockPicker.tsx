@@ -9,12 +9,15 @@ import { browseScreener, searchScreener, getScreenerQuotes } from "@/services/sc
  * 백테스트/포워드 테스트 패널에서 하드코딩된 8종목 드롭다운 대신 쓴다.
  */
 export function StockPicker({
-  market, marketCapTier, value, onChange,
+  market, marketCapTier, value, onChange, label = "종목", className,
 }: {
   market: string;
   marketCapTier: string;
   value: number;
   onChange: (stockId: number) => void;
+  /** 박스 안 위쪽 라벨 — 터미널 Field와 같은 모양 */
+  label?: string;
+  className?: string;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -58,32 +61,35 @@ export function StockPicker({
   }, [open]);
 
   return (
-    <div className="relative" ref={containerRef}>
-      <input
-        type="text"
-        aria-label="종목 선택"
-        placeholder="종목명·코드 검색"
-        value={open ? query : selected ? `${selected.name} (${selected.symbol})` : ""}
-        onFocus={() => { setOpen(true); setQuery(""); }}
-        onChange={e => setQuery(e.target.value)}
-        className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg px-3 py-2 text-xs transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
-      />
+    <div className={`relative min-w-0 ${className ?? ""}`} ref={containerRef}>
+      <label className="flex min-h-[52px] min-w-0 flex-col justify-center gap-0.5 rounded-lg border border-tm-line bg-tm-inner px-3 py-1.5 focus-within:border-dracula-purple">
+        <span className="text-2xs text-tm-muted">{label}</span>
+        <input
+          type="text"
+          aria-label="종목 선택"
+          placeholder="종목명·코드 검색"
+          value={open ? query : selected ? `${selected.name} (${selected.symbol})` : ""}
+          onFocus={() => { setOpen(true); setQuery(""); }}
+          onChange={e => setQuery(e.target.value)}
+          className="w-full bg-transparent p-0 text-sm text-dracula-fg outline-none placeholder:text-[#8b92b8]"
+        />
+      </label>
       {open && (
-        <div className="absolute z-20 mt-1 w-full max-h-56 overflow-y-auto rounded-lg bg-white dark:bg-dracula-surface border border-gray-200 dark:border-dracula-line shadow-lg">
+        <div className="absolute z-20 mt-1 max-h-56 w-full min-w-[220px] overflow-y-auto rounded-lg border border-tm-line2 bg-tm-panel shadow-lg">
           {loading ? (
-            <div className="px-3 py-2 text-xs text-gray-500 dark:text-dracula-comment">검색 중...</div>
+            <div className="px-3 py-2 text-xs text-tm-muted">검색 중...</div>
           ) : results.length === 0 ? (
-            <div className="px-3 py-2 text-xs text-gray-500 dark:text-dracula-comment">일치하는 종목이 없습니다.</div>
+            <div className="px-3 py-2 text-xs text-tm-muted">일치하는 종목이 없습니다.</div>
           ) : (
             results.map(item => (
               <button
                 key={item.stockId}
                 type="button"
                 onClick={() => { onChange(item.stockId); setSelected(item); setOpen(false); }}
-                className="w-full flex items-center justify-between gap-2 px-3 py-2 text-xs text-left hover:bg-gray-50 dark:hover:bg-dracula-line/30 transition-colors"
+                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs hover:bg-tm-raised"
               >
-                <span className="text-gray-900 dark:text-dracula-fg font-medium">{item.name}</span>
-                <span className="text-gray-400 dark:text-dracula-comment tabular-nums">{item.symbol} · {item.market}</span>
+                <span className="font-medium text-dracula-fg">{item.name}</span>
+                <span className="num text-tm-muted">{item.symbol} · {item.market}</span>
               </button>
             ))
           )}
