@@ -9,6 +9,8 @@ export interface RiskLimits {
   varLimitPct: number;
   maxPositionCount: number;
   maxHourlyOrders: number;
+  /** 섹터 합산 비중 한도(%) — null이면 미설정(ADR-069) */
+  sectorConcentrationLimitPct: number | null;
   isActive: boolean;
 }
 

@@ -33,6 +33,8 @@ function validate(l: RiskLimits): string | null {
     if (f.int && !Number.isInteger(v)) return `${f.label}은(는) 정수여야 합니다.`;
     if (f.max != null && v > f.max) return `${f.label}은(는) ${f.max}${f.unit} 이하여야 합니다.`;
   }
+  const sector = l.sectorConcentrationLimitPct;
+  if (sector != null && (!Number.isFinite(sector) || sector <= 0 || sector > 100)) return "섹터 최대 비중은 0 초과 100 이하여야 합니다.";
   return null;
 }
 
@@ -46,8 +48,11 @@ export default function RiskPage() {
   const { data: portfolio } = usePaperPortfolio();
   const holdings = useMemo(() => portfolio?.holdings ?? [], [portfolio]);
   const meta = useStockMeta(holdings.map((h) => h.stockId));
-  const { top: topSector, slices } = useSectorSlices(holdings, portfolio?.cash ?? 0, meta);
-  const sectorPct = slices.find((s) => s.name === topSector)?.pct ?? null;
+  const { slices } = useSectorSlices(holdings, portfolio?.cash ?? 0, meta);
+  // 섹터 한도는 분류된 섹터에만 걸린다(미분류 종목은 대상이 아님 — ADR-069). 슬라이스는 비중 내림차순이다.
+  const topSlice = slices.find((s) => s.name !== "현금" && s.name !== "미분류") ?? null;
+  const topSector = topSlice?.name ?? null;
+  const sectorPct = topSlice?.pct ?? null;
 
   const [draft, setDraft] = useState<RiskLimits | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -58,7 +63,7 @@ export default function RiskPage() {
       const r = await authFetch("/api/risk/limits", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, clearSectorConcentrationLimit: payload.sectorConcentrationLimitPct == null }),
       });
       if (!r.ok) throw new Error("한도 업데이트 실패");
       return r.json();
@@ -98,15 +103,22 @@ export default function RiskPage() {
     const lossPct = Math.abs(Math.min(exposure.dailyPnlPct, 0));
     const lossRatio = L.dailyLossLimitPct > 0 ? lossPct / L.dailyLossLimitPct : 0;
     const hourRatio = L.maxHourlyOrders > 0 ? exposure.hourlyOrderCount / L.maxHourlyOrders : 0;
+    const sectorRatio = L.sectorConcentrationLimitPct != null && L.sectorConcentrationLimitPct > 0 && sectorPct != null
+      ? sectorPct / L.sectorConcentrationLimitPct : null;
     gauges.push(
       { name: "1일 VaR (95%)", value: `${exposure.estimatedVaR.toFixed(2)}%`, limit: `${L.varLimitPct}%`, ratio: varRatio, sub: `약 ${fmtNum(varWon)}원 — 하루에 이 이상 잃을 확률 5%` },
       { name: "단일 종목 집중도", value: conc ? `${conc.valuePct.toFixed(1)}%` : "—", limit: `${L.concentrationLimitPct}%`, ratio: concRatio, sub: conc ? conc.symbol : "보유 종목 없음" },
-      // 섹터 한도는 백엔드 리스크 규칙에 아직 없다 — 비중만 계산해 보여 준다
-      { name: "섹터 집중도", value: sectorPct != null ? `${sectorPct.toFixed(1)}%` : "—", limit: "미설정", ratio: null, sub: topSector ? `${topSector} — 섹터 한도 준비 중` : "보유 종목 없음", preview: true },
+      {
+        name: "섹터 집중도",
+        value: sectorPct != null ? `${sectorPct.toFixed(1)}%` : "—",
+        limit: L.sectorConcentrationLimitPct != null ? `${L.sectorConcentrationLimitPct}%` : "미설정",
+        ratio: sectorRatio,
+        sub: topSector ? (L.sectorConcentrationLimitPct != null ? topSector : `${topSector} — 한도를 설정하면 매수 때 함께 점검합니다`) : "분류된 섹터 보유 없음",
+      },
       { name: "일일 손실", value: fmtPct(exposure.dailyPnlPct), limit: `-${L.dailyLossLimitPct}%`, ratio: lossRatio, sub: "오늘 실현+평가 손익 기준" },
       { name: "1시간 주문 빈도", value: `${exposure.hourlyOrderCount}회`, limit: `${L.maxHourlyOrders}회`, ratio: hourRatio, sub: `미체결 주문 ${exposure.activeOrderCount}건` },
     );
-    level = Math.max(...[varRatio, concRatio, lossRatio, hourRatio].map(levelOf));
+    level = Math.max(...[varRatio, concRatio, lossRatio, hourRatio, sectorRatio ?? 0].map(levelOf));
   }
   const varUse = exposure && exposure.limits.varLimitPct > 0 ? (exposure.estimatedVaR / exposure.limits.varLimitPct) * 100 : null;
 
@@ -166,7 +178,19 @@ export default function RiskPage() {
               {FIELDS.slice(0, 2).map((f) => (
                 <Field key={f.key} label={f.label} aria-label={f.label} unit={f.unit} type="number" step={f.step} min={0} max={f.max} value={Number.isFinite(limits[f.key]) ? limits[f.key] : ""} onChange={(e) => set(f.key, parseFloat(e.target.value))} className="flex-none" />
               ))}
-              <Field label="섹터 최대 비중 (준비 중)" unit="%" placeholder="—" disabled className="flex-none opacity-60" />
+              <Field
+                label="섹터 최대 비중 (비우면 미설정)"
+                aria-label="섹터 최대 비중"
+                unit="%"
+                type="number"
+                step={0.5}
+                min={0}
+                max={100}
+                placeholder="미설정"
+                value={limits.sectorConcentrationLimitPct != null && Number.isFinite(limits.sectorConcentrationLimitPct) ? limits.sectorConcentrationLimitPct : ""}
+                onChange={(e) => setDraft({ ...limits, sectorConcentrationLimitPct: e.target.value === "" ? null : parseFloat(e.target.value) })}
+                className="flex-none"
+              />
               {FIELDS.slice(2).map((f) => (
                 <Field key={f.key} label={f.label} aria-label={f.label} unit={f.unit} type="number" step={f.step} min={0} max={f.max} value={Number.isFinite(limits[f.key]) ? limits[f.key] : ""} onChange={(e) => set(f.key, parseFloat(e.target.value))} className="flex-none" />
               ))}
