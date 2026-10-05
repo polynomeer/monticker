@@ -12,6 +12,8 @@ data class ReplayEvent(
     val time: Instant,
     val type: String,
     val stockSymbol: String?,
+    /** 캔들 리플레이가 이 종목의 그날 분봉을 불러온다 */
+    val stockId: Long? = null,
     val qty: Int?,
     val price: BigDecimal?,
     val pnlPct: Double?,
@@ -89,6 +91,7 @@ class ReplayService(
                 time = event.createdAt,
                 type = type,
                 stockSymbol = symbol,
+                stockId = event.stockId,
                 qty = qty,
                 price = price,
                 pnlPct = pnlPct,

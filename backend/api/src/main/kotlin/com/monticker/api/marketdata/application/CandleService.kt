@@ -14,6 +14,18 @@ class CandleService(private val candleRepository: CandleRepository) {
         val BUCKETS: Map<String, Pair<Int, Long>> = mapOf("3m" to (3 to 5L), "15m" to (15 to 15L), "1h" to (60 to 45L))
     }
 
+    /**
+     * 과거 하루(KST)의 분봉 전부 — 주문 리플레이(지갑) 재생용. 정규장 390분 + 시간외를 덮도록 최대 600개.
+     * 날짜 하나로 범위가 고정되므로 [getCandles]의 "최근 300개" 규칙과 달리 그날 처음부터 돌려준다.
+     */
+    fun getIntradayCandles(stockId: Long, date: java.time.LocalDate): List<Candle> {
+        val zone = java.time.ZoneId.of("Asia/Seoul")
+        require(!date.isAfter(java.time.LocalDate.now(zone))) { "미래 날짜는 조회할 수 없습니다" }
+        val from = date.atStartOfDay(zone).toInstant()
+        val to = date.plusDays(1).atStartOfDay(zone).toInstant().minusMillis(1)
+        return candleRepository.findCandles(stockId, "candles_1m", from, to, limit = 600)
+    }
+
     fun getCandles(
         stockId: Long,
         interval: String = "1d",

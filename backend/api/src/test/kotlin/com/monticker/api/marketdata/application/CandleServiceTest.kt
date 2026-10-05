@@ -52,6 +52,23 @@ class CandleServiceTest {
     }
 
     @Test
+    fun `intraday returns the whole KST day of minute candles`() {
+        val from = io.mockk.slot<Instant>()
+        val to = io.mockk.slot<Instant>()
+        every { repo.findCandles(1L, "candles_1m", capture(from), capture(to), 600) } returns listOf(makeCandle())
+
+        assertThat(service.getIntradayCandles(1L, java.time.LocalDate.of(2026, 10, 2))).hasSize(1)
+        assertThat(from.captured).isEqualTo(Instant.parse("2026-10-01T15:00:00Z"))
+        assertThat(to.captured).isBefore(Instant.parse("2026-10-02T15:00:00Z"))
+    }
+
+    @Test
+    fun `intraday rejects a future date`() {
+        assertThatThrownBy { service.getIntradayCandles(1L, java.time.LocalDate.now().plusDays(3)) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+    }
+
+    @Test
     fun `throws on unsupported interval`() {
         assertThatThrownBy { service.getCandles(1L, "5m") }
             .isInstanceOf(IllegalArgumentException::class.java)
