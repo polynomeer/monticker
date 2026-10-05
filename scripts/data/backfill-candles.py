@@ -6,19 +6,19 @@ Yahoo Finance에서 일봉 OHLCV를 가져와 monticker DB의 candles_1m / candl
 
 사용법:
     # 전체 활성 종목 · 1년치 (기본)
-    python scripts/backfill-candles.py
+    python3 scripts/data/backfill-candles.py
 
     # 기간 지정
-    python scripts/backfill-candles.py --from 2023-01-01 --to 2024-12-31
+    python3 scripts/data/backfill-candles.py --from 2023-01-01 --to 2024-12-31
 
     # 특정 종목만
-    python scripts/backfill-candles.py --symbols 005930 AAPL NVDA
+    python3 scripts/data/backfill-candles.py --symbols 005930 AAPL NVDA
 
     # 캐시 무시하고 강제 재다운로드
-    python scripts/backfill-candles.py --no-cache
+    python3 scripts/data/backfill-candles.py --no-cache
 
     # DB 연결 정보를 명시
-    python scripts/backfill-candles.py --db-url postgresql://monticker:monticker@localhost:5432/monticker
+    python3 scripts/data/backfill-candles.py --db-url postgresql://monticker:monticker@localhost:5432/monticker
 
 캐시:
     data/backfill/{symbol}_{from}_{to}.csv 형태로 저장된다.
@@ -26,7 +26,7 @@ Yahoo Finance에서 일봉 OHLCV를 가져와 monticker DB의 candles_1m / candl
     캐시 디렉터리는 .gitignore에 포함되어 있다.
 
 의존성:
-    pip install -r scripts/requirements-backfill.txt
+    pip install -r scripts/data/requirements.txt
 """
 
 import argparse
@@ -35,6 +35,7 @@ import os
 import sys
 import time
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Optional
 
@@ -49,7 +50,7 @@ def check_deps():
             missing.append(pkg if pkg != "dotenv" else "python-dotenv")
     if missing:
         print(f"[ERROR] 의존성 누락: {', '.join(missing)}")
-        print(f"        pip install -r scripts/requirements-backfill.txt")
+        print(f"        pip install -r scripts/data/requirements.txt")
         sys.exit(1)
 
 check_deps()
@@ -61,7 +62,8 @@ from dotenv import load_dotenv
 
 # ── 설정 ────────────────────────────────────────────────────────────────────
 
-CACHE_DIR = Path(__file__).parent.parent / "data" / "backfill"
+ROOT = Path(__file__).resolve().parents[2]
+CACHE_DIR = ROOT / "data" / "backfill"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 DEFAULT_DB_URL = "postgresql://monticker:monticker@localhost:5432/monticker"
@@ -70,6 +72,10 @@ DEFAULT_DAYS   = 365  # 기본 1년치
 # Yahoo Finance 심볼 매핑 (한국 종목은 .KS / .KQ 접미사)
 KS_SUFFIX  = ".KS"   # KOSPI
 KQ_SUFFIX  = ".KQ"   # KOSDAQ
+
+# candle_time은 TIMESTAMPTZ다. 일봉 버킷은 KST 자정 — worker CandleAggregator가 실시간으로 쓰는 버킷과 같아야
+# 같은 날짜가 한 행으로 모인다(PK = stock_id, candle_time).
+KST = ZoneInfo("Asia/Seoul")
 
 # 호출 간 대기 (Yahoo Finance 과호출 방지)
 FETCH_DELAY_SEC = 0.5
@@ -163,13 +169,15 @@ def insert_candles(conn, stock_id: int, rows: list[dict]) -> int:
     if not rows:
         return 0
 
-    # 09:00 KST = 00:00 UTC (UTC+9)
+    # 시각은 반드시 tz-aware로 넘긴다. 예전엔 naive datetime이라 DB 세션 타임존(컨테이너 기본 UTC)으로 해석돼
+    # 일봉이 00:00 UTC(= 09:00 KST)에 들어갔다 — worker가 쓰는 00:00 KST 버킷과 달라 같은 날짜가 두 행이 됐고,
+    # "09:00 KST" 분봉은 실제로 18:00 KST에 찍혔다.
     values_1m = []
     values_1d = []
     for r in rows:
         d = datetime.strptime(r["date"], "%Y-%m-%d")
-        candle_time_1m = d.replace(hour=9, minute=0, second=0)  # 09:00 KST (naive, stored as local)
-        candle_time_1d = d.replace(hour=0, minute=0, second=0)  # 00:00 일봉
+        candle_time_1m = d.replace(hour=9, minute=0, second=0, tzinfo=KST)  # 분봉 차트용 대표값: 그날 09:00 KST
+        candle_time_1d = d.replace(hour=0, minute=0, second=0, tzinfo=KST)  # 일봉 버킷: KST 자정
         t = (
             stock_id,
             candle_time_1m,
@@ -217,10 +225,22 @@ def has_data(conn, stock_id: int, from_date: date, to_date: date) -> bool:
     expected = (to_date - from_date).days * 0.6
     return count >= expected
 
+def default_db_url() -> str:
+    """scripts/dev/up.sh가 포트 충돌로 5432 대신 다른 포트를 썼으면 그 포트를 쓴다."""
+    import subprocess
+    try:
+        out = subprocess.run(["docker", "compose", "--project-directory", str(ROOT), "port", "postgres", "5432"],
+                             capture_output=True, text=True, timeout=10).stdout.strip()
+        if out:
+            return DEFAULT_DB_URL.replace(":5432/", f":{out.rsplit(':', 1)[-1]}/")
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return DEFAULT_DB_URL
+
 # ── 메인 ────────────────────────────────────────────────────────────────────
 
 def main():
-    load_dotenv()
+    load_dotenv(ROOT / ".env")
 
     parser = argparse.ArgumentParser(description="monticker 차트 데이터 백필")
     parser.add_argument("--from", dest="from_date", default=None,
@@ -236,7 +256,7 @@ def main():
     parser.add_argument("--no-skip-existing", dest="skip_existing", action="store_false",
                         help="DB 기존 데이터 무관하게 모두 적재")
     parser.add_argument("--db-url", default=None,
-                        help=f"DB 연결 URL (기본: {DEFAULT_DB_URL})")
+                        help=f"DB 연결 URL (기본: $DATABASE_URL → 실행 중인 compose postgres 포트 → {DEFAULT_DB_URL})")
     args = parser.parse_args()
 
     # 날짜 결정
@@ -244,7 +264,7 @@ def main():
     from_date = date.fromisoformat(args.from_date) if args.from_date else to_date - timedelta(days=DEFAULT_DAYS)
 
     # DB URL (우선순위: CLI > 환경변수 > 기본값)
-    db_url = args.db_url or os.getenv("DATABASE_URL") or DEFAULT_DB_URL
+    db_url = args.db_url or os.getenv("DATABASE_URL") or default_db_url()
 
     print(f"")
     print(f"monticker Candle Backfill")
@@ -258,7 +278,7 @@ def main():
         conn = psycopg2.connect(db_url)
     except Exception as e:
         print(f"[ERROR] DB 연결 실패: {e}")
-        print(f"        docker compose up -d postgres 로 DB를 먼저 기동하세요.")
+        print(f"        scripts/dev/up.sh(또는 docker compose up -d postgres)로 DB를 먼저 기동하세요.")
         sys.exit(1)
 
     # 종목 목록
