@@ -28,8 +28,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # braces(GHSA-vfj7-8cjw-p6xm, 2026-09-18): 취약 범위가 <=3.0.3이고 patched_versions가 "<0.0.0"(업스트림
+      # 패치 없음)라 override로 해결 불가. 경로가 eslint-config-next > fast-glob > micromatch 뿐인 린트 도구 전용이고,
+      # 우리가 작성한 glob 패턴만 처리해 실질 위험이 낮아 예외 처리. 패치가 나오면 --allow를 지울 것.
       - name: Audit dependencies (high+ severity, apps/web + packages scope)
-        run: node scripts/ci/audit-scope.js apps/web packages/
+        run: node scripts/ci/audit-scope.js apps/web packages/ --allow braces
 
       - name: Lint
         run: pnpm --filter @monticker/web lint

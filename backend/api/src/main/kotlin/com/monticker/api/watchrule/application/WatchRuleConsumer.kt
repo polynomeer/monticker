@@ -48,7 +48,7 @@ class WatchRuleConsumer(
     @DltHandler
     fun onDlt(record: ConsumerRecord<String, String>) {
         dlt.increment()
-        log.error("[WatchRule] DLT — 이 이벤트의 룰은 발동하지 않았다. 수동 검토 필요: {}", record.value())
+        log.error("[WatchRule] DLT — 이 이벤트의 룰 중 일부가 재시도 끝에 실패했다(나머지는 처리됐을 수 있다 — watch_rule_executions 확인). 수동 검토 필요: {}", record.value())
     }
 
     companion object {

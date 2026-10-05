@@ -2,6 +2,7 @@ package com.monticker.worker.kis
 
 import com.monticker.worker.kafka.TickKafkaProducer
 import com.monticker.worker.marketdata.GeneratedTick
+import com.monticker.worker.marketdata.TickSource
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -40,7 +41,7 @@ class KisExecutionTickHandlerTest {
                 listOf(mapper.mapRow(rs, 0))
             }
         }
-        return KisCoverageProvider(jdbc, "kis")
+        return KisCoverageProvider(jdbc, "kis", "k", "s")
     }
 
     @Test
@@ -59,6 +60,8 @@ class KisExecutionTickHandlerTest {
         assertThat(tick.market).isEqualTo("KOSPI")
         assertThat(tick.price).isEqualByComparingTo(BigDecimal("71500"))
         assertThat(tick.volume).isEqualTo(120L)
+        // ADR-055 — 실시세 생산자는 출처를 명시해야 api의 조건부 주문이 이 틱으로 발동할 수 있다
+        assertThat(tick.source).isEqualTo(TickSource.KIS)
     }
 
     @Test

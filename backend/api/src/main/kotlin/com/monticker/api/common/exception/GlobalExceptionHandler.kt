@@ -72,6 +72,12 @@ class GlobalExceptionHandler {
     fun handleReconnectRequired(e: ReconnectRequiredException) =
         error(HttpStatus.UNAUTHORIZED, e.message ?: "재연동이 필요합니다.")
 
+    // ADR-057 — 킬 스위치. 의도된 정지라 4xx다(5xx면 주문 경로 장애 알림이 울린다).
+    @ExceptionHandler(TradingHaltedException::class)
+    fun handleTradingHalted(e: TradingHaltedException) =
+        ResponseEntity.status(HttpStatus.LOCKED)
+            .body(ErrorResponse(HttpStatus.LOCKED.value(), e.message ?: "실거래 주문이 일시 중단되었습니다", "TRADING_HALTED:${e.scope}"))
+
     // 메시지 키워드 매칭에 기대지 않고 항상 409로 매핑되는 명시적 비즈니스 규칙 예외.
     @ExceptionHandler(BusinessRuleException::class)
     fun handleBusinessRule(e: BusinessRuleException) =

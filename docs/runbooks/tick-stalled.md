@@ -36,3 +36,15 @@ Realtime Pipeline 대시보드의 패널이 이 순서다.
 
 ## 에스컬레이션
 - 장중 10분 이상 정지 → 인시던트. 15분 이상이면 사용자 공지(시세 지연 안내).
+
+## `ConditionalOrdersWithoutPriceFeed` — 실시세 없는 조건부 주문 (ADR-060)
+실계좌 조건부 주문은 실시세(KIS·Toss) 틱으로만 발동한다(ADR-055). 이 알림은 발동할 수 없는 ACTIVE 주문이 있다는 뜻이다 —
+사용자 화면에는 경고가 뜨지만 주문은 그대로 걸려 있다.
+- **`reason=none`** — 그 종목이 커버리지(`realtime_price_coverage`)에 없다.
+  1. `SELECT source, COUNT(*), max(published_at) FROM realtime_price_coverage GROUP BY 1;` — 비었거나 `published_at`이 5분 넘었으면
+     worker-market의 공표가 멈췄다(로그 `[Coverage]`). worker-market이 살아 있는지부터.
+  2. 공표는 되는데 종목이 없다 → `INGESTION_SOURCE`에 kis/toss가 있는지, 플랫폼 키(`KIS_APP_KEY`·`TOSS_PLATFORM_APP_KEY`)가 있는지.
+     키가 없으면 커버리지는 0이다(의도).
+  3. 커버리지 집합이 바뀌었다(KIS는 ID 순 21종목 — 낮은 ID 종목 추가로 밀린다). 수요 기반 구독 전까지는 사용자에게 안내하는 수밖에 없다.
+- **`reason=stale`** — 커버리지에는 있는데 장중에 그 종목 실시세만 2분 넘게 안 온다. 위 "증상"의 KIS/Toss 웹소켓 단계로.
+  끊긴 동안 그 가격 이동에는 반응하지 못하고, 재연결 후 첫 틱이 조건을 만족하면 그때 발동한다.

@@ -3,6 +3,7 @@ package com.monticker.worker.kis
 import jakarta.annotation.PostConstruct
 import jakarta.annotation.PreDestroy
 import org.slf4j.LoggerFactory
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
@@ -11,7 +12,10 @@ import org.springframework.stereotype.Component
  * 앱 시작 시 KIS WebSocket 연결 후 DB에 등록된 국내 주식 종목을 호가 채널에 구독한다.
  * 연결이 끊기면 매 60초마다 재연결을 시도한다.
  */
+// 시세 생산 역할(market|all)에서만 연다 — 역할 분리 배포에서 모든 worker가 같은 앱키로 웹소켓을 열면 KIS 등록 한도(41건)와
+// Toss 연결 한도를 역할 수만큼 나눠 쓰고, 같은 틱을 중복 생산한다(2026-10 설계 리뷰 후속).
 @Component
+@ConditionalOnExpression("'\${worker.role:all}'.matches('market|all')")
 class KisOrderBookSubscriber(
     private val ws: KisWebSocketClient,
     private val jdbc: JdbcTemplate,

@@ -4,8 +4,6 @@ import org.flywaydb.core.Flyway
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
 import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.utility.DockerImageName
 import javax.sql.DataSource
 
@@ -23,18 +21,24 @@ import javax.sql.DataSource
  * 컨테이너와 마이그레이션은 companion object(하위 클래스 간 공유)에서 지연 초기화되어
  * 이 베이스를 상속하는 여러 통합 테스트 클래스가 컨테이너 기동과 마이그레이션 비용을
  * 한 번만 지불하도록 한다.
+ *
+ * @Testcontainers/@Container를 쓰지 않는다 — 그 JUnit5 확장은 컨테이너를 쓰는 각 테스트 클래스의 afterAll에
+ * stop()을 걸어, 상속으로 같은 static 필드를 공유하는 이 베이스에서는 먼저 끝난 클래스가 다음 클래스의 컨테이너를
+ * 꺼버린다. 하위 클래스가 스모크 테스트 하나뿐이던 동안은 드러나지 않다가 두 번째(RealtimeCoveragePublisher
+ * IntegrationTest, ADR-060)가 생기자 매번 "Failed to obtain JDBC Connection"으로 재현됐다. api 베이스가 이미 겪고
+ * 고친 것과 같은 레이스다 — 같은 방식으로 직접 start()하고 stop()하지 않는다(JVM 종료 시 Ryuk가 정리한다).
  */
-@Testcontainers
 abstract class PostgresIntegrationTest {
 
     companion object {
-        @Container
         @JvmStatic
-        val postgres: PostgreSQLContainer<*> =
+        val postgres: PostgreSQLContainer<*> by lazy {
             PostgreSQLContainer(DockerImageName.parse("timescale/timescaledb:latest-pg16").asCompatibleSubstituteFor("postgres"))
                 .withDatabaseName("monticker")
                 .withUsername("monticker")
                 .withPassword("monticker")
+                .apply { start() }
+        }
 
         @JvmStatic
         val dataSource: DataSource by lazy {

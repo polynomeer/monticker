@@ -3,7 +3,9 @@
 
 export type BrokerageOrderSide = "BUY" | "SELL";
 export type BrokerageOrderType = "MARKET" | "LIMIT";
-export type BrokerageOrderStatus = "SUBMITTED" | "FILLED" | "PARTIALLY_FILLED" | "CANCELLED" | "REJECTED";
+// ADR-056 — PENDING_SUBMIT(제출 중), UNKNOWN(증권사 응답 없음 — 체결됐을 수 있다). 서버 대조 잡이 해소한다.
+export type BrokerageOrderStatus =
+  | "PENDING_SUBMIT" | "SUBMITTED" | "UNKNOWN" | "FILLED" | "PARTIALLY_FILLED" | "CANCELLED" | "REJECTED";
 export type BrokerageSettlementStatus = "PENDING" | "SETTLED" | "FAILED";
 // ADR-026 — 사용자가 선택 가능한 실제 증권사만. MOCK은 서버 설정(app.brokerage.mock.enabled)에
 // 따른 내부 구현 디테일이라 프론트에서 선택하지 않는다.
@@ -61,6 +63,15 @@ export interface BrokerageOrderResponse {
   rejectReason: string | null;
   submittedAt: string;
   filledAt: string | null;
+  /** ADR-056 — 결과 불명 주문을 자동으로 확정할 수 없어 사람이 확인해야 한다. */
+  needsReview: boolean;
+}
+
+/** ADR-057 — 이 사용자의 실주문을 막는 킬 스위치. 사용자 범위(USER)는 사유를 숨긴 문구다. */
+export interface TradingStatusResponse {
+  halted: boolean;
+  scope: "GLOBAL" | "PROVIDER" | "USER" | null;
+  message: string | null;
 }
 
 export interface BrokerageSettlementResponse {
@@ -121,12 +132,17 @@ export interface ConditionalOrderResponse {
   createdAt: string;
   triggeredAt: string | null;
   expiresAt: string | null;
+  /**
+   * ADR-060 — ACTIVE일 때만. LIVE: 실시세 연결. STALE: 장중 이 종목 실시세가 끊겼다. NONE: 실시세 대상이 아니다.
+   * STALE·NONE이면 조건을 만족해도 발동하지 않는다.
+   */
+  priceFeed?: "LIVE" | "STALE" | "NONE" | null;
 }
 
 // ADR-034 — 리밸런싱 실행 자동화(실브로커리지, 수동 실행).
 export type RebalanceTargetSource = "OPTIMIZER" | "MANUAL";
 export type RebalanceExecutionStatus = "EXECUTING" | "COMPLETED" | "PARTIALLY_FAILED";
-export type RebalanceLegStatus = "EXECUTED" | "FAILED";
+export type RebalanceLegStatus = "EXECUTED" | "FAILED" | "UNKNOWN";  // UNKNOWN — ADR-056, 주문 결과 확인 중
 
 export interface SaveRebalanceTargetRequest {
   weights: Record<string, number>;

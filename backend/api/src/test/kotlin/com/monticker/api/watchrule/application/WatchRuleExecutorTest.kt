@@ -44,6 +44,9 @@ class WatchRuleExecutorTest {
         executor = WatchRuleExecutor(ruleRepo, execRepo, submitter, SimpleMeterRegistry())
         every { execRepo.existsByWatchRuleIdAndStockEventId(any(), any()) } returns false
         every { execRepo.existsSince(any(), any(), any()) } returns false
+        // relaxed 목의 제네릭 save()는 Object를 돌려줘 캐스트가 터진다. 예전엔 onEvent가 그 예외까지 삼켜
+        // 테스트가 통과했다 — 기록 뒤의 메트릭 증가는 한 번도 실행되지 않았다.
+        every { execRepo.save(any<WatchRuleExecution>()) } answers { firstArg() }
     }
 
     private fun rule(
@@ -194,7 +197,9 @@ class WatchRuleExecutorTest {
         every { submitter.submitMarket(any(), any(), any(), any(), any()) } throws
             org.springframework.dao.QueryTimeoutException("connection pool exhausted")
 
-        executor.onEvent(event())   // onEvent 는 룰 단위로 격리하므로 여기서는 던지지 않는다
+        // 컨슈머까지 던져야 @RetryableTopic 재시도·DLT가 동작한다
+        assertThatThrownBy { executor.onEvent(event()) }
+            .isInstanceOf(org.springframework.dao.QueryTimeoutException::class.java)
 
         verify(exactly = 0) { execRepo.save(any()) }
     }
@@ -209,7 +214,8 @@ class WatchRuleExecutorTest {
             RuntimeException("boom")
         every { submitter.submitMarket(userId, stockId, "BUY", 10, "WR:2:$eventId") } returns fill(orderId = 901L)
 
-        executor.onEvent(event())
+        // 실패한 룰 때문에 재시도로 가더라도, 그 전에 같은 이벤트의 나머지 룰은 처리를 마친다
+        assertThatThrownBy { executor.onEvent(event()) }.hasMessage("boom")
 
         verify { submitter.submitMarket(userId, stockId, "BUY", 10, "WR:2:$eventId") }
     }

@@ -30,6 +30,9 @@ class KisWebSocketClient(
     private val WS_URL = "ws://ops.koreainvestment.com:21000"
     private val wsRef = AtomicReference<WebSocket?>()
     private val connected = AtomicBoolean(false)
+
+    /** ADR-060 — 커버리지 공표가 쓴다. 끊겨 있으면 이 연결의 종목은 실시세가 없다. */
+    val isConnected: Boolean get() = connected.get()
     private val approvalKey = AtomicReference<String?>()
     private val approvalKeyExpiry = AtomicReference(Instant.EPOCH)
 

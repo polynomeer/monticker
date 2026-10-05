@@ -36,7 +36,8 @@ val passed = dailyPnl >= lossLimitAmt.negate()
 ```
 
 오늘 **실현한** 손익만 본다 — 보유 중인 종목의 평가손실은 포함하지 않는다. 현금 대비 설정 비율(기본 3%)을
-초과하는 실현 손실이면 차단한다.
+초과하는 실현 손실이면 **매수를** 차단한다. 매도(손절·정리)는 막지 않는다([ADR-063](../decisions/063-daily-loss-rule-buy-only.md)).
+실거래는 매도 시점 증권사 평단가로 실현손익을 내고, 한도 기준은 증권사 총평가액이다([ADR-062](../decisions/062-real-account-daily-loss-realized-pnl.md)).
 
 > **정정 (2026-09-14)**: 이전 구현은 `SUM(SELL amount − BUY amount)` — 손익이 아니라 **현금 흐름**이었다.
 > 매수가 그대로 "손실"로 잡혀 1,000만 계좌에서 하루 30만 원만 사면 그날의 모든 매수가 차단됐다.

@@ -10,6 +10,7 @@ import com.monticker.api.brokerage.infrastructure.RebalanceExecutionLegRepositor
 import com.monticker.api.brokerage.infrastructure.RebalanceExecutionRepository
 import com.monticker.api.brokerage.domain.BrokerageOrderStatus
 import com.monticker.api.common.exception.BusinessRuleException
+import com.monticker.api.common.exception.TradingHaltedException
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
@@ -46,6 +47,7 @@ class RebalanceExecutionService(
     private val executionRepo: RebalanceExecutionRepository,
     private val legRepo: RebalanceExecutionLegRepository,
     private val jdbc: JdbcTemplate,
+    private val tradingHaltService: TradingHaltService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -56,6 +58,8 @@ class RebalanceExecutionService(
 
     fun execute(userId: Long): RebalanceExecution {
         val target = targetService.get(userId) ?: throw BusinessRuleException("저장된 리밸런싱 목표가 없습니다.")
+        // ADR-057 — 스위치가 켜져 있으면 실행 기록을 만들지 않는다(leg마다 막힌 실패가 쌓이지 않게).
+        tradingHaltService.findActive(brokerageService.getAccount(userId).provider, userId)?.let { throw it.toException() }
         val plan = computePreview(userId, target)
         if (plan.legs.isEmpty()) throw BusinessRuleException("임계값을 넘는 리밸런싱 대상이 없습니다.")
 
@@ -69,8 +73,17 @@ class RebalanceExecutionService(
         val ordered = plan.legs.sortedWith(compareBy({ it.side != OrderSide.SELL }, { -it.diffPct.abs().toDouble() }))
 
         var anyFailed = false
-        for (leg in ordered) {
-            anyFailed = anyFailed or !executeLeg(execution.id, leg, userId)
+        for ((i, leg) in ordered.withIndex()) {
+            try {
+                anyFailed = anyFailed or !executeLeg(execution.id, leg, userId)
+            } catch (e: TradingHaltedException) {
+                // ADR-057 — 실행 도중 킬 스위치가 켜졌다. 남은 leg는 시도하지 않는다(시도해도 모두 막힌다). 이 leg와 남은
+                // leg 모두 주문이 나가지 않았음을 분명히 남긴다 — 매도만 되고 매수가 막혀 현금으로 남았을 수 있다.
+                ordered.drop(i).forEach { saveLeg(execution.id, it, RebalanceLegStatus.FAILED, null, "실거래 주문 중단(킬 스위치) — 주문 미전송") }
+                log.warn("리밸런싱 실행 중 킬 스위치 — 남은 {}건 미실행: executionId={}", ordered.size - i, execution.id)
+                anyFailed = true
+                break
+            }
         }
 
         execution.complete(anyFailed)
@@ -92,14 +105,29 @@ class RebalanceExecutionService(
                 userId,
                 BrokerageOrderRequest(symbol = leg.symbol, side = leg.side.name, orderType = "MARKET", quantity = leg.quantity),
             )
-            if (order.status == BrokerageOrderStatus.REJECTED) {
-                saveLeg(executionId, leg, RebalanceLegStatus.FAILED, order.id, order.rejectReason)
-                log.warn("리밸런싱 leg 거부: executionId={} symbol={} reason={}", executionId, leg.symbol, order.rejectReason)
-                false
-            } else {
-                saveLeg(executionId, leg, RebalanceLegStatus.EXECUTED, order.id, null)
-                true
+            when {
+                order.status == BrokerageOrderStatus.REJECTED -> {
+                    saveLeg(executionId, leg, RebalanceLegStatus.FAILED, order.id, order.rejectReason)
+                    log.warn("리밸런싱 leg 거부: executionId={} symbol={} reason={}", executionId, leg.symbol, order.rejectReason)
+                    false
+                }
+                // ADR-056 — 결과 불명. 실패로 적으면 실제로 체결된 leg가 실패로 보인다. 해소는 주문 행이 따라간다.
+                order.status.isUnresolved -> {
+                    saveLeg(executionId, leg, RebalanceLegStatus.UNKNOWN, order.id, order.rejectReason)
+                    log.warn("리밸런싱 leg 결과 확인 중: executionId={} symbol={} orderId={}", executionId, leg.symbol, order.id)
+                    false
+                }
+                else -> {
+                    saveLeg(executionId, leg, RebalanceLegStatus.EXECUTED, order.id, null)
+                    true
+                }
             }
+        } catch (e: TradingHaltedException) {
+            throw e   // execute()가 남은 leg까지 한 번에 정리한다
+        } catch (e: OrderOutcomeUnknownException) {
+            saveLeg(executionId, leg, RebalanceLegStatus.UNKNOWN, e.orderId, e.message)
+            log.warn("리밸런싱 leg 결과 확인 중: executionId={} symbol={} orderId={}", executionId, leg.symbol, e.orderId)
+            false
         } catch (e: Exception) {
             saveLeg(executionId, leg, RebalanceLegStatus.FAILED, null, e.message?.take(500) ?: "알 수 없는 오류")
             log.warn("리밸런싱 leg 실패: executionId={} symbol={} reason={}", executionId, leg.symbol, e.message)

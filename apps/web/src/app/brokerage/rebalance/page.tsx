@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ShieldWarning, CheckCircle, XCircle, ArrowsClockwise, Sparkle } from "@phosphor-icons/react";
+import { ShieldWarning, CheckCircle, XCircle, ArrowsClockwise, Sparkle, Question } from "@phosphor-icons/react";
 import { getAccessToken } from "@/services/auth";
 import {
   useBrokerageAccount,
@@ -16,6 +16,7 @@ import { ApiError } from "@/services/brokerage";
 import { authFetch } from "@/services/api";
 import { Card } from "@/components/ui/Card";
 import type { RebalanceExecutionResponse, RebalanceTargetSource } from "@monticker/types";
+import { TradingHaltBanner } from "@/components/brokerage/TradingHaltBanner";
 
 interface StockHit { id: number; symbol: string; name: string; }
 interface WeightRow { symbol: string; name: string; weightPct: string; id?: number; }
@@ -228,6 +229,8 @@ export default function RebalancePage() {
         <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">목표 비중을 저장하고, 현재 보유와의 괴리를 확인한 뒤 직접 실행합니다</p>
       </div>
 
+      <TradingHaltBanner enabled={!!account} note="중단 중에는 리밸런싱을 실행할 수 없습니다. 목표 비중 저장과 미리보기는 가능합니다." />
+
       {/* 목표 비중 설정 */}
       <Card className="p-5" outerClassName="mb-6">
         <div className="flex items-center gap-2 mb-3">
@@ -413,11 +416,15 @@ export default function RebalancePage() {
               <div key={leg.symbol} className="flex items-center gap-2 text-xs py-1.5">
                 {leg.status === "EXECUTED"
                   ? <CheckCircle size={16} weight="bold" className="text-dracula-green shrink-0" aria-hidden />
-                  : <XCircle size={16} weight="bold" className="text-dracula-red shrink-0" aria-hidden />}
+                  : leg.status === "UNKNOWN"
+                    ? <Question size={16} weight="bold" className="text-amber-700 dark:text-dracula-yellow shrink-0" aria-hidden />
+                    : <XCircle size={16} weight="bold" className="text-dracula-red shrink-0" aria-hidden />}
                 <span className={leg.side === "BUY" ? "text-dracula-red" : "text-dracula-cyan"}>{leg.side === "BUY" ? "매수" : "매도"}</span>
                 <span className="text-gray-900 dark:text-dracula-fg font-semibold">{leg.symbol}</span>
                 <span className="text-gray-500 dark:text-dracula-comment">{leg.quantity}주</span>
-                {leg.failReason && <span className="text-dracula-red ml-auto">{leg.failReason}</span>}
+                {leg.status === "UNKNOWN"
+                  ? <span className="text-amber-700 dark:text-dracula-yellow ml-auto">체결 여부 확인 중 — 주문 내역에서 확인</span>
+                  : leg.failReason && <span className="text-dracula-red ml-auto">{leg.failReason}</span>}
               </div>
             ))}
           </div>

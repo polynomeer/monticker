@@ -3,6 +3,13 @@
 ## Status
 Accepted
 
+**Note (2026-10-04) — 구현이 이 문서와 다르다.** [2026-10 설계 리뷰](../design-review-2026-10.md)에서 확인:
+- 스케줄은 오전 9시가 아니라 **16:30 KST**(`BatchJobScheduler.runPaperSettlement`, Spring Batch 잡)다.
+- **매도 대금은 체결 즉시 현금에 반영된다**(`OrderSagaOrchestrator` STEP 5 `adjustCash`). 정산 잡은 수수료·세금만
+  차감한다. 아래 "`settlement_pending` → T+2 후 `available_cash`" 모델은 현재 코드에 없다.
+- 처리 주체는 `LedgerService`가 아니라 `PaperSettlementService.settle()`이다.
+- 정산 리더가 기동 시점 날짜로 고정되던 버그는 2026-10-04 수정됐다(`@StepScope` + 잡 파라미터 `date`).
+
 ## Context
 
 페이퍼 트레이딩(모의투자)에서 체결이 발생했을 때 자산을 즉시 지갑에 반영할 것인지,  

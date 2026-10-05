@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
 import org.springframework.security.web.SecurityFilterChain
@@ -21,6 +22,7 @@ import org.springframework.web.cors.CorsConfigurationSource
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource
 
 @Configuration
+@EnableMethodSecurity
 class SecurityConfig(
     private val jwtTokenProvider: JwtTokenProvider,
     private val idempotencyFilter: IdempotencyFilter,
@@ -69,6 +71,11 @@ class SecurityConfig(
                     // 이미 포함되지만, 왜 안전한지 남겨둔다.
                     .requestMatchers("/actuator/**").permitAll()
                     .requestMatchers("/ws/**").permitAll()
+                    // 관리자 API — 실거래 킬 스위치(ADR-057), 정산·결제 갱신 수동 실행, 재색인. 컨트롤러의
+                    // @PreAuthorize는 @EnableMethodSecurity가 없어 한 번도 적용된 적이 없었다(2026-10 브랜치 리뷰에서
+                    // 발견 — 로그인한 일반 사용자가 정산 배치를 돌리고 킬 스위치를 끌 수 있었다). URL 규칙을 1차 방어선으로
+                    // 두고 메서드 보안도 켠다 — 둘 중 하나가 빠져도 막힌다.
+                    .requestMatchers("/api/admin/**").hasRole("ADMIN")
                     .anyRequest().authenticated()
             }
             .exceptionHandling {

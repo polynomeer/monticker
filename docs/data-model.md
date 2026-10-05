@@ -977,8 +977,8 @@ stocks
 | `alert_histories` | V6 | ✅ |
 | `alert_rules` | V6 | ✅ |
 | `brokerage_accounts` | V27 | — |
-| `brokerage_orders` | V27 | — |
-| `brokerage_settlements` | V27 | — |
+| `brokerage_orders` | V27 (+V37 `broker_order_ref`, +V51 `PENDING_SUBMIT`/`UNKNOWN`·`client_order_id`·대조 컬럼 ADR-056, +V54 수동 확정, +V55 `status_synced_at` ADR-061, +V56 `cost_basis_price` ADR-062) | — |
+| `brokerage_settlements` | V27 (+V55 `order_id` 유일 — 체결 하나에 정산 하나, ADR-061) | — |
 | `candles_1d` | V4 | — |
 | `candles_1m` | V4 | ✅ |
 | `conditional_orders` | V38 | — |
@@ -1003,11 +1003,12 @@ stocks
 | `payment_records` | V27 | — |
 | `portfolio_optimizations` | V16 | ✅ |
 | `portfolio_positions` | V21 | ✅ |
-| `price_ticks` | V4 | — |
+| ~~`price_ticks`~~ | V4 → V42 제거 | 원시 틱은 Postgres에 저장하지 않는다 (ADR-041) |
 | `quant_backtest_results` | V13 | — |
 | `quant_forward_test_equity` | V33 | — |
 | `quant_forward_tests` | V33 | — |
 | `quant_signals` | V13 | ✅ |
+| `realtime_price_coverage` | V53 | — 실시세 연결 종목, worker 공표·heartbeat (ADR-060) |
 | `rebalance_execution_legs` | V39 | — |
 | `rebalance_executions` | V39 | — |
 | `rebalance_targets` | V39 | — |
@@ -1027,6 +1028,7 @@ stocks
 | `strategy_subscriptions` | V24 | ✅ |
 | `subscription_plans` | V27 | — |
 | `tax_harvesting_logs` | V16 | ✅ |
+| `trading_halts` | V52 | — 실거래 킬 스위치·감사 이력, 행 삭제 없음 (ADR-057) |
 | `user_billing_keys` | V32 | — |
 | `user_subscriptions` | V27 | — |
 | `users` | V2 | ✅ |

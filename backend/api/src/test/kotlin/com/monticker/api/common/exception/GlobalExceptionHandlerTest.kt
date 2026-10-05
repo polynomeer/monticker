@@ -135,4 +135,11 @@ class GlobalExceptionHandlerTest {
         assertThat(resp.headers.getFirst("Retry-After")).isEqualTo("30")
         assertThat(resp.body!!.detail).isEqualTo("service=kis")
     }
+
+    @Test
+    fun `킬 스위치(TradingHaltedException)는 5xx가 아니라 423이다 — 의도된 정지가 주문 경로 장애 알림을 울리면 안 된다`() {
+        val resp = handler.handleTradingHalted(TradingHaltedException("실거래 주문이 일시 중단되었습니다: 점검", "GLOBAL"))
+        assertThat(resp.statusCode).isEqualTo(HttpStatus.LOCKED)
+        assertThat(resp.body?.detail).isEqualTo("TRADING_HALTED:GLOBAL")
+    }
 }

@@ -1,5 +1,6 @@
 package com.monticker.worker.marketdata
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.monticker.worker.kis.KisCoverageProvider
 import com.monticker.worker.toss.TossCoverageProvider
 import jakarta.annotation.PostConstruct
@@ -12,6 +13,9 @@ import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.random.Random
 
+// ADR-055 — 관대한 리더. worker-market·market-gateway(생산자)와 worker-event(소비자)는 별개 Deployment라
+// 생산자가 먼저 롤아웃되면 새 필드를 모르는 소비자가 틱마다 실패해 전부 DLT로 간다(아래 seq 주석의 사고).
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class GeneratedTick(
     val stockId: Long,
     val symbol: String,
@@ -24,7 +28,17 @@ data class GeneratedTick(
     // 종목별 단조 증가 시퀀스. Go market-gateway가 TICK_SEQ=true 일 때만 채운다(실험 M-002) — 없으면 null.
     // ObjectMapper 기본값이 FAIL_ON_UNKNOWN_PROPERTIES=true 라 필드 없이는 seq가 실린 틱이 전부 DLT로 간다.
     val seq: Long? = null,
+    // ADR-055 — 시세 출처. 기본값이 MOCK인 건 의도다: 출처를 빠뜨린 생산자는 실주문 경로(조건부 주문)에서
+    // "실시세 아님"으로 취급돼 fail-closed 된다. 실시세 생산자(KIS·Toss)는 반드시 명시한다.
+    val source: String = TickSource.MOCK,
 )
+
+/** ADR-055 — market.ticks 와이어의 `source` 값. api의 PriceSource와 문자열로 맞춘다. */
+object TickSource {
+    const val MOCK = "MOCK"
+    const val KIS = "KIS"
+    const val TOSS = "TOSS"
+}
 
 private data class StockMeta(val id: Long, val symbol: String, val market: String)
 

@@ -3,6 +3,11 @@
 ## Status
 Accepted
 
+**Note (2026-10-04):** 아래 "`PaperTradingService`의 BUY/SELL/reset 직후 동기 업데이트"는
+[ADR-047](047-single-execution-path-for-paper-account.md) 이후 달라졌다 — 체결은 매칭 엔진 사가가 유일한 경로이고,
+프로젝션 갱신은 사가 트랜잭션 안에서 동기 호출되는 `PaperExecutionListener`가 한다. "같은 트랜잭션에서 갱신"이라는
+결정 자체는 그대로다.
+
 ## Context
 
 `PaperPortfolioQueryService.buildHoldings()`는 사용자의 보유 종목을 조회할 때마다 `paper_trades` 전체를 GROUP BY / HAVING으로 집계한다:

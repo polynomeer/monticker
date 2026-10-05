@@ -22,13 +22,16 @@ class TossCoverageProvider(
     jdbc: JdbcTemplate,
     @Value("\${ingestion.source:internal}") ingestionSource: String,
     kisCoverage: KisCoverageProvider,
+    // ADR-060 — 키가 없으면 구독이 없다. KisCoverageProvider와 같은 이유로 집합을 비운다.
+    @Value("\${toss.platform.app-key:}") appKey: String = "",
+    @Value("\${toss.platform.app-secret:}") appSecret: String = "",
 ) {
     companion object {
         // Toss AsyncAPI 스펙 명시: "연결당 구독 수: 100건(codes 합산)".
         const val MAX_PER_CONNECTION = 100
     }
 
-    private val enabled = ingestionSource.contains("toss")
+    private val enabled = ingestionSource.contains("toss") && appKey.isNotBlank() && appSecret.isNotBlank()
 
     val usTargets: List<TossTickTarget> =
         if (enabled)

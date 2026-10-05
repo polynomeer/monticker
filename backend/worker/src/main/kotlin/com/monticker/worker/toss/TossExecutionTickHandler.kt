@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode
 import com.monticker.worker.kafka.TickKafkaProducer
 import com.monticker.worker.marketdata.GeneratedTick
 import com.monticker.worker.marketdata.MarketSchedule
+import com.monticker.worker.marketdata.TickSource
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.time.Instant
@@ -50,6 +51,7 @@ class TossExecutionTickHandler(
                 volume = volume,
                 tradeTime = tradeTime,
                 marketStatus = MarketSchedule.getTickConfig(target.symbol, target.market).status.name,
+                source = TickSource.TOSS,
             )
         )
     }

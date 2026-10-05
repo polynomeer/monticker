@@ -5,7 +5,7 @@ import java.math.BigDecimal
 import java.time.Instant
 
 enum class RebalanceExecutionStatus { EXECUTING, COMPLETED, PARTIALLY_FAILED }
-enum class RebalanceLegStatus { EXECUTED, FAILED }
+enum class RebalanceLegStatus { EXECUTED, FAILED, UNKNOWN }  // UNKNOWN — ADR-056, 주문 결과 확인 중
 
 @Entity
 @Table(name = "rebalance_executions")

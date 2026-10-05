@@ -75,7 +75,7 @@ class MockPriceGeneratorTest {
                 listOf(mapper.mapRow(rs, 0))
             }
         }
-        val kisCoverage = KisCoverageProvider(kisJdbc, "kis")
+        val kisCoverage = KisCoverageProvider(kisJdbc, "kis", "k", "s")
 
         val loadingJdbc = mockk<JdbcTemplate> {
             every { query(any<String>(), any<RowMapper<Any>>()) } answers {
@@ -119,7 +119,7 @@ class MockPriceGeneratorTest {
                 listOf(mapper.mapRow(rs, 0))
             }
         }
-        val tossCoverage = TossCoverageProvider(tossJdbc, "toss", noKisCoverage)
+        val tossCoverage = TossCoverageProvider(tossJdbc, "toss", noKisCoverage, "k", "s")
 
         val loadingJdbc = mockk<JdbcTemplate> {
             every { query(any<String>(), any<RowMapper<Any>>()) } answers {

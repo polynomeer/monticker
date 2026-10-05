@@ -9,12 +9,15 @@ import { ApiError } from "@/services/brokerage";
 import { Card } from "@/components/ui/Card";
 import OrderProposalCard from "@/components/ai/OrderProposalCard";
 import type { BrokerageOrderResponse, BrokerageOrderSide, BrokerageOrderType } from "@monticker/types";
+import { TradingHaltBanner } from "@/components/brokerage/TradingHaltBanner";
 
 interface StockHit { id: number; symbol: string; name: string; }
 
 function fmt(n: number) { return n.toLocaleString("ko-KR", { maximumFractionDigits: 0 }); }
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
+  PENDING_SUBMIT:   { label: "제출 중",  color: "text-dracula-orange" },
+  UNKNOWN:          { label: "확인 중",  color: "text-amber-700 dark:text-dracula-yellow" },
   SUBMITTED:        { label: "접수됨",   color: "text-dracula-orange" },
   FILLED:           { label: "체결 완료", color: "text-dracula-green" },
   PARTIALLY_FILLED: { label: "부분 체결", color: "text-dracula-cyan" },
@@ -136,6 +139,8 @@ export default function BrokerageOrderPage() {
         <h1 className="text-xl font-bold text-gray-900 dark:text-dracula-fg">실전 주문</h1>
         <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">실제 증권사 계좌로 체결되는 주문입니다</p>
       </div>
+
+      <TradingHaltBanner enabled={!!account} note="미체결 주문 취소와 주문 내역 확인은 계속 가능합니다." />
 
       <Card className="p-4 flex items-center justify-between" outerClassName="mb-5">
         <span className="text-xs text-gray-500 dark:text-dracula-comment">가용 현금</span>

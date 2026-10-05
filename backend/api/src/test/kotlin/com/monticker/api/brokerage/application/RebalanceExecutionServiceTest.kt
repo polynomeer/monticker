@@ -18,7 +18,13 @@ class RebalanceExecutionServiceTest {
     private val executionRepo = mockk<RebalanceExecutionRepository>()
     private val legRepo = mockk<RebalanceExecutionLegRepository>()
     private val jdbc = mockk<JdbcTemplate>()
-    private val service = RebalanceExecutionService(targetService, brokerageService, executionRepo, legRepo, jdbc)
+    private val service = RebalanceExecutionService(targetService, brokerageService, executionRepo, legRepo, jdbc, mockk { every { findActive(any(), any()) } returns null })
+
+    init {
+        // ADR-057 — execute()가 킬 스위치를 보려고 계좌의 증권사를 읽는다.
+        every { brokerageService.getAccount(1L) } returns
+            com.monticker.api.brokerage.domain.BrokerageAccount(userId = 1L, provider = com.monticker.api.brokerage.domain.BrokerageProvider.KIS, accountNumber = "12345678")
+    }
 
     private fun makeTarget(weights: Map<String, BigDecimal>, thresholdPct: BigDecimal = BigDecimal("5.00")) =
         RebalanceTarget(id = 1L, userId = 1L, accountId = 1L, weightsJson = "{}", thresholdPct = thresholdPct, source = RebalanceTargetSource.MANUAL).also {
@@ -132,7 +138,7 @@ class RebalanceExecutionServiceTest {
         every { legRepo.save(capture(legSlot)) } answers { firstArg() }
 
         val orderCallOrder = mutableListOf<String>()
-        every { brokerageService.submitOrder(1L, any()) } answers {
+        every { brokerageService.submitOrder(1L, any(), any()) } answers {
             val req = secondArg<BrokerageOrderRequest>()
             orderCallOrder += req.symbol
             makeOrder(id = if (req.symbol == "000660") 200L else 201L, status = BrokerageOrderStatus.FILLED)
@@ -162,8 +168,8 @@ class RebalanceExecutionServiceTest {
         val legSlot = mutableListOf<RebalanceExecutionLeg>()
         every { legRepo.save(capture(legSlot)) } answers { firstArg() }
 
-        every { brokerageService.submitOrder(1L, match { it.symbol == "000660" }) } returns makeOrder(200L, BrokerageOrderStatus.REJECTED, "리스크 한도 초과")
-        every { brokerageService.submitOrder(1L, match { it.symbol == "005930" }) } returns makeOrder(201L, BrokerageOrderStatus.FILLED)
+        every { brokerageService.submitOrder(1L, match { it.symbol == "000660" }, any()) } returns makeOrder(200L, BrokerageOrderStatus.REJECTED, "리스크 한도 초과")
+        every { brokerageService.submitOrder(1L, match { it.symbol == "005930" }, any()) } returns makeOrder(201L, BrokerageOrderStatus.FILLED)
 
         val execution = service.execute(1L)
 
@@ -174,5 +180,59 @@ class RebalanceExecutionServiceTest {
         assertThat(sellLeg.failReason).isEqualTo("리스크 한도 초과")
         val buyLeg = legSlot.first { it.symbol == "005930" }
         assertThat(buyLeg.status).isEqualTo(RebalanceLegStatus.EXECUTED)
+    }
+
+    @Test
+    fun `결과 불명 leg는 FAILED가 아니라 UNKNOWN으로 남고 주문을 가리킨다 — 실제로 체결됐을 수 있다`() {
+        val target = makeTarget(mapOf("005930" to BigDecimal("0.50")))
+        every { targetService.get(1L) } returns target
+        every { brokerageService.getBalance(1L) } returns makeBalance(BigDecimal("1000000"), emptyList())
+        every { jdbc.queryForObject(match<String> { it.contains("candles_1m") }, eq(BigDecimal::class.java), eq("005930")) } returns BigDecimal("50000")
+        stubStockId("005930", 2L)
+        every { executionRepo.save(any<RebalanceExecution>()) } answers { firstArg() }
+        val legSlot = mutableListOf<RebalanceExecutionLeg>()
+        every { legRepo.save(capture(legSlot)) } answers { firstArg() }
+        every { brokerageService.submitOrder(1L, any(), any()) } throws OrderOutcomeUnknownException(301L, RuntimeException("db down"))
+
+        service.execute(1L)
+
+        assertThat(legSlot.single().status).isEqualTo(RebalanceLegStatus.UNKNOWN)
+        assertThat(legSlot.single().executedOrderId).isEqualTo(301L)
+    }
+
+    @Test
+    fun `킬 스위치가 켜져 있으면 실행 기록을 만들지 않고 막는다`() {
+        val halted = RebalanceExecutionService(targetService, brokerageService, executionRepo, legRepo, jdbc,
+            mockk { every { findActive(any(), any()) } returns TradingHalt(1, HaltScope.USER, "1", "조사", 9, java.time.Instant.now(), null, null, null) })
+        every { targetService.get(1L) } returns makeTarget(mapOf("005930" to BigDecimal("0.50")))
+
+        org.assertj.core.api.Assertions.assertThatThrownBy { halted.execute(1L) }
+            .isInstanceOf(com.monticker.api.common.exception.TradingHaltedException::class.java)
+        verify(exactly = 0) { executionRepo.save(any()) }
+        verify(exactly = 0) { brokerageService.submitOrder(any(), any(), any()) }
+    }
+
+    @Test
+    fun `실행 도중 킬 스위치가 켜지면 남은 leg는 시도하지 않고 미전송으로 남긴다`() {
+        val target = makeTarget(mapOf("005930" to BigDecimal("0.50")))
+        every { targetService.get(1L) } returns target
+        val holding = BrokerageHolding(symbol = "000660", quantity = 5, avgPrice = BigDecimal("100000"), currentPrice = BigDecimal("100000"))
+        every { brokerageService.getBalance(1L) } returns makeBalance(BigDecimal("1000000"), listOf(holding))
+        every { jdbc.queryForObject(match<String> { it.contains("candles_1m") }, eq(BigDecimal::class.java), eq("005930")) } returns BigDecimal("50000")
+        stubStockId("005930", 2L)
+        stubStockId("000660", 3L)
+        every { executionRepo.save(any<RebalanceExecution>()) } answers { firstArg() }
+        val legSlot = mutableListOf<RebalanceExecutionLeg>()
+        every { legRepo.save(capture(legSlot)) } answers { firstArg() }
+        // 매도(000660)가 먼저 나가는 중에 스위치가 켜졌다
+        every { brokerageService.submitOrder(1L, any(), any()) } throws
+            com.monticker.api.common.exception.TradingHaltedException("실거래 주문이 일시 중단되었습니다", "GLOBAL")
+
+        val execution = service.execute(1L)
+
+        verify(exactly = 1) { brokerageService.submitOrder(1L, any(), any()) }   // 매수는 시도조차 하지 않는다
+        assertThat(legSlot.map { it.symbol }).containsExactly("000660", "005930")
+        assertThat(legSlot).allMatch { it.status == RebalanceLegStatus.FAILED && it.failReason!!.contains("킬 스위치") }
+        assertThat(execution.status).isEqualTo(RebalanceExecutionStatus.PARTIALLY_FAILED)
     }
 }

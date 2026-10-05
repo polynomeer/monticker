@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Card } from "@/components/ui/Card";
 import StockChart from "./chart/StockChart";
 import type { IndicatorKey, OrderLine, DrawingTool, Drawing } from "./chart/types";
 import IndicatorChart from "./IndicatorChart";

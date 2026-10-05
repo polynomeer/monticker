@@ -1,10 +1,14 @@
 package com.monticker.api.brokerage.application
 
 import com.monticker.api.brokerage.domain.BrokerageOrderStatus
+import com.monticker.api.brokerage.domain.BrokerageProvider
 import com.monticker.api.brokerage.domain.ConditionalTriggerType
 import com.monticker.api.brokerage.domain.OrderSide
+import com.monticker.api.brokerage.infrastructure.BrokerageClientRegistry
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRequest
+import com.monticker.api.common.exception.TradingHaltedException
 import com.monticker.api.marketdata.domain.MarketTickReceivedEvent
+import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.context.event.EventListener
 import org.springframework.jdbc.core.JdbcTemplate
@@ -26,6 +30,7 @@ data class ConditionalOrderRow(
     val limitPrice: BigDecimal?,
     val quantity: Int,
     val ocoGroupId: UUID?,
+    val provider: BrokerageProvider,   // ADR-057 — 증권사 범위 킬 스위치 판정용
 )
 
 /**
@@ -37,16 +42,36 @@ data class ConditionalOrderRow(
 class ConditionalOrderEvaluator(
     private val jdbc: JdbcTemplate,
     private val brokerageService: BrokerageService,
+    private val meterRegistry: MeterRegistry,
+    private val tradingHaltService: TradingHaltService,
+    private val clientRegistry: BrokerageClientRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    @EventListener
+    // ADR-055 — 실시세 틱만 비동기 큐에 넣는다. condition은 @Async 디스패치 전에 평가되므로 합성(Mock) 틱
+    // 폭주가 conditionalOrderExecutor 큐(200)를 채워 실시세 틱을 밀어내지 않는다.
+    // ADR-060 — Mock 증권사(실제 돈 없음)가 하나라도 있으면 합성 틱도 받는다 — 단 ACTIVE 조건부 주문이 걸린 종목만(큐 포화 방지).
+    // 실거래 모드에서는 지금과 같다(실시세 틱만).
+    @EventListener(condition = "#event.provenance.source.real or (@brokerageClientRegistry.anySimulated() and @activeConditionalStocks.contains(#event.tick.stockId))")
     @Async("conditionalOrderExecutor")
     fun onTick(event: MarketTickReceivedEvent) {
         val tick = event.tick
+        // 실시세라도 정규장·신선한 틱으로만 실주문을 낸다. 실제 돈을 움직이는 계좌만 이 조건을 탄다(ADR-060) — 그런 계좌만
+        // 있으면(실거래 모드) DB 조회 전에 거른다.
+        val realOrderReject = event.provenance.rejectReasonForRealOrder(Instant.now())
+        if (realOrderReject != null && !clientRegistry.anySimulated()) {
+            meterRegistry.counter("conditional_order_tick_ignored_total", "reason", realOrderReject.substringBefore('=')).increment()
+            return
+        }
         try {
             for (row in fetchActiveForStock(tick.stockId)) {
+                if (realOrderReject != null && clientRegistry.movesRealMoney(row.provider)) continue
                 if (row.triggerType.isTriggered(tick.price, row.triggerPrice)) {
+                    // ADR-057 — 킬 스위치 중에는 클레임하지 않는다. ACTIVE로 남아 해제 뒤 다음 실시세 틱부터 다시 평가된다.
+                    if (tradingHaltService.findActive(row.provider, row.userId) != null) {
+                        meterRegistry.counter("conditional_order_halted_total").increment()
+                        continue
+                    }
                     fire(row)
                 }
             }
@@ -58,9 +83,11 @@ class ConditionalOrderEvaluator(
     private fun fetchActiveForStock(stockId: Long): List<ConditionalOrderRow> =
         jdbc.query(
             """
-            SELECT id, user_id, symbol, side, trigger_type, trigger_price, order_type, limit_price, quantity, oco_group_id
-            FROM conditional_orders
-            WHERE stock_id = ? AND status = 'ACTIVE'
+            SELECT co.id, co.user_id, co.symbol, co.side, co.trigger_type, co.trigger_price, co.order_type, co.limit_price,
+                   co.quantity, co.oco_group_id, ba.provider
+            FROM conditional_orders co
+            JOIN brokerage_accounts ba ON ba.id = co.account_id
+            WHERE co.stock_id = ? AND co.status = 'ACTIVE'
             """,
             { rs, _ ->
                 ConditionalOrderRow(
@@ -74,6 +101,7 @@ class ConditionalOrderEvaluator(
                     limitPrice = rs.getBigDecimal("limit_price"),
                     quantity = rs.getInt("quantity"),
                     ocoGroupId = rs.getString("oco_group_id")?.let { UUID.fromString(it) },
+                    provider = BrokerageProvider.valueOf(rs.getString("provider")),
                 )
             },
             stockId,
@@ -100,25 +128,53 @@ class ConditionalOrderEvaluator(
                     quantity = row.quantity,
                     limitPrice = row.limitPrice,
                 ),
+                // ADR-056 — 결정적 식별자. 발동 중 크래시하면 리퍼가 이 값으로 주문 행을 찾는다(없으면 미전송 확정).
+                clientOrderId = clientOrderIdFor(row.id),
             )
-            if (order.status == BrokerageOrderStatus.REJECTED) {
-                markFailed(row.id, order.rejectReason ?: "증권사 거부", order.id)
-                log.warn("[ConditionalOrderEvaluator] 증권사 거부: id={} userId={} reason={}", row.id, row.userId, order.rejectReason)
-            } else {
-                jdbc.update(
-                    "UPDATE conditional_orders SET status = 'EXECUTED', executed_order_id = ?, updated_at = ? WHERE id = ?",
-                    order.id, Timestamp.from(Instant.now()), row.id,
-                )
-                log.info("[ConditionalOrderEvaluator] 발동: id={} userId={} symbol={} orderId={}", row.id, row.userId, row.symbol, order.id)
+            when {
+                order.status == BrokerageOrderStatus.REJECTED -> {
+                    markFailed(row.id, order.rejectReason ?: "증권사 거부", order.id)
+                    log.warn("[ConditionalOrderEvaluator] 증권사 거부: id={} userId={} reason={}", row.id, row.userId, order.rejectReason)
+                }
+                order.status.isUnresolved -> keepTriggered(row, order.id)
+                else -> {
+                    jdbc.update(
+                        "UPDATE conditional_orders SET status = 'EXECUTED', executed_order_id = ?, updated_at = ? WHERE id = ?",
+                        order.id, Timestamp.from(Instant.now()), row.id,
+                    )
+                    log.info("[ConditionalOrderEvaluator] 발동: id={} userId={} symbol={} orderId={}", row.id, row.userId, row.symbol, order.id)
+                }
             }
+            row.ocoGroupId?.let { cancelOcoSiblings(it, row.id) }
+        } catch (e: TradingHaltedException) {
+            // ADR-057 — 평가기 확인과 주문 준비 사이에 스위치가 켜졌다. 주문은 나가지 않았다(의도 기록 전). 소모하지 않고 되돌린다.
+            jdbc.update(
+                "UPDATE conditional_orders SET status = 'ACTIVE', triggered_at = NULL, updated_at = ? WHERE id = ? AND status = 'TRIGGERED'",
+                Timestamp.from(Instant.now()), row.id,
+            )
+            meterRegistry.counter("conditional_order_halted_total").increment()
+            log.warn("[ConditionalOrderEvaluator] 킬 스위치로 발동 취소 — ACTIVE로 복귀: id={} userId={}", row.id, row.userId)
+        } catch (e: OrderOutcomeUnknownException) {
+            // 의도는 커밋됐고 결과를 기록하지 못했다 — 주문이 나갔을 수 있다. FAILED로 단정하지 않는다.
+            keepTriggered(row, e.orderId)
             row.ocoGroupId?.let { cancelOcoSiblings(it, row.id) }
         } catch (e: Exception) {
             // ADR-032 — 실패 시 재시도하지 않는다(조건을 계속 만족하는 동안 매 틱마다
             // 재시도하면 같은 실패 요청이 반복 발사될 수 있다). 사용자가 재등록해야 한다.
+            // ADR-056 — OrderOutcomeUnknownException이 아닌 예외는 의도 커밋 전에 났다 → 증권사 호출이 없었다.
             markFailed(row.id, e.message?.take(500) ?: "알 수 없는 오류")
             log.warn("[ConditionalOrderEvaluator] 발동 실패: id={} userId={} reason={}", row.id, row.userId, e.message)
             row.ocoGroupId?.let { cancelOcoSiblings(it, row.id) }
         }
+    }
+
+    /** ADR-056 — 주문 결과를 모른다. TRIGGERED로 두고 주문만 연결한다 — 대조 잡이 주문을 해소하면 리퍼가 따라간다. */
+    private fun keepTriggered(row: ConditionalOrderRow, orderId: Long) {
+        jdbc.update(
+            "UPDATE conditional_orders SET executed_order_id = ?, updated_at = ? WHERE id = ?",
+            orderId, Timestamp.from(Instant.now()), row.id,
+        )
+        log.warn("[ConditionalOrderEvaluator] 발동 — 주문 결과 확인 중: id={} userId={} orderId={}", row.id, row.userId, orderId)
     }
 
     private fun markFailed(id: Long, reason: String, executedOrderId: Long? = null) {
@@ -134,5 +190,10 @@ class ConditionalOrderEvaluator(
             Timestamp.from(Instant.now()), groupId, executedId,
         )
         if (cancelled > 0) log.info("[ConditionalOrderEvaluator] OCO 형제 취소: groupId={} count={}", groupId, cancelled)
+    }
+
+    companion object {
+        /** ADR-056 — 조건부 주문 하나에 증권사 주문은 최대 하나다(client_order_id 유니크 인덱스). */
+        fun clientOrderIdFor(conditionalOrderId: Long) = "co-$conditionalOrderId"
     }
 }

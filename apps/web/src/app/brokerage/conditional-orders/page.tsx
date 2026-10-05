@@ -10,6 +10,7 @@ import { ApiError } from "@/services/brokerage";
 import { Card } from "@/components/ui/Card";
 import { ConditionalOrderRow } from "@/components/brokerage/ConditionalOrderRow";
 import type { BrokerageOrderSide, BrokerageOrderType, ConditionalTriggerType } from "@monticker/types";
+import { TradingHaltBanner } from "@/components/brokerage/TradingHaltBanner";
 
 interface StockHit { id: number; symbol: string; name: string; }
 
@@ -163,6 +164,8 @@ export default function ConditionalOrderPage() {
         <h1 className="text-xl font-bold text-gray-900 dark:text-dracula-fg">조건부 주문</h1>
         <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">가격 조건이 충족되면 자동으로 실제 주문이 제출됩니다</p>
       </div>
+
+      <TradingHaltBanner enabled={!!account} note="걸어둔 조건부 주문은 그대로 유지되며, 중단이 해제되면 자동으로 다시 감시합니다." />
 
       <Card className="p-5" outerClassName="mb-6">
         {/* 종목 검색 */}

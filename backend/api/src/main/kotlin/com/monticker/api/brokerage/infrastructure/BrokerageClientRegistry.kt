@@ -13,17 +13,28 @@ import org.springframework.context.annotation.Configuration
 class BrokerageClientRegistry(private val byProvider: Map<BrokerageProvider, BrokerageClient>) {
     fun get(provider: BrokerageProvider): BrokerageClient =
         byProvider[provider] ?: throw IllegalStateException("지원하지 않는 증권사입니다: $provider")
+
+    /**
+     * ADR-060 — 이 증권사 계좌의 주문이 실제 돈을 움직이는가. Mock 모드에서는 KIS·Toss 계좌도 Mock 클라이언트로 가므로 계좌의
+     * provider가 아니라 연결되는 클라이언트로 판정한다. 등록되지 않은 provider는 실제 돈으로 본다(fail-closed).
+     */
+    fun movesRealMoney(provider: BrokerageProvider): Boolean = byProvider[provider]?.movesRealMoney ?: true
+
+    /** 실제 돈을 움직이지 않는 클라이언트가 하나라도 있는가 — 조건부 주문 평가기의 사전 필터(SpEL)가 쓴다. */
+    fun anySimulated(): Boolean = byProvider.values.any { !it.movesRealMoney }
 }
 
 @Configuration
 class BrokerageClientRegistryConfig {
 
-    @Bean
+    // 두 빈의 이름을 같게 둔다(동시에 하나만 존재) — ConditionalOrderEvaluator의 @EventListener 조건이 SpEL로
+    // @brokerageClientRegistry를 참조한다(ADR-060).
+    @Bean(BEAN_NAME)
     @ConditionalOnProperty("app.brokerage.mock.enabled", havingValue = "true", matchIfMissing = true)
     fun mockBrokerageClientRegistry(mock: MockBrokerageClient): BrokerageClientRegistry =
         BrokerageClientRegistry(BrokerageProvider.entries.associateWith { mock })
 
-    @Bean
+    @Bean(BEAN_NAME)
     @ConditionalOnProperty("app.brokerage.mock.enabled", havingValue = "false")
     fun realBrokerageClientRegistry(kis: KisBrokerageClient, toss: TossBrokerageClient): BrokerageClientRegistry =
         BrokerageClientRegistry(
@@ -32,4 +43,8 @@ class BrokerageClientRegistryConfig {
                 BrokerageProvider.TOSS to toss,
             )
         )
+
+    companion object {
+        const val BEAN_NAME = "brokerageClientRegistry"
+    }
 }

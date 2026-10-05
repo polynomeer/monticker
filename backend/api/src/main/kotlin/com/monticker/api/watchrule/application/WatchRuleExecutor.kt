@@ -48,12 +48,18 @@ class WatchRuleExecutor(
     fun onEvent(event: StockEventDetectedEvent) {
         val rules = ruleRepo.findAllByStockIdAndEventTypeAndIsActiveTrue(event.stockId, event.eventType)
         if (rules.isEmpty()) return
-        // 한 룰의 실패가 같은 이벤트에 걸린 다른 사용자의 룰을 막지 않는다. 인프라 예외는 다시 던져
-        // 컨슈머가 재시도하게 하고(아래 applyRule 참고), 여기서는 룰 단위로만 격리한다.
+        // 한 룰의 실패가 같은 이벤트에 걸린 다른 사용자의 룰을 막지 않는다 — 룰 단위로 격리해 끝까지 돈 뒤,
+        // 인프라 예외가 있었으면 다시 던져 컨슈머 재시도(@RetryableTopic → DLT)로 보낸다. 재시도 때 이미 처리된
+        // 룰은 (룰, 이벤트) 기록으로 건너뛰므로 실패한 룰만 다시 시도된다. 예전엔 여기서 삼켜 재시도도 DLT도
+        // 일어나지 않았다(2026-10 설계 리뷰).
+        var failure: Throwable? = null
         rules.forEach { rule ->
-            runCatching { applyRule(rule, event) }
-                .onFailure { log.error("watch rule 처리 실패 ruleId={} eventId={}", rule.id, event.eventId, it) }
+            runCatching { applyRule(rule, event) }.onFailure {
+                log.error("watch rule 처리 실패 ruleId={} eventId={}", rule.id, event.eventId, it)
+                failure?.addSuppressed(it) ?: run { failure = it }
+            }
         }
+        failure?.let { throw it }
     }
 
     private fun applyRule(rule: WatchRule, event: StockEventDetectedEvent) {

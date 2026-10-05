@@ -17,7 +17,9 @@ import org.springframework.stereotype.Component
  * 판단한다("kis" 단독 사용 시 동작은 바뀌지 않는다).
  */
 @Component
-@ConditionalOnExpression("'\${ingestion.source:internal}'.contains('kis')")
+// 시세 생산 역할(market|all)에서만 연다 — 역할 분리 배포에서 모든 worker가 같은 앱키로 웹소켓을 열면 KIS 등록 한도(41건)와
+// Toss 연결 한도를 역할 수만큼 나눠 쓰고, 같은 틱을 중복 생산한다(2026-10 설계 리뷰 후속).
+@ConditionalOnExpression("'\${worker.role:all}'.matches('market|all') && '\${ingestion.source:internal}'.contains('kis')")
 class KisExecutionTickSubscriber(
     private val ws: KisWebSocketClient,
     private val coverage: KisCoverageProvider,

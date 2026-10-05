@@ -264,6 +264,22 @@ val trId = if (request.side == "BUY") "TTTC0802U" else "TTTC0801U"   // "BUY"가
 - (§4 H2) 이 패턴이 반복되지 않도록 39개 중 37개 컨트롤러에 Bean Validation이 없는 시스템적
   공백 자체를 별도 작업으로 닫는다.
 
+### C4 — 관리자 API의 `@PreAuthorize`가 한 번도 적용된 적이 없다 — ✅ 수정(2026-10-04)
+
+**발견 경위**: [ADR-057](decisions/057-real-order-kill-switch.md) 킬 스위치 관리 API 리뷰 중. 이 문서 작성 시점의 점검에서도 놓쳤다.
+
+**근거**: 저장소 어디에도 `@EnableMethodSecurity`가 없었다. 그래서 `/api/admin/batch`(모의·실거래 정산, 정기결제 갱신,
+원장 대사 수동 실행)와 `/api/admin/search`(인덱스 삭제 후 재색인)의 `@PreAuthorize("hasRole('ADMIN')")`가 무효였고,
+`SecurityConfig`에도 `/api/admin/**` 규칙이 없어 `anyRequest().authenticated()`만 적용됐다 — **로그인한 일반 사용자 누구나**
+호출할 수 있었다. 킬 스위치가 같은 방식으로 붙었다면 사고 대응 중인 스위치를 아무나 끌 수 있었다.
+
+**조치**: `SecurityConfig`에 `/api/admin/**` → `hasRole("ADMIN")` URL 규칙(1차) + `@EnableMethodSecurity`(2차). 실제 필터
+체인 테스트(`TradingHaltAdminSecurityTest`)로 일반 사용자 403·비로그인 401·관리자 201을 고정했고, 두 층을 하나씩 지워도
+여전히 403, 둘 다 지워야(수정 전 상태) 실패하는 것을 확인했다. 기존 카오스 스크립트(`bench/chaos/lib.sh`)는 이미 사용자를
+ADMIN으로 승격한 뒤 호출하므로 영향 없다.
+
+**교훈**: 애노테이션은 활성화 설정이 없으면 조용히 아무 일도 하지 않는다. 권한 규칙은 "막힌다"를 테스트로 확인할 때만 존재한다.
+
 ---
 
 ## 3. High

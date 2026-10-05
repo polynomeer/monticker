@@ -63,6 +63,14 @@ export function ConditionalOrderRow({ o, showTypeBadge }: { o: ConditionalOrderR
           )}
         </p>
         {o.failReason && <p className="text-xs text-dracula-red mt-0.5">{o.failReason}</p>}
+        {(o.priceFeed === "NONE" || o.priceFeed === "STALE") && (
+          // ADR-060 — 실시세가 없으면 조건을 만족해도 발동하지 않는다. 사용자가 보호받고 있다고 믿지 않게 분명히 말한다.
+          <p role="status" className="text-xs text-amber-700 dark:text-dracula-yellow mt-0.5">
+            {o.priceFeed === "NONE"
+              ? "실시간 시세가 연결되지 않은 종목이라 지금은 발동하지 않습니다. 시세가 다시 연결되면 자동으로 감시합니다."
+              : "이 종목의 실시간 시세가 장중에 끊겼습니다. 끊긴 동안에는 발동하지 않습니다."}
+          </p>
+        )}
       </div>
       {o.status === "ACTIVE" && (
         <button

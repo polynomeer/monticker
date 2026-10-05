@@ -96,7 +96,7 @@ class RiskCheckerServiceTest {
             jdbc.query(match<String> { it.contains("avg_cost") }, any<RowMapper<BigDecimal>>(), userId, any())
         } returns listOf(BigDecimal("-400000"))
 
-        val result = service.check(userId, stockId, "SELL", 1, estimatedPrice)
+        val result = service.check(userId, stockId, "BUY", 1, estimatedPrice)
 
         val dailyLossCheck = result.checks.first { it.rule == "DailyLossRule" }
         assertThat(dailyLossCheck.passed).isFalse()
@@ -112,10 +112,23 @@ class RiskCheckerServiceTest {
             jdbc.query(match<String> { it.contains("avg_cost") }, any<RowMapper<BigDecimal>>(), userId, any())
         } returns listOf(BigDecimal("-100000"))
 
-        val result = service.check(userId, stockId, "SELL", 1, estimatedPrice)
+        val result = service.check(userId, stockId, "BUY", 1, estimatedPrice)
 
         val dailyLossCheck = result.checks.first { it.rule == "DailyLossRule" }
         assertThat(dailyLossCheck.passed).isTrue()
+    }
+
+    @Test
+    fun `daily loss rule does not block sells — a stop-loss after a losing sale must still go out (ADR-063)`() {
+        stubSafeDefaults()
+        every {
+            jdbc.query(match<String> { it.contains("avg_cost") }, any<RowMapper<BigDecimal>>(), userId, any())
+        } returns listOf(BigDecimal("-400000"))
+
+        val result = service.check(userId, stockId, "SELL", 1, estimatedPrice)
+
+        assertThat(result.checks.none { it.rule == "DailyLossRule" }).isTrue()
+        assertThat(result.approved).isTrue()
     }
 
     @Test

@@ -3,6 +3,14 @@
 ## Status
 Accepted — 구현 완료(코드는 `backend/worker/.../toss/` 참고). 처음엔 사용자가 설계만 요청해 이 문서를 코드 없이 작성했고, 바로 다음 요청으로 구현까지 이어졌다. 라이브 검증은 여전히 보류 상태다(아래 Consequences 참고) — 이 부분만 최초 작성 이후 갱신됐다.
 
+**Note (2026-10-04):** 커버리지 공급자는 이제 `ingestion.source`에 포함될 뿐 아니라 **플랫폼 키가 설정돼 있어야** 집합을 낸다
+([ADR-060](060-realtime-price-coverage-for-conditional-orders.md)). 키 없이 켜면 구독기는 아무것도 구독하지 않고 끝나는데, 집합은 그대로
+선언돼 `MockPriceGenerator`가 그 종목들을 건너뛰어 **시세가 아예 멈췄다.** 이제 그 경우 Mock이 계속 채운다. 집합은 worker가
+`realtime_price_coverage`에 공표하고 api가 조건부 주문 생성에 쓴다.
+또 실시간 구독기(KIS 체결·호가, Toss 체결)는 이제 시세 생산 역할(`worker.role` market|all)에서만 생긴다 — 예전엔 역할을 보지 않아
+역할 분리 배포에서 모든 worker가 같은 앱키로 웹소켓을 열었다([ADR-022](022-tick-consumer-msa-role-gating.md)와 같은 원칙).
+
+
 ## Context
 
 [ADR-030](030-kis-realtime-tick-ingestion.md)의 "Revisit When"이 명시한 다음 단계다: "Toss 플랫폼 앱키가 준비되면 — trade:kr/trade:us WebSocket 채널로 별도 라운드 진행." 이번엔 KIS 라운드와 같은 방식(공식 스펙 직접 확인 → ADR로 설계 → 구현)을 따랐다 — 처음엔 사용자가 설계까지만 요청해 코드 없이 작성했고, 곧이어 구현까지 요청받아 완료했다.
