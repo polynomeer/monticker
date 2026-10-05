@@ -37,10 +37,13 @@ interface PaymentRecordRepository : JpaRepository<PaymentRecord, Long> {
      *
      * `pg_order_id` 가 있어야만 PG 에 되물을 수 있다(그게 유일한 열쇠다). 방금 만들어진 건은
      * 아직 확정 중일 수 있으므로 제외한다 — 진행 중인 결제를 배치가 가로채면 안 된다.
+     *
+     * 정리되면 PENDING 에서 빠지므로 `id > afterId` 키셋으로 읽는다([com.monticker.api.batch.KeysetItemReader]).
      */
-    fun findAllByStatusAndPgOrderIdIsNotNullAndCreatedAtBeforeOrderByCreatedAtAsc(
+    fun findAllByStatusAndPgOrderIdIsNotNullAndCreatedAtBeforeAndIdGreaterThanOrderByIdAsc(
         status: PaymentStatus,
         before: Instant,
+        afterId: Long,
         pageable: Pageable,
     ): List<PaymentRecord>
 

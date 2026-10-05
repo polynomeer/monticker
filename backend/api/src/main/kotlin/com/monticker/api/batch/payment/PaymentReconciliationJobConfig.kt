@@ -1,5 +1,6 @@
 package com.monticker.api.batch.payment
 
+import com.monticker.api.batch.KeysetItemReader
 import com.monticker.api.subscription.application.PaymentResolution
 import com.monticker.api.subscription.application.SubscriptionService
 import com.monticker.api.subscription.domain.PaymentRecord
@@ -14,12 +15,10 @@ import org.springframework.batch.core.repository.JobRepository
 import org.springframework.batch.core.step.builder.StepBuilder
 import org.springframework.batch.item.ItemProcessor
 import org.springframework.batch.item.ItemWriter
-import org.springframework.batch.item.data.RepositoryItemReader
-import org.springframework.batch.item.data.builder.RepositoryItemReaderBuilder
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
-import org.springframework.data.domain.Sort
+import org.springframework.data.domain.PageRequest
 import org.springframework.transaction.PlatformTransactionManager
 import java.time.Duration
 import java.time.Instant
@@ -77,18 +76,21 @@ class PaymentReconciliationJobConfig(
      * `@StepScope` 가 필요하다 — 싱글턴이면 `Instant.now()` 가 **기동 시각**으로 굳어, 며칠 떠
      * 있는 인스턴스는 영원히 그 시점 기준으로만 PENDING 을 찾는다. 갱신 배치의 리더가 정확히
      * 그 상태였고 CH-13 에서 드러났다(ADR-053).
+     *
+     * 키셋으로 읽는다 — 정리된 건은 PENDING 에서 빠지므로 offset 페이징은 20건씩 건너뛴다. 예전
+     * `RepositoryItemReader` 는 리포지토리가 `List` 를 돌려줘 `Slice` 캐스팅에서 매번 죽었다(첫 read 부터
+     * ClassCastException → skip limit 초과 → FAILED). 이 잡은 한 번도 PENDING 을 정리한 적이 없었다.
      */
     @Bean
     @StepScope
-    fun stalePendingPaymentReader(): RepositoryItemReader<PaymentRecord> =
-        RepositoryItemReaderBuilder<PaymentRecord>()
-            .name("stalePendingPaymentReader")
-            .repository(paymentRepo)
-            .methodName("findAllByStatusAndPgOrderIdIsNotNullAndCreatedAtBeforeOrderByCreatedAtAsc")
-            .arguments(listOf(PaymentStatus.PENDING, Instant.now().minus(Duration.ofMinutes(staleAfterMinutes))))
-            .sorts(mapOf("createdAt" to Sort.Direction.ASC))
-            .pageSize(20)
-            .build()
+    fun stalePendingPaymentReader(): KeysetItemReader<PaymentRecord> {
+        val before = Instant.now().minus(Duration.ofMinutes(staleAfterMinutes))
+        return KeysetItemReader("stalePendingPaymentReader", 20, PaymentRecord::id) { afterId, limit ->
+            paymentRepo.findAllByStatusAndPgOrderIdIsNotNullAndCreatedAtBeforeAndIdGreaterThanOrderByIdAsc(
+                PaymentStatus.PENDING, before, afterId, PageRequest.of(0, limit),
+            )
+        }
+    }
 
     @Bean
     fun paymentReconciliationProcessor(): ItemProcessor<PaymentRecord, PaymentRecord> =

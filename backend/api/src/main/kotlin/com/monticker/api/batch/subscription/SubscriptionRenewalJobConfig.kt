@@ -1,5 +1,6 @@
 package com.monticker.api.batch.subscription
 
+import com.monticker.api.batch.KeysetItemReader
 import com.monticker.api.subscription.application.RenewResult
 import com.monticker.api.subscription.application.SubscriptionService
 import com.monticker.api.subscription.domain.UserSubscription
@@ -13,11 +14,9 @@ import org.springframework.batch.core.configuration.annotation.StepScope
 import org.springframework.batch.core.step.builder.StepBuilder
 import org.springframework.batch.item.ItemProcessor
 import org.springframework.batch.item.ItemWriter
-import org.springframework.batch.item.data.RepositoryItemReader
-import org.springframework.batch.item.data.builder.RepositoryItemReaderBuilder
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
-import org.springframework.data.domain.Sort
+import org.springframework.data.domain.PageRequest
 import org.springframework.transaction.PlatformTransactionManager
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -56,15 +55,13 @@ class SubscriptionRenewalJobConfig(
      */
     @Bean
     @StepScope
-    fun expiringSubscriptionReader(): RepositoryItemReader<UserSubscription> =
-        RepositoryItemReaderBuilder<UserSubscription>()
-            .name("expiringSubscriptionReader")
-            .repository(subscriptionRepo)
-            .methodName("findExpiringBefore")
-            .arguments(listOf(Instant.now().plus(1, ChronoUnit.DAYS)))
-            .sorts(mapOf("expiresAt" to Sort.Direction.ASC))
-            .pageSize(20)
-            .build()
+    fun expiringSubscriptionReader(): KeysetItemReader<UserSubscription> {
+        // 키셋 — 갱신(expiresAt 연장)·강등(status 변경)되면 조건에서 빠지므로 offset 페이징은 20건씩 건너뛴다.
+        val threshold = Instant.now().plus(1, ChronoUnit.DAYS)
+        return KeysetItemReader("expiringSubscriptionReader", 20, UserSubscription::id) { afterId, limit ->
+            subscriptionRepo.findExpiringBeforeAfter(threshold, afterId, PageRequest.of(0, limit))
+        }
+    }
 
     @Bean
     fun renewalProcessor(): ItemProcessor<UserSubscription, UserSubscription> =
