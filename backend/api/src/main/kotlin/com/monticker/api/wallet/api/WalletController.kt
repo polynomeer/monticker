@@ -76,7 +76,7 @@ class TradeReceiptController(
 
     @GetMapping("/{id}/emotion")
     fun getEmotion(@PathVariable id: Long): ResponseEntity<*> {
-        val tag = emotionTagService.getTag(id)
+        val tag = emotionTagService.getTag(userId(), id)
         return if (tag != null) ResponseEntity.ok(tag)
         else ResponseEntity.notFound().build<Unit>()
     }

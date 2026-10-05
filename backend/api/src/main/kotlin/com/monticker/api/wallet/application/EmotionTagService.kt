@@ -39,6 +39,7 @@ class EmotionTagService(
 ) {
 
     fun saveTag(userId: Long, tradeId: Long, emotion: String, memo: String?): EmotionTagDto {
+        requireOwnedTrade(userId, tradeId)
         val existing = emotionTagRepo.findByPaperTradeId(tradeId)
         if (existing != null) {
             emotionTagRepo.delete(existing)
@@ -56,8 +57,13 @@ class EmotionTagService(
     }
 
     @Transactional(readOnly = true)
-    fun getTag(tradeId: Long): EmotionTagDto? =
-        emotionTagRepo.findByPaperTradeId(tradeId)?.toDto()
+    fun getTag(userId: Long, tradeId: Long): EmotionTagDto? {
+        requireOwnedTrade(userId, tradeId)
+        // 수정 전 IDOR로 다른 사용자가 심어둔 태그가 남아 있을 수 있으므로 태그 쪽 소유자도 확인한다
+        return emotionTagRepo.findByPaperTradeId(tradeId)
+            ?.takeIf { it.userId == userId }
+            ?.toDto()
+    }
 
     @Transactional(readOnly = true)
     fun getAnalysis(userId: Long): EmotionAnalysisResponse {
@@ -95,6 +101,17 @@ class EmotionTagService(
         }
 
         return EmotionAnalysisResponse(stats = stats)
+    }
+
+    /**
+     * 남의 거래는 존재하지 않는 거래와 똑같이 404로 응답한다 — 403/400으로 구분하면
+     * paper trade id의 존재 여부를 열거할 수 있다.
+     */
+    private fun requireOwnedTrade(userId: Long, tradeId: Long) {
+        val trade = tradeQueryService.findById(tradeId)
+        if (trade == null || trade.userId != userId) {
+            throw NoSuchElementException("Paper trade not found: $tradeId")
+        }
     }
 
     private fun EmotionTag.toDto() = EmotionTagDto(

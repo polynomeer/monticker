@@ -10,6 +10,8 @@ import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.jdbc.core.JdbcTemplate
 import java.math.BigDecimal
@@ -20,6 +22,17 @@ class EmotionTagServiceTest {
     private val tradeQueryService = mockk<PaperTradeQueryService>()
     private val jdbc = mockk<JdbcTemplate>()
     private val service = EmotionTagService(emotionTagRepo, tradeQueryService, jdbc)
+
+    private fun trade(id: Long, ownerId: Long) = PaperTradeSummary(
+        id = id, userId = ownerId, stockId = 100L, side = "BUY",
+        quantity = 10, price = BigDecimal("100"), amount = BigDecimal("1000"),
+    )
+
+    @BeforeEach
+    fun stubOwnedTrade() {
+        // 기본: trade 1은 user 1 소유
+        every { tradeQueryService.findById(1L) } returns trade(id = 1L, ownerId = 1L)
+    }
 
     @Test
     fun `saveTag persists a new emotion tag for a trade with no existing tag`() {
@@ -67,10 +80,10 @@ class EmotionTagServiceTest {
     }
 
     @Test
-    fun `getTag returns null when no tag exists for the trade`() {
-        every { emotionTagRepo.findByPaperTradeId(404L) } returns null
+    fun `getTag returns null when no tag exists for the caller's trade`() {
+        every { emotionTagRepo.findByPaperTradeId(1L) } returns null
 
-        assertThat(service.getTag(404L)).isNull()
+        assertThat(service.getTag(userId = 1L, tradeId = 1L)).isNull()
     }
 
     @Test
@@ -78,11 +91,63 @@ class EmotionTagServiceTest {
         val tag = EmotionTag(id = 1L, paperTradeId = 1L, userId = 1L, emotion = EmotionType.NEWS_BASED, memo = "기사 보고 매수")
         every { emotionTagRepo.findByPaperTradeId(1L) } returns tag
 
-        val result = service.getTag(1L)
+        val result = service.getTag(userId = 1L, tradeId = 1L)
 
         assertThat(result).isNotNull()
         assertThat(result!!.emotion).isEqualTo("NEWS_BASED")
         assertThat(result.memo).isEqualTo("기사 보고 매수")
+    }
+
+    // ── 소유권 (IDOR) ────────────────────────────────────────────────
+
+    @Test
+    fun `getTag throws not-found when the trade belongs to another user`() {
+        every { tradeQueryService.findById(2L) } returns trade(id = 2L, ownerId = 99L)
+        every { emotionTagRepo.findByPaperTradeId(2L) } returns
+            EmotionTag(id = 7L, paperTradeId = 2L, userId = 99L, emotion = EmotionType.FOMO, memo = "남의 메모")
+
+        assertThatThrownBy { service.getTag(userId = 1L, tradeId = 2L) }
+            .isInstanceOf(NoSuchElementException::class.java)
+            .hasMessage("Paper trade not found: 2")
+        verify(exactly = 0) { emotionTagRepo.findByPaperTradeId(any()) }
+    }
+
+    @Test
+    fun `getTag gives the same not-found for a missing trade as for another user's trade`() {
+        every { tradeQueryService.findById(404L) } returns null
+
+        assertThatThrownBy { service.getTag(userId = 1L, tradeId = 404L) }
+            .isInstanceOf(NoSuchElementException::class.java)
+            .hasMessage("Paper trade not found: 404")
+    }
+
+    @Test
+    fun `getTag hides a tag on the caller's trade that was written by another user`() {
+        every { emotionTagRepo.findByPaperTradeId(1L) } returns
+            EmotionTag(id = 7L, paperTradeId = 1L, userId = 99L, emotion = EmotionType.FOMO, memo = "심어둔 메모")
+
+        assertThat(service.getTag(userId = 1L, tradeId = 1L)).isNull()
+    }
+
+    @Test
+    fun `saveTag on another user's trade throws not-found and neither deletes nor saves`() {
+        every { tradeQueryService.findById(2L) } returns trade(id = 2L, ownerId = 99L)
+
+        assertThatThrownBy { service.saveTag(userId = 1L, tradeId = 2L, emotion = "FOMO", memo = "덮어쓰기") }
+            .isInstanceOf(NoSuchElementException::class.java)
+            .hasMessage("Paper trade not found: 2")
+        verify(exactly = 0) { emotionTagRepo.findByPaperTradeId(any()) }
+        verify(exactly = 0) { emotionTagRepo.delete(any()) }
+        verify(exactly = 0) { emotionTagRepo.save(any()) }
+    }
+
+    @Test
+    fun `saveTag on a missing trade throws not-found`() {
+        every { tradeQueryService.findById(404L) } returns null
+
+        assertThatThrownBy { service.saveTag(userId = 1L, tradeId = 404L, emotion = "FOMO", memo = null) }
+            .isInstanceOf(NoSuchElementException::class.java)
+        verify(exactly = 0) { emotionTagRepo.save(any()) }
     }
 
     @Test
