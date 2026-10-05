@@ -49,6 +49,45 @@ class PaperTradingService(
         return TradeResultResponse(side, stockId, quantity, result.fillPrice, result.amount, cash, trade.id)
     }
 
+    /**
+     * ADR-074 — 종목 화면의 주문 패널. MARKET은 [buy]/[sell]과 같다. LIMIT은 매칭 엔진에 지정가로 제출한다:
+     * 교차하면 즉시 체결(tradeId 있음), 아니면 미체결로 남고 스위퍼가 이후 시세로 체결한다(tradeId 없음, status=PENDING).
+     */
+    fun placeOrder(userId: Long, req: PaperOrderRequest): PaperOrderResponse {
+        require(req.side == "BUY" || req.side == "SELL") { "side는 BUY 또는 SELL이어야 합니다" }
+        require(req.quantity > 0) { "수량은 1 이상이어야 합니다" }
+        return when (req.orderType) {
+            "MARKET" -> {
+                val r = execute(userId, req.stockId, req.side, req.quantity)
+                PaperOrderResponse(
+                    orderId = null, status = "FILLED", orderType = "MARKET", side = r.side, stockId = r.stockId,
+                    quantity = r.quantity, limitPrice = null, price = r.price, amount = r.amount,
+                    remainingCash = r.remainingCash, tradeId = r.tradeId,
+                )
+            }
+            "LIMIT" -> {
+                val limitPrice = req.limitPrice
+                require(limitPrice != null && limitPrice > BigDecimal.ZERO) { "지정가 주문에는 0보다 큰 지정가가 필요합니다" }
+                require(limitPrice.stripTrailingZeros().scale() <= 4) { "지정가는 소수점 4자리까지입니다" }
+                getOrCreateAccount(userId)
+                val r = orderSubmitter.submitLimit(userId, req.stockId, req.side, req.quantity, limitPrice)
+                val tradeId = r.fill?.let { f ->
+                    tradeRepo.findByFillId(f.fillId)?.id ?: throw IllegalStateException("체결 기록이 없습니다: fillId=${f.fillId}")
+                }
+                PaperOrderResponse(
+                    orderId = r.orderId, status = r.status, orderType = "LIMIT", side = r.side, stockId = r.stockId,
+                    quantity = r.quantity, limitPrice = r.limitPrice, price = r.fill?.fillPrice, amount = r.fill?.amount,
+                    remainingCash = currentCash(userId), tradeId = tradeId,
+                )
+            }
+            else -> throw IllegalArgumentException("orderType은 MARKET 또는 LIMIT이어야 합니다")
+        }
+    }
+
+    private fun currentCash(userId: Long): BigDecimal =
+        jdbc.query("SELECT cash FROM paper_accounts WHERE user_id = ?", { rs, _ -> rs.getBigDecimal("cash") }, userId)
+            .firstOrNull() ?: BigDecimal.ZERO
+
     fun reset(userId: Long) {
         // ADR-043 라이브 검증에서 발견: 미체결 BUY 주문의 예약금은 cash에서 이미 빠져 있다. 그 상태로 잔고를
         // 1,000만으로 되돌리면 나중에 취소될 때 환불이 1,000만 위에 얹혀 돈이 생긴다. 초기화 뒤 리스너로 취소해도
@@ -69,6 +108,29 @@ class PaperTradingService(
         projection.onReset(userId)
     }
 }
+
+data class PaperOrderRequest(
+    val stockId: Long,
+    val side: String,
+    val orderType: String = "MARKET",
+    val quantity: Int,
+    val limitPrice: BigDecimal? = null,
+)
+
+/** status: FILLED(즉시 체결 — tradeId 있음) | PENDING(미체결 지정가 — orderId로 취소·조회). */
+data class PaperOrderResponse(
+    val orderId: Long?,
+    val status: String,
+    val orderType: String,
+    val side: String,
+    val stockId: Long,
+    val quantity: Int,
+    val limitPrice: BigDecimal?,
+    val price: BigDecimal?,
+    val amount: BigDecimal?,
+    val remainingCash: BigDecimal,
+    val tradeId: Long?,
+)
 
 data class PortfolioResponse(val cash: BigDecimal, val totalValue: BigDecimal, val totalPnl: BigDecimal, val totalPnlRate: Double, val holdings: List<HoldingResponse>)
 data class HoldingResponse(val stockId: Long, val symbol: String, val name: String, val quantity: Int, val avgPrice: BigDecimal, val currentPrice: BigDecimal, val value: BigDecimal, val pnl: BigDecimal, val pnlRate: Double)

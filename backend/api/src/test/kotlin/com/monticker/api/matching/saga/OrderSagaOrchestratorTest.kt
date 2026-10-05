@@ -173,6 +173,24 @@ class OrderSagaOrchestratorTest {
         verify(exactly = 0) { jdbc.update(match<String> { it.startsWith("UPDATE paper_accounts") }, *anyVararg()) }
     }
 
+    // ADR-074 — 미체결 SELL 지정가의 잔량은 이미 팔기로 한 수량이다. 보유 10, 미체결 매도 8이면 3주 매도는 거부.
+    @Test
+    fun `execute subtracts open SELL orders from the sellable quantity`() {
+        stubStockExistsAndPrice()
+        every {
+            jdbc.query(match<String> { it.contains("FROM portfolio_positions") }, any<org.springframework.jdbc.core.RowMapper<Int>>(), userId, stockId)
+        } returns listOf(10)
+        every {
+            jdbc.query(OrderSagaOrchestrator.PENDING_SELL_QTY_SQL, any<org.springframework.jdbc.core.RowMapper<Int>>(), userId, stockId)
+        } returns listOf(8)
+
+        org.assertj.core.api.Assertions.assertThatThrownBy {
+            orchestrator.execute(userId, SubmitOrderRequest(stockId = stockId, side = "SELL", orderType = "LIMIT", quantity = 3, limitPrice = BigDecimal("1200")))
+        }.isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("미체결 매도 8")
+
+        verify(exactly = 0) { orderRepo.save(any()) }
+    }
+
     @Test
     fun `execute throws a business IllegalStateException, not a raw DB exception, when the stock has no recent candle`() {
         // 부하 테스트로 실제 재현된 버그: query()가 0건일 때 queryForObject처럼
