@@ -142,4 +142,21 @@ class GlobalExceptionHandlerTest {
         assertThat(resp.statusCode).isEqualTo(HttpStatus.LOCKED)
         assertThat(resp.body?.detail).isEqualTo("TRADING_HALTED:GLOBAL")
     }
+
+    @Test
+    fun `지원하지 않는 HTTP 메서드는 서버 오류가 아니라 405다`() {
+        val resp = handler.handleMethodNotSupported(
+            org.springframework.web.HttpRequestMethodNotSupportedException("GET", listOf("POST")),
+        )
+        assertThat(resp.statusCode).isEqualTo(HttpStatus.METHOD_NOT_ALLOWED)
+        assertThat(resp.headers.allow).containsExactly(org.springframework.http.HttpMethod.POST)
+    }
+
+    @Test
+    fun `없는 경로는 서버 오류가 아니라 404다`() {
+        val resp = handler.handleNoResource(
+            org.springframework.web.servlet.resource.NoResourceFoundException(org.springframework.http.HttpMethod.GET, "/api/nope"),
+        )
+        assertThat(resp.statusCode).isEqualTo(HttpStatus.NOT_FOUND)
+    }
 }

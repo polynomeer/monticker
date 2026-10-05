@@ -117,6 +117,19 @@ class GlobalExceptionHandler {
         }
     }
 
+    // ── 404 · 405 — 잘못된 경로·메서드는 클라이언트 오류다 ──────────────────
+    // 아래 catch-all에 걸리면 500 + ERROR 로그가 되어, 스캐너·오타 요청이 서버 장애 지표와 알림을 오염시켰다.
+
+    @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException::class)
+    fun handleMethodNotSupported(e: org.springframework.web.HttpRequestMethodNotSupportedException): ResponseEntity<ErrorResponse> =
+        ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+            .apply { e.supportedHttpMethods?.let { allow(*it.toTypedArray()) } }
+            .body(ErrorResponse(HttpStatus.METHOD_NOT_ALLOWED.value(), "지원하지 않는 요청 방식입니다: ${e.method}", null))
+
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException::class)
+    fun handleNoResource(e: org.springframework.web.servlet.resource.NoResourceFoundException) =
+        error(HttpStatus.NOT_FOUND, "요청한 경로를 찾을 수 없습니다")
+
     // ── 5xx — 서버 오류 ──────────────────────────────────────────────────
 
     @ExceptionHandler(Exception::class)
