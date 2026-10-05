@@ -62,6 +62,10 @@ class QuantBacktestResult(
     @Column(name = "excess_return")
     val excessReturn: BigDecimal? = null,
 
+    /** ADR-079 — 연환산 샤프(무위험 3%). V75 이전 결과는 null */
+    @Column(name = "sharpe")
+    val sharpe: BigDecimal? = null,
+
     @Column(name = "commission_rate", nullable = false)
     val commissionRate: BigDecimal = BigDecimal("0.015"),
 

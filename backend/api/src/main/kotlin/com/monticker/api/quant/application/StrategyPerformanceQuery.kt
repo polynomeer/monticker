@@ -98,7 +98,7 @@ class StrategyPerformanceQuery(
             totalReturn      = r.totalReturn?.toDouble(),
             annualReturn     = r.annualReturn?.toDouble(),
             mdd              = r.mdd?.toDouble(),
-            sharpe           = null,
+            sharpe           = r.sharpe?.toDouble(),
             tradeCount       = r.tradeCount,
             reliabilityScore = r.reliabilityScore,
             curve            = downsample(curve),

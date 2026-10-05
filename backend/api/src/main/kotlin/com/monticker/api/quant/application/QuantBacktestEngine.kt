@@ -10,6 +10,18 @@ object QuantBacktestEngine {
     // ForwardTestService가 동일한 수수료/슬리피지 가정으로 시뮬레이션 체결하기 위해 internal로 공유한다.
     internal const val COMMISSION_RATE = 0.00015   // 0.015%
     internal const val SLIPPAGE_RATE   = 0.001     // 0.1%
+    /** 샤프 계산의 연 무위험 수익률 — backtest 모듈 BacktestEngine과 같은 3% 가정 */
+    internal const val RISK_FREE_ANNUAL = 0.03
+
+    /** 일별 자산에서 연환산 샤프. 계산할 수 없으면 null(0으로 보이면 "위험 대비 수익 없음"으로 읽힌다). */
+    internal fun sharpe(equity: List<Double>): Double? {
+        val daily = equity.zipWithNext { a, b -> if (a > 0) (b - a) / a else 0.0 }
+        if (daily.size < 2) return null
+        val mean = daily.average()
+        val std = kotlin.math.sqrt(daily.map { (it - mean) * (it - mean) }.average())
+        if (std == 0.0) return null
+        return (mean * 252 - RISK_FREE_ANNUAL) / (std * kotlin.math.sqrt(252.0))
+    }
 
     fun run(
         candles: List<DailyCandle>,
@@ -133,6 +145,7 @@ object QuantBacktestEngine {
             avgHoldingDays   = avgHoldingDays,
             benchmarkReturn  = benchmarkReturn,
             excessReturn     = excessReturn,
+            sharpe           = sharpe(equity.map { it.equity }),
             reliabilityScore = score,
             reliabilityNotes = notes,
         )
@@ -159,7 +172,7 @@ object QuantBacktestEngine {
     }
 
     private fun emptyResult(initialCapital: Double): QuantBacktestRunResult {
-        val metrics = QuantBacktestMetrics(0.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0.0, 0.0, "D",
+        val metrics = QuantBacktestMetrics(0.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0.0, 0.0, null, "D",
             mapOf("reason" to "no candle data"))
         return QuantBacktestRunResult(initialCapital, initialCapital, metrics, emptyList(), emptyList())
     }

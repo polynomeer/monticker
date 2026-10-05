@@ -88,6 +88,8 @@ data class QuantBacktestMetrics(
     val avgHoldingDays: Double,
     val benchmarkReturn: Double,
     val excessReturn: Double,
+    /** ADR-079 — 연환산 샤프(무위험 3%, 단순 백테스트 엔진과 같은 가정). 일별 수익률이 2개 미만이거나 변동이 0이면 null */
+    val sharpe: Double?,
     val reliabilityScore: String,
     val reliabilityNotes: Map<String, Any>,
 )

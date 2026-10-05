@@ -213,4 +213,32 @@ class QuantBacktestEngineTest {
         assertThat(result.metrics.profitFactor).isEqualTo(0.0)
         assertThat(result.metrics.tradeCount).isEqualTo(0)
     }
+
+    // ── ADR-079 샤프 ─────────────────────────────────────────────────────────────
+
+    @Test
+    fun `sharpe is annualized mean excess return over volatility of daily equity returns`() {
+        val equity = listOf(100.0, 101.0, 100.5, 102.0, 101.0)
+        val daily = equity.zipWithNext { a, b -> (b - a) / a }
+        val mean = daily.average()
+        val std = kotlin.math.sqrt(daily.map { (it - mean) * (it - mean) }.average())
+        val expected = (mean * 252 - 0.03) / (std * kotlin.math.sqrt(252.0))
+
+        assertThat(QuantBacktestEngine.sharpe(equity)).isCloseTo(expected, within(1e-12))
+    }
+
+    @Test
+    fun `sharpe is null for a flat equity curve rather than zero`() {
+        assertThat(QuantBacktestEngine.sharpe(listOf(100.0, 100.0, 100.0))).isNull()
+        assertThat(QuantBacktestEngine.sharpe(listOf(100.0))).isNull()
+    }
+
+    @Test
+    fun `run reports sharpe in the metrics`() {
+        val candles = (0..30).map { candle(it, 100.0 + (it % 3)) }
+
+        val result = QuantBacktestEngine.run(candles, alwaysEntryAlwaysExitRule(), 1_000_000.0, candles.first().date, candles.last().date)
+
+        assertThat(result.metrics.sharpe).isNotNull()
+    }
 }
