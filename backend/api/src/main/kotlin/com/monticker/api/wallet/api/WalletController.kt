@@ -23,6 +23,7 @@ class WalletController(
     private val replayService: ReplayService,
     private val behaviorScoreService: BehaviorScoreService,
     private val emotionTagService: EmotionTagService,
+    private val reconciliationQueryService: com.monticker.api.wallet.application.ReconciliationQueryService,
 ) {
 
     private fun userId(): Long =
@@ -42,6 +43,11 @@ class WalletController(
     fun getDailyReplay(
         @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) date: LocalDate,
     ) = ResponseEntity.ok(replayService.getDailyReplay(userId(), date))
+
+    /** ADR-043 일일 대사 결과 — "잔액 불일치 N건". 스냅샷만 읽는다(실시간 재계산 없음). */
+    @GetMapping("/reconciliation")
+    fun getReconciliation(@RequestParam(defaultValue = "90") days: Int) =
+        ResponseEntity.ok(reconciliationQueryService.summary(userId(), days))
 
     @GetMapping("/score")
     fun getScore() = ResponseEntity.ok(
