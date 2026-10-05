@@ -132,12 +132,8 @@ class RiskController(
         }
         val totalAssets = cash + stockValue
 
-        // Daily P&L
-        val dailyPnl = jdbc.queryForObject(
-            """SELECT COALESCE(SUM(CASE WHEN side='SELL' THEN amount ELSE -amount END), 0)
-               FROM fills WHERE user_id = ? AND filled_at >= current_date""",
-            BigDecimal::class.java, userId()
-        ) ?: BigDecimal.ZERO
+        // Daily P&L — 일간 손실 게이트와 같은 값(오늘 KST 실현 손익). 이전엔 오늘 체결의 현금 흐름이라 매수가 손실로 보였다.
+        val dailyPnl = riskChecker.paperRealizedPnlToday(userId())
         val dailyPnlPct = if (totalAssets > BigDecimal.ZERO)
             dailyPnl.divide(totalAssets, 6, RoundingMode.HALF_UP).multiply(BigDecimal("100")).toDouble()
         else 0.0
