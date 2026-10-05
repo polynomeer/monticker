@@ -19,7 +19,7 @@ services:
   elasticsearch:
     # ADR-042 — nori 플러그인이 포함된 이미지 (infra/docker/elasticsearch). 공식 이미지에는 nori가 없다.
     build: infra/docker/elasticsearch
-    image: monticker/elasticsearch:8.13.4-nori
+    image: monticker/elasticsearch:8.18.1-nori
     container_name: monticker-elasticsearch
     environment:
       # docs/security-review.md M3 — 의도적으로 무인증. 이 파일은 로컬 개발 전용이고(운영은
