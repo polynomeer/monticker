@@ -51,6 +51,15 @@ function PreviewRow({ title, sub, on = true }: { title: string; sub: string; on?
   );
 }
 
+/** 끌 수 없는 알림 — 놓치면 이중 주문 같은 실제 손해로 이어지는 것(서버가 항상 보낸다) */
+function AlwaysOnRow({ title, sub }: { title: string; sub: string }) {
+  return (
+    <Row title={title} sub={sub}>
+      <span className="inline-flex h-[22px] items-center rounded-md bg-[#22392c] px-2 text-xs font-semibold text-dracula-green">항상 받음</span>
+    </Row>
+  );
+}
+
 export default function NotificationSettingsPage() {
   const { toast } = useToast();
   const [pref, setPref] = useState<NotifPref>(DEFAULT);
@@ -150,7 +159,7 @@ export default function NotificationSettingsPage() {
               <div>
                 <PreviewRow title="체결·정산" sub="모의/실전 체결, T+2 정산 완료" />
                 <PreviewRow title="리스크 경고" sub="한도 80% 도달 · 주문 차단" />
-                <PreviewRow title="‘결과 확인 중’ 주문" sub="증권사 응답 지연 시 즉시 알림" />
+                <AlwaysOnRow title="‘결과 확인 중’ 주문" sub="증권사 응답이 없을 때, 그리고 결과가 확인됐을 때 알림 · 끌 수 없음" />
               </div>
 
               <H2>리포트</H2>
