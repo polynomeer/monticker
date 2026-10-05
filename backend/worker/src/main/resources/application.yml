@@ -107,6 +107,12 @@ naver:
 dart:
   api-key: ${DART_API_KEY:}
 
+# ADR-071 — 지수·환율(KOSPI·KOSDAQ·USD/KRW) 수집. 지금은 mock만 지원한다(값은 is_mocked=true로 저장).
+# 실시세 공급자는 요청·응답 규격을 실제 키로 확인한 뒤 추가한다 — 알 수 없는 값이면 기동이 실패한다.
+market-index:
+  provider: ${MARKET_INDEX_PROVIDER:mock}
+  poll-ms: 30000
+
 kis:
   app-key: ${KIS_APP_KEY:}
   app-secret: ${KIS_APP_SECRET:}
