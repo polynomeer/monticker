@@ -1,5 +1,6 @@
 "use client";
 
+import { useFillHeight } from "@/hooks/useFillHeight";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
@@ -80,29 +81,6 @@ interface Props {
   onCancelOrderLine: (orderId: number) => void;
 }
 
-/**
- * 차트 높이 — 패널이 옆 열(주문폼) 높이만큼 늘어나면 남는 공간까지 차트가 채운다(시안처럼 빈 바닥이 없게).
- * 최소 높이는 좁은 화면 320, 그 외 470.
- */
-function useChartHeight(box: React.RefObject<HTMLDivElement | null>) {
-  const [h, setH] = useState(470);
-  useEffect(() => {
-    const el = box.current;
-    const measure = () => {
-      const min = window.innerWidth < 640 ? 320 : 470;
-      setH(Math.max(min, Math.floor(el?.clientHeight ?? 0)));
-    };
-    measure();
-    window.addEventListener("resize", measure);
-    const ro = el && typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
-    if (el && ro) ro.observe(el);
-    return () => {
-      window.removeEventListener("resize", measure);
-      ro?.disconnect();
-    };
-  }, [box]);
-  return h;
-}
 
 /** 시안 Main의 차트 패널 — 종목 탭 · 타임프레임 · 지표/캔들 · 이벤트 레이어 · 왼쪽 그리기 도구 · 차트 · 면책 문구 */
 export default function ChartPanel(props: Props) {
@@ -149,8 +127,7 @@ function ChartBody({ stockId, symbol, stockName, currentPrice, dayChange, dayCha
   const [drawings, setDrawings] = useState<Drawing[]>([]);
   const [hideDrawings, setHideDrawings] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const chartBox = useRef<HTMLDivElement>(null);
-  const height = useChartHeight(chartBox);
+  const [chartBox, height] = useFillHeight(470, 320);
 
   const { candles, events, loading } = useStockChart(stockId, interval);
   const { data: vwapData } = useVwap(stockId);

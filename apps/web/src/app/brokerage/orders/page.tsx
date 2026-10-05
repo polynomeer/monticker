@@ -7,6 +7,7 @@ import {
   useSubmitBrokerageOrder, useTradingStatus,
 } from "@/hooks/useBrokerage";
 import { useStockChart } from "@/hooks/useStockChart";
+import { useFillHeight } from "@/hooks/useFillHeight";
 import { ApiError } from "@/services/brokerage";
 import StockChart from "@/components/stock/chart/StockChart";
 import OrderProposalCard from "@/components/ai/OrderProposalCard";
@@ -102,6 +103,7 @@ export default function BrokerageOrderPage() {
   const ordersQuery = useBrokerageOrders(histPage, !!account && histTab === "orders");
   const fillsQuery = useBrokerageSettlements(histPage, !!account && histTab === "fills");
   const { candles } = useStockChart(stock?.id ?? null, "1m");
+  const [chartBox, chartHeight] = useFillHeight(300);
 
   const selectStock = async (hit: StockHit) => {
     setStock(hit);
@@ -356,11 +358,16 @@ export default function BrokerageOrderPage() {
 
         {/* ── 차트 ── */}
         <Panel tabs={["차트"]} actions={["expand"]} className="flex-[999_1_460px]">
-          {stock ? (
-            <StockChart candles={candles} height={300} orderLines={orderLines} enabledIndicators={NO_INDICATORS} />
-          ) : (
-            <div className="grid h-[300px] place-items-center rounded-lg bg-tm-inner text-13 text-tm-muted">종목을 선택하면 분봉 차트와 주문 가격선이 표시됩니다.</div>
-          )}
+          {/* 주문폼 열 높이만큼 차트가 채운다 */}
+          <div ref={chartBox} className="relative min-h-[300px] flex-1">
+            <div className="absolute inset-x-0 top-0">
+              {stock ? (
+                <StockChart candles={candles} height={chartHeight} orderLines={orderLines} enabledIndicators={NO_INDICATORS} />
+              ) : (
+                <div className="grid place-items-center rounded-lg bg-tm-inner text-13 text-tm-muted" style={{ height: chartHeight }}>종목을 선택하면 분봉 차트와 주문 가격선이 표시됩니다.</div>
+              )}
+            </div>
+          </div>
         </Panel>
 
         {/* ── 주문 확인 ── */}
