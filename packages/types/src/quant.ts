@@ -24,10 +24,19 @@ export interface PositionSizing {
   value: number;
 }
 
+/** ADR-079 — exitRules의 AND/OR와 무관하게 항상 먼저 보는 강제 청산. */
+export interface HardExits {
+  /** 진입 다음 거래일부터 센 보유 거래일 수(1~500) */
+  maxHoldDays?: number;
+  /** 진입 이후 최고 종가 대비 하락률 %(0 초과 50 이하) */
+  trailingStopPct?: number;
+}
+
 export interface RuleDefinition {
   entryRules: RuleGroup;
   exitRules: RuleGroup;
   positionSizing: PositionSizing;
+  hardExits?: HardExits;
 }
 
 export type RuleSetStatus = "DRAFT" | "BACKTESTED" | "RUNNING" | "ARCHIVED";
