@@ -1,5 +1,8 @@
 package com.monticker.api.auth.application
 
+import com.monticker.api.common.consent.ConsentGroup
+import com.monticker.api.common.consent.ConsentService
+import com.monticker.api.common.consent.ConsentSource
 import com.monticker.api.auth.domain.User
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
 import com.monticker.api.auth.infrastructure.UserRepository
@@ -39,10 +42,11 @@ class AuthService(
     private val emailService: EmailService,
     private val guard: RedisGuard,
     private val revocationService: RefreshTokenRevocationService,
+    private val consentService: ConsentService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    fun signup(email: String, password: String, nickname: String): TokenPair {
+    fun signup(email: String, password: String, nickname: String, consents: Collection<String>): TokenPair {
         require(!userRepository.existsByEmail(email)) { "이미 사용 중인 이메일입니다." }
         val user = userRepository.save(
             User(
@@ -51,6 +55,8 @@ class AuthService(
                 nickname     = nickname,
             )
         )
+        // ADR-068 — 필수 동의가 빠지면 400으로 거부한다. 같은 트랜잭션이라 사용자 행도 함께 롤백된다.
+        consentService.requireAndRecord(user.id, ConsentGroup.SIGNUP, consents, ConsentSource.SIGNUP)
         // 인증 메일은 가입의 부수 효과다. Redis(토큰 저장소)가 없다고 가입 자체를 500으로 실패시키지
         // 않는다 — 계정과 토큰은 발급하고, 메일은 /resend-verification으로 나중에 받을 수 있다.
         // CH-01 실험에서 Redis 정지 중 가입이 500으로 떨어지는 것을 확인해 fail-open으로 바꿨다 (P0-1).

@@ -1,5 +1,8 @@
 package com.monticker.api.brokerage.application
 
+import com.monticker.api.common.consent.ConsentGroup
+import com.monticker.api.common.consent.ConsentService
+import com.monticker.api.common.consent.ConsentSource
 import jakarta.persistence.EntityManager
 import jakarta.persistence.PersistenceContext
 import com.monticker.api.brokerage.domain.BrokerageAccount
@@ -60,6 +63,7 @@ class BrokerageService(
     private val meterRegistry: MeterRegistry,
     private val tradingHaltService: TradingHaltService,
     private val pendingBuyQuery: PendingBuyQuery,
+    private val consentService: ConsentService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -90,7 +94,9 @@ class BrokerageService(
     // ── 계좌 연동 ──────────────────────────────────────────────────────────────
 
     @Transactional
-    fun connect(userId: Long, provider: BrokerageProvider, appKey: String, appSecret: String, accountNumber: String): BrokerageAccount {
+    fun connect(userId: Long, provider: BrokerageProvider, appKey: String, appSecret: String, accountNumber: String, consents: Collection<String>): BrokerageAccount {
+        // ADR-068 — 위임·자금 미보관·손실 귀속 고지 동의가 없으면 증권사 호출 전에 거부한다(400). 연동이 실패하면 같은 트랜잭션이라 기록도 롤백된다.
+        consentService.requireAndRecord(userId, ConsentGroup.BROKERAGE_CONNECT, consents, ConsentSource.BROKERAGE_CONNECT)
         val client = clientRegistry.get(provider)
         val token = client.issueToken(appKey, appSecret)
         // ADR-026 — Toss는 계좌번호만으로 호출할 수 없고 별도 조회로 얻는 accountSeq가

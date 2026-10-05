@@ -10,6 +10,7 @@ import com.monticker.api.brokerage.infrastructure.BrokerageOrderRequest
 import com.monticker.api.common.aop.RateLimited
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Size
 import jakarta.validation.constraints.Positive
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
@@ -27,6 +28,8 @@ data class ConnectRequest(
     @field:NotBlank val appKey: String,
     @field:NotBlank val appSecret: String,
     @field:NotBlank val accountNumber: String,
+    /** ADR-068 — BROKERAGE_DELEGATION, BROKERAGE_NO_CUSTODY, BROKERAGE_LOSS_ATTRIBUTION 모두 필수. */
+    @field:Size(max = 10) val consents: List<String> = emptyList(),
 )
 
 data class OrderRequest(
@@ -116,7 +119,7 @@ class BrokerageController(
         @Valid @RequestBody req: ConnectRequest,
     ): ResponseEntity<AccountResponse> {
         val provider = BrokerageProvider.valueOf(req.provider.uppercase())
-        val account = brokerageService.connect(userId(token), provider, req.appKey, req.appSecret, req.accountNumber)
+        val account = brokerageService.connect(userId(token), provider, req.appKey, req.appSecret, req.accountNumber, req.consents)
         return ResponseEntity.ok(account.toResponse())
     }
 

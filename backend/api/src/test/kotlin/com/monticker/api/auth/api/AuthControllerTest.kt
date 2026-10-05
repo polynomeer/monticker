@@ -91,13 +91,14 @@ class AuthControllerTest {
     @Test
     @WithMockUser
     fun `회원가입 - 정상 요청은 200`() {
-        given(authService.signup(anyString(), anyString(), anyString())).willReturn(
+        val consents = listOf("TERMS", "PRIVACY", "AGE_OVER_19")
+        given(authService.signup("user@test.com", "password123", "tester", consents)).willReturn(
             com.monticker.api.auth.application.TokenPair("access", "refresh")
         )
         mvc.post("/api/auth/signup") {
             contentType = MediaType.APPLICATION_JSON
             content = objectMapper.writeValueAsString(
-                mapOf("email" to "user@test.com", "password" to "password123", "nickname" to "tester")
+                mapOf("email" to "user@test.com", "password" to "password123", "nickname" to "tester", "consents" to consents)
             )
             with(csrf())
         }.andExpect {

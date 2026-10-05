@@ -23,6 +23,9 @@ import com.monticker.api.brokerage.infrastructure.BrokerageToken
 import com.monticker.api.brokerage.infrastructure.MockBrokerageClient
 import com.monticker.api.common.aop.RiskLimitException
 import com.monticker.api.common.exception.BusinessRuleException
+import com.monticker.api.common.consent.ConsentGroup
+import com.monticker.api.common.consent.ConsentService
+import com.monticker.api.common.consent.ConsentSource
 import com.monticker.api.common.exception.ReconnectRequiredException
 import com.monticker.api.risk.application.RiskCheckResult
 import com.monticker.api.risk.application.RiskCheckerService
@@ -60,7 +63,10 @@ class BrokerageServiceTest {
         every { orderRepo.findAllByAccountIdAndStockIdAndSideAndStatusAndSubmittedAtAfter(any(), any(), any(), any(), any()) } returns emptyList()
     }
 
-    private val service = BrokerageService(clientRegistry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery)
+    private val consentService = mockk<ConsentService>(relaxed = true)
+    private val connectConsents = listOf("BROKERAGE_DELEGATION", "BROKERAGE_NO_CUSTODY", "BROKERAGE_LOSS_ATTRIBUTION")
+
+    private val service = BrokerageService(clientRegistry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService)
 
     private val approvedRisk = RiskCheckResult(approved = true, blockedBy = null, severity = "APPROVED", checks = emptyList())
 
@@ -96,7 +102,7 @@ class BrokerageServiceTest {
         every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.empty()
         every { accountRepo.save(capture(accountSlot)) }      returns makeAccount()
 
-        service.connect(userId = 1L, provider = BrokerageProvider.KIS, appKey = "key", appSecret = "secret", accountNumber = "12345678")
+        service.connect(userId = 1L, provider = BrokerageProvider.KIS, appKey = "key", appSecret = "secret", accountNumber = "12345678", consents = connectConsents)
 
         val saved = accountSlot.captured
         assertThat(saved.accessToken).startsWith("mock_token_")
@@ -114,7 +120,7 @@ class BrokerageServiceTest {
         every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(oldAccount)
         every { accountRepo.save(capture(accountSlots)) } answers { firstArg() }
 
-        service.connect(userId = 1L, provider = BrokerageProvider.TOSS, appKey = "key2", appSecret = "secret2", accountNumber = "98765432")
+        service.connect(userId = 1L, provider = BrokerageProvider.TOSS, appKey = "key2", appSecret = "secret2", accountNumber = "98765432", consents = connectConsents)
 
         assertThat(oldAccount.isActive).isFalse()
         val newAccount = accountSlots.first { it !== oldAccount }
@@ -299,7 +305,7 @@ class BrokerageServiceTest {
 
     private fun serviceWithFakeClient(fakeClient: BrokerageClient): BrokerageService {
         val registry = BrokerageClientRegistry(BrokerageProvider.entries.associateWith { fakeClient })
-        return BrokerageService(registry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery)
+        return BrokerageService(registry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService)
     }
 
     @Test
@@ -365,7 +371,7 @@ class BrokerageServiceTest {
         every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(oldAccount)
         every { accountRepo.save(capture(accountSlot)) } answers { firstArg() }
 
-        service.connect(userId = 1L, provider = BrokerageProvider.KIS, appKey = "key", appSecret = "secret", accountNumber = "12345678")
+        service.connect(userId = 1L, provider = BrokerageProvider.KIS, appKey = "key", appSecret = "secret", accountNumber = "12345678", consents = connectConsents)
 
         assertThat(accountSlot.captured.authFailedAt).isNull()
     }
@@ -944,5 +950,17 @@ class BrokerageServiceTest {
 
         assertThat(account.appSecret).isEqualTo("secret")
         verify(exactly = 0) { accountRepo.save(any()) }
+    }
+
+    @Test
+    fun `connect is refused before calling the broker when the notice consents are missing (ADR-068)`() {
+        val brokerClient = mockk<BrokerageClient>()
+        val svc = BrokerageService(BrokerageClientRegistry(BrokerageProvider.entries.associateWith { brokerClient }), accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService)
+        every { consentService.requireAndRecord(1L, ConsentGroup.BROKERAGE_CONNECT, emptyList(), ConsentSource.BROKERAGE_CONNECT) } throws IllegalArgumentException("필수 동의 항목이 빠졌습니다")
+
+        assertThrows<IllegalArgumentException> {
+            svc.connect(userId = 1L, provider = BrokerageProvider.KIS, appKey = "k", appSecret = "s", accountNumber = "1", consents = emptyList())
+        }
+        verify(exactly = 0) { brokerClient.issueToken(any(), any()) }
     }
 }

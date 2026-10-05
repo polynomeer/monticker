@@ -1,5 +1,8 @@
 package com.monticker.api.auth.application
 
+import com.monticker.api.common.consent.ConsentGroup
+import com.monticker.api.common.consent.ConsentService
+import com.monticker.api.common.consent.ConsentSource
 import com.monticker.api.auth.domain.User
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
 import com.monticker.api.auth.infrastructure.UserRepository
@@ -38,7 +41,9 @@ class AuthServiceTest {
     private val emailService = mockk<EmailService>(relaxed = true)
     private val guard = RedisGuard(SimpleMeterRegistry())
     private val revocationService = mockk<RefreshTokenRevocationService>(relaxed = true)
-    private val service = AuthService(userRepository, provider, encoder, jdbc, redis, emailService, guard, revocationService)
+    private val consentService = mockk<ConsentService>(relaxed = true)
+    private val service = AuthService(userRepository, provider, encoder, jdbc, redis, emailService, guard, revocationService, consentService)
+    private val requiredConsents = listOf("TERMS", "PRIVACY", "AGE_OVER_19")
 
     @Test
     fun `signup creates user and returns tokens`() {
@@ -51,7 +56,7 @@ class AuthServiceTest {
             }
         }
 
-        val result = service.signup("test@test.com", "password1!", "테스터")
+        val result = service.signup("test@test.com", "password1!", "테스터", requiredConsents)
 
         assertThat(result.accessToken).isNotBlank()
         assertThat(result.refreshToken).isNotBlank()
@@ -70,7 +75,7 @@ class AuthServiceTest {
         every { valueOps.set(any<String>(), any<String>(), any<java.time.Duration>()) } throws
             org.springframework.data.redis.RedisConnectionFailureException("down")
 
-        val result = service.signup("nored@test.com", "password1!", "무레디스")
+        val result = service.signup("nored@test.com", "password1!", "무레디스", requiredConsents)
 
         assertThat(result.accessToken).isNotBlank()
         verify(exactly = 0) { emailService.sendVerificationEmail(any(), any()) }
@@ -89,7 +94,7 @@ class AuthServiceTest {
             jdbc.update(match<String> { it.startsWith("INSERT INTO refresh_tokens") }, 3L, capture(hashes), any())
         } returns 1
 
-        val signedUp = service.signup("fast@test.com", "password1!", "빠른")
+        val signedUp = service.signup("fast@test.com", "password1!", "빠른", requiredConsents)
         val loggedIn = service.login("fast@test.com", "password1!")
 
         assertThat(signedUp.refreshToken).isNotEqualTo(loggedIn.refreshToken)
@@ -101,7 +106,7 @@ class AuthServiceTest {
     fun `signup throws when email already exists`() {
         every { userRepository.existsByEmail("dup@test.com") } returns true
 
-        assertThatThrownBy { service.signup("dup@test.com", "password1!", "중복") }
+        assertThatThrownBy { service.signup("dup@test.com", "password1!", "중복", requiredConsents) }
             .isInstanceOf(IllegalArgumentException::class.java)
             .hasMessageContaining("이메일")
     }
@@ -260,5 +265,25 @@ class AuthServiceTest {
         service.logout("not-a-jwt-at-all")
 
         verify(exactly = 0) { jdbc.update(any<String>(), any(), any()) }
+    }
+
+    @Test
+    fun `signup records the given consents for the new user (ADR-068)`() {
+        every { userRepository.existsByEmail("c@test.com") } returns false
+        every { userRepository.save(any()) } answers { firstArg() }
+
+        service.signup("c@test.com", "password1!", "동의", requiredConsents)
+
+        io.mockk.verify { consentService.requireAndRecord(any(), ConsentGroup.SIGNUP, requiredConsents, ConsentSource.SIGNUP) }
+    }
+
+    @Test
+    fun `signup fails when required consents are missing`() {
+        every { userRepository.existsByEmail("n@test.com") } returns false
+        every { userRepository.save(any()) } answers { firstArg() }
+        every { consentService.requireAndRecord(any(), ConsentGroup.SIGNUP, emptyList(), any()) } throws IllegalArgumentException("필수 동의 항목이 빠졌습니다")
+
+        assertThatThrownBy { service.signup("n@test.com", "password1!", "미동의", emptyList()) }
+            .isInstanceOf(IllegalArgumentException::class.java)
     }
 }
