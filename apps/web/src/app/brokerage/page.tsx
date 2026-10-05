@@ -2,96 +2,68 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ShieldCheck } from "@phosphor-icons/react";
 import { getAccessToken } from "@/services/auth";
 import { useBrokerageAccount, useBrokerageBalance, useBrokerageOrders, useConditionalOrders, useBrokerageSettlements } from "@/hooks/useBrokerage";
-import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
-import { OrderRow } from "@/components/brokerage/OrderRow";
-import { ConditionalOrderRow } from "@/components/brokerage/ConditionalOrderRow";
+import {
+  AutoGrid, BtnLink, ChgNum, DataTable, Icon, LiveBadge, Notice, Panel, PanelCol, PanelRow, Pill, Stat, StockCell, TerminalPage,
+  fmtNum, fmtSigned, dirClass, type Column, type IconName,
+} from "@/components/terminal";
+import { OrderActions, OrderStatusCell, orderPriceText } from "@/components/brokerage/OrderCells";
+import { COND_STATUS, ConditionalCancelButton, TRIGGER_LABEL } from "@/components/brokerage/ConditionalOrderRow";
+import {
+  LiveNotice, LoginRequired, NoAccount, PagerButtons, SkeletonRows, brokerageStats, fmtDateTime, maskAccount,
+  sideClass, sideLabel, useSymbolQuotes, won,
+} from "@/components/brokerage/shared";
+import { SettlementsTable } from "@/components/brokerage/SettlementsTable";
 import { brokerageProviderLabel } from "@/lib/brokerageProvider";
-import type { BrokerageOrderResponse, BrokerageSettlementResponse, ConditionalOrderResponse } from "@monticker/types";
-
-function fmt(n: number) { return n.toLocaleString("ko-KR", { maximumFractionDigits: 0 }); }
-function pnlColor(n: number) { return n > 0 ? "text-dracula-red" : n < 0 ? "text-dracula-cyan" : "text-gray-500 dark:text-dracula-comment"; }
-
-const SETTLEMENT_STATUS_META: Record<string, { label: string; color: string }> = {
-  PENDING: { label: "대기 중",   color: "text-dracula-orange" },
-  SETTLED: { label: "정산 완료", color: "text-dracula-green" },
-  FAILED:  { label: "실패",      color: "text-dracula-red" },
-};
+import type { BrokerageHolding, BrokerageOrderResponse, ConditionalOrderResponse } from "@monticker/types";
 
 type TimelineEntry =
   | { kind: "REGULAR"; at: string; order: BrokerageOrderResponse }
   | { kind: "CONDITIONAL"; at: string; order: ConditionalOrderResponse };
 
-function SettlementRow({ s }: { s: BrokerageSettlementResponse }) {
-  const meta = SETTLEMENT_STATUS_META[s.status] ?? { label: s.status, color: "text-gray-500" };
-  return (
-    <Card className="p-4 flex items-center justify-between gap-3">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className={`text-xs font-medium ${s.side === "BUY" ? "text-dracula-red" : "text-dracula-cyan"}`}>{s.side === "BUY" ? "매수" : "매도"}</span>
-          <span className="text-sm font-semibold text-gray-900 dark:text-dracula-fg">{s.symbol}</span>
-          <span className={`text-xs ${meta.color}`}>{meta.label}</span>
-        </div>
-        <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">
-          정산 예정일 {new Date(s.settleDate).toLocaleDateString("ko-KR")}
-        </p>
-      </div>
-      <p className={`text-sm font-semibold shrink-0 ${s.side === "BUY" ? "text-dracula-red" : "text-dracula-cyan"}`}>
-        {s.side === "BUY" ? "-" : "+"}{fmt(s.netAmount)}원
-      </p>
-    </Card>
-  );
-}
+const QUICK: { title: string; sub: string; icon: IconName; href: string }[] = [
+  { title: "실전 주문", sub: "지정가·시장가 주문 · 확인 단계 포함", icon: "send", href: "/brokerage/orders" },
+  { title: "조건부 주문", sub: "가격 조건 충족 시 자동 제출", icon: "target", href: "/brokerage/conditional-orders" },
+  { title: "리밸런싱", sub: "목표 비중과 괴리 확인 후 직접 실행", icon: "pie", href: "/brokerage/rebalance" },
+  { title: "연동 관리", sub: "API 키 재인증", icon: "key", href: "/brokerage/connect" },
+];
 
 export default function BrokerageDashboardPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [tab, setTab] = useState<"holdings" | "orders" | "settlements">("holdings");
+  const [orderTab, setOrderTab] = useState<"orders" | "settlements">("orders");
   const [ordersPage, setOrdersPage] = useState(0);
   const [settlementsPage, setSettlementsPage] = useState(0);
 
   useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
 
   const { data: account, isLoading: accountLoading } = useBrokerageAccount();
-  const { data: balance, isLoading: balanceLoading, isError: balanceError, error: balanceErr } = useBrokerageBalance(!!account);
-  const { data: ordersData, isLoading: ordersLoading } = useBrokerageOrders(ordersPage, !!account && tab === "orders");
-  const { data: conditionalData, isLoading: conditionalLoading } = useConditionalOrders(ordersPage, !!account && tab === "orders");
-  const { data: settlementsData, isLoading: settlementsLoading } = useBrokerageSettlements(settlementsPage, !!account && tab === "settlements");
+  const balanceQuery = useBrokerageBalance(!!account);
+  const { data: balance, isLoading: balanceLoading, isError: balanceError, error: balanceErr } = balanceQuery;
+  const ordersQuery = useBrokerageOrders(ordersPage, !!account && orderTab === "orders");
+  const conditionalQuery = useConditionalOrders(ordersPage, !!account && orderTab === "orders");
+  const settlementsQuery = useBrokerageSettlements(settlementsPage, !!account && orderTab === "settlements");
+  const holdings = balance?.holdings ?? [];
+  const names = useSymbolQuotes(holdings.map(h => h.symbol), false);
 
-  if (!isLoggedIn) return (
-    <div className="max-w-3xl mx-auto p-6 text-center py-20">
-      <p className="text-gray-500 dark:text-dracula-comment mb-4">실전투자를 이용하려면 로그인이 필요합니다.</p>
-      <Link href="/login" className="inline-block bg-blue-600 dark:bg-dracula-purple dark:text-dracula-bg text-white px-6 py-2 rounded-lg font-medium hover:opacity-90 active:scale-[0.98] transition-all duration-150">로그인</Link>
-    </div>
-  );
+  if (!isLoggedIn) return <LoginRequired title="실전투자" message="실전투자를 이용하려면 로그인이 필요합니다." />;
 
   if (accountLoading) return (
-    <div className="max-w-3xl mx-auto p-6">
-      <div className="h-32 rounded-xl bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15 bg-[length:200%_100%] animate-shimmer mb-4" />
-    </div>
+    <TerminalPage title="실전투자" crumb="증권사 연동 (BYOK)" account={{ kind: "live" }}>
+      <SkeletonRows n={4} />
+    </TerminalPage>
   );
 
   if (!account) return (
-    <div className="max-w-lg mx-auto px-4 py-6 sm:py-8 text-center">
-      <Card className="p-8">
-        <ShieldCheck size={32} weight="duotone" className="text-gray-400 dark:text-dracula-comment mx-auto mb-3" aria-hidden />
-        <p className="text-gray-900 dark:text-dracula-fg font-semibold mb-1">연동된 증권사 계좌가 없습니다</p>
-        <p className="text-xs text-gray-500 dark:text-dracula-comment mb-4">
-          BYOK(Bring Your Own Key) 방식으로 본인 명의의 증권사 API 키를 연동해 실전 주문을 체결할 수 있습니다.
-        </p>
-        <Link href="/brokerage/connect" className="inline-block px-5 py-2.5 rounded-lg bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg text-sm font-semibold hover:opacity-90 active:scale-[0.98] transition-all duration-150">
-          계좌 연동하기
-        </Link>
-      </Card>
-    </div>
+    <NoAccount
+      title="실전투자"
+      message="BYOK(Bring Your Own Key) 방식으로 본인 명의의 증권사 API 키를 연동해 실전 주문을 체결할 수 있습니다."
+    />
   );
 
-  const holdings = balance?.holdings ?? [];
-  const orders = ordersData?.content ?? [];
-  const conditionalOrders = conditionalData?.content ?? [];
-  const settlements = settlementsData?.content ?? [];
+  const orders = ordersQuery.data?.content ?? [];
+  const conditionalOrders = conditionalQuery.data?.content ?? [];
+  const settlements = settlementsQuery.data?.content ?? [];
 
   // 일반 주문과 조건부 주문은 별도 API(별도 페이지네이션)지만 같은 계좌·같은 돈이라
   // "지금 뭐가 대기 중인지" 확인에는 한 화면에서 시간순으로 같이 보여야 한다.
@@ -100,175 +72,157 @@ export default function BrokerageDashboardPage() {
     ...orders.map((order): TimelineEntry => ({ kind: "REGULAR", at: order.submittedAt, order })),
     ...conditionalOrders.map((order): TimelineEntry => ({ kind: "CONDITIONAL", at: order.createdAt, order })),
   ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+  const ordersTotalPages = Math.max(ordersQuery.data?.totalPages ?? 0, conditionalQuery.data?.totalPages ?? 0);
 
-  const ordersTotalPages = Math.max(ordersData?.totalPages ?? 0, conditionalData?.totalPages ?? 0);
+  const holdingCols: Column<BrokerageHolding>[] = [
+    { key: "name", header: "종목", cell: h => <StockCell name={names.get(h.symbol)?.name ?? h.symbol} code={h.symbol} /> },
+    { key: "qty", header: "수량", align: "right", cell: h => <span className="num">{fmtNum(h.quantity)}</span> },
+    { key: "avg", header: "평균단가", align: "right", cell: h => <span className="num">{fmtNum(h.avgPrice)}</span> },
+    { key: "cur", header: "현재가", align: "right", cell: h => <span className="num">{fmtNum(h.currentPrice)}</span> },
+    { key: "pnl", header: "평가손익", align: "right", cell: h => { const pnl = (h.currentPrice - h.avgPrice) * h.quantity; return <span className={`num ${dirClass(pnl)}`}>{fmtSigned(pnl)}</span>; } },
+    { key: "rate", header: "수익률", align: "right", cell: h => <ChgNum value={h.avgPrice > 0 ? ((h.currentPrice - h.avgPrice) / h.avgPrice) * 100 : null} /> },
+    { key: "act", header: <span className="sr-only">주문</span>, align: "right", cell: h => (
+      <BtnLink href={`/brokerage/orders?symbol=${encodeURIComponent(h.symbol)}`} kind="soft" size="sm">주문</BtnLink>
+    ) },
+  ];
+
+  const timelineCols: Column<TimelineEntry>[] = [
+    { key: "at", header: "시각", cell: e => <span className="num text-tm-muted">{fmtDateTime(e.at)}</span> },
+    { key: "sym", header: "종목", cell: e => <span className="font-medium">{e.order.symbol}</span> },
+    { key: "side", header: "구분", cell: e => (
+      <span className="flex items-center gap-1.5">
+        {e.kind === "CONDITIONAL" && <Pill tone="orange">조건부 · {TRIGGER_LABEL[e.order.triggerType]}</Pill>}
+        <span className={sideClass(e.order.side)}>{sideLabel(e.order.side)}</span>
+      </span>
+    ) },
+    { key: "qty", header: "수량", align: "right", cell: e => <span className="num">{fmtNum(e.order.quantity)}</span> },
+    { key: "price", header: "가격", align: "right", cell: e => (
+      <span className="num">
+        {e.kind === "REGULAR"
+          ? orderPriceText(e.order, n => fmtNum(n))
+          : `${fmtNum(e.order.triggerPrice)} 발동`}
+      </span>
+    ) },
+    { key: "status", header: "상태", cell: e => {
+      if (e.kind === "REGULAR") return <OrderStatusCell o={e.order} />;
+      const m = COND_STATUS[e.order.status];
+      return <Pill tone={m?.tone ?? "muted"}>{m?.label ?? e.order.status}</Pill>;
+    } },
+    { key: "act", header: <span className="sr-only">작업</span>, align: "right", cell: e =>
+      e.kind === "REGULAR" ? <OrderActions o={e.order} /> : <ConditionalCancelButton o={e.order} /> },
+  ];
+
+  const updatedAt = balanceQuery.dataUpdatedAt ? new Date(balanceQuery.dataUpdatedAt).toLocaleTimeString("ko-KR", { hour12: false }) : null;
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 sm:py-8 animate-fade-up">
-      <div className="mb-8 flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-dracula-fg">실전투자</h1>
-          <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">계좌번호 {account.accountNumber}</p>
-        </div>
-        <div className="flex gap-2 shrink-0">
-          <Link href="/brokerage/rebalance"
-            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-dracula-line text-gray-700 dark:text-dracula-fg text-sm font-semibold hover:bg-gray-50 dark:hover:bg-dracula-line/30 active:scale-[0.98] transition-all duration-150">
-            리밸런싱
-          </Link>
-          <Link href="/brokerage/conditional-orders"
-            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-dracula-line text-gray-700 dark:text-dracula-fg text-sm font-semibold hover:bg-gray-50 dark:hover:bg-dracula-line/30 active:scale-[0.98] transition-all duration-150">
-            조건부 주문
-          </Link>
-          <Link href="/brokerage/orders"
-            className="px-4 py-2 rounded-lg bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg text-sm font-semibold hover:opacity-90 active:scale-[0.98] transition-all duration-150">
-            주문하기
-          </Link>
-        </div>
-      </div>
+    <TerminalPage title="실전투자" crumb="증권사 연동 (BYOK)" stats={brokerageStats(account, balance, balanceError)} account={{ kind: "live" }}>
+      <LiveNotice />
+      <PanelRow>
+        <PanelCol className="flex-[1_1_340px]">
+          <Panel tabs={["계좌"]} actions={["refresh"]} onAction={() => balanceQuery.refetch()} closable={false}>
+            <div className="flex items-center gap-3">
+              <span className="grid h-10 w-10 flex-none place-items-center rounded-[10px] bg-tm-raised text-dracula-fg"><Icon name="bank" size={20} /></span>
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <span className="font-bold">{brokerageProviderLabel(account.provider)}</span>
+                <span className="num text-xs text-tm-muted">{account.accountType ? `${account.accountType} ` : ""}{maskAccount(account.accountNumber)}</span>
+              </div>
+              <span className="ml-auto"><LiveBadge /></span>
+            </div>
 
-      {/* 계좌 상태 */}
-      <Card className="p-4 flex items-center justify-between gap-4 mb-6" outerClassName="mb-6">
-        <div className="flex items-center gap-3">
-          <ShieldCheck size={22} weight="duotone" className={account.tokenValid ? "text-dracula-green" : "text-dracula-orange"} aria-hidden />
-          <div>
-            <p className="text-xs text-gray-500 dark:text-dracula-comment">{brokerageProviderLabel(account.provider)} 계좌 연동됨</p>
-            <p className="text-sm font-semibold text-gray-900 dark:text-dracula-fg mt-0.5">
-              {account.tokenValid ? "정상 연결" : "재인증 필요"}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {!account.tokenValid && (
-            <Link href="/brokerage/connect"
-              className="px-3 py-1.5 rounded-lg bg-dracula-red/15 text-dracula-red text-xs font-semibold hover:bg-dracula-red/25 transition-colors">
-              재연동
-            </Link>
-          )}
-          <Badge variant={account.isActive ? "up" : "neutral"}>{account.isActive ? "활성" : "비활성"}</Badge>
-        </div>
-      </Card>
-
-      {/* 잔고 요약 */}
-      {balanceLoading ? (
-        <div className="h-24 rounded-xl bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15 bg-[length:200%_100%] animate-shimmer mb-6" />
-      ) : balanceError ? (
-        // 증권사 장애(503) 중엔 "0원"이 아니라 "조회 불가"를 보여 준다 — 이전엔 서버가 0원을 돌려줘 잔고가 사라진 것처럼 보였다
-        <Card className="p-4 mb-6 border-dracula-orange/40">
-          <p className="text-xs font-semibold text-dracula-orange">잔고를 확인할 수 없습니다</p>
-          <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">
-            {balanceErr instanceof Error ? balanceErr.message : "증권사 응답이 없습니다. 잠시 후 자동으로 다시 시도합니다."}
-          </p>
-        </Card>
-      ) : balance && (
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          <Card className="p-4">
-            <p className="text-xs text-gray-500 dark:text-dracula-comment">가용 현금</p>
-            <p className="text-lg font-bold font-mono text-gray-900 dark:text-dracula-fg mt-0.5">₩{fmt(balance.cash)}</p>
-          </Card>
-          <Card className="p-4">
-            <p className="text-xs text-gray-500 dark:text-dracula-comment">총 평가금액</p>
-            <p className="text-lg font-bold font-mono text-gray-900 dark:text-dracula-fg mt-0.5">₩{fmt(balance.totalEvaluated)}</p>
-          </Card>
-        </div>
-      )}
-
-      {/* 탭 */}
-      <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-dracula-line">
-        {([
-          { key: "holdings", label: "보유종목" },
-          { key: "orders", label: "주문내역" },
-          { key: "settlements", label: "정산내역" },
-        ] as const).map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px
-              ${tab === t.key ? "border-blue-600 dark:border-dracula-purple text-blue-600 dark:text-dracula-purple" : "border-transparent text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg"}`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* 보유종목 */}
-      {tab === "holdings" && (
-        holdings.length === 0 ? (
-          <div className="text-center py-16 border border-dashed border-gray-300 dark:border-dracula-line rounded-xl text-gray-500 dark:text-dracula-comment text-sm">
-            보유 중인 종목이 없습니다.
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {holdings.map(h => {
-              const pnl = (h.currentPrice - h.avgPrice) * h.quantity;
-              const pnlRate = h.avgPrice > 0 ? ((h.currentPrice - h.avgPrice) / h.avgPrice) * 100 : 0;
-              return (
-                <Card key={h.symbol} className="p-4 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900 dark:text-dracula-fg">{h.symbol}</p>
-                    <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">{h.quantity}주 · 평단 ₩{fmt(h.avgPrice)}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold font-mono text-gray-900 dark:text-dracula-fg">₩{fmt(h.currentPrice * h.quantity)}</p>
-                    <p className={`text-xs font-mono ${pnlColor(pnl)}`}>{pnl >= 0 ? "+" : ""}{fmt(pnl)} ({pnlRate.toFixed(2)}%)</p>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-        )
-      )}
-
-      {/* 주문내역 — 일반 주문 + 조건부 주문을 시간순으로 합쳐서 보여준다. 모의투자(matching)는
-          별도 계좌(가상 자금)라 여기 섞지 않고 /matching에 따로 둔다. */}
-      {tab === "orders" && (
-        (ordersLoading || conditionalLoading) ? (
-          <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-16 rounded-xl bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15 bg-[length:200%_100%] animate-shimmer" />)}</div>
-        ) : timeline.length === 0 ? (
-          <div className="text-center py-16 border border-dashed border-gray-300 dark:border-dracula-line rounded-xl text-gray-500 dark:text-dracula-comment text-sm">
-            주문 내역이 없습니다.
-          </div>
-        ) : (
-          <>
-            <div className="space-y-2">
-              {timeline.map(entry => entry.kind === "REGULAR"
-                ? <OrderRow key={`regular-${entry.order.id}`} o={entry.order} showTypeBadge />
-                : <ConditionalOrderRow key={`conditional-${entry.order.id}`} o={entry.order} showTypeBadge />
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              {account.tokenValid
+                ? <Pill tone="green">정상 연결</Pill>
+                : <Pill tone="orange">재인증 필요</Pill>}
+              <Pill tone={account.isActive ? "cyan" : "muted"}>{account.isActive ? "활성" : "비활성"}</Pill>
+              {!account.tokenValid && (
+                <Link href="/brokerage/connect" className="ml-auto inline-flex h-7 items-center rounded-lg border border-[#6b3a44] px-2.5 text-xs font-semibold text-[#ff8a8a] hover:bg-[#3d252b]">
+                  재연동
+                </Link>
               )}
             </div>
-            <p className="text-[10px] text-gray-400 dark:text-dracula-comment text-center mt-3">
-              조건부 주문만 따로 관리하려면 <Link href="/brokerage/conditional-orders" className="underline hover:text-gray-600 dark:hover:text-dracula-fg">조건부 주문 페이지</Link>에서 확인하세요.
-            </p>
-            {ordersTotalPages > 1 && (
-              <div className="flex justify-center gap-3 mt-6">
-                {ordersPage > 0 && <button onClick={() => setOrdersPage(p => p - 1)} className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg text-sm font-medium hover:bg-gray-200 dark:hover:bg-dracula-comment transition-all duration-150">이전</button>}
-                {ordersPage < ordersTotalPages - 1 && <button onClick={() => setOrdersPage(p => p + 1)} className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg text-sm font-medium hover:bg-gray-200 dark:hover:bg-dracula-comment transition-all duration-150">다음</button>}
-              </div>
-            )}
-          </>
-        )
-      )}
 
-      {/* 정산내역 */}
-      {tab === "settlements" && (
-        settlementsLoading ? (
-          <div className="space-y-2">{[1, 2, 3].map(i => <div key={i} className="h-16 rounded-xl bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15 bg-[length:200%_100%] animate-shimmer" />)}</div>
-        ) : settlements.length === 0 ? (
-          <div className="text-center py-16 border border-dashed border-gray-300 dark:border-dracula-line rounded-xl text-gray-500 dark:text-dracula-comment text-sm">
-            정산 내역이 없습니다.
-          </div>
-        ) : (
-          <>
-            <div className="space-y-2">{settlements.map(s => <SettlementRow key={s.id} s={s} />)}</div>
-            {(settlementsData?.totalPages ?? 0) > 1 && (
-              <div className="flex justify-center gap-3 mt-6">
-                {settlementsPage > 0 && <button onClick={() => setSettlementsPage(p => p - 1)} className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg text-sm font-medium hover:bg-gray-200 dark:hover:bg-dracula-comment transition-all duration-150">이전</button>}
-                {settlementsPage < (settlementsData?.totalPages ?? 1) - 1 && <button onClick={() => setSettlementsPage(p => p + 1)} className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg text-sm font-medium hover:bg-gray-200 dark:hover:bg-dracula-comment transition-all duration-150">다음</button>}
-              </div>
+            {balanceLoading ? (
+              <SkeletonRows n={2} />
+            ) : balanceError ? (
+              // 증권사 장애(503) 중엔 "0원"이 아니라 "조회 불가"를 보여 준다 — 이전엔 서버가 0원을 돌려줘 잔고가 사라진 것처럼 보였다
+              <Notice tone="warn">
+                <b className="text-dracula-orange">잔고를 확인할 수 없습니다</b>
+                <br />
+                {balanceErr instanceof Error ? balanceErr.message : "증권사 응답이 없습니다. 잠시 후 자동으로 다시 시도합니다."}
+              </Notice>
+            ) : (
+              <AutoGrid min={140}>
+                <Stat big label="가용 현금" value={won(balance?.cash)} />
+                <Stat big label="총 평가금액" value={won(balance?.totalEvaluated)} />
+              </AutoGrid>
             )}
-          </>
-        )
-      )}
+            <span className="text-2xs text-tm-muted">
+              잔고는 증권사 API에서 조회합니다{updatedAt && !balanceError ? ` · 마지막 갱신 ${updatedAt}` : ""}
+            </span>
+          </Panel>
 
-      <p className="text-xs text-gray-500 dark:text-dracula-comment text-center mt-8">
-        실제 자금이 이동하는 실전투자 계좌입니다. 투자에 대한 책임은 본인에게 있습니다.
-      </p>
-    </div>
+          <Panel tabs={["바로가기"]} actions={[]} closable={false}>
+            {QUICK.map(q => (
+              <Link key={q.href} href={q.href} className="flex items-center gap-3 rounded-[10px] bg-tm-inner p-3.5 text-dracula-fg hover:bg-tm-raised">
+                <span className="grid h-9 w-9 flex-none place-items-center rounded-[10px] bg-tm-raised text-dracula-purple"><Icon name={q.icon} size={18} /></span>
+                <span className="flex flex-1 flex-col gap-0.5">
+                  <span className="font-semibold">{q.title}</span>
+                  <span className="text-xs text-tm-muted">{q.sub}</span>
+                </span>
+                <Icon name="chevr" size={16} className="text-tm-muted" />
+              </Link>
+            ))}
+          </Panel>
+        </PanelCol>
+
+        <PanelCol className="flex-[999_1_620px]">
+          <Panel tabs={["보유 종목"]} actions={["refresh"]} onAction={() => balanceQuery.refetch()} bodyClassName="px-1.5 pb-1.5 pt-1">
+            {balanceLoading ? <SkeletonRows /> : balanceError ? (
+              <p className="px-3 py-8 text-center text-13 text-tm-muted">잔고를 확인할 수 없어 보유 종목을 표시하지 않습니다.</p>
+            ) : (
+              <DataTable columns={holdingCols} rows={holdings} rowKey={h => h.symbol} minWidth={720} empty="보유 중인 종목이 없습니다." />
+            )}
+          </Panel>
+
+          <Panel
+            tabs={[{ key: "orders", label: "최근 주문" }, { key: "settlements", label: "정산 내역" }]}
+            active={orderTab}
+            onTabChange={k => setOrderTab(k as "orders" | "settlements")}
+            closable={false}
+            actions={["refresh"]}
+            onAction={() => { if (orderTab === "orders") { ordersQuery.refetch(); conditionalQuery.refetch(); } else settlementsQuery.refetch(); }}
+            bodyClassName="px-1.5 pb-2.5 pt-1"
+          >
+            {orderTab === "orders" ? (
+              // 일반 주문 + 조건부 주문을 시간순으로 합쳐서 보여준다. 모의투자(matching)는 별도 계좌(가상 자금)라 섞지 않는다.
+              <>
+                {(ordersQuery.isLoading || conditionalQuery.isLoading) ? <SkeletonRows /> : (
+                  <DataTable
+                    columns={timelineCols}
+                    rows={timeline}
+                    rowKey={e => `${e.kind}-${e.order.id}`}
+                    minWidth={760}
+                    empty="주문 내역이 없습니다."
+                  />
+                )}
+                <PagerButtons page={ordersPage} totalPages={ordersTotalPages} onChange={setOrdersPage} />
+                <Notice tone="info">
+                  ‘결과 확인 중’은 증권사 응답이 지연되어 체결 여부를 아직 확정하지 못한 주문입니다. 같은 주문을 다시 내기 전에 증권사 앱에서 확인하세요.
+                  {" "}조건부 주문만 따로 관리하려면 <Link href="/brokerage/conditional-orders" className="underline">조건부 주문</Link>에서 확인하세요.
+                </Notice>
+              </>
+            ) : (
+              <>
+                {settlementsQuery.isLoading ? <SkeletonRows /> : (
+                  <SettlementsTable rows={settlements} />
+                )}
+                <PagerButtons page={settlementsPage} totalPages={settlementsQuery.data?.totalPages ?? 0} onChange={setSettlementsPage} />
+              </>
+            )}
+          </Panel>
+        </PanelCol>
+      </PanelRow>
+      <p className="py-2 text-center text-xs text-tm-muted">실제 자금이 이동하는 실전투자 계좌입니다. 투자에 대한 책임은 본인에게 있습니다.</p>
+    </TerminalPage>
   );
 }

@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { ShieldWarning, CheckCircle, XCircle, ArrowsClockwise, Sparkle, Question } from "@phosphor-icons/react";
 import { getAccessToken } from "@/services/auth";
 import {
   useBrokerageAccount,
+  useBrokerageBalance,
   useRebalanceTarget,
   useSaveRebalanceTarget,
   useRebalancePreview,
@@ -14,11 +13,14 @@ import {
 import { useToast } from "@/hooks/useToast";
 import { ApiError } from "@/services/brokerage";
 import { authFetch } from "@/services/api";
-import { Card } from "@/components/ui/Card";
-import type { RebalanceExecutionResponse, RebalanceTargetSource } from "@monticker/types";
+import {
+  Btn, DataTable, Icon, IconBtn, KV, Notice, Panel, PanelRow, Pill, PreviewTag, Seg, TerminalPage, fmtNum, type Column,
+} from "@/components/terminal";
 import { TradingHaltBanner } from "@/components/brokerage/TradingHaltBanner";
+import { LiveNotice, LoginRequired, NoAccount, StockSearchBox, sideClass, sideLabel, useLastRebalanceExecution, useSymbolQuotes, type StockHit } from "@/components/brokerage/shared";
+import { cn } from "@/lib/utils";
+import type { RebalanceExecutionResponse, RebalanceLegResponse, RebalanceTargetSource } from "@monticker/types";
 
-interface StockHit { id: number; symbol: string; name: string; }
 interface WeightRow { symbol: string; name: string; weightPct: string; id?: number; }
 
 /** /api/analytics/portfolio/optimize 응답 — weights 는 stockId 키. (analytics 페이지의 로컬 타입과 동일) */
@@ -30,19 +32,23 @@ interface OptimizationResult {
   suggestion: string;
 }
 
+/** 표의 한 행 — 목표에 있는 종목 + 목표엔 없지만 보유 중인 종목(서버 미리보기는 이것도 매도 대상으로 본다). */
+interface TableRow { symbol: string; name: string; inTarget: boolean; weightPct: string; currentPct: number | null; }
+
 function pct(n: number) { return (n * 100).toFixed(2); }
+
+const THRESHOLD_PRESETS = ["2.00", "3.00", "5.00"] as const;
 
 export default function RebalancePage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [rows, setRows] = useState<WeightRow[]>([]);
   const [thresholdPct, setThresholdPct] = useState("5.00");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<StockHit[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [executeError, setExecuteError] = useState<string | null>(null);
   const [lastExecution, setLastExecution] = useState<RebalanceExecutionResponse | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [source, setSource] = useState<RebalanceTargetSource>("MANUAL");
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeError, setOptimizeError] = useState<string | null>(null);
@@ -55,10 +61,12 @@ export default function RebalancePage() {
   useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
 
   const { data: account, isLoading: accountLoading } = useBrokerageAccount();
+  const { data: balance, isError: balanceError } = useBrokerageBalance(!!account);
   const { data: target } = useRebalanceTarget(!!account);
   const saveTarget = useSaveRebalanceTarget();
-  const { data: previewData, isLoading: previewLoading, refetch: refetchPreview } = useRebalancePreview(false);
+  const { data: previewData, isLoading: previewLoading, isFetching: previewFetching, refetch: refetchPreview } = useRebalancePreview(false);
   const executeMutation = useExecuteRebalance();
+  const { data: latestExecution, refetch: refetchLatestExecution } = useLastRebalanceExecution(!!account);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -69,30 +77,19 @@ export default function RebalancePage() {
     setIsDirty(false);
   }, [target]);
 
+  // 미리보기를 다시 보거나 편집하면 실행 확인은 처음부터 다시 받는다.
+  useEffect(() => { setConfirming(false); }, [isDirty, previewData, showPreview]);
+
+  const holdings = balance?.holdings ?? [];
+  const names = useSymbolQuotes([...rows.filter(r => r.name === r.symbol).map(r => r.symbol), ...holdings.map(h => h.symbol)], false);
+  const nameOf = (symbol: string, fallback?: string) => (fallback && fallback !== symbol ? fallback : names.get(symbol)?.name ?? symbol);
+
   // 수동 편집은 최적화 산출물의 출처를 무효화한다 — MANUAL 로 되돌리고 최적화 요약도 지운다.
   const markManual = () => { setSource("MANUAL"); setOptimizeInfo(null); setIsDirty(true); };
 
-  useEffect(() => {
-    if (searchQuery.length < 1) { setSearchResults([]); return; }
-    const controller = new AbortController();
-    const timer = setTimeout(async () => {
-      try {
-        const r = await fetch(`/api/stocks/search?query=${encodeURIComponent(searchQuery)}`, { signal: controller.signal });
-        if (r.ok) setSearchResults((await r.json()).slice(0, 6));
-      } catch (e) {
-        if ((e as Error).name !== "AbortError") throw e;
-      }
-    }, 200);
-    // V-L6 — 요청 id/AbortController 가드가 없으면 더 늦게 도착한 이전 검색어의 응답이
-    // 최신 결과를 덮어쓸 수 있다. 다음 검색어가 오거나 언마운트되면 진행 중인 요청도 취소한다.
-    return () => { clearTimeout(timer); controller.abort(); };
-  }, [searchQuery]);
-
   const addStock = (hit: StockHit) => {
-    if (rows.some(r => r.symbol === hit.symbol)) { setSearchQuery(""); setSearchResults([]); return; }
+    if (rows.some(r => r.symbol === hit.symbol)) return;
     setRows(rs => [...rs, { symbol: hit.symbol, name: hit.name, weightPct: "", id: hit.id }]);
-    setSearchQuery("");
-    setSearchResults([]);
     markManual();
   };
 
@@ -101,6 +98,7 @@ export default function RebalancePage() {
     setRows(rs => rs.map(r => (r.symbol === symbol ? { ...r, weightPct } : r)));
     markManual();
   };
+  const updateThreshold = (v: string) => { setThresholdPct(v); setIsDirty(true); };
 
   /** 저장된 목표에서 복원한 행은 id 가 없다 — 최적화 호출에 필요한 stockId 를 검색 API 로 보강한다. */
   const ensureIds = async (): Promise<Array<WeightRow & { id: number }>> =>
@@ -129,7 +127,7 @@ export default function RebalancePage() {
       // 원인 표시 없이 막혀버린다. 생략된 종목이 있으면 미리 알린다.
       const missingIds = withIds.filter(r => !(String(r.id) in result.weights));
       if (missingIds.length > 0) {
-        setOptimizeError(`다음 종목은 최적화 결과에 없어 0%로 채워졌습니다: ${missingIds.map(r => r.name).join(", ")}`);
+        setOptimizeError(`다음 종목은 최적화 결과에 없어 0%로 채워졌습니다: ${missingIds.map(r => nameOf(r.symbol, r.name)).join(", ")}`);
       }
       // 각 비중을 소수 1자리로 반올림하면 합이 100을 살짝 넘어(예: 100.1%) 저장이 막힐 수 있다.
       // 초과분은 가장 큰 비중에서 덜어 합계를 100% 이하로 맞춘다.
@@ -180,7 +178,8 @@ export default function RebalancePage() {
     setPreviewError(null);
     setLastExecution(null);
     try {
-      await refetchPreview();
+      const r = await refetchPreview();
+      if (r.error) throw r.error;
       setShowPreview(true);
     } catch (e) {
       setPreviewError(e instanceof ApiError ? e.message : (e as Error).message);
@@ -188,11 +187,15 @@ export default function RebalancePage() {
   };
 
   const handleExecute = async () => {
+    // 저장 안 된 편집이 있으면 실행하지 않는다(V-M6) — 버튼도 막혀 있지만 한 번 더 확인한다.
+    if (isDirty) return;
     setExecuteError(null);
+    setConfirming(false);
     try {
       const result = await executeMutation.mutateAsync();
       setLastExecution(result);
       setShowPreview(false);
+      refetchLatestExecution();
       toast({
         type: result.status === "COMPLETED" ? "success" : "error",
         title: result.status === "COMPLETED" ? "실행 완료" : "일부 실패",
@@ -203,237 +206,257 @@ export default function RebalancePage() {
     }
   };
 
-  if (!isLoggedIn) return (
-    <div className="max-w-3xl mx-auto p-6 text-center py-20">
-      <p className="text-gray-500 dark:text-dracula-comment mb-4">리밸런싱을 이용하려면 로그인이 필요합니다.</p>
-      <Link href="/login" className="inline-block bg-blue-600 dark:bg-dracula-purple dark:text-dracula-bg text-white px-6 py-2 rounded-lg font-medium hover:opacity-90 active:scale-[0.98] transition-all duration-150">로그인</Link>
-    </div>
-  );
+  if (!isLoggedIn) return <LoginRequired title="리밸런싱" message="리밸런싱을 이용하려면 로그인이 필요합니다." />;
+  if (!accountLoading && !account) return <NoAccount title="리밸런싱" message="리밸런싱을 실행하려면 먼저 증권사 계좌를 연동하세요." />;
 
-  if (!accountLoading && !account) return (
-    <div className="max-w-lg mx-auto px-4 py-6 sm:py-8 text-center">
-      <Card className="p-6">
-        <p className="text-gray-900 dark:text-dracula-fg font-semibold mb-1">연동된 계좌가 없습니다</p>
-        <p className="text-xs text-gray-500 dark:text-dracula-comment mb-4">리밸런싱을 실행하려면 먼저 증권사 계좌를 연동하세요.</p>
-        <Link href="/brokerage/connect" className="inline-block px-4 py-2 rounded-lg bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg text-sm font-semibold hover:opacity-90 active:scale-[0.98] transition-all duration-150">
-          계좌 연동하기
-        </Link>
-      </Card>
-    </div>
-  );
+  // 현재 비중 = 보유 평가액 / 증권사 총평가액 — 서버 미리보기(RebalanceExecutionService)와 같은 식.
+  const total = balance && balance.totalEvaluated > 0 ? balance.totalEvaluated : null;
+  const currentPctOf = (symbol: string) => {
+    if (!total) return null;
+    const h = holdings.find(x => x.symbol === symbol);
+    return h ? (h.currentPrice * h.quantity / total) * 100 : 0;
+  };
+  const tableRows: TableRow[] = [
+    ...rows.map(r => ({ symbol: r.symbol, name: nameOf(r.symbol, r.name), inTarget: true, weightPct: r.weightPct, currentPct: currentPctOf(r.symbol) })),
+    ...holdings.filter(h => !rows.some(r => r.symbol === h.symbol))
+      .map(h => ({ symbol: h.symbol, name: nameOf(h.symbol), inTarget: false, weightPct: "0", currentPct: currentPctOf(h.symbol) })),
+  ];
+  const cashPct = total && balance ? (balance.cash / total) * 100 : null;
+  const th = Number(thresholdPct) || 0;
+  const diffOf = (r: TableRow) => (r.currentPct == null ? null : r.currentPct - (Number(r.weightPct) || 0));
+  const suggestionOf = (r: TableRow): { label: string; tone: "red" | "green" | "muted" } | null => {
+    const d = diffOf(r);
+    if (d == null) return null;
+    if (th > 0 && d >= th) return { label: "매도", tone: "red" };
+    if (th > 0 && d <= -th) return { label: "매수", tone: "green" };
+    return { label: "유지", tone: "muted" };
+  };
+  const maxDiffRow = tableRows.reduce<TableRow | null>((best, r) => {
+    const d = diffOf(r);
+    if (d == null) return best;
+    const bd = best ? diffOf(best) : null;
+    return bd == null || Math.abs(d) > Math.abs(bd) ? r : best;
+  }, null);
+  const maxDiff = maxDiffRow ? diffOf(maxDiffRow) : null;
+  const targetCount = tableRows.filter(r => { const s = suggestionOf(r); return s && s.label !== "유지"; }).length;
+
+  const cols: Column<TableRow>[] = [
+    { key: "name", header: "종목", cell: r => (
+      <span className="flex flex-col gap-px">
+        <span className="font-semibold">{r.name}</span>
+        {r.name !== r.symbol && <span className="num text-2xs text-tm-muted">{r.symbol}</span>}
+      </span>
+    ) },
+    { key: "target", header: "목표", cell: r => r.inTarget ? (
+      <label className="inline-flex h-8 items-center gap-1.5 rounded-md border border-tm-line2 bg-tm-inner px-2.5">
+        <span className="sr-only">{r.name} 목표 비중</span>
+        <input
+          className="num w-12 bg-transparent text-right text-13 text-dracula-fg outline-none"
+          type="number" min={0} max={100} step={0.1} inputMode="decimal"
+          value={r.weightPct}
+          placeholder="0.0"
+          onChange={e => updateWeight(r.symbol, e.target.value)}
+        />
+        <span className="text-tm-muted">%</span>
+      </label>
+    ) : (
+      <span className="text-xs text-tm-muted">목표 없음 (0%)</span>
+    ) },
+    { key: "cur", header: "현재", align: "right", cell: r => <span className="num">{r.currentPct == null ? "—" : `${r.currentPct.toFixed(1)}%`}</span> },
+    { key: "bar", header: "현재 vs 목표", cell: r => {
+      const tgt = Number(r.weightPct) || 0;
+      return (
+        <div className="relative h-2.5 w-[200px] rounded-full bg-tm-inner" aria-hidden>
+          {r.currentPct != null && <div className="absolute left-0 h-full rounded-full bg-tm-line2" style={{ width: `${Math.min(100, r.currentPct * 2.5)}%` }} />}
+          <div className="absolute -top-[3px] h-4 w-0.5 bg-dracula-purple" style={{ left: `${Math.min(100, tgt * 2.5)}%` }} />
+        </div>
+      );
+    } },
+    { key: "diff", header: "괴리", align: "right", cell: r => {
+      const d = diffOf(r);
+      return <span className={cn("num", d != null && th > 0 && Math.abs(d) >= th ? "text-dracula-orange" : "text-tm-muted")}>{d == null ? "—" : `${d > 0 ? "+" : ""}${d.toFixed(1)}%p`}</span>;
+    } },
+    { key: "sugg", header: "제안", cell: r => { const s = suggestionOf(r); return s ? <Pill tone={s.tone}>{s.label}</Pill> : <span className="text-tm-muted">—</span>; } },
+    { key: "rm", header: <span className="sr-only">삭제</span>, align: "right", cell: r => r.inTarget
+      ? <IconBtn name="x" label={`${r.name} 목표에서 제거`} size={28} iconSize={14} onClick={() => removeStock(r.symbol)} />
+      : null },
+  ];
+
+  const holdingPrice = (symbol: string) => holdings.find(h => h.symbol === symbol)?.currentPrice ?? null;
+  const previewCols: Column<RebalanceLegResponse>[] = [
+    { key: "sym", header: "종목", cell: l => <span className="font-medium">{nameOf(l.symbol)}</span> },
+    { key: "side", header: "구분", cell: l => <span className={sideClass(l.side)}>{sideLabel(l.side)}</span> },
+    { key: "qty", header: "수량", align: "right", cell: l => <span className="num">{fmtNum(l.quantity)}</span> },
+    { key: "w", header: "비중", align: "right", cell: l => <span className="num text-tm-muted">{pct(l.currentWeight)}→{pct(l.targetWeight)}%</span> },
+    { key: "amt", header: "예상 금액", align: "right", cell: l => { const p = holdingPrice(l.symbol); return <span className="num">{p ? fmtNum(p * l.quantity) : "—"}</span>; } },
+  ];
+
+  const legs = showPreview && previewData ? previewData.legs : null;
+  const presetValue = (THRESHOLD_PRESETS as readonly string[]).includes(Number(thresholdPct).toFixed(2)) ? Number(thresholdPct).toFixed(2) : "custom";
 
   return (
-    <div className="max-w-lg mx-auto px-4 py-6 sm:py-8 animate-fade-up">
-      <div className="mb-8">
-        <h1 className="text-xl font-bold text-gray-900 dark:text-dracula-fg">리밸런싱</h1>
-        <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">목표 비중을 저장하고, 현재 보유와의 괴리를 확인한 뒤 직접 실행합니다</p>
-      </div>
-
+    <TerminalPage
+      title="리밸런싱"
+      crumb="실전투자 · 목표 비중과 괴리 확인 후 직접 실행"
+      stats={[
+        { label: "최대 괴리", value: maxDiffRow && maxDiff != null ? `${maxDiffRow.name} ${maxDiff > 0 ? "+" : ""}${maxDiff.toFixed(1)}%p` : "—", tone: maxDiff != null && th > 0 && Math.abs(maxDiff) >= th ? "text-dracula-orange" : undefined },
+        { label: "대상 종목", value: legs ? `${legs.length}개` : total ? `${targetCount}개` : "—" },
+        { label: "임계값", value: `${Number(thresholdPct) || 0}%p` },
+        { label: "마지막 실행", value: (lastExecution ?? latestExecution) ? new Date((lastExecution ?? latestExecution)!.requestedAt).toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" }) : "—" },
+      ]}
+      account={{ kind: "live" }}
+    >
+      <LiveNotice />
       <TradingHaltBanner enabled={!!account} note="중단 중에는 리밸런싱을 실행할 수 없습니다. 목표 비중 저장과 미리보기는 가능합니다." />
 
-      {/* 목표 비중 설정 */}
-      <Card className="p-5" outerClassName="mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <h2 className="text-sm font-bold text-gray-900 dark:text-dracula-fg">목표 비중</h2>
-          {source === "OPTIMIZER" && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-dracula-purple/10 text-dracula-purple text-[10px] font-semibold px-2 py-0.5">
-              <Sparkle size={10} weight="fill" aria-hidden /> 최적화됨
+      <PanelRow>
+        {/* ── 목표 비중 ── */}
+        <Panel
+          tabs={["목표 비중"]}
+          actions={[]}
+          right={source === "OPTIMIZER" ? <Pill tone="purple">최적화됨</Pill> : undefined}
+          className="flex-[999_1_620px]"
+          bodyClassName="px-1.5 pb-2.5 pt-1"
+        >
+          <div className="flex flex-wrap items-center gap-3 px-1.5 py-2">
+            <span className="text-13 text-tm-soft">실행 임계값</span>
+            <Seg
+              size="lg"
+              options={THRESHOLD_PRESETS.map(v => ({ value: v as string, label: `${Number(v)}%p` }))}
+              value={presetValue}
+              onChange={updateThreshold}
+            />
+            <label className="inline-flex h-8 items-center gap-1.5 rounded-md border border-tm-line2 bg-tm-inner px-2.5">
+              <span className="sr-only">실행 임계값 직접 입력</span>
+              <input
+                className="num w-12 bg-transparent text-right text-13 text-dracula-fg outline-none"
+                type="number" min={0} max={100} step={0.1}
+                value={thresholdPct}
+                onChange={e => updateThreshold(e.target.value)}
+              />
+              <span className="text-tm-muted">%p</span>
+            </label>
+            <span className="text-xs text-tm-muted">
+              괴리가 이 값 이상인 종목만 대상 · 합계{" "}
+              <b className={cn("num", totalWeightPct > 100 ? "text-[#ff8a8a]" : totalWeightPct === 100 ? "text-dracula-green" : "text-dracula-fg")}>{totalWeightPct.toFixed(1)}%</b>
             </span>
-          )}
-        </div>
+            <span className="ml-auto flex flex-wrap gap-1.5">
+              <Btn kind="ghost" size="sm" icon="zap" onClick={handleOptimize} disabled={rows.length < 2 || optimizing} className="h-[34px]">
+                {optimizing ? "계산 중..." : "최적 비중 채우기"}
+              </Btn>
+              <Btn kind="ghost" size="sm" onClick={handleSave} disabled={!isSaveValid || saveTarget.isPending} className="h-[34px]">
+                {saveTarget.isPending ? "저장 중..." : "목표 비중 저장"}
+              </Btn>
+            </span>
+          </div>
 
-        <div className="relative mb-4">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="종목 추가 — 종목명 또는 코드 검색"
-            className="w-full rounded-lg border px-4 py-2.5 text-sm border-gray-300 bg-white text-gray-900 placeholder-gray-400 dark:border-dracula-line dark:bg-dracula-surface dark:text-dracula-fg dark:placeholder-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50 focus:border-dracula-purple transition-all duration-150"
-          />
-          {searchResults.length > 0 && (
-            <div className="absolute z-10 mt-1 w-full rounded-lg border border-gray-200 dark:border-dracula-line bg-white dark:bg-dracula-surface shadow-lg overflow-hidden">
-              {searchResults.map(r => (
-                <button key={r.id} onClick={() => addStock(r)} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-dracula-line/30 transition-colors">
-                  <span className="font-medium text-gray-900 dark:text-dracula-fg">{r.name}</span>
-                  <span className="text-xs text-gray-500 dark:text-dracula-comment ml-2">{r.symbol}</span>
-                </button>
+          <div className="px-1.5 pb-2"><StockSearchBox onSelect={addStock} label="종목 추가" placeholder="종목 추가 — 종목명 또는 코드 검색" /></div>
+
+          {tableRows.length === 0 ? (
+            <p className="px-3 py-8 text-center text-13 text-tm-muted">종목을 추가해 목표 비중을 설정하세요.</p>
+          ) : (
+            <DataTable columns={cols} rows={tableRows} rowKey={r => r.symbol} minWidth={760} dense={false} />
+          )}
+          {total && cashPct != null && (
+            <div className="flex justify-between px-3 py-2 text-xs text-tm-muted">
+              <span>현금 (목표 합계가 100%보다 작으면 나머지는 현금으로 남습니다)</span>
+              <span className="num">{cashPct.toFixed(1)}%</span>
+            </div>
+          )}
+          {balanceError && <p className="px-3 text-xs text-dracula-orange">잔고를 확인할 수 없어 현재 비중을 표시하지 않습니다.</p>}
+
+          <div className="flex flex-col gap-2 px-1.5 pt-1">
+            {optimizeError && <Notice tone="danger">{optimizeError}</Notice>}
+            {optimizeInfo && optimizeInfo.suggestion && <Notice tone="info">{optimizeInfo.suggestion}</Notice>}
+            {saveError && <Notice tone="danger">{saveError}</Notice>}
+            {isDirty && (
+              <span className="text-xs text-dracula-orange">저장되지 않은 변경사항이 있습니다 — 저장해야 오른쪽 미리보기/실행에 반영됩니다.</span>
+            )}
+          </div>
+        </Panel>
+
+        {/* ── 실행 미리보기 ── */}
+        <Panel tabs={["실행 미리보기"]} actions={[]} closable={false} className="flex-[1_1_340px] self-start">
+          {!target ? (
+            <p className="text-13 text-tm-muted">목표 비중을 저장하면 현재 보유와의 괴리를 미리보고 실행할 수 있습니다.</p>
+          ) : (
+            <>
+              {/* V-M6 — 미리보기/실행 둘 다 위 편집 상태가 아니라 마지막으로 저장된 target을
+                  대상으로 동작한다. 편집 중인데 모르고 실행하면 의도하지 않은 비중으로 실제
+                  주문이 나갈 수 있어, 편집 중엔 눈에 띄게 알리고 실행 자체를 막는다. */}
+              {isDirty && (
+                <Notice tone="warn">
+                  편집 중인 내용이 아직 저장되지 않았습니다. 아래 미리보기/실행은 저장된 이전 목표 비중을 기준으로 동작합니다 — 지금 편집한 비중으로 실행하려면 먼저 저장하세요.
+                </Notice>
+              )}
+
+              <Btn kind="soft" full icon="refresh" onClick={handlePreview} disabled={previewLoading || previewFetching}>
+                {previewLoading || previewFetching ? "계산 중..." : "괴리 미리보기"}
+              </Btn>
+              {previewError && <Notice tone="danger">{previewError}</Notice>}
+
+              {legs && (legs.length === 0 ? (
+                <p className="py-2 text-center text-xs text-tm-muted">임계값을 넘는 괴리가 없습니다 — 리밸런싱이 필요하지 않습니다.</p>
+              ) : (
+                <DataTable columns={previewCols} rows={legs} rowKey={l => l.symbol} minWidth={360} />
+              ))}
+
+              <div className="flex flex-col gap-2">
+                <KV k="기대 수익률 (연)" v={optimizeInfo ? `${pct(optimizeInfo.expectedReturn)}%` : "—"} valueClassName={optimizeInfo ? "text-up" : "text-tm-muted"} />
+                <KV k="예상 위험" v={optimizeInfo ? `${pct(optimizeInfo.expectedRisk)}%` : "—"} valueClassName={optimizeInfo ? undefined : "text-tm-muted"} />
+                <KV k={<span className="inline-flex items-center gap-1.5">예상 거래비용 <PreviewTag /></span>} v="—" valueClassName="text-tm-muted" />
+                {optimizeInfo && <span className="text-2xs leading-relaxed text-tm-muted">기대 수익률·위험은 최적 비중 계산 결과(과거 데이터 기반 참고용)이며 투자자문이 아닙니다.</span>}
+              </div>
+
+              <Notice tone="info">
+                실행은 매도 후 매수 순서로 진행되며, 각 주문은 기존 리스크 한도를 그대로 적용받습니다. 실행 전에 한 번 더 확인합니다.
+              </Notice>
+
+              {executeError && <Notice tone="danger">{executeError}</Notice>}
+
+              {legs && legs.length > 0 && (
+                confirming && !isDirty ? (
+                  <div role="region" aria-label="리밸런싱 실행 확인" className="flex flex-col gap-2.5 rounded-xl border-[1.5px] border-dracula-orange bg-tm-inner p-3.5">
+                    <span className="flex items-center gap-2 font-bold"><Icon name="alert" size={18} className="text-dracula-orange" />실제 주문 {legs.length}건을 제출할까요?</span>
+                    <span className="text-xs text-tm-muted">서버가 실행 시점의 잔고로 다시 계산하므로 수량은 미리보기와 다를 수 있습니다.</span>
+                    <div className="flex gap-2">
+                      <Btn kind="ghost" className="flex-1" onClick={() => setConfirming(false)} disabled={executeMutation.isPending}>취소</Btn>
+                      <Btn kind="warn" className="flex-[2]" onClick={handleExecute} disabled={executeMutation.isPending || isDirty}>
+                        {executeMutation.isPending ? "실행 중..." : `주문 ${legs.length}건 실행`}
+                      </Btn>
+                    </div>
+                  </div>
+                ) : (
+                  <Btn kind="warn" size="lg" full onClick={() => setConfirming(true)} disabled={executeMutation.isPending || isDirty}>
+                    {executeMutation.isPending ? "실행 중..." : isDirty ? "저장되지 않은 변경사항이 있습니다" : `주문 ${legs.length}건 직접 실행`}
+                  </Btn>
+                )
+              )}
+            </>
+          )}
+
+          {lastExecution && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-13 font-semibold">실행 결과</span>
+              {lastExecution.legs.map(leg => (
+                <div key={leg.symbol} className="flex flex-wrap items-center gap-2 text-xs">
+                  {leg.status === "EXECUTED"
+                    ? <Icon name="check" size={16} strokeWidth={2.4} className="text-dracula-green" />
+                    : leg.status === "UNKNOWN"
+                      ? <Icon name="clock" size={16} className="text-dracula-yellow" />
+                      : <Icon name="x" size={16} strokeWidth={2.4} className="text-[#ff8a8a]" />}
+                  <span className={sideClass(leg.side)}>{sideLabel(leg.side)}</span>
+                  <span className="font-semibold">{nameOf(leg.symbol)}</span>
+                  <span className="num text-tm-muted">{fmtNum(leg.quantity)}주</span>
+                  {leg.status === "UNKNOWN"
+                    ? <span className="ml-auto text-dracula-yellow">체결 여부 확인 중 — 주문 내역에서 확인</span>
+                    : leg.failReason && <span className="ml-auto text-[#ff8a8a]">{leg.failReason}</span>}
+                </div>
               ))}
             </div>
           )}
-        </div>
-
-        {rows.length === 0 ? (
-          <p className="text-xs text-gray-500 dark:text-dracula-comment text-center py-6">종목을 추가해 목표 비중을 설정하세요.</p>
-        ) : (
-          <div className="space-y-2 mb-4">
-            {rows.map(row => (
-              <div key={row.symbol} className="flex items-center gap-2">
-                <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium text-gray-900 dark:text-dracula-fg">{row.symbol}</span>
-                </div>
-                <input
-                  type="number" min={0} max={100} step={0.1} value={row.weightPct}
-                  onChange={e => updateWeight(row.symbol, e.target.value)}
-                  placeholder="0.0"
-                  className="w-20 rounded-lg border px-2 py-1.5 text-sm text-right font-mono border-gray-300 bg-white text-gray-900 dark:border-dracula-line dark:bg-dracula-surface dark:text-dracula-fg focus:outline-none focus:ring-2 focus:ring-dracula-purple/50 focus:border-dracula-purple transition-all duration-150"
-                />
-                <span className="text-xs text-gray-500 dark:text-dracula-comment">%</span>
-                <button onClick={() => removeStock(row.symbol)} className="text-gray-400 hover:text-dracula-red transition-colors">
-                  <XCircle size={16} weight="bold" aria-hidden />
-                </button>
-              </div>
-            ))}
-            <div className="flex justify-between text-xs pt-2 border-t border-gray-200 dark:border-dracula-line">
-              <span className="text-gray-500 dark:text-dracula-comment">합계</span>
-              <span className={`font-mono font-semibold ${totalWeightPct > 100 ? "text-dracula-red" : "text-gray-900 dark:text-dracula-fg"}`}>{totalWeightPct.toFixed(1)}%</span>
-            </div>
-          </div>
-        )}
-
-        <div className="mb-4">
-          <label className="text-xs text-gray-500 dark:text-dracula-comment mb-1 block">실행 임계값 — 괴리가 이 값 이상인 종목만 리밸런싱 대상이 됩니다</label>
-          <div className="flex items-center gap-2">
-            <input
-              type="number" min={0} max={100} step={0.1} value={thresholdPct}
-              onChange={e => { setThresholdPct(e.target.value); setIsDirty(true); }}
-              className="w-24 rounded-lg border px-3 py-2 text-sm text-right font-mono border-gray-300 bg-white text-gray-900 dark:border-dracula-line dark:bg-dracula-surface dark:text-dracula-fg focus:outline-none focus:ring-2 focus:ring-dracula-purple/50 focus:border-dracula-purple transition-all duration-150"
-            />
-            <span className="text-xs text-gray-500 dark:text-dracula-comment">%p</span>
-          </div>
-        </div>
-
-        {/* 최적화 — /api/analytics/portfolio/optimize 결과를 목표 비중에 채운다 */}
-        <button onClick={handleOptimize} disabled={rows.length < 2 || optimizing}
-          className="w-full py-2.5 rounded-xl font-bold text-sm border border-dracula-purple/40 text-dracula-purple hover:bg-dracula-purple/10 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100 mb-3 flex items-center justify-center gap-2">
-          <Sparkle size={16} weight="bold" aria-hidden />
-          {optimizing ? "계산 중..." : "최적 비중 계산해 채우기"}
-        </button>
-
-        {optimizeError && <p className="text-xs text-dracula-red mb-3">{optimizeError}</p>}
-
-        {optimizeInfo && (
-          <div className="rounded-lg bg-dracula-purple/5 border border-dracula-purple/20 p-3 mb-4 space-y-2">
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-500 dark:text-dracula-comment">기대 수익률 (연환산)</span>
-              <span className="font-mono font-semibold text-dracula-green">{pct(optimizeInfo.expectedReturn)}%</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-500 dark:text-dracula-comment">예상 위험 (변동성)</span>
-              <span className="font-mono font-semibold text-gray-900 dark:text-dracula-fg">{pct(optimizeInfo.expectedRisk)}%</span>
-            </div>
-            {optimizeInfo.suggestion && (
-              <p className="text-xs text-dracula-purple leading-relaxed pt-1 border-t border-dracula-purple/20">{optimizeInfo.suggestion}</p>
-            )}
-            <p className="text-[10px] text-gray-500 dark:text-dracula-comment leading-relaxed">
-              최적화 결과는 과거 데이터 기반 참고용이며 투자자문이 아닙니다. 저장 전 비중을 검토하세요.
-            </p>
-          </div>
-        )}
-
-        {saveError && (
-          <div className="flex items-start gap-2 rounded-lg border border-dracula-red/40 bg-dracula-red/10 p-3 mb-4">
-            <ShieldWarning size={18} weight="bold" className="text-dracula-red shrink-0 mt-0.5" aria-hidden />
-            <p className="text-xs text-dracula-red">{saveError}</p>
-          </div>
-        )}
-
-        {isDirty && (
-          <p className="text-xs text-dracula-orange mb-2">저장되지 않은 변경사항이 있습니다 — 저장해야 아래 미리보기/실행에 반영됩니다.</p>
-        )}
-        <button onClick={handleSave} disabled={!isSaveValid || saveTarget.isPending}
-          className="w-full py-2.5 rounded-xl font-bold text-sm text-white bg-blue-600 dark:bg-dracula-purple dark:text-dracula-bg active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100">
-          {saveTarget.isPending ? "저장 중..." : "목표 비중 저장"}
-        </button>
-      </Card>
-
-      {/* 미리보기 / 실행 */}
-      {target && (
-        <Card className="p-5" outerClassName="mb-6">
-          <h2 className="text-sm font-bold text-gray-900 dark:text-dracula-fg mb-3">실행</h2>
-
-          {/* V-M6 — 미리보기/실행 둘 다 위 편집 상태가 아니라 마지막으로 저장된 target을
-              대상으로 동작한다. 편집 중인데 모르고 실행하면 의도하지 않은 비중으로 실제
-              주문이 나갈 수 있어, 편집 중엔 눈에 띄게 알리고 실행 자체를 막는다. */}
-          {isDirty && (
-            <div className="flex items-start gap-2 rounded-lg border border-dracula-orange/40 bg-dracula-orange/10 p-3 mb-3">
-              <ShieldWarning size={18} weight="bold" className="text-dracula-orange shrink-0 mt-0.5" aria-hidden />
-              <p className="text-xs text-dracula-orange">
-                편집 중인 내용이 아직 저장되지 않았습니다. 아래 미리보기/실행은 저장된 이전 목표 비중을 기준으로 동작합니다 — 지금 편집한 비중으로 실행하려면 먼저 저장하세요.
-              </p>
-            </div>
-          )}
-
-          <button onClick={handlePreview} disabled={previewLoading}
-            className="w-full py-2.5 rounded-xl font-bold text-sm border border-gray-300 dark:border-dracula-line text-gray-700 dark:text-dracula-fg hover:bg-gray-50 dark:hover:bg-dracula-line/30 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 mb-3 flex items-center justify-center gap-2">
-            <ArrowsClockwise size={16} weight="bold" aria-hidden />
-            {previewLoading ? "계산 중..." : "괴리 미리보기"}
-          </button>
-
-          {previewError && <p className="text-xs text-dracula-red mb-3">{previewError}</p>}
-
-          {showPreview && previewData && (
-            previewData.legs.length === 0 ? (
-              <p className="text-xs text-gray-500 dark:text-dracula-comment text-center py-4">임계값을 넘는 괴리가 없습니다 — 리밸런싱이 필요하지 않습니다.</p>
-            ) : (
-              <>
-                <div className="space-y-1.5 mb-4">
-                  {previewData.legs.map(leg => (
-                    <div key={leg.symbol} className="flex items-center justify-between text-xs py-1.5 border-b border-gray-100 dark:border-dracula-line/50 last:border-0">
-                      <div className="flex items-center gap-2">
-                        <span className={`font-medium ${leg.side === "BUY" ? "text-dracula-red" : "text-dracula-cyan"}`}>{leg.side === "BUY" ? "매수" : "매도"}</span>
-                        <span className="text-gray-900 dark:text-dracula-fg font-semibold">{leg.symbol}</span>
-                        <span className="text-gray-500 dark:text-dracula-comment">{leg.quantity}주</span>
-                      </div>
-                      <span className="font-mono text-gray-500 dark:text-dracula-comment">
-                        {pct(leg.currentWeight)}% → {pct(leg.targetWeight)}%
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                {executeError && (
-                  <div className="flex items-start gap-2 rounded-lg border border-dracula-red/40 bg-dracula-red/10 p-3 mb-4">
-                    <ShieldWarning size={18} weight="bold" className="text-dracula-red shrink-0 mt-0.5" aria-hidden />
-                    <p className="text-xs text-dracula-red">{executeError}</p>
-                  </div>
-                )}
-
-                <button onClick={handleExecute} disabled={executeMutation.isPending || isDirty}
-                  className="w-full py-3 rounded-xl font-bold text-sm text-white bg-dracula-orange active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100">
-                  {executeMutation.isPending ? "실행 중..." : isDirty ? "저장되지 않은 변경사항이 있습니다" : `${previewData.legs.length}건 실행 — 실제 주문이 제출됩니다`}
-                </button>
-              </>
-            )
-          )}
-        </Card>
-      )}
-
-      {lastExecution && (
-        <Card className="p-5" outerClassName="mb-6">
-          <h2 className="text-sm font-bold text-gray-900 dark:text-dracula-fg mb-3">실행 결과</h2>
-          <div className="space-y-1.5">
-            {lastExecution.legs.map(leg => (
-              <div key={leg.symbol} className="flex items-center gap-2 text-xs py-1.5">
-                {leg.status === "EXECUTED"
-                  ? <CheckCircle size={16} weight="bold" className="text-dracula-green shrink-0" aria-hidden />
-                  : leg.status === "UNKNOWN"
-                    ? <Question size={16} weight="bold" className="text-amber-700 dark:text-dracula-yellow shrink-0" aria-hidden />
-                    : <XCircle size={16} weight="bold" className="text-dracula-red shrink-0" aria-hidden />}
-                <span className={leg.side === "BUY" ? "text-dracula-red" : "text-dracula-cyan"}>{leg.side === "BUY" ? "매수" : "매도"}</span>
-                <span className="text-gray-900 dark:text-dracula-fg font-semibold">{leg.symbol}</span>
-                <span className="text-gray-500 dark:text-dracula-comment">{leg.quantity}주</span>
-                {leg.status === "UNKNOWN"
-                  ? <span className="text-amber-700 dark:text-dracula-yellow ml-auto">체결 여부 확인 중 — 주문 내역에서 확인</span>
-                  : leg.failReason && <span className="text-dracula-red ml-auto">{leg.failReason}</span>}
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      <p className="text-xs text-gray-500 dark:text-dracula-comment text-center mt-8">
-        비중의 합이 100%보다 작으면 나머지는 현금으로 남습니다. 실행은 매도 후 매수 순서로 진행되며, 각 주문은 기존 리스크 한도를 그대로 적용받습니다.
-      </p>
-    </div>
+        </Panel>
+      </PanelRow>
+    </TerminalPage>
   );
 }

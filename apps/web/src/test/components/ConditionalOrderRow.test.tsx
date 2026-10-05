@@ -5,7 +5,7 @@ import type { ConditionalOrderResponse } from "@monticker/types";
 vi.mock("@/hooks/useBrokerage", () => ({ useCancelConditionalOrder: () => ({ mutateAsync: vi.fn(), isPending: false }) }));
 vi.mock("@/hooks/useToast", () => ({ useToast: () => ({ toast: vi.fn() }) }));
 
-import { ConditionalOrderRow } from "@/components/brokerage/ConditionalOrderRow";
+import { ConditionalStatusCell } from "@/components/brokerage/ConditionalOrderRow";
 
 function order(over: Partial<ConditionalOrderResponse>): ConditionalOrderResponse {
   return {
@@ -17,17 +17,17 @@ function order(over: Partial<ConditionalOrderResponse>): ConditionalOrderRespons
 
 describe("ConditionalOrderRow — 실시세 상태 (ADR-060)", () => {
   it("실시세가 연결돼 있으면 경고하지 않는다", () => {
-    render(<ConditionalOrderRow o={order({})} />);
+    render(<ConditionalStatusCell o={order({})} />);
     expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("실시세 대상이 아니면 발동하지 않는다고 분명히 알린다", () => {
-    render(<ConditionalOrderRow o={order({ priceFeed: "NONE" })} />);
+    render(<ConditionalStatusCell o={order({ priceFeed: "NONE" })} />);
     expect(screen.getByRole("status")).toHaveTextContent("발동하지 않습니다");
   });
 
   it("장중에 끊겼으면 끊긴 동안 발동하지 않는다고 알린다", () => {
-    render(<ConditionalOrderRow o={order({ priceFeed: "STALE" })} />);
+    render(<ConditionalStatusCell o={order({ priceFeed: "STALE" })} />);
     expect(screen.getByRole("status")).toHaveTextContent("끊겼습니다");
   });
 });

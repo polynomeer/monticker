@@ -1,7 +1,7 @@
 "use client";
 
-import { Prohibit } from "@phosphor-icons/react";
 import { useTradingStatus } from "@/hooks/useBrokerage";
+import { Notice } from "@/components/terminal";
 
 /**
  * ADR-057 — 실거래 주문 킬 스위치가 켜져 있으면 주문 화면 맨 위에 알린다. 서버는 이 상태에서 주문을 423으로 거부하지만,
@@ -11,13 +11,10 @@ export function TradingHaltBanner({ enabled, note }: { enabled: boolean; note?: 
   const { data } = useTradingStatus(enabled);
   if (!data?.halted) return null;
   return (
-    <div role="alert" className="flex items-start gap-2 rounded-lg border border-dracula-red/40 bg-dracula-red/10 p-3 mb-5">
-      <Prohibit size={18} weight="bold" className="text-dracula-red shrink-0 mt-0.5" aria-hidden />
-      <div>
-        <p className="text-sm font-semibold text-dracula-red">실거래 주문이 일시 중단되었습니다</p>
-        <p className="text-xs text-dracula-red/80 mt-0.5">{data.message}</p>
-        {note && <p className="text-xs text-dracula-red/80 mt-0.5">{note}</p>}
-      </div>
-    </div>
+    <Notice tone="danger" icon="x">
+      <p className="m-0 text-sm font-semibold text-[#ff8a8a]">실거래 주문이 일시 중단되었습니다</p>
+      <p className="m-0 mt-0.5 text-xs">{data.message}</p>
+      {note && <p className="m-0 mt-0.5 text-xs">{note}</p>}
+    </Notice>
   );
 }
