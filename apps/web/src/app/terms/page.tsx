@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
-import { PageLayout } from "@/components/ui/PageLayout";
-import { Card } from "@/components/ui/Card";
-import { Warning } from "@phosphor-icons/react/dist/ssr";
+import { LegalDoc, type LegalSection } from "@/components/auth/LegalDoc";
 
 export const metadata: Metadata = {
   title: "이용약관",
 };
 
-const sections: { heading: string; body: React.ReactNode }[] = [
+const sections: LegalSection[] = [
   {
     heading: "제1조 (목적)",
     body: (
@@ -133,29 +131,11 @@ const sections: { heading: string; body: React.ReactNode }[] = [
 
 export default function TermsOfServicePage() {
   return (
-    <PageLayout
+    <LegalDoc
+      doc="terms"
       title="이용약관"
-      subtitle="최종 수정일: 2026-09-05 · 시행일: 미정 (법률 검토 후 확정)"
-      className="max-w-3xl"
-    >
-      <Card className="p-4 mb-6 flex gap-3 items-start bg-amber-50 dark:bg-dracula-orange/10 border-amber-200 dark:border-dracula-orange/30">
-        <Warning size={20} weight="fill" className="text-amber-500 dark:text-dracula-orange shrink-0 mt-0.5" aria-hidden />
-        <p className="text-sm text-amber-800 dark:text-dracula-orange">
-          이 페이지는 초안(draft)입니다. 실제 서비스 오픈 전 법률 자문을 거쳐 확정됩니다. 주황색으로
-          표시된 항목은 아직 확정되지 않은 부분입니다.
-        </p>
-      </Card>
-
-      <Card className="p-6 sm:p-8">
-        <div className="space-y-6 text-sm leading-relaxed text-gray-700 dark:text-dracula-fg">
-          {sections.map((section) => (
-            <section key={section.heading}>
-              <h2 className="font-semibold text-gray-900 dark:text-dracula-fg mb-2">{section.heading}</h2>
-              <div className="text-gray-600 dark:text-dracula-comment">{section.body}</div>
-            </section>
-          ))}
-        </div>
-      </Card>
-    </PageLayout>
+      meta="최종 수정일: 2026-09-05 · 시행일: 미정 (법률 검토 후 확정)"
+      sections={sections}
+    />
   );
 }

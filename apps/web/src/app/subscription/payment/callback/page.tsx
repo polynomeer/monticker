@@ -2,8 +2,8 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CheckCircle, XCircle, HourglassMedium } from "@phosphor-icons/react";
-import { Card } from "@/components/ui/Card";
+import { Btn } from "@/components/terminal";
+import { CenteredPage, StatusCard } from "@/components/auth/StatusCard";
 import { confirmPayment } from "@/services/payment";
 
 type Status = "processing" | "success" | "error";
@@ -64,60 +64,36 @@ function PaymentCallbackContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const back = (
+    <Btn kind={status === "success" ? "primary" : "ghost"} size="lg" full onClick={() => router.push("/subscription")}>
+      구독 페이지로 돌아가기
+    </Btn>
+  );
+
   return (
-    <div className="min-h-[60vh] flex items-center justify-center px-4">
-      <Card className="p-8 text-center" outerClassName="w-full max-w-sm animate-fade-up">
-        {status === "processing" && (
-          <>
-            <div className="flex justify-center mb-4 text-dracula-comment">
-              <HourglassMedium size={40} weight="duotone" aria-hidden />
-            </div>
-            <h1 className="text-lg font-bold text-gray-900 dark:text-dracula-fg mb-1">결제 승인 처리 중...</h1>
-            {/* 이 화면에서 나가면 결제는 이미 승인됐을 수 있다 — 떠나지 말라고 분명히 말한다. */}
-            <p className="text-sm text-gray-500 dark:text-dracula-comment">
-              창을 닫지 말고 잠시만 기다려주세요.
-            </p>
-          </>
-        )}
-        {status === "success" && (
-          <>
-            <div className="flex justify-center mb-4 text-dracula-green">
-              <CheckCircle size={40} weight="duotone" aria-hidden />
-            </div>
-            <h1 className="text-lg font-bold text-gray-900 dark:text-dracula-fg mb-1">결제 완료</h1>
-            <p className="text-sm text-gray-500 dark:text-dracula-comment mb-6">
-              구독이 활성화되었습니다.
-            </p>
-            <button
-              onClick={() => router.push("/subscription")}
-              className="w-full bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg py-2 rounded-lg font-semibold hover:opacity-90 active:scale-[0.98] transition-all duration-150"
-            >
-              구독 페이지로 돌아가기
-            </button>
-          </>
-        )}
-        {status === "error" && (
-          <>
-            <div className="flex justify-center mb-4 text-dracula-red">
-              <XCircle size={40} weight="duotone" aria-hidden />
-            </div>
-            <h1 className="text-lg font-bold text-gray-900 dark:text-dracula-fg mb-1">결제 실패</h1>
-            <p className="text-sm text-gray-500 dark:text-dracula-comment mb-4">{message}</p>
-            {/* 승인 단계에서 실패하면 "돈은 빠졌는데 구독은 없는" 상태일 수 있다. 서버가
-                6시간 주기로 PG에 되물어 정리하지만(ADR-059), 사용자가 그걸 알 수는 없다. */}
-            <p className="text-xs text-gray-400 dark:text-dracula-line mb-6">
-              결제가 이루어졌다면 자동으로 확인해 구독에 반영됩니다. 결제 내역에서 상태를 확인할 수 있어요.
-            </p>
-            <button
-              onClick={() => router.push("/subscription")}
-              className="w-full border border-gray-300 dark:border-dracula-line text-gray-700 dark:text-dracula-fg py-2 rounded-lg font-semibold hover:border-gray-400 dark:hover:border-dracula-comment active:scale-[0.98] transition-all duration-150"
-            >
-              구독 페이지로 돌아가기
-            </button>
-          </>
-        )}
-      </Card>
-    </div>
+    <CenteredPage>
+      {status === "processing" && (
+        // 이 화면에서 나가면 결제는 이미 승인됐을 수 있다 — 떠나지 말라고 분명히 말한다.
+        <StatusCard tone="pending" title="결제 승인 처리 중...">
+          <p className="m-0">창을 닫지 말고 잠시만 기다려주세요.</p>
+        </StatusCard>
+      )}
+      {status === "success" && (
+        <StatusCard tone="ok" title="결제 완료" actions={back}>
+          <p className="m-0">구독이 활성화되었습니다.</p>
+        </StatusCard>
+      )}
+      {status === "error" && (
+        <StatusCard tone="error" title="결제 실패" actions={back}>
+          <p className="m-0">{message}</p>
+          {/* 승인 단계에서 실패하면 "돈은 빠졌는데 구독은 없는" 상태일 수 있다. 서버가
+              6시간 주기로 PG에 되물어 정리하지만(ADR-059), 사용자가 그걸 알 수는 없다. */}
+          <p className="m-0 text-xs text-tm-muted">
+            결제가 이루어졌다면 자동으로 확인해 구독에 반영됩니다. 결제 내역에서 상태를 확인할 수 있어요.
+          </p>
+        </StatusCard>
+      )}
+    </CenteredPage>
   );
 }
 

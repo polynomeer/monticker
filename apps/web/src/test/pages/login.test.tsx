@@ -27,8 +27,8 @@ describe("LoginPage", () => {
 
     render(<LoginPage />);
 
-    await userEvent.type(screen.getByPlaceholderText("이메일"),   "user@example.com");
-    await userEvent.type(screen.getByPlaceholderText("비밀번호"), "password123");
+    await userEvent.type(screen.getByLabelText("이메일"),   "user@example.com");
+    await userEvent.type(screen.getByLabelText("비밀번호"), "password123");
     fireEvent.submit(screen.getByRole("button", { name: /로그인/ }));
 
     await waitFor(() => {
@@ -41,8 +41,8 @@ describe("LoginPage", () => {
     mockLogin.mockRejectedValueOnce(new Error("이메일 또는 비밀번호가 올바르지 않습니다."));
 
     render(<LoginPage />);
-    await userEvent.type(screen.getByPlaceholderText("이메일"),   "bad@test.com");
-    await userEvent.type(screen.getByPlaceholderText("비밀번호"), "wrongpwd");
+    await userEvent.type(screen.getByLabelText("이메일"),   "bad@test.com");
+    await userEvent.type(screen.getByLabelText("비밀번호"), "wrongpwd");
     fireEvent.submit(screen.getByRole("button", { name: /로그인/ }));
 
     await waitFor(() => expect(screen.getByText(/이메일 또는 비밀번호/)).toBeInTheDocument());
@@ -68,7 +68,7 @@ describe("LoginPage", () => {
   it("이메일만 입력하고 제출하면 비밀번호 오류만 표시한다", async () => {
     render(<LoginPage />);
 
-    await userEvent.type(screen.getByPlaceholderText("이메일"), "user@example.com");
+    await userEvent.type(screen.getByLabelText("이메일"), "user@example.com");
     fireEvent.submit(screen.getByRole("button", { name: /로그인/ }));
 
     expect(await screen.findByText("비밀번호를 입력해주세요.")).toBeInTheDocument();

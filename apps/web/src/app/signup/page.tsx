@@ -1,43 +1,54 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { signup, saveTokens } from "@/services/auth";
 import Link from "next/link";
-import { Card } from "@/components/ui/Card";
+import { signup, saveTokens } from "@/services/auth";
+import { Btn, Checkbox, PreviewTag } from "@/components/terminal";
+import { AuthField, AuthHeading, AuthShell, FormError, OrDivider } from "@/components/auth/AuthShell";
+import { SocialButtons } from "@/components/auth/SocialButtons";
+import { cn } from "@/lib/utils";
 
-function passwordStrength(pw: string): { label: string; color: string; width: string } {
-  if (pw.length === 0) return { label: "", color: "", width: "0%" };
+function passwordStrength(pw: string): { label: string; level: 0 | 1 | 2 | 3 | 4; color: string; text: string } {
+  if (pw.length === 0) return { label: "", level: 0, color: "", text: "" };
   let score = 0;
-  if (pw.length >= 8)  score++;
+  if (pw.length >= 8) score++;
   if (pw.length >= 12) score++;
   if (/[A-Z]/.test(pw)) score++;
   if (/[0-9]/.test(pw)) score++;
   if (/[^A-Za-z0-9]/.test(pw)) score++;
-  if (score <= 1) return { label: "약함",   color: "bg-dracula-red", width: "25%" };
-  if (score <= 2) return { label: "보통",   color: "bg-dracula-orange", width: "50%" };
-  if (score <= 3) return { label: "강함",   color: "bg-dracula-green", width: "75%" };
-  return            { label: "매우 강함", color: "bg-dracula-green", width: "100%" };
+  if (score <= 1) return { label: "약함", level: 1, color: "bg-[#ff8a8a]", text: "text-[#ff8a8a]" };
+  if (score <= 2) return { label: "보통", level: 2, color: "bg-dracula-orange", text: "text-dracula-orange" };
+  if (score <= 3) return { label: "강함", level: 3, color: "bg-dracula-green", text: "text-dracula-green" };
+  return { label: "매우 강함", level: 4, color: "bg-dracula-green", text: "text-dracula-green" };
 }
+
+type ConsentKey = "terms" | "privacy" | "age" | "marketing";
+const REQUIRED: ConsentKey[] = ["terms", "privacy", "age"];
 
 export default function SignupPage() {
   const router = useRouter();
-  const [email,    setEmail]    = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [nickname, setNickname] = useState("");
-  const [errors,   setErrors]   = useState<Record<string, string>>({});
-  const [loading,  setLoading]  = useState(false);
+  const [consent, setConsent] = useState<Record<ConsentKey, boolean>>({ terms: false, privacy: false, age: false, marketing: false });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
 
   const strength = passwordStrength(password);
+  const allAgreed = Object.values(consent).every(Boolean);
+  const setAll = (v: boolean) => setConsent({ terms: v, privacy: v, age: v, marketing: v });
+  const setOne = (k: ConsentKey) => (v: boolean) => setConsent((c) => ({ ...c, [k]: v }));
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (!email)                  e.email    = "이메일을 입력해주세요.";
+    if (!email) e.email = "이메일을 입력해주세요.";
     else if (!/\S+@\S+\.\S+/.test(email)) e.email = "올바른 이메일 형식이 아닙니다.";
-    if (!nickname)               e.nickname = "닉네임을 입력해주세요.";
+    if (!nickname) e.nickname = "닉네임을 입력해주세요.";
     else if (nickname.length < 2) e.nickname = "닉네임은 2자 이상이어야 합니다.";
-    if (!password)               e.password = "비밀번호를 입력해주세요.";
+    if (!password) e.password = "비밀번호를 입력해주세요.";
     else if (password.length < 8) e.password = "비밀번호는 8자 이상이어야 합니다.";
     else if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) e.password = "비밀번호는 영문과 숫자를 포함해야 합니다.";
+    if (REQUIRED.some((k) => !consent[k])) e.consent = "필수 항목에 모두 동의해주세요.";
     return e;
   };
 
@@ -48,6 +59,7 @@ export default function SignupPage() {
     setErrors({});
     setLoading(true);
     try {
+      // 동의 항목은 아직 서버에 기록되지 않는다(SignupRequest에 필드 없음) — 화면에서 필수 동의만 막는다.
       const tokens = await signup(email, password, nickname);
       saveTokens(tokens);
       router.push("/onboarding");
@@ -58,80 +70,76 @@ export default function SignupPage() {
     }
   };
 
-  const inputCls = (field: string) =>
-    `border rounded-lg px-4 py-2 w-full transition-all duration-150 focus:outline-none focus:ring-2 hover:border-gray-400 dark:hover:border-dracula-comment dark:bg-dracula-line dark:text-dracula-fg dark:placeholder-dracula-comment ${
-      errors[field]
-        ? "border-dracula-red focus:ring-dracula-red/50"
-        : "border-gray-300 dark:border-dracula-line focus:ring-dracula-purple/50 focus:border-dracula-purple"
-    }`;
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-dracula-bg bg-mesh-light dark:bg-mesh-dark px-4">
-      <Card className="p-8" outerClassName="w-full max-w-sm animate-fade-up">
-        <h1 className="text-2xl font-bold mb-6 text-center dark:text-dracula-fg">회원가입</h1>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+    <AuthShell title={<>아이디어를 규칙으로,<br />규칙을 <span className="text-dracula-purple">검증된 전략</span>으로</>}>
+      <AuthHeading title="회원가입">
+        이미 계정이 있나요?{" "}
+        <Link href="/login" className="text-dracula-purple hover:text-[#d6bcfb]">로그인</Link>
+      </AuthHeading>
 
-          {/* 이메일 */}
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium dark:text-dracula-fg mb-1">이메일</label>
-            <input
-              id="email" type="email" value={email} onChange={e => setEmail(e.target.value)}
-              placeholder="you@example.com" autoComplete="email"
-              aria-describedby={errors.email ? "email-error" : undefined}
-              aria-invalid={!!errors.email}
-              className={inputCls("email")}
-            />
-            {errors.email && <p id="email-error" className="text-dracula-red text-xs mt-1">{errors.email}</p>}
+      <SocialButtons onError={(m) => setErrors({ form: m })} />
+      <OrDivider>또는 이메일로</OrDivider>
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
+        <AuthField
+          id="email" label="이메일" icon="mail" type="email" autoComplete="email"
+          placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)}
+          error={errors.email}
+        />
+        <AuthField
+          id="nickname" label="닉네임" icon="user" type="text" autoComplete="username"
+          placeholder="전략 마켓에 표시됩니다" value={nickname} onChange={(e) => setNickname(e.target.value)}
+          error={errors.nickname}
+        />
+        <div className="flex flex-col gap-1.5">
+          <AuthField
+            id="password" label="비밀번호" icon="lock" type="password" autoComplete="new-password"
+            placeholder="8자 이상" value={password} onChange={(e) => setPassword(e.target.value)}
+            error={errors.password}
+          />
+          <div id="password-strength" className="flex flex-col gap-1.5" aria-live="polite">
+            <div className="flex gap-1" aria-hidden>
+              {[1, 2, 3, 4].map((i) => (
+                <span key={i} className={cn("h-1 flex-1 rounded-full", i <= strength.level ? strength.color : "bg-tm-line2")} />
+              ))}
+            </div>
+            <span className="text-xs text-tm-muted">
+              {strength.label && <>강도: <b className={strength.text}>{strength.label}</b> · </>}8자 이상, 영문·숫자 포함
+            </span>
           </div>
+        </div>
 
-          {/* 닉네임 */}
-          <div>
-            <label htmlFor="nickname" className="block text-sm font-medium dark:text-dracula-fg mb-1">닉네임</label>
-            <input
-              id="nickname" type="text" value={nickname} onChange={e => setNickname(e.target.value)}
-              placeholder="2~30자" autoComplete="username"
-              aria-describedby={errors.nickname ? "nickname-error" : undefined}
-              aria-invalid={!!errors.nickname}
-              className={inputCls("nickname")}
-            />
-            {errors.nickname && <p id="nickname-error" className="text-dracula-red text-xs mt-1">{errors.nickname}</p>}
-          </div>
+        <fieldset className="m-0 flex flex-col gap-2.5 rounded-[10px] border-0 bg-tm-panel p-3.5">
+          <legend className="sr-only">약관 동의</legend>
+          <Checkbox checked={allAgreed} onChange={setAll} label="전체 동의" />
+          <span className="h-px bg-tm-line" />
+          <ConsentRow checked={consent.terms} onChange={setOne("terms")} label="[필수] 이용약관" href="/terms" />
+          <ConsentRow checked={consent.privacy} onChange={setOne("privacy")} label="[필수] 개인정보 수집·이용" href="/privacy" />
+          <Checkbox checked={consent.age} onChange={setOne("age")} label="[필수] 만 19세 이상입니다" />
+          <span className="flex items-center gap-2">
+            <Checkbox checked={consent.marketing} onChange={setOne("marketing")} label="[선택] 이벤트·리포트 이메일 수신" />
+            <PreviewTag />
+          </span>
+          {errors.consent && <span className="text-xs text-[#ff8a8a]">{errors.consent}</span>}
+        </fieldset>
 
-          {/* 비밀번호 + 강도 */}
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium dark:text-dracula-fg mb-1">비밀번호</label>
-            <input
-              id="password" type="password" value={password} onChange={e => setPassword(e.target.value)}
-              placeholder="8자 이상" autoComplete="new-password"
-              aria-describedby="password-strength password-error"
-              aria-invalid={!!errors.password}
-              className={inputCls("password")}
-            />
-            {password && (
-              <div id="password-strength" className="mt-1.5 space-y-0.5" aria-label={`비밀번호 강도: ${strength.label}`}>
-                <div className="h-1 w-full rounded bg-dracula-line">
-                  <div className={`h-1 rounded transition-all duration-300 ${strength.color}`} style={{ width: strength.width }} />
-                </div>
-                <p className="text-xs text-dracula-comment">강도: <span className="font-medium">{strength.label}</span></p>
-              </div>
-            )}
-            {errors.password && <p id="password-error" className="text-dracula-red text-xs mt-1">{errors.password}</p>}
-          </div>
+        {errors.form && <FormError>{errors.form}</FormError>}
 
-          {errors.form && (
-            <p role="alert" className="text-dracula-red text-sm text-center">{errors.form}</p>
-          )}
+        <Btn type="submit" size="xl" full disabled={loading} className="h-12">
+          {loading ? "처리 중..." : "가입하기"}
+        </Btn>
+      </form>
+    </AuthShell>
+  );
+}
 
-          <button type="submit" disabled={loading}
-            className="bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg py-2 rounded-lg hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 font-semibold transition-all duration-150">
-            {loading ? "처리 중..." : "회원가입"}
-          </button>
-        </form>
-        <p className="mt-4 text-center text-sm text-gray-500 dark:text-dracula-comment">
-          이미 계정이 있으신가요?{" "}
-          <Link href="/login" className="text-blue-600 dark:text-dracula-purple hover:underline">로그인</Link>
-        </p>
-      </Card>
-    </div>
+function ConsentRow({ checked, onChange, label, href }: { checked: boolean; onChange: (v: boolean) => void; label: string; href: string }) {
+  return (
+    <span className="flex items-start justify-between gap-3">
+      <Checkbox checked={checked} onChange={onChange} label={label} />
+      <Link href={href} target="_blank" rel="noopener noreferrer" className="flex-none text-xs text-tm-muted hover:text-dracula-fg">
+        보기
+      </Link>
+    </span>
   );
 }

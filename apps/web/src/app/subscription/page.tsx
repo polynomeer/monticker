@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { type Icon, Plant, Lightning, Microscope, Check, CreditCard } from "@phosphor-icons/react";
 import { authFetch } from "@/services/api";
 import { getBillingStatus, getOrCreateCustomerKey, deregisterBillingKey, type BillingStatus } from "@/services/billing";
 import { isRealPaymentEnabled, openTossPaymentWindow, preparePayment } from "@/services/payment";
 import { useToast } from "@/hooks/useToast";
-import { Card } from "@/components/ui/Card";
+import {
+  Btn, DataTable, Divider, Icon, KV, Panel, PanelRow, Pill, PreviewTag, TerminalPage, type BtnKind, type Column,
+} from "@/components/terminal";
+import { cn } from "@/lib/utils";
 
 interface Plan {
   id: number;
@@ -38,70 +40,90 @@ interface PaymentRecord {
   createdAt: string;
 }
 
-const PLAN_ACCENTS: Record<string, { border: string; badge: string; btn: string; icon: Icon }> = {
-  FREE:  { border: "border-gray-200 dark:border-dracula-line",      badge: "bg-gray-100 text-gray-700 dark:bg-dracula-line dark:text-dracula-fg",        btn: "bg-gray-100 text-gray-700 dark:bg-dracula-line dark:text-dracula-fg hover:bg-gray-200 dark:hover:bg-dracula-comment",               icon: Plant },
-  PRO:   { border: "border-dracula-purple/50",   badge: "bg-dracula-purple/20 text-dracula-purple",     btn: "bg-dracula-purple text-dracula-bg hover:bg-dracula-pink",               icon: Lightning },
-  QUANT: { border: "border-dracula-green/50",   badge: "bg-dracula-green/20 text-dracula-green",     btn: "bg-dracula-green text-dracula-bg hover:bg-dracula-cyan",               icon: Microscope },
+/** 플랜 코드별 대상 문구(시안 카피) — 가격·기능은 서버(/api/subscription/plans) 값을 쓴다 */
+const PLAN_WHO: Record<string, string> = {
+  FREE: "관찰을 시작하는 분",
+  PRO: "이벤트 매매를 하는 분",
+  QUANT: "전략을 만들고 파는 분",
 };
 
-function won(n: number) {
-  return n === 0 ? "무료" : n.toLocaleString("ko-KR") + "원/월";
+const STATUS_LABELS: Record<string, { label: string; tone: string }> = {
+  ACTIVE: { label: "활성", tone: "text-dracula-green" },
+  EXPIRED: { label: "만료", tone: "text-[#ff8a8a]" },
+  CANCELLED: { label: "해지", tone: "text-tm-muted" },
+};
+
+const PAYMENT_LABELS: Record<string, { label: string; tone: string }> = {
+  SUCCESS: { label: "결제 완료", tone: "text-dracula-green" },
+  FAILED: { label: "결제 실패", tone: "text-[#ff8a8a]" },
+  PENDING: { label: "처리 중", tone: "text-dracula-orange" },
+  REFUNDED: { label: "환불", tone: "text-tm-muted" },
+};
+
+const FAQ: { q: string; a: string }[] = [
+  { q: "실전투자 연동도 구독에 포함되나요?", a: "증권사 API 키를 직접 등록해 사용하는 방식(BYOK)입니다. 플랜별 이용 범위는 확정 전이며, 증권사 수수료는 별도입니다." },
+  { q: "전략 마켓 판매 수익은 어떻게 받나요?", a: "전략 마켓의 제작자 수익 화면에서 정산 내역을 확인할 수 있습니다. 출금 방식은 확정 전입니다." },
+  { q: "환불 정책은?", a: "[환불 정책 — 법률 검토 후 확정]" },
+];
+
+function fmtDate(iso: string | null | undefined) {
+  return iso ? new Date(iso).toLocaleDateString("ko-KR") : "—";
 }
 
 function PlanCard({
-  plan,
-  currentCode,
-  onSubscribe,
-  isPending,
-}: {
-  plan: Plan;
-  currentCode: string | null;
-  onSubscribe: (code: string) => void;
-  isPending: boolean;
-}) {
-  const accent = PLAN_ACCENTS[plan.code] ?? PLAN_ACCENTS.FREE;
-  const isCurrent = currentCode === plan.code;
-
+  plan, isCurrent, onSubscribe, isPending,
+}: { plan: Plan; isCurrent: boolean; onSubscribe: (code: string) => void; isPending: boolean }) {
+  const hot = plan.code === "PRO";
+  const free = plan.price === 0;
+  const kind: BtnKind = isCurrent ? "soft" : hot ? "primary" : free ? "soft" : "ghost";
+  const label = isCurrent ? "현재 플랜" : isPending ? "처리 중..." : free ? "무료로 시작" : `${plan.code} 시작하기`;
   return (
-    <Card
-      className={`relative flex flex-col p-6 transition-all ${isCurrent ? accent.border + " ring-1 ring-dracula-purple/30" : accent.border}`}
-      hover
-    >
-      {isCurrent && (
-        <span className="absolute top-4 right-4 text-xs px-2 py-0.5 rounded-full bg-dracula-purple/20 text-dracula-purple font-medium">
-          현재 플랜
+    <section className={cn("flex min-w-0 flex-col gap-4 rounded-[14px] bg-tm-panel p-[22px]", hot && "outline outline-2 outline-dracula-purple")}>
+      <div className="flex items-center justify-between gap-2">
+        <span className={cn("font-bold tracking-[0.06em]", hot ? "text-dracula-purple" : "text-tm-soft")}>{plan.code}</span>
+        <span className="flex gap-1.5">
+          {isCurrent && <Pill tone="green">이용 중</Pill>}
+          {hot && <Pill tone="purple">추천</Pill>}
         </span>
-      )}
-      <div className="flex items-center gap-2 mb-4">
-        <accent.icon size={24} weight="duotone" aria-hidden />
-        <div>
-          <p className="text-xs text-gray-500 dark:text-dracula-comment">{plan.name}</p>
-          <p className="text-xl font-bold text-gray-900 dark:text-dracula-fg">{won(plan.price)}</p>
-        </div>
       </div>
-
-      <ul className="flex-1 space-y-2 mb-6">
+      <div className="flex flex-col gap-1">
+        <span className="num text-[1.625rem] font-semibold">
+          {free ? "무료" : `${plan.price.toLocaleString("ko-KR")}원`}
+          {!free && <span className="text-13 text-tm-muted"> / 월</span>}
+        </span>
+        <span className="text-13 text-tm-muted">{PLAN_WHO[plan.code] ?? plan.name}</span>
+      </div>
+      <ul className="m-0 flex flex-1 list-none flex-col gap-2.5 p-0">
         {(plan.features ?? []).map((f, i) => (
-          <li key={i} className="flex items-start gap-2 text-sm text-gray-500 dark:text-dracula-comment">
-            <Check size={14} weight="bold" className="text-dracula-green shrink-0 mt-0.5" aria-hidden />
-            <span>{f}</span>
+          <li key={i} className="flex gap-2.5 text-13 text-tm-soft">
+            <Icon name="check" size={16} strokeWidth={2.4} className="mt-px flex-none text-dracula-green" />
+            {f}
           </li>
         ))}
       </ul>
-
-      <button
-        onClick={() => onSubscribe(plan.code)}
-        disabled={isPending || isCurrent}
-        className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100 ${accent.btn}`}
-      >
-        {isCurrent ? "현재 플랜" : isPending ? "처리 중..." : plan.price === 0 ? "무료로 시작" : "구독하기"}
-      </button>
-    </Card>
+      <Btn kind={kind} size="lg" full onClick={() => onSubscribe(plan.code)} disabled={isPending || isCurrent}>
+        {label}
+      </Btn>
+    </section>
   );
 }
 
+const PAYMENT_COLUMNS: Column<PaymentRecord>[] = [
+  { key: "date", header: "일자", cell: (p) => <span className="num">{fmtDate(p.createdAt)}</span> },
+  { key: "plan", header: "플랜", cell: (p) => `${p.planCode} 플랜` },
+  { key: "pg", header: "결제사", cell: (p) => p.pgProvider },
+  {
+    key: "status", header: "상태",
+    cell: (p) => {
+      const m = PAYMENT_LABELS[p.status] ?? { label: p.status, tone: "text-dracula-fg" };
+      return <span className={m.tone}>{m.label}</span>;
+    },
+  },
+  { key: "amount", header: "금액", align: "right", cell: (p) => <span className="num">{p.amount.toLocaleString("ko-KR")}원</span> },
+];
+
 export default function SubscriptionPage() {
-  const [activeTab, setActiveTab] = useState<"plans" | "history">("plans");
+  const [showHistory, setShowHistory] = useState(false);
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -122,7 +144,7 @@ export default function SubscriptionPage() {
   const { data: paymentsData, isLoading: paymentsLoading } = useQuery<PaymentRecord[]>({
     queryKey: ["subscription", "payments"],
     queryFn: () => authFetch("/api/subscription/payments").then(r => r.json()),
-    enabled: activeTab === "history",
+    enabled: showHistory,
   });
 
   const { data: billingStatus, isLoading: billingLoading } = useQuery<BillingStatus>({
@@ -207,164 +229,147 @@ export default function SubscriptionPage() {
   });
 
   const currentCode = mySub?.status === "ACTIVE" ? mySub.planCode : null;
-
-  const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-    ACTIVE:    { label: "활성", color: "text-dracula-green" },
-    EXPIRED:   { label: "만료", color: "text-dracula-red" },
-    CANCELLED: { label: "해지", color: "text-gray-500 dark:text-dracula-comment" },
-  };
-
-  const PAYMENT_LABELS: Record<string, { label: string; color: string }> = {
-    SUCCESS:  { label: "결제 완료", color: "text-dracula-green" },
-    FAILED:   { label: "결제 실패", color: "text-dracula-red" },
-    PENDING:  { label: "처리 중",   color: "text-dracula-orange" },
-    REFUNDED: { label: "환불",      color: "text-gray-500 dark:text-dracula-comment" },
-  };
+  const plans = plansData ?? [];
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 animate-fade-up">
-      <div className="mb-8">
-        <h1 className="text-xl font-bold text-gray-900 dark:text-dracula-fg">구독 플랜</h1>
-        <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">더 강력한 분석 도구로 업그레이드하세요</p>
+    <TerminalPage
+      title="구독 플랜"
+      crumb="계정"
+      stats={[
+        { label: "현재 플랜", value: currentCode ?? "—" },
+        { label: "만료일", value: mySub?.status === "ACTIVE" ? fmtDate(mySub.expiresAt) : "—" },
+        { label: "결제 수단", value: billingStatus?.registered ? "토스페이먼츠" : "미등록" },
+      ]}
+    >
+      <div className="flex flex-col gap-1.5 px-1.5 pb-1 pt-2">
+        <h2 className="m-0 text-[1.375rem] font-bold">더 강력한 분석 도구로 업그레이드하세요</h2>
+        <span className="text-tm-muted">언제든 해지할 수 있고, 해지해도 결제 기간이 끝날 때까지 이용할 수 있습니다.</span>
       </div>
 
-      {/* 현재 구독 상태 배너 */}
-      {mySub && (
-        <Card className="p-4 flex items-center justify-between gap-4" outerClassName="mb-6">
-          <div>
-            <p className="text-xs text-gray-500 dark:text-dracula-comment">현재 구독</p>
-            <p className="font-semibold text-gray-900 dark:text-dracula-fg mt-0.5">
-              {mySub.planCode} 플랜{" "}
-              <span className={`text-xs font-normal ${STATUS_LABELS[mySub.status]?.color}`}>
-                {STATUS_LABELS[mySub.status]?.label}
-              </span>
-            </p>
-            {mySub.expiresAt && (
-              <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">
-                만료일: {new Date(mySub.expiresAt).toLocaleDateString("ko-KR")}
-              </p>
-            )}
-          </div>
-          {mySub.status === "ACTIVE" && mySub.planCode !== "FREE" && (
-            <button
-              onClick={() => cancelMutation.mutate()}
-              disabled={cancelMutation.isPending}
-              className="shrink-0 px-3 py-1.5 rounded-lg border border-dracula-red/40 text-dracula-red text-xs hover:bg-dracula-red/10 transition-colors disabled:opacity-40"
-            >
-              {cancelMutation.isPending ? "처리 중..." : "구독 해지"}
-            </button>
-          )}
-        </Card>
+      <div className="flex items-center gap-2 px-1.5">
+        <div className="inline-flex gap-0.5 rounded-lg bg-tm-inner p-[3px]">
+          <button type="button" aria-pressed className="h-[30px] whitespace-nowrap rounded-md bg-tm-line2 px-3 text-13 font-semibold text-dracula-fg">
+            월간 결제
+          </button>
+          {/* 연간 결제는 서버에 요금제가 없다 — 시안 요소 */}
+          <button type="button" aria-pressed={false} disabled title="준비 중" className="h-[30px] cursor-not-allowed whitespace-nowrap rounded-md px-3 text-13 text-tm-muted opacity-50">
+            연간 결제 · 2개월 무료
+          </button>
+        </div>
+        <PreviewTag />
+      </div>
+
+      {plansLoading ? (
+        <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))" }}>
+          {[1, 2, 3].map((i) => <div key={i} className="h-80 animate-pulse rounded-[14px] bg-tm-panel" />)}
+        </div>
+      ) : plans.length === 0 ? (
+        <div className="rounded-[14px] bg-tm-panel px-6 py-12 text-center text-tm-muted">플랜 정보를 불러오지 못했습니다.</div>
+      ) : (
+        <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))" }}>
+          {plans.map((plan) => (
+            <PlanCard
+              key={plan.id}
+              plan={plan}
+              isCurrent={currentCode === plan.code}
+              onSubscribe={(code) => subscribeMutation.mutate(code)}
+              isPending={subscribeMutation.isPending}
+            />
+          ))}
+        </div>
       )}
 
-      {/* 정기결제 카드 */}
-      <Card className="p-4 flex items-center justify-between gap-4" outerClassName="mb-6">
-        <div className="flex items-center gap-3">
-          <CreditCard size={22} weight="duotone" className="text-gray-400 dark:text-dracula-comment shrink-0" aria-hidden />
-          <div>
-            <p className="text-xs text-gray-500 dark:text-dracula-comment">자동결제 카드</p>
-            {billingLoading ? (
-              <p className="text-sm text-gray-400 dark:text-dracula-comment mt-0.5">불러오는 중...</p>
-            ) : billingStatus?.registered ? (
-              <p className="font-semibold text-gray-900 dark:text-dracula-fg mt-0.5">
-                {billingStatus.cardCompany} 끝자리 {billingStatus.cardLast4}
-              </p>
-            ) : (
-              <p className="text-sm text-gray-500 dark:text-dracula-comment mt-0.5">
-                등록된 카드가 없습니다 — 유료 플랜 자동 갱신을 위해 등록해주세요.
-              </p>
+      <PanelRow>
+        <Panel tabs={["현재 구독"]} actions={[]} closable={false} className="flex-[1_1_360px]">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="grid h-[30px] w-11 place-items-center rounded-md bg-tm-raised text-tm-soft">
+              <Icon name="card" size={18} />
+            </span>
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <span className="font-semibold">
+                {billingLoading
+                  ? "불러오는 중..."
+                  : billingStatus?.registered
+                    ? `${billingStatus.cardCompany ?? "카드"} 끝자리 ${billingStatus.cardLast4 ?? "—"}`
+                    : "등록된 카드 없음"}
+              </span>
+              <span className="text-xs text-tm-muted">
+                {billingStatus?.registered ? "토스페이먼츠 자동결제" : "유료 플랜 자동 갱신을 위해 등록해주세요"}
+              </span>
+            </div>
+            <span className="ml-auto">
+              {billingStatus?.registered ? (
+                <Btn kind="danger" size="sm" className="h-[34px]" onClick={() => deregisterCardMutation.mutate()} disabled={deregisterCardMutation.isPending}>
+                  {deregisterCardMutation.isPending ? "처리 중..." : "카드 해지"}
+                </Btn>
+              ) : (
+                <Btn kind="ghost" size="sm" className="h-[34px]" onClick={() => registerCardMutation.mutate()} disabled={registerCardMutation.isPending || billingLoading}>
+                  {registerCardMutation.isPending ? "이동 중..." : "카드 등록"}
+                </Btn>
+              )}
+            </span>
+          </div>
+          <KV
+            k="현재 플랜"
+            mono={false}
+            v={
+              mySub ? (
+                <>
+                  {mySub.planCode}{" "}
+                  <span className={cn("text-xs", STATUS_LABELS[mySub.status]?.tone)}>{STATUS_LABELS[mySub.status]?.label}</span>
+                </>
+              ) : (
+                "구독 없음"
+              )
+            }
+          />
+          <KV k="만료일" v={fmtDate(mySub?.expiresAt)} />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <button
+              type="button"
+              aria-expanded={showHistory}
+              onClick={() => setShowHistory((v) => !v)}
+              className="text-xs text-dracula-purple hover:text-[#d6bcfb]"
+            >
+              결제 내역 · 영수증 {showHistory ? "접기" : "보기"}
+            </button>
+            {mySub?.status === "ACTIVE" && mySub.planCode !== "FREE" && (
+              <Btn kind="danger" size="sm" onClick={() => cancelMutation.mutate()} disabled={cancelMutation.isPending}>
+                {cancelMutation.isPending ? "처리 중..." : "구독 해지"}
+              </Btn>
             )}
           </div>
-        </div>
-        {billingStatus?.registered ? (
-          <button
-            onClick={() => deregisterCardMutation.mutate()}
-            disabled={deregisterCardMutation.isPending}
-            className="shrink-0 px-3 py-1.5 rounded-lg border border-dracula-red/40 text-dracula-red text-xs hover:bg-dracula-red/10 transition-colors disabled:opacity-40"
-          >
-            {deregisterCardMutation.isPending ? "처리 중..." : "카드 해지"}
-          </button>
-        ) : (
-          <button
-            onClick={() => registerCardMutation.mutate()}
-            disabled={registerCardMutation.isPending || billingLoading}
-            className="shrink-0 px-3 py-1.5 rounded-lg bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg text-xs font-semibold hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40"
-          >
-            {registerCardMutation.isPending ? "이동 중..." : "카드 등록"}
-          </button>
-        )}
-      </Card>
+          {showHistory && (
+            <>
+              <Divider />
+              {paymentsLoading ? (
+                <p className="m-0 py-4 text-center text-tm-muted">불러오는 중...</p>
+              ) : (
+                <DataTable
+                  columns={PAYMENT_COLUMNS}
+                  rows={paymentsData ?? []}
+                  rowKey={(p) => p.id}
+                  minWidth={420}
+                  empty="결제 내역이 없습니다."
+                />
+              )}
+            </>
+          )}
+        </Panel>
 
-      {/* 탭 */}
-      <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-dracula-line">
-        {(["plans", "history"] as const).map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px
-              ${activeTab === tab ? "border-blue-600 dark:border-dracula-purple text-blue-600 dark:text-dracula-purple" : "border-transparent text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg"}`}>
-            {tab === "plans" ? "플랜 선택" : "결제 내역"}
-          </button>
-        ))}
-      </div>
-
-      {/* 플랜 선택 */}
-      {activeTab === "plans" && (
-        plansLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[1, 2, 3].map(i => <div key={i} className="h-72 rounded-2xl bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15 bg-[length:200%_100%] animate-shimmer" />)}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {(plansData ?? []).map((plan: Plan) => (
-              <PlanCard
-                key={plan.id}
-                plan={plan}
-                currentCode={currentCode}
-                onSubscribe={(code) => subscribeMutation.mutate(code)}
-                isPending={subscribeMutation.isPending}
-              />
+        <Panel tabs={["자주 묻는 질문"]} actions={[]} closable={false} className="flex-[2_1_480px]">
+          <div>
+            {FAQ.map((f) => (
+              <details key={f.q} className="border-b border-tm-line py-2.5">
+                <summary className="cursor-pointer font-semibold">{f.q}</summary>
+                <p className="mb-0 mt-2 text-13 leading-relaxed text-tm-soft">{f.a}</p>
+              </details>
             ))}
           </div>
-        )
-      )}
+        </Panel>
+      </PanelRow>
 
-      {/* 결제 내역 */}
-      {activeTab === "history" && (
-        paymentsLoading ? (
-          <div className="space-y-2">
-            {[1,2,3].map(i => <div key={i} className="h-16 rounded-xl bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15 bg-[length:200%_100%] animate-shimmer" />)}
-          </div>
-        ) : (paymentsData ?? []).length === 0 ? (
-          <div className="text-center py-16 border border-dashed border-gray-300 dark:border-dracula-line rounded-xl text-gray-500 dark:text-dracula-comment text-sm">
-            결제 내역이 없습니다.
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {(paymentsData ?? []).map((p: PaymentRecord) => {
-              const meta = PAYMENT_LABELS[p.status] ?? { label: p.status, color: "text-gray-900 dark:text-dracula-fg" };
-              return (
-                <Card key={p.id} className="flex items-center gap-3 p-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-900 dark:text-dracula-fg">{p.planCode} 플랜</span>
-                      <span className={`text-xs ${meta.color}`}>{meta.label}</span>
-                    </div>
-                    <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">
-                      {new Date(p.createdAt).toLocaleDateString("ko-KR")} · {p.pgProvider}
-                    </p>
-                  </div>
-                  <p className={`text-sm font-semibold ${p.status === "SUCCESS" ? "text-dracula-green" : "text-dracula-red"}`}>
-                    {p.amount.toLocaleString("ko-KR")}원
-                  </p>
-                </Card>
-              );
-            })}
-          </div>
-        )
-      )}
-
-      <p className="text-xs text-gray-500 dark:text-dracula-comment text-center mt-8">
-        교육 목적 시뮬레이션 서비스입니다. 실제 투자 조언이 아닙니다.
-      </p>
-    </div>
+      <p className="m-0 py-2 text-center text-xs text-tm-muted">교육 목적 시뮬레이션 서비스입니다. 실제 투자 조언이 아닙니다.</p>
+    </TerminalPage>
   );
 }
