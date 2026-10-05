@@ -151,6 +151,26 @@ export interface MarketStrategy {
   performance?: StrategyPerformance | null;
 }
 
+// GET /api/quant/market/signals, /api/quant/market/{id}/signals — 구독 전략 신호 이력(ADR-035: 구독자·제작자만)
+export interface MarketSignal {
+  id: number;
+  marketId: number;
+  rulesetId: string;
+  strategyName: string;
+  direction: "BUY" | "SELL";
+  stockId: number;
+  /** 평가일 종가. 2026-10 이전 신호는 null */
+  price: number | null;
+  evalDate: string | null;
+  signalTime: string;
+}
+
+export interface MarketSignalFeed {
+  items: MarketSignal[];
+  /** 이번 달(KST) 구독 전략 신호 수 */
+  thisMonthCount: number;
+}
+
 // Quant Lab forward test (ADR-024) — /api/quant/rulesets/{id}/forward-test*
 export type ForwardTestStatus = "RUNNING" | "STOPPED";
 
