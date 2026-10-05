@@ -3,15 +3,18 @@
 
 export interface FrontierPt { risk: number; ret: number }
 
-export function FrontierChart({ points, optimal, current }: {
+export function FrontierChart({ points, optimal, current, held }: {
   /** 연 변동성·연 수익률, % 단위 */
   points: FrontierPt[];
   optimal?: FrontierPt;
+  /** 동일가중 */
   current?: FrontierPt;
+  /** 사용자의 현재(모의투자) 보유 비중 */
+  held?: FrontierPt;
 }) {
   const W = 560;
   const H = 300;
-  const all = [...points, ...(optimal ? [optimal] : []), ...(current ? [current] : [])];
+  const all = [...points, ...(optimal ? [optimal] : []), ...(current ? [current] : []), ...(held ? [held] : [])];
   if (all.length === 0) {
     return (
       <div className="grid h-[300px] place-items-center rounded-lg border border-dashed border-tm-line2 text-center text-13 text-tm-muted">
@@ -32,7 +35,7 @@ export function FrontierChart({ points, optimal, current }: {
   const sorted = [...points].sort((a, b) => a.risk - b.risk);
 
   return (
-    <svg viewBox={`0 0 ${W + 10} ${H + 16}`} className="block h-auto w-full" role="img" aria-label="효율적 프론티어 — 최적화 포트폴리오와 동일가중 포트폴리오 표시">
+    <svg viewBox={`0 0 ${W + 10} ${H + 16}`} className="block h-auto w-full" role="img" aria-label={`효율적 프론티어 — 최적화 포트폴리오와 동일가중${held ? "·현재 보유" : ""} 포트폴리오 표시`}>
       {yt.map((v) => (
         <g key={`y${v}`}>
           <line x1={44} x2={W} y1={y(v)} y2={y(v)} stroke="#34364a" strokeDasharray="2 4" />
@@ -58,6 +61,12 @@ export function FrontierChart({ points, optimal, current }: {
         <g>
           <circle cx={x(current.risk)} cy={y(current.ret)} r={6} fill="none" stroke="#ffb86c" strokeWidth={2} />
           <text x={x(current.risk) + 10} y={y(current.ret) + 16} fill="#ffb86c" fontSize={12}>동일가중 포트폴리오</text>
+        </g>
+      )}
+      {held && (
+        <g>
+          <rect x={x(held.risk) - 6} y={y(held.ret) - 6} width={12} height={12} fill="#8be9fd" stroke="#1b1c24" strokeWidth={2} transform={`rotate(45 ${x(held.risk)} ${y(held.ret)})`} />
+          <text x={x(held.risk) + 12} y={y(held.ret) + 4} fill="#8be9fd" fontSize={12}>현재 보유 비중</text>
         </g>
       )}
       <text x={W / 2} y={H + 10} fill="#a4abcf" fontSize={11} textAnchor="middle">예상 위험 (연 변동성) →</text>
