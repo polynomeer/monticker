@@ -486,7 +486,7 @@ export default function BuilderPage() {
               <>
                 <AutoGrid min={110}>
                   <Stat big label="CAGR" value={fmtPct(latest.annualReturn, 1)} valueClassName={(latest.annualReturn ?? 0) >= 0 ? "text-up" : "text-down"} />
-                  <Stat big label="MDD" value={fmtPct(latest.mdd, 1)} valueClassName="text-down" />
+                  <Stat big label="MDD" value={fmtPct(latest.mdd, 1)} valueClassName={Math.abs(latest.mdd ?? 0) >= 0.05 ? "text-down" : undefined} />
                   <Stat big label="샤프" value="—" valueClassName="text-tm-muted" />
                   <Stat big label="거래 수" value={fmtNum(latest.tradeCount)} />
                 </AutoGrid>

@@ -5,7 +5,7 @@
 
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { PreviewTag, type Tone } from "@/components/terminal";
+import { PreviewTag, type Tone, fmtPct } from "@/components/terminal";
 
 export const RULESET_STATUS: Record<string, { label: string; tone: Tone }> = {
   DRAFT: { label: "초안", tone: "muted" },
@@ -103,11 +103,11 @@ function Row({ year, map }: { year: string; map: Map<string, number> }) {
         return (
           <span
             key={i}
-            title={`${year}년 ${i + 1}월 ${v >= 0 ? "+" : ""}${v.toFixed(1)}%`}
+            title={`${year}년 ${i + 1}월 ${fmtPct(v, 1)}`}
             className="num grid h-[30px] place-items-center rounded-[5px] text-2xs text-dracula-fg"
             style={{ backgroundColor: `rgb(var(${v >= 0 ? "--mt-up" : "--mt-down"}) / ${a.toFixed(2)})` }}
           >
-            {`${v >= 0 ? "+" : ""}${v.toFixed(1)}`}
+            {fmtPct(v, 1).replace("%", "")}
           </span>
         );
       })}

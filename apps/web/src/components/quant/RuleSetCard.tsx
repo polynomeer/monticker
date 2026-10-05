@@ -55,7 +55,7 @@ export function RuleSetCard({ rs, onDelete, deleting }: { rs: RuleSet; onDelete:
 
       <div className="grid grid-cols-3 gap-2">
         <Stat label="CAGR" value={fmtPct(cagr, 1)} valueClassName={cagr == null ? "text-tm-muted" : cagr >= 0 ? "text-up" : "text-down"} />
-        <Stat label="MDD" value={fmtPct(latest?.mdd ?? null, 1)} valueClassName={latest?.mdd == null ? "text-tm-muted" : "text-down"} />
+        <Stat label="MDD" value={fmtPct(latest?.mdd ?? null, 1)} valueClassName={latest?.mdd == null ? "text-tm-muted" : Math.abs(latest.mdd) >= 0.05 ? "text-down" : undefined} />
         {/* 포워드 신호 일치율 — 백엔드에 지표가 없다(설계만 반영) */}
         <Stat label="포워드 일치" value="—" valueClassName="text-tm-muted" />
       </div>
