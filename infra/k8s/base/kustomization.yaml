@@ -8,7 +8,8 @@ resources:
   - configmap.yaml
   - secret.yaml
   - api.yaml
-  - worker.yaml
+  # 워커는 역할 분리 배포(market/event/alert)만 둔다. role=all `worker`를 함께 올리면
+  # Mock 시세 생산과 커버리지 공표가 중복된다 — docker-compose의 msa 프로필과 같은 규칙.
   - web.yaml
   - market-gateway.yaml
   - worker-market.yaml

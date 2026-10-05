@@ -18,7 +18,7 @@ Phase 2에서 이 상태를 그대로 기록하고, 이 디렉터리에 실제 �
 3. 이 디렉터리의 두 파일에서 `.example`을 떼고, `<...>`로 표시된 부분을 실제 값으로 채운다.
 4. `../kustomization.yaml`의 `resources:`에서 `secret.yaml`을 지우고 이 두 파일로 교체한다.
 5. `kubectl apply -k .` — ExternalSecret이 주기적으로 실제 백엔드에서 값을 읽어와 기존과
-   동일한 이름(`monticker-secrets`)의 Kubernetes Secret을 생성/갱신한다. `api.yaml`/`worker.yaml`
+   동일한 이름(`monticker-secrets`)의 Kubernetes Secret을 생성/갱신한다. `api.yaml`/`worker-*.yaml`
    등은 `envFrom.secretRef.name: monticker-secrets`로만 참조하므로 **이 파일들은 전혀 손댈
    필요가 없다** — Secret을 누가 만들었는지는 신경 쓰지 않는다.
 
