@@ -3,7 +3,7 @@
 "use client";
 
 import Link from "next/link";
-import type { ComponentProps, ReactNode } from "react";
+import { useId, type ComponentProps, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Icon, type IconName } from "./Icon";
 
@@ -178,11 +178,15 @@ export function Toggle({ checked, onChange, label, disabled }: { checked: boolea
 }
 
 export function Checkbox({ checked, onChange, label, sub, disabled }: { checked: boolean; onChange?: (v: boolean) => void; label: ReactNode; sub?: ReactNode; disabled?: boolean }) {
+  // 이름을 라벨 요소에 명시적으로 묶는다 — 내용에서 이름을 계산하지 않는 보조기술·도구가 있어(이름 없는 체크박스로 읽혔다)
+  const id = useId();
   return (
     <button
       type="button"
       role="checkbox"
       aria-checked={checked}
+      aria-labelledby={`${id}-l`}
+      aria-describedby={sub ? `${id}-s` : undefined}
       disabled={disabled}
       onClick={() => onChange?.(!checked)}
       className="flex items-start gap-2.5 text-left text-13 text-dracula-fg disabled:opacity-50"
@@ -191,8 +195,8 @@ export function Checkbox({ checked, onChange, label, sub, disabled }: { checked:
         <Icon name="check" size={13} strokeWidth={3} />
       </span>
       <span className="flex flex-col gap-0.5">
-        <span>{label}</span>
-        {sub && <span className="text-xs text-tm-muted">{sub}</span>}
+        <span id={`${id}-l`}>{label}</span>
+        {sub && <span id={`${id}-s`} className="text-xs text-tm-muted">{sub}</span>}
       </span>
     </button>
   );

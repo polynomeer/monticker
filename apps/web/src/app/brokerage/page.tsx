@@ -151,7 +151,8 @@ export default function BrokerageDashboardPage() {
                 {balanceErr instanceof Error ? balanceErr.message : "증권사 응답이 없습니다. 잠시 후 자동으로 다시 시도합니다."}
               </Notice>
             ) : (
-              <AutoGrid min={140}>
+              // 억 단위 금액이 큰 글씨로 두 개 나란히 들어가면 좁은 계좌 카드에서 겹친다 — 칸을 넓혀 줄바꿈시킨다
+              <AutoGrid min={190}>
                 <Stat big label="가용 현금" value={won(balance?.cash)} />
                 <Stat big label="총 평가금액" value={won(balance?.totalEvaluated)} />
               </AutoGrid>
