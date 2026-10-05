@@ -110,6 +110,8 @@ Start as **Modular Monolith + async workers + Redis + TimescaleDB**. `docker com
 
 ## Tech Stack
 
+> 각 기술을 왜 골랐는지, 근거가 어디에 있는지는 [tech-stack-decisions.md](tech-stack-decisions.md)에 있습니다. 아래 버전 표기 중 Kotlin(실제 1.9.25)·Batch(실제 Spring Batch)·MongoDB 용도(실제 `rule_sets`만)는 코드와 다릅니다 — 같은 문서 §10 참고.
+
 ### Backend
 
 ```

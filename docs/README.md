@@ -71,6 +71,7 @@ monticker의 모든 문서를 **독자별 · 주제별**로 정리한 색인입�
 | 문서 | 내용 |
 |------|------|
 | [architecture.md](architecture.md) | 시스템 구조, 기술 스택, 모듈 경계, 워커 파이프라인, Quant Lab/체결엔진/리스크/지갑 아키텍처, API 목록, MSA 프로파일, 서킷브레이커·레이트리밋·DLT·멱등성·Outbox 설정 |
+| [tech-stack-decisions.md](tech-stack-decisions.md) | 사용 중인 모든 기술의 선택 근거와 출처(ADR·문서·커밋·기록 없음), 근거 없는 선택의 사후 평가, 문서-코드 불일치 목록, ADR 승격 후보 |
 | [data-model.md](data-model.md) | PostgreSQL/TimescaleDB 전체 스키마, Redis 키 규칙 |
 | [elasticsearch.md](elasticsearch.md) | ES 인덱스 6개·도메인 8개 적용 현황, 파이프라인, DB 폴백 |
 | [external-apis.md](external-apis.md) | 시세·뉴스·공시·AI 외부 API 후보와 설정 |
