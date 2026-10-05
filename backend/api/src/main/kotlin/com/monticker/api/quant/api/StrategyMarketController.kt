@@ -1,6 +1,7 @@
 package com.monticker.api.quant.api
 
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
+import com.monticker.api.quant.application.StrategyPerformanceQuery
 import com.monticker.api.quant.domain.RuleSetStatus
 import com.monticker.api.quant.infrastructure.RuleSetRepository
 import com.monticker.api.settlement.creator.application.CreatorEarningsService
@@ -25,6 +26,7 @@ class StrategyMarketController(
     private val jwtTokenProvider: JwtTokenProvider,
     private val creatorEarningsService: CreatorEarningsService,
     private val ruleSetRepository: RuleSetRepository,
+    private val performanceQuery: StrategyPerformanceQuery,
 ) {
     @GetMapping
     fun list(
@@ -52,6 +54,9 @@ class StrategyMarketController(
         val rulesetIds = rows.mapNotNull { it["ruleset_id"] as? String }
         val namesById = ruleSetRepository.findAllById(rulesetIds).associate { it.id to it.name }
 
+        // ADR-078 — 카드 성과(최신 백테스트 지표·다운샘플 곡선·포워드 일치율). 룰 정의는 싣지 않는다(ADR-035).
+        val performance = performanceQuery.summarize(rulesetIds)
+
         val subscribedMarketIds: Set<Long> = if (userId != null) {
             jdbc.queryForList("SELECT market_id FROM strategy_subscriptions WHERE user_id = ?", Long::class.java, userId).toSet()
         } else emptySet()
@@ -60,6 +65,7 @@ class StrategyMarketController(
             LinkedHashMap(row).apply {
                 put("name", namesById[row["ruleset_id"]] ?: "(삭제된 전략)")
                 put("isSubscribed", (row["id"] as Number).toLong() in subscribedMarketIds)
+                put("performance", performance[row["ruleset_id"]])
             }
         }
         return ResponseEntity.ok(enriched)
