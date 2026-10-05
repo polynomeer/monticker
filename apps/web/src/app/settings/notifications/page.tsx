@@ -5,6 +5,7 @@ import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
 import { Btn, Checkbox, Chip, Divider, Field, H2, Panel, PanelRow, PreviewTag, TerminalPage, Toggle } from "@/components/terminal";
 import { SettingsNav } from "@/components/settings/SettingsNav";
+import { MarketingConsentRow } from "@/components/settings/MarketingConsentRow";
 
 interface NotifPref {
   pushEnabled: boolean;
@@ -168,6 +169,11 @@ export default function NotificationSettingsPage() {
                   <Toggle checked={pref.weeklyReportEmail} onChange={set("weeklyReportEmail")} label="주간 투자 행동 리포트" />
                 </Row>
                 <PreviewRow title="전략 마켓 소식" sub="새 검증 전략 · 프로모션" on={false} />
+              </div>
+
+              <H2>수신 동의</H2>
+              <div>
+                <MarketingConsentRow />
               </div>
             </>
           )}
