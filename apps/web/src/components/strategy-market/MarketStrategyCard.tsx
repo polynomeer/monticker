@@ -1,42 +1,43 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { MarketStrategy, SignalDirection } from "@monticker/types";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { MarketStrategy } from "@monticker/types";
 import { authFetch } from "@/services/api";
+import { getStrategySignals } from "@/services/strategyMarket";
 import { useToast } from "@/hooks/useToast";
-import { useForwardTestSignalsWs } from "@/hooks/useForwardTestSignalsWs";
 import { Btn, Pill, Sparkline, Stat, fmtPct } from "@/components/terminal";
 import { fmtMatch, fmtMdd, matchTone } from "@/components/quant/parts";
 
-interface SignalEvent { direction: SignalDirection; stockId: number; price: number; evalDate: string; }
-
 export function fmtWon(n: number) { return n.toLocaleString("ko-KR", { maximumFractionDigits: 0 }); }
 
-function SignalFeed({ rulesetId }: { rulesetId: string }) {
-  const [signals, setSignals] = useState<SignalEvent[]>([]);
-  const { connected, denied } = useForwardTestSignalsWs(rulesetId, event => {
-    setSignals(prev => [{ direction: event.direction, stockId: event.stockId, price: event.price, evalDate: event.evalDate }, ...prev].slice(0, 10));
+/**
+ * 전략 하나의 신호 이력(서버, 구독자·제작자만). 실시간 신호는 화면의 구독 신호 패널이 한 연결로
+ * 받아 이 쿼리(["quant","market","signals", id])를 무효화한다 — 카드마다 연결을 따로 열지 않는다.
+ */
+function SignalFeed({ marketId }: { marketId: number }) {
+  const { data: signals = [], isLoading, error } = useQuery({
+    queryKey: ["quant", "market", "signals", marketId],
+    queryFn: () => getStrategySignals(marketId, 10),
   });
 
   return (
     <div className="flex flex-col gap-1.5 border-t border-tm-line pt-2.5">
-      <div className="flex items-center gap-1.5">
-        <span className={`h-[7px] w-[7px] rounded-full ${denied ? "bg-down" : connected ? "bg-dracula-green" : "bg-tm-muted"}`} aria-hidden />
-        <span className={`text-2xs ${denied ? "text-[#ff8a8a]" : "text-tm-muted"}`}>
-          {denied ? "구독 권한이 없어 신호를 받을 수 없습니다" : connected ? "실시간 신호 연결됨" : "연결 중..."}
-        </span>
-      </div>
-      {denied ? null : signals.length === 0 ? (
-        <p className="m-0 text-xs text-tm-muted">아직 발생한 신호가 없습니다 — 새 신호가 오면 여기 표시됩니다.</p>
+      <span className="text-2xs text-tm-muted">최근 신호 · 새 신호는 실시간으로 갱신됩니다</span>
+      {error ? (
+        <p className="m-0 text-xs text-[#ff8a8a]">{(error as Error).message}</p>
+      ) : isLoading ? (
+        <p className="m-0 text-xs text-tm-muted">불러오는 중…</p>
+      ) : signals.length === 0 ? (
+        <p className="m-0 text-xs text-tm-muted">아직 발생한 신호가 없습니다.</p>
       ) : (
         <ul className="m-0 flex list-none flex-col gap-1 p-0">
-          {signals.map((s, i) => (
-            <li key={i} className="flex items-center justify-between text-xs">
+          {signals.map((s) => (
+            <li key={s.id} className="flex items-center justify-between text-xs">
               <span className={s.direction === "BUY" ? "font-medium text-up" : "font-medium text-down"}>
                 {s.direction === "BUY" ? "매수" : "매도"} 신호
               </span>
-              <span className="num text-tm-muted">₩{fmtWon(s.price)} · {s.evalDate}</span>
+              <span className="num text-tm-muted">{s.price != null ? `₩${fmtWon(s.price)} · ` : ""}{s.evalDate ?? s.signalTime.slice(0, 10)}</span>
             </li>
           ))}
         </ul>
@@ -144,7 +145,7 @@ export function MarketStrategyCard({ strategy }: { strategy: MarketStrategy }) {
         </span>
       </div>
 
-      {showSignals && strategy.isSubscribed && <SignalFeed rulesetId={strategy.ruleset_id} />}
+      {showSignals && strategy.isSubscribed && <SignalFeed marketId={strategy.id} />}
     </article>
   );
 }

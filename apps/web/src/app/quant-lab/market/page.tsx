@@ -7,7 +7,7 @@ import { authFetch } from "@/services/api";
 import { Btn, BtnLink, Notice, Panel, PanelCol, PanelRow, SelectBox, TerminalPage } from "@/components/terminal";
 import { SegOpts } from "@/components/quant/parts";
 import { MarketStrategyCard, forwardWeeks } from "@/components/strategy-market/MarketStrategyCard";
-import { SubscribedSignalsPanel } from "@/components/strategy-market/SubscribedSignalsPanel";
+import { SubscribedSignalsPanel, useSubscribedSignalFeed } from "@/components/strategy-market/SubscribedSignalsPanel";
 
 const PAGE_SIZE = 20;
 type Filter = "popular" | "new" | "verified" | "free" | "subscribed";
@@ -30,6 +30,7 @@ export default function StrategyMarketPage() {
 
   const list = useMemo(() => strategies ?? [], [strategies]);
   const subscribed = list.filter(s => s.isSubscribed);
+  const { data: signalFeed } = useSubscribedSignalFeed(subscribed.length > 0);
 
   const shown = useMemo(() => {
     let l = list;
@@ -54,7 +55,7 @@ export default function StrategyMarketPage() {
         { label: "공유 전략", value: isLoading ? "—" : `${list.length}${list.length === PAGE_SIZE ? "+" : ""}개` },
         { label: "검증 배지", value: "—", tone: "text-tm-muted" },
         { label: "구독 중", value: `${subscribed.length}개` },
-        { label: "이번 달 신호", value: "—", tone: "text-tm-muted" },
+        { label: "이번 달 신호", value: subscribed.length === 0 ? "0건" : signalFeed ? `${signalFeed.thisMonthCount}건` : "—", tone: signalFeed || subscribed.length === 0 ? undefined : "text-tm-muted" },
       ]}
     >
       <PanelRow>
