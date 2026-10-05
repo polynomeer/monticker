@@ -9,3 +9,6 @@ CREATE TABLE risk_limit_pending_changes (
     effective_at TIMESTAMPTZ   NOT NULL,
     PRIMARY KEY (user_id, field)
 );
+
+-- /api/risk/decisions — 차단 기록 조회와 "이번 달 차단" 집계. 승인 로그가 대부분이라 차단만 담는 부분 인덱스를 둔다.
+CREATE INDEX idx_risk_check_logs_user_blocked ON risk_check_logs (user_id, created_at DESC) WHERE approved = false;
