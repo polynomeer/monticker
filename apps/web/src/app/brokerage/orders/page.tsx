@@ -13,7 +13,7 @@ import StockChart from "@/components/stock/chart/StockChart";
 import OrderProposalCard from "@/components/ai/OrderProposalCard";
 import {
   Btn, BuySell, DataTable, Field, Icon, KV, LiveBadge, Notice, Panel, PanelRow, SelectBox, SymbolPill, TerminalPage, TitleBlock,
-  fmtNum, type Column,
+  dirClass, fmtNum, type Column,
 } from "@/components/terminal";
 import { TradingHaltBanner } from "@/components/brokerage/TradingHaltBanner";
 import { OrderActions, OrderStatusCell, orderPriceText } from "@/components/brokerage/OrderCells";
@@ -24,23 +24,20 @@ import {
 } from "@/components/brokerage/shared";
 import { brokerageProviderLabel } from "@/lib/brokerageProvider";
 import { cn } from "@/lib/utils";
-import type { BrokerageOrderResponse, BrokerageOrderSide, BrokerageOrderType } from "@monticker/types";
+import { fmtChangeRate, isKrxSymbol, isOnKrxTick, krxBand, krxTick } from "@/lib/krxOrderPrice";
+import type { BrokerageOrderResponse, BrokerageOrderSide, BrokerageOrderType, StockPriceResponse } from "@monticker/types";
 
-/** KRX 호가 단위(2023년 개편, 유가·코스닥 공통). 국내 6자리 종목 코드에만 적용한다. */
-function krxTick(price: number) {
-  if (price < 2_000) return 1;
-  if (price < 5_000) return 5;
-  if (price < 20_000) return 10;
-  if (price < 50_000) return 50;
-  if (price < 200_000) return 100;
-  if (price < 500_000) return 500;
-  return 1_000;
-}
 const NO_INDICATORS: never[] = [];
-const isKrxSymbol = (s: string) => /^\d{5}[0-9A-Z]$/.test(s);
 
 type CheckState = "ok" | "fail" | "warn" | "wait" | "na";
-interface Check { label: string; state: CheckState; /** 필수 — 실패하면 확인 단계로 못 넘어간다 */ required: boolean; }
+interface Check {
+  label: string;
+  state: CheckState;
+  /** 필수 — 실패하면 확인 단계로 못 넘어간다 */
+  required: boolean;
+  /** ADR-081 — 서버가 같은 규칙으로 거부한다(증권사 호출 전 400) */
+  server?: boolean;
+}
 
 function CheckLine({ c }: { c: Check }) {
   const icon = {
@@ -55,8 +52,10 @@ function CheckLine({ c }: { c: Check }) {
     <li className={cn("flex items-center gap-1.5 text-xs", c.state === "fail" ? "text-[#ff8a8a]" : c.state === "na" ? "text-tm-muted" : "text-tm-soft")}>
       <span className="grid w-3.5 place-items-center">{icon}</span>
       <span>{c.label}</span>
-      <span className="sr-only">: {srState}{c.required ? "" : " (참고)"}</span>
-      {!c.required && c.state !== "na" && <span className="ml-auto text-2xs text-tm-muted">참고</span>}
+      <span className="sr-only">: {srState}{c.server ? " (서버 검증)" : c.required ? "" : " (참고)"}</span>
+      {c.server
+        ? <span className="ml-auto text-2xs text-tm-muted">서버 검증</span>
+        : !c.required && c.state !== "na" && <span className="ml-auto text-2xs text-tm-muted">참고</span>}
     </li>
   );
 }
@@ -82,6 +81,8 @@ export default function BrokerageOrderPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [stock, setStock] = useState<StockHit | null>(null);
   const [currentPrice, setCurrentPrice] = useState(0);
+  const [prevClose, setPrevClose] = useState<number | null>(null);
+  const [changeRate, setChangeRate] = useState<number | null>(null);
   const [side, setSide] = useState<BrokerageOrderSide>("BUY");
   const [orderType, setOrderType] = useState<BrokerageOrderType>("MARKET");
   const [quantity, setQuantity] = useState(1);
@@ -110,9 +111,13 @@ export default function BrokerageOrderPage() {
     setRiskBlock(null);
     setOrderError(null);
     setResult(null);
+    setPrevClose(null);
+    setChangeRate(null);
     const r = await fetch(`/api/stocks/${hit.id}/price`);
-    const data = r.ok ? await r.json() : null;
+    const data: StockPriceResponse | null = r.ok ? await r.json() : null;
     setCurrentPrice(data?.price ?? 0);
+    setPrevClose(data?.prevClose ?? null);
+    setChangeRate(data?.changeRate ?? null);
   };
 
   // 보유 종목의 "주문" 버튼(/brokerage/orders?symbol=005930)에서 들어오면 그 종목을 정확히 일치할 때만 선택해 둔다.
@@ -144,18 +149,24 @@ export default function BrokerageOrderPage() {
   const balanceReady = !balanceLoading && !balanceError;
   const qtyOk = Number.isInteger(quantity) && quantity > 0;
   const limitOk = orderType === "MARKET" || Number(limitPrice) > 0;
+  // ADR-081 — 국내 종목 지정가는 호가 단위가 맞아야 한다. 서버도 같은 규칙으로 거부하므로(400) 여기서 먼저 막는다.
+  const krx = !!stock && isKrxSymbol(stock.symbol);
+  const tickOk = orderType !== "LIMIT" || !krx || isOnKrxTick(Number(limitPrice));
   const halted = !!trading?.halted;
   const isValid =
     !!stock &&
     qtyOk &&
     limitOk &&
+    tickOk &&
     balanceReady &&
     quantity <= maxQty &&
     !halted;
 
-  // 검증 체크리스트 — 필수 항목은 위 isValid와 같은 조건을 그대로 보여 준다. 호가 단위·±30%는 참고(증권사가 최종 판정).
+  // 검증 체크리스트 — 필수 항목은 위 isValid와 같은 조건을 그대로 보여 준다. 호가 단위·가격제한폭은 서버가 같은 규칙으로 다시 본다(ADR-081).
   const lp = Number(limitPrice);
-  const tick = stock && isKrxSymbol(stock.symbol) && currentPrice > 0 ? krxTick(orderType === "LIMIT" && lp > 0 ? lp : currentPrice) : null;
+  const tickBase = orderType === "LIMIT" && lp > 0 ? lp : currentPrice;
+  const tick = krx && tickBase > 0 ? krxTick(tickBase) : null;
+  const band = krx && prevClose ? krxBand(prevClose) : null;
   const checks: Check[] = [
     { label: "수량이 1주 이상의 정수입니다", state: qtyOk ? "ok" : "fail", required: true },
     orderType === "LIMIT"
@@ -168,13 +179,16 @@ export default function BrokerageOrderPage() {
     },
     {
       label: tick ? `호가 단위(${fmtNum(tick)}원)에 맞습니다` : "호가 단위",
-      state: orderType !== "LIMIT" || !tick || !(lp > 0) ? "na" : lp % tick === 0 ? "ok" : "warn",
-      required: false,
+      state: orderType !== "LIMIT" || !krx || !(lp > 0) ? "na" : tickOk ? "ok" : "fail",
+      required: orderType === "LIMIT" && krx,
+      server: true,
     },
     {
-      label: "현재가 대비 ±30% 이내입니다",
-      state: orderType !== "LIMIT" || currentPrice <= 0 || !(lp > 0) ? "na" : Math.abs(lp - currentPrice) / currentPrice <= 0.3 ? "ok" : "warn",
+      // 서버는 기준가를 확인할 수 있을 때(실시세 종목·오늘 시세가 폭 안) 이 밖의 가격을 거부한다. 화면은 미리 알려 준다.
+      label: band ? `전일 종가 ±30%(${fmtNum(band.low)}~${fmtNum(band.high)}원) 이내입니다` : "가격제한폭(전일 종가 ±30%)",
+      state: orderType !== "LIMIT" || !band || !(lp > 0) ? "na" : lp >= band.low && lp <= band.high ? "ok" : "warn",
       required: false,
+      server: true,
     },
   ];
 
@@ -232,7 +246,7 @@ export default function BrokerageOrderPage() {
 
   const stats = [
     { label: "현재가", value: currentPrice > 0 ? `${fmtNum(currentPrice)}원` : "—" },
-    { label: "등락", value: "—" },
+    { label: "등락", value: fmtChangeRate(changeRate) ?? "—", tone: changeRate != null ? dirClass(changeRate) : undefined },
     { label: "호가 단위", value: tick ? `${fmtNum(tick)}원` : "—" },
     { label: "가용 현금", value: balanceError ? "조회 불가" : won(balance?.cash), tone: balanceError ? "text-dracula-orange" : undefined },
     { ...apiStat(account), label: "API" },
@@ -275,7 +289,7 @@ export default function BrokerageOrderPage() {
           </div>
 
           {stock
-            ? <SelectedStock stock={stock} price={currentPrice} onClear={() => { setStock(null); setCurrentPrice(0); setResult(null); setRiskBlock(null); setOrderError(null); }} />
+            ? <SelectedStock stock={stock} price={currentPrice} onClear={() => { setStock(null); setCurrentPrice(0); setPrevClose(null); setChangeRate(null); setResult(null); setRiskBlock(null); setOrderError(null); }} />
             : <StockSearchBox onSelect={selectStock} />}
 
           {stock && (

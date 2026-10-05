@@ -31,7 +31,10 @@ class AlertEvaluatorTest {
     private val meterRegistry = SimpleMeterRegistry()
     // 인덱스는 loadAll() 전이라 DB 폴백 경로 — 기존 테스트의 jdbc 스텁이 그대로 유효하다.
     // 지표 캐시는 TTL 0 — 테스트마다 다른 스텁이 들어가므로 캐시가 끼면 안 된다.
-    private val dispatcher = AlertDispatcher(jdbc, pushSender, events, tx, redis, mailSender)
+    private val preferences = mockk<com.monticker.worker.notification.NotificationPreferenceReader> {
+        every { forUser(any()) } returns com.monticker.worker.notification.NotificationPreference()
+    }
+    private val dispatcher = AlertDispatcher(jdbc, pushSender, events, tx, redis, mailSender, preferences)
     private val evaluator = AlertEvaluator(AlertRuleIndex(jdbc, meterRegistry), IndicatorCache(jdbc, ttlMs = 0), InlineTriggerSink(dispatcher), meterRegistry)
 
     @BeforeEach
@@ -74,6 +77,8 @@ class AlertEvaluatorTest {
         every { jdbc.queryForList(any<String>(), String::class.java, rule.userId) } returns
             listOf("ExponentPushToken[abc123]")
         every { jdbc.update(any<String>(), any(), 42L) } returns 1
+        // 빈 결과(서킷 OPEN)는 이제 "닿지 않음"이다(ADR-082) — 실제 응답처럼 ok를 준다
+        every { pushSender.send(any()) } returns listOf(com.monticker.worker.push.PushResult("ExponentPushToken[abc123]", "ok", null))
         val published = slot<Any>()
         every { events.publishEvent(capture(published)) } returns Unit
 
@@ -443,5 +448,21 @@ class AlertEvaluatorTest {
             .isEqualTo(1.0)
         assertThat(meterRegistry.counter("alert_rule_eval_failed_total", "ruleType", "PRICE_ABOVE").count())
             .isEqualTo(0.0)
+    }
+
+    @Test
+    fun `ADR-082 가격 알림을 끈 사용자에게는 보내지 않고 SUPPRESSED로 기록한다`() {
+        val rule = AlertRuleRow(id = 1L, userId = 10L, stockId = 5L, ruleType = "PRICE_ABOVE", conditionJson = """{"threshold": 70000}""")
+        every { jdbc.query(any<String>(), any<RowMapper<AlertRuleRow>>(), 5L) } returns listOf(rule)
+        every { preferences.forUser(10L) } returns com.monticker.worker.notification.NotificationPreference(priceAlertPush = false)
+        stubCooldownAcquired(true)
+        stubHistoryInsert(42L)
+        every { jdbc.update(any<String>(), any(), 42L) } returns 1
+
+        evaluator.processAlert(stockId = 5L, price = BigDecimal("75000"))
+
+        verify(exactly = 0) { pushSender.send(any()) }
+        verify(exactly = 0) { mailSender.send(any<org.springframework.mail.SimpleMailMessage>()) }
+        verify { jdbc.update(match<String> { it.contains("delivery_status") }, "SUPPRESSED", 42L) }
     }
 }

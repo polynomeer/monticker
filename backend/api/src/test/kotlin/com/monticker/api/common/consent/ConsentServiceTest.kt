@@ -92,4 +92,48 @@ class ConsentServiceTest {
     fun `required items cannot be withdrawn`() {
         assertThrows<IllegalArgumentException> { service.withdraw(1L, ConsentType.TERMS, ConsentSource.SETTINGS) }
     }
+
+    @Test
+    fun `marketing alone can be agreed again from settings and becomes the latest state`() {
+        val saved = slot<Iterable<UserConsent>>()
+        every { repo.findAllByUserIdOrderByRecordedAtDescIdDesc(1L) } returns listOf(row(ConsentType.MARKETING, agreed = false))
+        every { repo.saveAll(capture(saved)) } answers { saved.captured.toList() }
+
+        service.agreeOptional(1L, ConsentType.MARKETING, ConsentSource.SETTINGS)
+
+        val r = saved.captured.single()
+        assertThat(r.consentType).isEqualTo(ConsentType.MARKETING)
+        assertThat(r.agreed).isTrue()
+        assertThat(r.source).isEqualTo(ConsentSource.SETTINGS)
+        assertThat(r.documentVersion).isEqualTo(ConsentDocuments.versionOf(ConsentType.MARKETING))
+    }
+
+    @Test
+    fun `agreeing again while already agreed at the current version adds no row`() {
+        every { repo.findAllByUserIdOrderByRecordedAtDescIdDesc(1L) } returns listOf(row(ConsentType.MARKETING, agreed = true))
+
+        service.agreeOptional(1L, ConsentType.MARKETING, ConsentSource.SETTINGS)
+
+        verify(exactly = 0) { repo.saveAll(any<Iterable<UserConsent>>()) }
+    }
+
+    @Test
+    fun `required items cannot be agreed one by one from settings`() {
+        listOf(ConsentType.TERMS, ConsentType.BROKERAGE_DELEGATION).forEach { t ->
+            assertThrows<IllegalArgumentException> { service.agreeOptional(1L, t, ConsentSource.SETTINGS) }
+        }
+        verify(exactly = 0) { repo.saveAll(any<Iterable<UserConsent>>()) }
+    }
+
+    @Test
+    fun `isAgreed follows the latest row and the current document version`() {
+        val now = Instant.now()
+        every { repo.findAllByUserIdOrderByRecordedAtDescIdDesc(1L) } returns listOf(
+            row(ConsentType.MARKETING, agreed = false, at = now), row(ConsentType.MARKETING, agreed = true, at = now.minusSeconds(60)),
+        )
+        assertThat(service.isAgreed(1L, ConsentType.MARKETING)).isFalse()
+
+        every { repo.findAllByUserIdOrderByRecordedAtDescIdDesc(1L) } returns listOf(row(ConsentType.MARKETING, agreed = true, version = "v0"))
+        assertThat(service.isAgreed(1L, ConsentType.MARKETING)).isFalse()
+    }
 }

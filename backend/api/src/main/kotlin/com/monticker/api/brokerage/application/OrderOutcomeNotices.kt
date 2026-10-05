@@ -2,7 +2,9 @@ package com.monticker.api.brokerage.application
 
 import com.monticker.api.brokerage.domain.BrokerageOrder
 import com.monticker.api.brokerage.domain.BrokerageOrderStatus
+import com.monticker.api.brokerage.domain.BrokerageSettlement
 import com.monticker.api.brokerage.domain.OrderSide
+import com.monticker.api.common.notification.NotificationCategory
 import com.monticker.api.common.notification.UserNotificationCommand
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
@@ -21,6 +23,7 @@ class OrderOutcomeNotices(private val events: ApplicationEventPublisher) {
     fun unknown(order: BrokerageOrder) = events.publishEvent(
         UserNotificationCommand(
             userId = order.userId,
+            category = NotificationCategory.ORDER_OUTCOME,
             title = "${order.symbol} ${sideLabel(order.side)} 주문 결과를 확인 중입니다",
             body = "증권사 응답이 없어 주문이 들어갔는지 아직 모릅니다. 같은 주문을 다시 내지 마세요 — 이중 주문이 될 수 있습니다. " +
                 "확인되는 대로 다시 알려드립니다.",
@@ -33,6 +36,7 @@ class OrderOutcomeNotices(private val events: ApplicationEventPublisher) {
     fun resolved(order: BrokerageOrder) = events.publishEvent(
         UserNotificationCommand(
             userId = order.userId,
+            category = NotificationCategory.ORDER_OUTCOME,
             title = "${order.symbol} ${sideLabel(order.side)} 주문 결과가 확인됐습니다",
             body = when (order.status) {
                 BrokerageOrderStatus.FILLED -> "주문이 체결됐습니다(${order.filledQty}주)."
@@ -51,12 +55,44 @@ class OrderOutcomeNotices(private val events: ApplicationEventPublisher) {
     fun needsReview(order: BrokerageOrder) = events.publishEvent(
         UserNotificationCommand(
             userId = order.userId,
+            category = NotificationCategory.ORDER_OUTCOME,
             title = "${order.symbol} ${sideLabel(order.side)} 주문을 직접 확인하고 있습니다",
             body = "증권사 주문 목록에서 자동으로 짝을 찾지 못해 담당자가 확인 중입니다. 확인 전까지 같은 주문을 다시 내지 마세요.",
             dedupKey = "brokerage-order-review:${order.id}",
             data = mapOf("type" to "ORDER_NEEDS_REVIEW", "orderId" to order.id, "symbol" to order.symbol),
         ),
     )
+
+    /**
+     * ADR-082 — 실거래 체결(끌 수 있다: 알림 설정 "체결·정산"). 결과 불명 해소로 체결이 확인된 경우는 [resolved]가 이미 알리므로
+     * 부르지 않는다. 체결 하나에 한 번(dedupKey = 주문 id) — 체결을 반영하는 경로가 여럿이어도 행 락 아래 한 번만 FILLED가 된다(ADR-061).
+     */
+    fun filled(order: BrokerageOrder) = events.publishEvent(
+        UserNotificationCommand(
+            userId = order.userId,
+            category = NotificationCategory.FILLS,
+            title = "${order.symbol} ${sideLabel(order.side)} 체결",
+            body = if (order.filledQty in 1 until order.quantity)
+                "${order.filledQty}/${order.quantity}주가 평균 ${won(order.avgFillPrice)}원에 체결됐습니다(잔량 취소)."
+            else "${order.filledQty}주가 평균 ${won(order.avgFillPrice)}원에 체결됐습니다.",
+            dedupKey = "brokerage-order-filled:${order.id}",
+            data = mapOf("type" to "ORDER_FILLED", "orderId" to order.id, "symbol" to order.symbol),
+        ),
+    )
+
+    /** ADR-082 — 실거래 정산 완료(T+2). 정산 하나에 한 번. */
+    fun settled(settlement: BrokerageSettlement) = events.publishEvent(
+        UserNotificationCommand(
+            userId = settlement.userId,
+            category = NotificationCategory.FILLS,
+            title = "${settlement.symbol} ${if (settlement.side == "BUY") "매수" else "매도"} 정산 완료",
+            body = "${settlement.quantity}주 정산이 끝났습니다. 정산 금액 ${won(settlement.netAmount)}원.",
+            dedupKey = "brokerage-settled:${settlement.id}",
+            data = mapOf("type" to "SETTLED", "settlementId" to settlement.id, "symbol" to settlement.symbol),
+        ),
+    )
+
+    private fun won(v: java.math.BigDecimal?) = v?.let { "%,d".format(it.setScale(0, java.math.RoundingMode.HALF_UP).toLong()) } ?: "—"
 
     private fun sideLabel(side: OrderSide) = if (side == OrderSide.BUY) "매수" else "매도"
 }

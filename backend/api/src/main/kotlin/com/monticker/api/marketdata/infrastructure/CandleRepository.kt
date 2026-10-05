@@ -39,4 +39,15 @@ class CandleRepository(private val jdbc: JdbcTemplate) {
             limit,
         )
     }
+
+    /**
+     * [before] 이전의 가장 최근 일봉 종가 — 전 거래일 종가. candles_1d.candle_time은 KST 자정이다(worker CandleAggregator).
+     * 연휴보다 긴 공백([lookbackDays] 초과)이면 직전 거래일이 아니라고 보고 null.
+     */
+    fun findPreviousClose(stockId: Long, before: Instant, lookbackDays: Long = 10): BigDecimal? =
+        jdbc.queryForList(
+            """SELECT close FROM candles_1d WHERE stock_id = ? AND candle_time < ? AND candle_time >= ?
+               ORDER BY candle_time DESC LIMIT 1""",
+            BigDecimal::class.java, stockId, java.sql.Timestamp.from(before), java.sql.Timestamp.from(before.minusSeconds(lookbackDays * 86_400)),
+        ).firstOrNull()?.takeIf { it.signum() > 0 }
 }

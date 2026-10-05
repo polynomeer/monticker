@@ -5,24 +5,44 @@ import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
 import { Btn, Checkbox, Chip, Divider, Field, H2, Panel, PanelRow, PreviewTag, TerminalPage, Toggle } from "@/components/terminal";
 import { SettingsNav } from "@/components/settings/SettingsNav";
+import { MarketingConsentRow } from "@/components/settings/MarketingConsentRow";
 
+/** ADR-082 — 서버 NotificationPreferenceRequest와 같은 필드·기본값(V78 notification_preferences). */
 interface NotifPref {
+  allEnabled: boolean;
   pushEnabled: boolean;
   emailEnabled: boolean;
   priceAlertPush: boolean;
   priceAlertEmail: boolean;
+  volumeSurgePush: boolean;
+  volumeSurgeEmail: boolean;
   newsAlertPush: boolean;
   newsAlertEmail: boolean;
+  quantSignalPush: boolean;
+  quantSignalEmail: boolean;
+  fillsPush: boolean;
+  fillsEmail: boolean;
+  strategyMarketNewsPush: boolean;
+  strategyMarketNewsEmail: boolean;
   weeklyReportEmail: boolean;
 }
 
 const DEFAULT: NotifPref = {
+  allEnabled: true,
   pushEnabled: true,
   emailEnabled: true,
   priceAlertPush: true,
   priceAlertEmail: false,
+  volumeSurgePush: true,
+  volumeSurgeEmail: false,
   newsAlertPush: true,
   newsAlertEmail: false,
+  quantSignalPush: true,
+  quantSignalEmail: false,
+  fillsPush: true,
+  fillsEmail: false,
+  strategyMarketNewsPush: false,
+  strategyMarketNewsEmail: false,
   weeklyReportEmail: true,
 };
 
@@ -106,8 +126,13 @@ export default function NotificationSettingsPage() {
   });
 
   const price = pair("priceAlertPush", "priceAlertEmail");
+  const volume = pair("volumeSurgePush", "volumeSurgeEmail");
   const news = pair("newsAlertPush", "newsAlertEmail");
-  const onCount = [price.on, news.on, pref.weeklyReportEmail].filter(Boolean).length;
+  const quant = pair("quantSignalPush", "quantSignalEmail");
+  const fills = pair("fillsPush", "fillsEmail");
+  const market = pair("strategyMarketNewsPush", "strategyMarketNewsEmail");
+  const kinds = [price.on, volume.on, news.on, quant.on, fills.on, market.on, pref.weeklyReportEmail];
+  const onCount = pref.allEnabled ? kinds.filter(Boolean).length : 0;
   const channels = [pref.pushEnabled && "푸시", pref.emailEnabled && "이메일"].filter(Boolean).join(" · ") || "없음";
 
   return (
@@ -115,7 +140,7 @@ export default function NotificationSettingsPage() {
       title="알림 설정"
       crumb="설정"
       stats={[
-        { label: "켜진 알림", value: loading ? "—" : `${onCount} / 3` },
+        { label: "켜진 알림", value: loading ? "—" : `${onCount} / ${kinds.length}` },
         { label: "채널", value: loading ? "—" : channels },
         { label: "방해 금지", value: "—" },
       ]}
@@ -140,24 +165,35 @@ export default function NotificationSettingsPage() {
             <>
               <H2>전체</H2>
               <div>
-                <PreviewRow title="전체 알림" sub="끄면 모든 알림이 중지됩니다" />
+                <Row title="전체 알림" sub="끄면 아래 알림이 모두 중지됩니다. ‘결과 확인 중’ 주문·조건부 주문 실패 알림은 계속 받습니다">
+                  <Toggle checked={pref.allEnabled} onChange={set("allEnabled")} label="전체 알림" />
+                </Row>
               </div>
+              {!pref.allEnabled && (
+                <p className="m-0 mt-2 text-xs text-dracula-orange">전체 알림이 꺼져 있어 아래 설정과 무관하게 끌 수 있는 알림은 보내지 않습니다.</p>
+              )}
 
               <H2>가격·이벤트</H2>
               <div>
                 <Row title="가격 알림" sub="설정한 목표가 도달" extra={price.channels}>
                   <Toggle checked={price.on} onChange={price.toggle} label="가격 알림" />
                 </Row>
-                <PreviewRow title="거래량 급증" sub="관심종목 5분 평균 대비 3× 이상" />
+                <Row title="거래량 급증" sub="거래량 급증 알림 규칙 · 관심종목 거래량 급증 이벤트" extra={volume.channels}>
+                  <Toggle checked={volume.on} onChange={volume.toggle} label="거래량 급증" />
+                </Row>
                 <Row title="뉴스·공시" sub="관심종목 관련 뉴스와 DART 공시" extra={news.channels}>
                   <Toggle checked={news.on} onChange={news.toggle} label="뉴스·공시" />
                 </Row>
-                <PreviewRow title="퀀트 시그널" sub="내 전략 · 구독 전략 신호" />
+                <Row title="퀀트 시그널" sub="내 전략의 포워드 테스트 매수·매도 신호 (모의 신호 — 주문은 나가지 않습니다)" extra={quant.channels}>
+                  <Toggle checked={quant.on} onChange={quant.toggle} label="퀀트 시그널" />
+                </Row>
               </div>
 
               <H2>계좌</H2>
               <div>
-                <PreviewRow title="체결·정산" sub="모의/실전 체결, T+2 정산 완료" />
+                <Row title="체결·정산" sub="실전 주문 체결, T+2 정산 완료" extra={fills.channels}>
+                  <Toggle checked={fills.on} onChange={fills.toggle} label="체결·정산" />
+                </Row>
                 <PreviewRow title="리스크 경고" sub="한도 80% 도달 · 주문 차단" />
                 <AlwaysOnRow title="‘결과 확인 중’ 주문" sub="증권사 응답이 없을 때, 그리고 결과가 확인됐을 때 알림 · 끌 수 없음" />
               </div>
@@ -167,7 +203,18 @@ export default function NotificationSettingsPage() {
                 <Row title="주간 투자 행동 리포트" sub="매주 월요일 · 이메일">
                   <Toggle checked={pref.weeklyReportEmail} onChange={set("weeklyReportEmail")} label="주간 투자 행동 리포트" />
                 </Row>
-                <PreviewRow title="전략 마켓 소식" sub="새 검증 전략 · 프로모션" on={false} />
+                <Row
+                  title="전략 마켓 소식"
+                  sub="새 검증 전략 · 프로모션 (광고성 — 아래 마케팅 정보 수신 동의도 있어야 보냅니다)"
+                  extra={market.channels}
+                >
+                  <Toggle checked={market.on} onChange={market.toggle} label="전략 마켓 소식" />
+                </Row>
+              </div>
+
+              <H2>수신 동의</H2>
+              <div>
+                <MarketingConsentRow />
               </div>
             </>
           )}
