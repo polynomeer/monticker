@@ -1,6 +1,8 @@
 package com.monticker.api.brokerage
 
 import com.monticker.api.brokerage.application.BrokerageService
+import com.monticker.api.brokerage.application.OrderOutcomeNotices
+import com.monticker.api.brokerage.application.OrderPriceGuard
 import com.monticker.api.brokerage.application.PendingBuyQuery
 import com.monticker.api.brokerage.application.TradingHaltService
 import com.monticker.api.brokerage.domain.BrokerageAccount
@@ -89,7 +91,7 @@ class BrokerageOrderUnknownOutcomeFlowIntegrationTest {
     /** ADR-058 — 리스크 게이트까지 실제로 조립한다(룰 판정·감사 기록이 실제 SQL로 돈다). */
     private fun serviceWithRealRiskGate(): BrokerageService = service(
         RiskCheckerService(
-            riskLimitRepo, RiskRuleQueryService(jdbc),
+            com.monticker.api.risk.application.RiskLimitService(riskLimitRepo, jdbc), RiskRuleQueryService(jdbc),
             // 운영처럼 트랜잭션 프록시를 씌운다 — record()는 REQUIRES_NEW라 거부와 함께 롤백되지 않고 남아야 한다.
             ProxyFactory(RiskCheckAuditLogger(jdbc, com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules())).apply {
                 isProxyTargetClass = true
@@ -110,6 +112,9 @@ class BrokerageOrderUnknownOutcomeFlowIntegrationTest {
             BrokerageClientRegistry(BrokerageProvider.entries.associateWith { mockBroker }),
             accountRepo, orderRepo, settlementRepo, mockk(relaxed = true), riskChecker, jdbc,
             txManager, SimpleMeterRegistry(), TradingHaltService(jdbc, SimpleMeterRegistry()), PendingBuyQuery(jdbc),
+            mockk(relaxed = true), OrderOutcomeNotices(mockk(relaxed = true)),
+            // 이 테스트는 결과 불명 흐름만 본다 — 호가 단위·가격제한 검증(ADR-081)은 통과시킨다
+            mockk<OrderPriceGuard>(relaxed = true),
         )
         // 운영처럼 @Transactional 프록시를 씌운다. 직접 생성한 인스턴스는 애노테이션이 무시돼, 예컨대 syncOrderStatus에
         // 바깥 트랜잭션이 생겨 캐시된(해소 전) 엔티티를 돌려주는 회귀를 이 테스트가 잡지 못했다.

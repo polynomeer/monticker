@@ -2,8 +2,10 @@ package com.monticker.api.alert.api
 
 import com.monticker.api.alert.application.AlertHistoryResult
 import com.monticker.api.alert.application.AlertService
+import com.monticker.api.alert.domain.AlertRuleConditions
 import com.monticker.api.alert.domain.AlertRuleType
 import com.monticker.api.common.aop.RateLimited
+import com.fasterxml.jackson.annotation.JsonProperty
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
@@ -20,9 +22,37 @@ class AlertController(private val alertService: AlertService) {
 
     private fun userId(): Long = SecurityContextHolder.getContext().authentication.principal as Long
 
+    /** 기본은 켜진 규칙만. includePaused=true면 꺼 둔 규칙도(삭제한 규칙은 제외) — 알림 화면의 켜기/끄기 토글용 */
     @GetMapping("/rules")
-    fun getRules(): ResponseEntity<List<AlertRuleResponse>> =
-        ResponseEntity.ok(alertService.getRules(userId()).map { AlertRuleResponse.from(it) })
+    fun getRules(@RequestParam(defaultValue = "false") includePaused: Boolean): ResponseEntity<List<AlertRuleResponse>> =
+        ResponseEntity.ok(alertService.getRules(userId(), includePaused).map { AlertRuleResponse.from(it) })
+
+    /**
+     * ADR-073 — 규칙 켜기/끄기. PATCH /api/alerts/rules/{id}  {"isActive": false}
+     * 삭제한 규칙·남의 규칙은 404, 다시 켤 수 없는 규칙(평가기 없는 유형)은 409.
+     */
+    @PatchMapping("/rules/{ruleId}")
+    @RateLimited(limit = 120, windowSec = 3600, keyPrefix = "alert.toggle")
+    fun setRuleActive(@PathVariable ruleId: Long, @Valid @RequestBody request: SetAlertRuleActiveRequest): ResponseEntity<AlertRuleResponse> =
+        ResponseEntity.ok(AlertRuleResponse.from(alertService.setActive(userId(), ruleId, request.isActive!!)))
+
+    /** ADR-073 — 이력 한 건 읽음(멱등). POST /api/alerts/history/{id}/read */
+    @PostMapping("/history/{historyId}/read")
+    fun markRead(@PathVariable historyId: Long): ResponseEntity<Void> {
+        alertService.markRead(userId(), historyId)
+        return ResponseEntity.noContent().build()
+    }
+
+    /**
+     * ADR-073 — 모두 읽음. POST /api/alerts/history/read-all?upTo=2026-10-06T01:00:00Z
+     * upTo(기본: 지금) 이전에 발동한 알림만 — 화면을 연 뒤 새로 온 알림은 남긴다.
+     */
+    @PostMapping("/history/read-all")
+    fun markAllRead(@RequestParam(required = false) upTo: Instant?): ResponseEntity<Map<String, Int>> {
+        val now = Instant.now()
+        val bound = if (upTo == null || upTo.isAfter(now)) now else upTo
+        return ResponseEntity.ok(mapOf("updated" to alertService.markAllRead(userId(), bound)))
+    }
 
     @PostMapping("/rules")
     @RateLimited(limit = 20, windowSec = 3600, keyPrefix = "alert.create")
@@ -37,25 +67,8 @@ class AlertController(private val alertService: AlertService) {
         return ResponseEntity.ok(AlertRuleResponse.from(rule))
     }
 
-    // 워커의 AlertEvaluator가 조건 필드를 못 찾으면 조용히 무시하고 룰이 영영 발동하지
-    // 않는다(evaluateRule의 `?: return` 패턴) — 생성 시점에 최소한의 필드 존재만이라도
-    // 걸러야 "저장은 됐는데 평생 안 울리는 룰"이 쌓이지 않는다. 값 자체(0 이하 등)까지
-    // 엄밀히 검증하진 않음 — 그건 워커 쪽에서 이미 각 지표 계산 가드로 처리된다.
-    private fun isConditionValid(type: AlertRuleType, stockId: Long?, condition: Map<String, Any>): Boolean {
-        fun num(key: String) = condition[key] as? Number
-        // 워커(AlertRuleIndex)는 stock_id 기준으로 룰을 색인한다 — stock_id 없는 룰은 어떤 틱에도 매칭되지 않아
-        // 평생 안 울린다(backlog §9). 종목 없는 룰을 받지 않는다. V45가 컬럼도 NOT NULL로 만들었다.
-        if (stockId == null) return false
-        return when (type) {
-            AlertRuleType.PRICE_ABOVE, AlertRuleType.PRICE_BELOW -> num("threshold") != null
-            AlertRuleType.RSI_BELOW, AlertRuleType.RSI_ABOVE -> num("threshold") != null
-            AlertRuleType.PRICE_BELOW_MA, AlertRuleType.PRICE_ABOVE_MA -> true
-            AlertRuleType.HOLDING_DROP -> num("dropPct") != null
-            AlertRuleType.VOLUME_SURGE -> true
-            // 평가기가 없는 타입 — 저장은 되지만 어떤 워커도 보지 않는다. "저장됐는데 평생 안 울리는 룰"의 정확한 정의.
-            AlertRuleType.NEWS_PUBLISHED, AlertRuleType.DISCLOSURE_PUBLISHED -> false
-        }
-    }
+    private fun isConditionValid(type: AlertRuleType, stockId: Long?, condition: Map<String, Any>): Boolean =
+        AlertRuleConditions.isValid(type, stockId, condition)
 
     @DeleteMapping("/rules/{ruleId}")
     fun deactivateRule(@PathVariable ruleId: Long): ResponseEntity<Void> {
@@ -111,6 +124,8 @@ data class AlertHistoryResponse(
     val deliveryStatus: String,
     val triggeredAt: Instant,
     val score: Float?,
+    /** null이면 읽지 않음 */
+    val readAt: Instant?,
 ) {
     companion object {
         fun from(r: AlertHistoryResult) = AlertHistoryResponse(
@@ -122,9 +137,14 @@ data class AlertHistoryResponse(
             deliveryStatus = r.deliveryStatus,
             triggeredAt    = r.triggeredAt,
             score          = r.score,
+            readAt         = r.readAt,
         )
     }
 }
+
+data class SetAlertRuleActiveRequest(
+    @field:NotNull @param:JsonProperty("isActive") @get:JsonProperty("isActive") val isActive: Boolean? = null,
+)
 
 data class CreateAlertRuleRequest(
     val stockId: Long? = null,

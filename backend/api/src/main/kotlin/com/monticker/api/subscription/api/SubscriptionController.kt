@@ -3,6 +3,7 @@ package com.monticker.api.subscription.api
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
+import com.monticker.api.subscription.application.BillingSchedule
 import com.monticker.api.subscription.application.SubscribeResult
 import com.monticker.api.subscription.application.SubscriptionService
 import com.monticker.api.subscription.domain.*
@@ -29,6 +30,11 @@ data class SubscriptionResponse(
     val status: String,
     val startedAt: Instant,
     val expiresAt: Instant?,
+    /** ADR-083 — 다음 정기결제 시각(갱신 잡 실행 시각). 청구되지 않으면 null */
+    val nextBillingAt: Instant? = null,
+    val nextBillingAmount: BigDecimal? = null,
+    /** 청구되지 않는 이유: FREE_PLAN | CANCELLED | NOT_ACTIVE | NO_BILLING_KEY */
+    val noChargeReason: String? = null,
 )
 
 data class PaymentResponse(
@@ -66,7 +72,7 @@ class SubscriptionController(
     ): ResponseEntity<SubscriptionResponse> {
         val sub = subscriptionService.getMySubscription(userId(token))
             ?: return ResponseEntity.notFound().build()
-        return ResponseEntity.ok(sub.toResponse())
+        return ResponseEntity.ok(sub.toResponse(subscriptionService.billingSchedule(sub)))
     }
 
     @PostMapping("/subscribe")
@@ -103,9 +109,11 @@ class SubscriptionController(
         features = mapper.readValue<List<String>>(features),
     )
 
-    private fun UserSubscription.toResponse() = SubscriptionResponse(
+    private fun UserSubscription.toResponse(schedule: BillingSchedule) = SubscriptionResponse(
         planCode = plan.code.name, planName = plan.name,
         status = status.name, startedAt = startedAt, expiresAt = expiresAt,
+        nextBillingAt = schedule.nextBillingAt, nextBillingAmount = schedule.amount,
+        noChargeReason = schedule.noChargeReason?.name,
     )
 
     private fun PaymentRecord.toResponse() = PaymentResponse(

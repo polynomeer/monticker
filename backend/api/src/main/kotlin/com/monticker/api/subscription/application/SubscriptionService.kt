@@ -40,6 +40,24 @@ class SubscriptionService(
     fun getMySubscription(userId: Long): UserSubscription? =
         subscriptionRepo.findByUserId(userId).orElse(null)
 
+    /**
+     * ADR-083 — 다음 정기결제. 저장하지 않고 갱신 잡과 같은 규칙([RenewalSchedule])으로 계산한다: 유료·ACTIVE·만료일 있음·카드 등록일 때만
+     * 청구된다. 해지(CANCELLED)는 갱신 대상이 아니고, 카드가 없으면 갱신 잡이 결제 거절로 기록한다(자동 갱신 없음).
+     */
+    @Transactional(readOnly = true)
+    fun billingSchedule(subscription: UserSubscription, now: Instant = Instant.now()): BillingSchedule {
+        val expiresAt = subscription.expiresAt
+        val reason = when {
+            subscription.plan.price.signum() == 0 -> BillingSchedule.NoChargeReason.FREE_PLAN
+            subscription.status == SubscriptionStatus.CANCELLED -> BillingSchedule.NoChargeReason.CANCELLED
+            subscription.status != SubscriptionStatus.ACTIVE || expiresAt == null -> BillingSchedule.NoChargeReason.NOT_ACTIVE
+            billingKeyRepo.findByUserId(subscription.userId).isEmpty -> BillingSchedule.NoChargeReason.NO_BILLING_KEY
+            else -> null
+        }
+        return if (reason != null) BillingSchedule(null, null, reason)
+        else BillingSchedule(RenewalSchedule.nextChargeAt(expiresAt!!, now), subscription.plan.price, null)
+    }
+
     @Transactional
     fun subscribe(userId: Long, planCode: PlanCode): SubscribeResult {
         val plan = planRepo.findByCode(planCode).orElseThrow {
@@ -392,6 +410,15 @@ class SubscriptionService(
         subscriptionRepo.findByUserId(userId).orElseGet {
             subscriptionRepo.save(UserSubscription(userId = userId, plan = plan))
         }
+}
+
+/** ADR-083 — 다음 정기결제 예정. 청구되지 않으면 [nextBillingAt]·[amount]는 null이고 [noChargeReason]이 이유다. */
+data class BillingSchedule(
+    val nextBillingAt: Instant?,
+    val amount: java.math.BigDecimal?,
+    val noChargeReason: NoChargeReason?,
+) {
+    enum class NoChargeReason { FREE_PLAN, CANCELLED, NOT_ACTIVE, NO_BILLING_KEY }
 }
 
 /** preparePayment 가 프론트에 돌려주는 값 — 이 orderId·amount 로 토스 SDK 를 띄운다. */

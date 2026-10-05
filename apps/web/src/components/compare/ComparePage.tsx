@@ -9,6 +9,7 @@ import StockChart from "@/components/stock/chart/StockChart";
 import type { CandleData } from "@/components/stock/chart/types";
 import { useQuotes } from "@/components/stock/parts";
 import { cn } from "@/lib/utils";
+import { beta, kstDayKey } from "./beta";
 
 const COLORS = ["#bd93f9", "#8be9fd", "#ffb86c", "#ff79c6"];
 const MAX = 4;
@@ -66,6 +67,14 @@ async function candlesFrom(id: number, fromIso: string): Promise<CandleData[]> {
     .sort((a, b) => a.time - b.time);
 }
 
+/** KOSPI 일별 종가(ADR-071). isMocked면 개발용 모의 지수다 */
+async function kospiFrom(fromIso: string): Promise<{ date: string; close: number; isMocked: boolean }[]> {
+  const r = await fetch(`/api/market/indices/KOSPI/daily?from=${fromIso.slice(0, 10)}`);
+  if (!r.ok) return [];
+  const data: { date: string; close: string | number; isMocked: boolean }[] = await r.json();
+  return data.map((d) => ({ date: d.date, close: +d.close, isMocked: d.isMocked }));
+}
+
 async function eventsFrom(id: number, fromIso: string): Promise<Ev[]> {
   const r = await fetch(`/api/stocks/${id}/events?from=${encodeURIComponent(fromIso)}&limit=100`);
   return r.ok ? r.json() : [];
@@ -102,6 +111,9 @@ export default function ComparePage() {
     queries: ids.map((id) => ({ queryKey: ["compare", "events", id, fromIso], queryFn: () => eventsFrom(id!, fromIso), enabled: id != null, staleTime: 60_000 })),
   });
   const quotes = useQuotes(ids.filter((x): x is number => x != null), 60_000);
+  const { data: kospi = [] } = useQuery({ queryKey: ["compare", "kospi", fromIso], queryFn: () => kospiFrom(fromIso), staleTime: 10 * 60_000 });
+  const kospiByDay = useMemo(() => new Map(kospi.map((d) => [d.date, d.close])), [kospi]);
+  const kospiMocked = kospi.some((d) => d.isMocked);
   const loadingCandles = candleQs.some((q) => q.isLoading && q.fetchStatus !== "idle");
 
   // 날짜 합집합 위에 각 종목 종가를 앞 값으로 채워 정렬한다(국내·해외 휴장일이 달라도 같은 x축).
@@ -155,7 +167,12 @@ export default function ComparePage() {
       })
       .filter((v): v is number => v != null);
     const q = s.info ? quotes[s.info.id] : undefined;
+    // 국내 종목만 KOSPI 베타를 낸다 — 해외 종목을 KOSPI에 회귀하면 숫자는 나오지만 뜻이 없다
+    const domestic = s.info ? ["KOSPI", "KOSDAQ"].includes(s.info.market) : false;
+    const b = domestic && kospiByDay.size > 0 ? beta(new Map(cs.map((c) => [kstDayKey(c.time), c.close])), kospiByDay) : null;
     return {
+      beta: b,
+      betaNote: !domestic && s.info ? "해외" : null,
       ret: closes.length > 1 ? closes[closes.length - 1] / closes[0] - 1 : null,
       vol: sd != null ? sd * Math.sqrt(252) : null,
       mdd: closes.length > 1 ? mdd : null,
@@ -172,7 +189,11 @@ export default function ComparePage() {
     { key: "ret", label: `${periodLabel} 수익률`, cells: metrics.map((m) => ({ text: pct(m.ret), cls: dirCls(m.ret) })) },
     { key: "vol", label: "변동성 (연)", cells: metrics.map((m) => ({ text: m.vol == null ? "—" : `${(m.vol * 100).toFixed(1)}%` })) },
     { key: "mdd", label: "최대 낙폭", cells: metrics.map((m) => ({ text: pct(m.mdd), cls: m.mdd ? "text-down" : "" })) },
-    { key: "beta", label: "베타 (KOSPI)", cells: metrics.map(() => ({ text: "—", cls: "text-tm-muted" })) },
+    {
+      key: "beta",
+      label: kospiMocked ? "베타 (KOSPI · 모의 지수)" : "베타 (KOSPI)",
+      cells: metrics.map((m) => ({ text: m.beta == null ? (m.betaNote ? `— (${m.betaNote})` : "—") : m.beta.toFixed(2), cls: m.beta == null ? "text-tm-muted" : kospiMocked ? "text-tm-soft" : "" })),
+    },
     { key: "ev", label: `이벤트 수 (${periodLabel})`, cells: metrics.map((m) => ({ text: m.events == null ? "—" : m.events >= 100 ? "100+" : String(m.events) })) },
     { key: "after", label: "이벤트 후 1일 평균", cells: metrics.map((m) => ({ text: pct(m.afterAvg, 2), cls: dirCls(m.afterAvg) })) },
     { key: "per", label: "PER", cells: metrics.map((m) => ({ text: m.per == null ? "—" : m.per.toFixed(1) })) },
@@ -319,7 +340,7 @@ export default function ComparePage() {
       <PanelRow>
         <Panel tabs={["지표 비교"]} actions={["download"]} className="flex-[999_1_600px]" bodyClassName="px-1.5 pb-1.5 pt-1">
           <DataTable columns={columns} rows={rows} rowKey={(r) => r.key} minWidth={640} />
-          <span className="px-2.5 pb-1 text-2xs text-tm-muted">기간 내 일봉 기준 계산. 베타·배당수익률은 지수·배당 데이터가 없어 아직 표시하지 않습니다.</span>
+          <span className="px-2.5 pb-1 text-2xs text-tm-muted">기간 내 일봉 기준 계산. 베타는 KOSPI와 공통 거래일 일간 수익률로 계산(20일 미만이면 —){kospiMocked ? ", 지금 지수는 개발용 모의 값이라 참고용이 아닙니다" : ""}. 배당수익률은 배당 데이터가 없어 표시하지 않습니다.</span>
         </Panel>
         <Panel tabs={["상관관계"]} actions={[]} className="flex-[1_1_320px]">
           {stocks.length < 2 ? (

@@ -10,6 +10,7 @@ import {
   Btn, DataTable, Divider, Icon, KV, Panel, PanelRow, Pill, PreviewTag, TerminalPage, type BtnKind, type Column,
 } from "@/components/terminal";
 import { cn } from "@/lib/utils";
+import { nextBillingText } from "@/lib/subscriptionBilling";
 
 interface Plan {
   id: number;
@@ -28,7 +29,12 @@ interface MySubscription {
   startedAt: string;
   expiresAt: string | null;
   cancelledAt: string | null;
+  /** ADR-083 — 다음 정기결제 시각(갱신 잡 실행 시각). 청구되지 않으면 null */
+  nextBillingAt?: string | null;
+  nextBillingAmount?: number | null;
+  noChargeReason?: "FREE_PLAN" | "CANCELLED" | "NOT_ACTIVE" | "NO_BILLING_KEY" | null;
 }
+
 
 interface PaymentRecord {
   id: number;
@@ -178,6 +184,7 @@ export default function SubscriptionPage() {
     mutationFn: deregisterBillingKey,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["subscription", "billing"] });
+      qc.invalidateQueries({ queryKey: ["subscription", "me"] });   // 카드가 없으면 다음 결제 예정도 사라진다
       toast({ type: "success", title: "해지 완료", message: "자동결제 카드가 해지되었습니다." });
     },
     onError: (e: Error) => toast({ type: "error", title: "해지 실패", message: e.message }),
@@ -219,7 +226,7 @@ export default function SubscriptionPage() {
     mutationFn: () =>
       authFetch("/api/subscription/cancel", { method: "POST" }).then(async r => {
         if (!r.ok) throw new Error(await r.text());
-        return r.json();
+        return null;   // 204 No Content — 본문이 없다(r.json()은 실패해 성공한 해지를 "해지 실패"로 보였다)
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["subscription"] });
@@ -237,7 +244,7 @@ export default function SubscriptionPage() {
       crumb="계정"
       stats={[
         { label: "현재 플랜", value: currentCode ?? "—" },
-        { label: "만료일", value: mySub?.status === "ACTIVE" ? fmtDate(mySub.expiresAt) : "—" },
+        { label: "다음 결제일", value: nextBillingText(mySub), tone: mySub?.noChargeReason === "NO_BILLING_KEY" ? "text-dracula-orange" : undefined },
         { label: "결제 수단", value: billingStatus?.registered ? "토스페이먼츠" : "미등록" },
       ]}
     >
@@ -323,7 +330,17 @@ export default function SubscriptionPage() {
               )
             }
           />
-          <KV k="만료일" v={fmtDate(mySub?.expiresAt)} />
+          <KV
+            k="다음 결제"
+            mono={false}
+            v={mySub?.nextBillingAt
+              ? `${nextBillingText(mySub)} 01:00 · ${(mySub.nextBillingAmount ?? 0).toLocaleString("ko-KR")}원`
+              : nextBillingText(mySub)}
+          />
+          {mySub?.noChargeReason === "NO_BILLING_KEY" && (
+            <span className="text-xs text-dracula-orange">자동결제 카드가 없어 만료일에 갱신 결제가 되지 않습니다. 카드를 등록해주세요.</span>
+          )}
+          <KV k={mySub?.status === "CANCELLED" ? "이용 종료일" : "만료일"} v={fmtDate(mySub?.expiresAt)} />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <button
               type="button"

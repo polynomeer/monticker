@@ -21,12 +21,11 @@ class ForwardTestServiceTest {
     private val signalRepository = mockk<QuantSignalRepository>(relaxed = true)
     private val equityRepository = mockk<QuantForwardTestEquityRepository>(relaxed = true)
     private val messagingTemplate = mockk<SimpMessagingTemplate>(relaxed = true)
-
-    private val eventPublisher = mockk<org.springframework.context.ApplicationEventPublisher>(relaxed = true)
+    private val events = mockk<org.springframework.context.ApplicationEventPublisher>(relaxed = true)
 
     private val service = ForwardTestService(
         ruleSetRepository, ruleSetService, forwardTestRepository,
-        signalRepository, equityRepository, messagingTemplate, eventPublisher,
+        signalRepository, equityRepository, messagingTemplate, events,
     )
 
     private fun candle(date: LocalDate, close: Double) = DailyCandle(
@@ -146,6 +145,9 @@ class ForwardTestServiceTest {
         assertThat(signalSlot.captured.direction).isEqualTo(SignalDirection.BUY)
         verify { messagingTemplate.convertAndSend("/topic/rulesets/rs1/signals", any<Map<String, Any>>()) }
         verify { equityRepository.save(any()) }
+        // ADR-082 — 룰셋 주인에게 끌 수 있는 퀀트 시그널 알림
+        verify { events.publishEvent(match<Any> { it is com.monticker.api.common.notification.UserNotificationCommand &&
+            it.category == com.monticker.api.common.notification.NotificationCategory.QUANT_SIGNAL }) }
     }
 
     @Test

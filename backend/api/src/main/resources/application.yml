@@ -216,6 +216,13 @@ app:
       trading: ${KAFKA_PARTITIONS_TRADING:3}
       search-index: ${KAFKA_PARTITIONS_SEARCH_INDEX:3}
       retry: ${KAFKA_PARTITIONS_RETRY:1}
+  risk:
+    # ADR-070 — 리스크 한도 근접 경고. 모의계좌 보유·당일 매도 사용자만 주기 평가하고, 사용률이 threshold를 넘으면
+    # 사용자·규칙·KST 날짜마다 한 번 notify.user로 알린다.
+    near-limit:
+      enabled: ${RISK_NEAR_LIMIT_ENABLED:true}
+      threshold: ${RISK_NEAR_LIMIT_THRESHOLD:0.8}
+      interval-ms: ${RISK_NEAR_LIMIT_INTERVAL_MS:300000}
   mail:
     from: ${MAIL_FROM:noreply@monticker.io}
   base-url: ${APP_BASE_URL:http://localhost:3000}

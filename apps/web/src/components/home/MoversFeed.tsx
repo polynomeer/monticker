@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Bar, DataTable, EventBadge, Panel, StockCell, type Column } from "@/components/terminal";
-import { eventLabel, kstTime, useQuotes, useRecentEvents, type RecentEvent } from "./data";
+import { Bar, DataTable, EventBadge, Panel, StockCell, dirClass, fmtPct, type Column } from "@/components/terminal";
+import { eventLabel, fmtMult, kstTime, useQuotes, useRecentEvents, type RecentEvent } from "./data";
 
 const TABS = [
   { key: "moving", label: "지금 움직이는 종목" },
@@ -17,7 +17,10 @@ const FILTER: Record<string, (e: RecentEvent) => boolean> = {
   news: (e) => e.eventType === "NEWS_PUBLISHED",
 };
 
-/** 최근 이벤트 피드 — /api/events/recent 기반. 이벤트 구간 변동·거래량 배수는 응답에 없어 "—". */
+/**
+ * 최근 이벤트 피드 — /api/events/recent 기반.
+ * 이벤트 구간 변동 = 이벤트 직전 1분봉 종가 → 이벤트 후 30분(또는 지금), 거래량 배수 = 직후 5분 ÷ 직전 60분 평균(서버 계산).
+ */
 export default function MoversFeed() {
   const [tab, setTab] = useState("moving");
   const { data: events = [], isLoading } = useRecentEvents();
@@ -35,8 +38,18 @@ export default function MoversFeed() {
       },
     },
     { key: "e", header: "이벤트", cell: (e) => <span title={e.title}><EventBadge type={eventLabel(e.eventType)} /></span> },
-    { key: "c", header: "이벤트 구간 변동", align: "right", cell: () => <span className="text-tm-muted">—</span> },
-    { key: "v", header: "거래량 배수", align: "right", cell: () => <span className="text-tm-muted">—</span> },
+    {
+      key: "c",
+      header: <span title="이벤트 직전 1분봉 종가 대비 이벤트 후 30분(진행 중이면 지금)까지">이벤트 구간 변동</span>,
+      align: "right",
+      cell: (e) => <span className={`num ${e.windowChangePct == null ? "text-tm-muted" : dirClass(e.windowChangePct)}`}>{fmtPct(e.windowChangePct)}</span>,
+    },
+    {
+      key: "v",
+      header: <span title="이벤트 직후 5분 평균 거래량 ÷ 직전 60분 평균">거래량 배수</span>,
+      align: "right",
+      cell: (e) => <span className={`num ${e.volumeMultiple == null ? "text-tm-muted" : ""}`}>{fmtMult(e.volumeMultiple)}</span>,
+    },
     {
       key: "i",
       header: "중요도",

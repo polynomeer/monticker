@@ -12,6 +12,8 @@ import com.monticker.api.quant.infrastructure.QuantSignalRepository
 import com.monticker.api.quant.infrastructure.RuleSetRepository
 import com.monticker.api.quant.events.QuantSignalEmittedEvent
 import org.slf4j.LoggerFactory
+import com.monticker.api.common.notification.NotificationCategory
+import com.monticker.api.common.notification.UserNotificationCommand
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.stereotype.Service
@@ -32,7 +34,7 @@ class ForwardTestService(
     private val signalRepository: QuantSignalRepository,
     private val equityRepository: QuantForwardTestEquityRepository,
     private val messagingTemplate: SimpMessagingTemplate,
-    private val eventPublisher: ApplicationEventPublisher,
+    private val events: ApplicationEventPublisher,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -168,10 +170,22 @@ class ForwardTestService(
             )
             log.info("포워드 테스트 신호 발생: forwardTestId={} direction={} price={}", ft.id, signal, price)
             // ADR-077 — 같은 트랜잭션에서 발행: 신호가 롤백되면 이벤트도 없다. watchrule의 "전략 신호" 규칙이 구독한다.
-            eventPublisher.publishEvent(QuantSignalEmittedEvent(
+            events.publishEvent(QuantSignalEmittedEvent(
                 signalId = saved.id, ruleSetId = saved.ruleSetId, stockId = saved.stockId,
                 direction = saved.direction.name, signalTime = saved.signalTime,
             ))
+            // ADR-082 — 룰셋 주인에게 알린다(알림 설정 "퀀트 시그널"). 이 트랜잭션이 커밋돼야 나간다. 하루·방향당 한 번.
+            events.publishEvent(
+                UserNotificationCommand(
+                    userId = doc.userId,
+                    category = NotificationCategory.QUANT_SIGNAL,
+                    title = "${doc.name} ${if (signal == SignalDirection.BUY) "매수" else "매도"} 신호",
+                    body = "포워드 테스트에서 ${if (signal == SignalDirection.BUY) "매수" else "매도"} 신호가 났습니다(종가 ${"%,.0f".format(price)}원, $asOfDate). " +
+                        "모의 신호이며 실제 주문은 나가지 않았습니다.",
+                    dedupKey = "quant-signal:${ft.id}:$asOfDate:${signal.name}",
+                    data = mapOf("type" to "QUANT_SIGNAL", "ruleSetId" to ft.ruleSetId, "stockId" to ft.stockId, "direction" to signal.name),
+                ),
+            )
             messagingTemplate.convertAndSend(
                 "/topic/rulesets/${ft.ruleSetId}/signals",
                 mapOf(

@@ -28,7 +28,8 @@ class UserNotificationDispatcherTest {
         every { delete(any<String>()) } returns true
     }
     private val mail = mockk<JavaMailSender>(relaxed = true)
-    private val dispatcher = UserNotificationDispatcher(jdbc, push, redis, mail)
+    private val prefs = mockk<NotificationPreferenceReader>()
+    private val dispatcher = UserNotificationDispatcher(jdbc, push, redis, mail, prefs)
 
     private val msg = UserNotificationMessage(
         userId = 7L, title = "005930 손절(스탑로스) 주문이 실행되지 않았습니다", body = "본문",
@@ -107,5 +108,66 @@ class UserNotificationDispatcherTest {
         val read = ObjectMapper().findAndRegisterModules().readValue(json, UserNotificationMessage::class.java)
 
         assertThat(read).isEqualTo(UserNotificationMessage(7L, "t", "b", "k", mapOf("type" to "CONDITIONAL_ORDER_FAILED", "conditionalOrderId" to 12)))
+    }
+
+    // ── ADR-082 사용자 설정 ──────────────────────────────────────────────────
+
+    private fun fills(dedup: String = "brokerage-order-filled:3") =
+        UserNotificationMessage(userId = 7L, title = "체결", body = "본문", dedupKey = dedup, category = "FILLS")
+
+    @Test
+    fun `끌 수 없는 종류(분류 없음 포함)는 설정을 읽지 않는다`() {
+        firstDelivery(); tokens("tok-a")
+        every { push.send(any()) } returns listOf(PushResult("tok-a", "ok", null))
+
+        dispatcher.dispatch(msg)
+        dispatcher.dispatch(msg.copy(category = "ORDER_OUTCOME"))
+
+        verify(exactly = 0) { prefs.forUser(any()) }
+    }
+
+    @Test
+    fun `체결 알림을 끈 사용자에게는 보내지 않고 중복 표시도 남기지 않는다`() {
+        every { prefs.forUser(7L) } returns NotificationPreference(fillsPush = false, fillsEmail = false)
+
+        dispatcher.dispatch(fills())
+
+        verify(exactly = 0) { ops.setIfAbsent(any(), any(), any()) }
+        verify(exactly = 0) { push.send(any()) }
+        verify(exactly = 0) { mail.send(any<SimpleMailMessage>()) }
+    }
+
+    @Test
+    fun `전체 알림을 끄면 끌 수 있는 종류는 모두 멈춘다`() {
+        every { prefs.forUser(7L) } returns NotificationPreference(allEnabled = false)
+
+        dispatcher.dispatch(fills())
+
+        verify(exactly = 0) { push.send(any()) }
+        verify(exactly = 0) { mail.send(any<SimpleMailMessage>()) }
+    }
+
+    @Test
+    fun `이메일을 고른 종류는 푸시가 닿아도 이메일을 함께 보낸다`() {
+        every { prefs.forUser(7L) } returns NotificationPreference(fillsPush = true, fillsEmail = true)
+        every { ops.setIfAbsent("notify:user:sent:brokerage-order-filled:3", "1", any()) } returns true
+        tokens("tok-a"); email("u@test.local")
+        every { push.send(any()) } returns listOf(PushResult("tok-a", "ok", null))
+
+        dispatcher.dispatch(fills())
+
+        verify(exactly = 1) { push.send(any()) }
+        verify(exactly = 1) { mail.send(any<SimpleMailMessage>()) }
+    }
+
+    @Test
+    fun `전략 마켓 소식은 마케팅 동의가 없으면 설정을 켰어도 보내지 않는다`() {
+        every { prefs.forUser(7L) } returns NotificationPreference(strategyMarketNewsPush = true, strategyMarketNewsEmail = true)
+        every { prefs.marketingAgreed(7L) } returns false
+
+        dispatcher.dispatch(UserNotificationMessage(7L, "새 전략", "본문", "sm:1", category = "STRATEGY_MARKET"))
+
+        verify(exactly = 0) { push.send(any()) }
+        verify(exactly = 0) { mail.send(any<SimpleMailMessage>()) }
     }
 }

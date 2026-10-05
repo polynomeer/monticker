@@ -10,6 +10,9 @@ import org.springframework.mail.SimpleMailMessage
 import org.springframework.mail.javamail.JavaMailSender
 import com.monticker.worker.push.ExpoPushSender
 import com.monticker.worker.push.PushMessage
+import com.monticker.worker.notification.NotificationCategory
+import com.monticker.worker.notification.NotificationPolicy
+import com.monticker.worker.notification.NotificationPreferenceReader
 import org.springframework.stereotype.Component
 import java.math.BigDecimal
 import java.time.Duration
@@ -31,10 +34,15 @@ class AlertDispatcher(
     private val tx: TransactionTemplate,
     private val redis: StringRedisTemplate,
     private val mailSender: JavaMailSender,
+    private val preferences: NotificationPreferenceReader,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
     fun dispatch(rule: AlertRuleRow, currentPrice: BigDecimal) {
+        // ADR-082 — 사용자 알림 설정(전체·채널·종류). 쿨다운보다 먼저 읽는다: 읽기가 실패하면 쿨다운 없이 예외로 끝나 재시도된다.
+        val category = if (rule.ruleType == "VOLUME_SURGE") NotificationCategory.VOLUME_SURGE else NotificationCategory.PRICE_ALERT
+        val plan = NotificationPolicy.plan(preferences.forUser(rule.userId), category)
+
         val cooldownKey = "alert:cooldown:${rule.id}"
         val acquired = redis.opsForValue().setIfAbsent(cooldownKey, "1", Duration.ofSeconds(600))
         if (acquired != true) return
@@ -55,29 +63,40 @@ class AlertDispatcher(
 
         log.info("[AlertDispatcher] triggered: ruleId={} userId={} price={}", rule.id, rule.userId, currentPrice)
 
-        val tokens = jdbc.queryForList(
-            "SELECT token FROM device_tokens WHERE user_id = ? AND is_active = true",
-            String::class.java,
-            rule.userId,
-        )
-        if (tokens.isEmpty()) {
-            sendEmailFallback(rule.userId, message)
-            finish(historyId, rule, message, "EMAIL_FALLBACK")
+        // 꺼진 알림도 발동 기록은 남긴다(SUPPRESSED) — 규칙 화면의 "최근 발동"과 쿨다운은 설정과 무관하다.
+        if (plan.none) {
+            finish(historyId, rule, message, "SUPPRESSED")
+            log.info("[AlertDispatcher] 사용자 설정으로 보내지 않음: ruleId={} userId={} category={}", rule.id, rule.userId, category)
             return
         }
 
-        val results = pushSender.send(tokens.map { token ->
-            PushMessage(
-                to    = token,
-                title = "monticker 알림",
-                body  = message,
-                data  = mapOf("stockId" to rule.stockId, "ruleId" to rule.id),
+        var status: String? = null
+        var reached = false
+        if (plan.push) {
+            val tokens = jdbc.queryForList(
+                "SELECT token FROM device_tokens WHERE user_id = ? AND is_active = true",
+                String::class.java,
+                rule.userId,
             )
-        })
-
-        val status = if (results.all { it.status == "ok" }) "SENT" else "FAILED"
-        finish(historyId, rule, message, status)
-        log.info("[AlertDispatcher] push sent: userId={} status={}", rule.userId, status)
+            if (tokens.isNotEmpty()) {
+                val results = pushSender.send(tokens.map { token ->
+                    PushMessage(
+                        to    = token,
+                        title = "monticker 알림",
+                        body  = message,
+                        data  = mapOf("stockId" to rule.stockId, "ruleId" to rule.id),
+                    )
+                })
+                reached = results.any { it.status == "ok" }
+                status = if (results.isNotEmpty() && results.all { it.status == "ok" }) "SENT" else "FAILED"
+                log.info("[AlertDispatcher] push sent: userId={} status={}", rule.userId, status)
+            }
+        }
+        if (plan.email || (plan.emailIfPushMissed && !reached)) {
+            sendEmailFallback(rule.userId, message)
+            if (status == null) status = "EMAIL_FALLBACK"
+        }
+        finish(historyId, rule, message, status ?: "FAILED")
     }
 
     /**
