@@ -34,6 +34,7 @@ class StockEventWriter(
     private val eventKafkaProducer: org.springframework.beans.factory.ObjectProvider<com.monticker.worker.kafka.EventKafkaProducer>,
     private val events: ApplicationEventPublisher,
     private val tx: TransactionTemplate,
+    private val preferences: com.monticker.worker.notification.NotificationPreferenceReader,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val objectMapper = ObjectMapper()
@@ -128,17 +129,27 @@ class StockEventWriter(
 
     private fun sendEventPushAsync(event: DetectedEvent) {
         // 이 stock_id를 관심종목으로 가진 user들의 device token 조회
-        val tokens = jdbcTemplate.queryForList(
+        val rows = jdbcTemplate.query(
                 """
-                SELECT dt.token
+                SELECT dt.user_id, dt.token
                 FROM device_tokens dt
                 JOIN watchlist_items wi ON wi.stock_id = ?
                 JOIN watchlist_groups wg ON wg.id = wi.watchlist_group_id
                 WHERE wg.user_id = dt.user_id AND dt.is_active = true
                 """,
-                String::class.java,
+                { rs, _ -> rs.getLong("user_id") to rs.getString("token") },
                 event.stockId,
             )
+            if (rows.isEmpty()) return
+
+            // ADR-082 — 사용자 알림 설정: 거래량 급증은 "거래량 급증", 급등·급락은 "가격 알림"의 푸시 선택을 따른다(이 경로는 푸시만 보낸다).
+            val category = if (event.eventType == DetectedEventType.VOLUME_SURGE)
+                com.monticker.worker.notification.NotificationCategory.VOLUME_SURGE
+            else com.monticker.worker.notification.NotificationCategory.PRICE_ALERT
+            val prefs = preferences.forUsers(rows.map { it.first })
+            val tokens = rows.filter { (userId, _) ->
+                com.monticker.worker.notification.NotificationPolicy.plan(prefs.getValue(userId), category).push
+            }.map { it.second }.distinct()
             if (tokens.isEmpty()) return
 
             val body = when (event.eventType) {
