@@ -23,6 +23,9 @@ const INDICATORS = [
   { value: "MACD_CROSS",     label: "MACD 크로스",           params: [],         comparators: ["GOLDEN","DEAD"] },
   { value: "PRICE_CHANGE",   label: "N일 가격변화율(%)",     params: ["period"], comparators: ["GT","LT"], hasValue: true },
   { value: "BOLLINGER_BAND", label: "볼린저밴드",            params: ["period"], comparators: ["ABOVE_UPPER","BELOW_LOWER"] },
+  // ADR-079 — 보조 데이터 지표. 장 마감(15:30) 이후 나온 뉴스·공시는 다음 거래일부터 반영된다.
+  { value: "NEWS_SENTIMENT", label: "뉴스 감성(-1~1)",       params: ["period"], comparators: ["GT","LT"], hasValue: true, step: 0.1, defaultPeriod: 5 },
+  { value: "DISCLOSURE",     label: "공시 발생",             params: ["period"], comparators: ["ANY","EARNINGS","BUYBACK","RIGHTS_ISSUE","BONUS_ISSUE","MNA","INSIDER","DIVIDEND"], defaultPeriod: 5 },
   { value: "PROFIT_RATE",    label: "수익률(%)",             params: [],         comparators: ["GTE","LTE"], hasValue: true, exitOnly: true },
   { value: "LOSS_RATE",      label: "손실률(%)",             params: [],         comparators: ["LTE"],       hasValue: true, exitOnly: true },
 ] as const;
@@ -31,6 +34,8 @@ const COMPARATOR_LABEL: Record<string, string> = {
   GT: ">", LT: "<", GTE: "≥", LTE: "≤",
   BETWEEN: "사이", GOLDEN: "골든크로스", DEAD: "데드크로스",
   ABOVE_UPPER: "상단 돌파", BELOW_LOWER: "하단 이탈",
+  ANY: "모든 공시", EARNINGS: "실적·정기보고서", BUYBACK: "자사주 취득", RIGHTS_ISSUE: "유상증자",
+  BONUS_ISSUE: "무상증자", MNA: "합병·분할·인수", INSIDER: "임원·주요주주 지분", DIVIDEND: "배당 결정",
 };
 
 const UNIVERSE_MARKETS = [
@@ -60,18 +65,19 @@ const DEFAULT_EXIT: Condition[] = [
   { id: "x2", indicator: "LOSS_RATE",   comparator: "LTE", params: {}, value: -4 },
 ];
 
-/** 조건 블록 팔레트 — 누르면 매수 조건에 추가된다. 엔진에 없는 지표는 준비 중으로 막아 둔다. */
-const BLOCKS: { label: string; icon: IconName; make?: () => Omit<Condition, "id"> }[] = [
+/** 조건 블록 팔레트 — 누르면 매수 조건에 추가된다. 엔진에 없는 지표는 이유와 함께 막아 둔다. */
+const BLOCKS: { label: string; icon: IconName; make?: () => Omit<Condition, "id">; reason?: string }[] = [
   { label: "거래량",     icon: "filter",  make: () => ({ indicator: "VOLUME_RATIO",   comparator: "GT", params: { period: 20 }, value: 2 }) },
   { label: "가격 변동",  icon: "trend",   make: () => ({ indicator: "PRICE_CHANGE",   comparator: "GT", params: { period: 5 },  value: 3 }) },
   { label: "이동평균",   icon: "line",    make: () => ({ indicator: "CLOSE_VS_MA",    comparator: "GT", params: { period: 20 } }) },
   { label: "RSI",        icon: "bars",    make: () => ({ indicator: "RSI",            comparator: "LT", params: { period: 14 }, value: 30 }) },
   { label: "MACD",       icon: "compare", make: () => ({ indicator: "MACD_CROSS",     comparator: "GOLDEN", params: {} }) },
   { label: "볼린저밴드", icon: "hlines",  make: () => ({ indicator: "BOLLINGER_BAND", comparator: "BELOW_LOWER", params: { period: 20 } }) },
-  { label: "뉴스 감성",  icon: "news" },
-  { label: "공시 유형",  icon: "doc" },
-  { label: "시가총액",   icon: "pie" },
-  { label: "배당",       icon: "card" },
+  { label: "뉴스 감성",  icon: "news",    make: () => ({ indicator: "NEWS_SENTIMENT", comparator: "GT", params: { period: 5 }, value: 0.3 }) },
+  { label: "공시 유형",  icon: "doc",     make: () => ({ indicator: "DISCLOSURE",     comparator: "BUYBACK", params: { period: 5 } }) },
+  { label: "배당 공시",  icon: "card",    make: () => ({ indicator: "DISCLOSURE",     comparator: "DIVIDEND", params: { period: 5 } }) },
+  // 시가총액은 종목당 최신 값 1개뿐이라 과거 시점으로 백테스트하면 미래 정보가 섞인다. 종목군은 아래 유니버스에서 고른다.
+  { label: "시가총액",   icon: "pie",     reason: "시가총액 이력이 없어 조건으로 쓸 수 없습니다 — 유니버스의 시총 필터를 쓰세요" },
 ];
 
 const COND_COLORS = ["text-dracula-purple", "text-dracula-cyan", "text-dracula-pink", "text-dracula-orange", "text-dracula-green"];
@@ -97,6 +103,7 @@ function condToText(c: Condition): string {
   const periodStr = period ? `(${period})` : "";
   const cmpLabel = COMPARATOR_LABEL[c.comparator] ?? c.comparator;
 
+  if (c.indicator === "DISCLOSURE") return `최근 ${period ?? 5}거래일 ${cmpLabel} 공시`;
   if (c.comparator === "GOLDEN") return `${label} — 골든크로스`;
   if (c.comparator === "DEAD")   return `${label} — 데드크로스`;
   if (c.comparator === "ABOVE_UPPER") return `${label}${periodStr} 상단 돌파`;
@@ -130,7 +137,9 @@ function ConditionRow({ cond, color, onChange, onRemove, exitMode }: {
         value={cond.indicator}
         onChange={e => {
           const m = INDICATORS.find(i => i.value === e.target.value)!;
-          onChange({ ...cond, indicator: e.target.value, comparator: m.comparators[0], params: {}, value: undefined });
+          // 기간을 비워 두면 화면(20)과 서버 기본값이 어긋날 수 있다 — 고를 때 명시적으로 채운다.
+          const period = (m.params as readonly string[]).includes("period") ? ("defaultPeriod" in m ? m.defaultPeriod : 20) : undefined;
+          onChange({ ...cond, indicator: e.target.value, comparator: m.comparators[0], params: period ? { period } : {}, value: undefined });
         }}
       >
         {options.map(i => <option key={i.value} value={i.value}>{i.label}</option>)}
@@ -169,6 +178,7 @@ function ConditionRow({ cond, color, onChange, onRemove, exitMode }: {
       ) : indicatorHasValue(meta) ? (
         <ChipNumber
           aria-label="값"
+          step={meta && "step" in meta ? meta.step : undefined}
           value={typeof cond.value === "number" ? cond.value : ""}
           onChange={e => onChange({ ...cond, value: +e.target.value })}
         />
@@ -338,7 +348,7 @@ export default function BuilderPage() {
                 key={b.label}
                 type="button"
                 disabled={!b.make}
-                title={b.make ? `${b.label} 조건을 매수 조건에 추가` : "준비 중인 지표입니다"}
+                title={b.make ? `${b.label} 조건을 매수 조건에 추가` : b.reason ?? "준비 중인 지표입니다"}
                 onClick={() => b.make && setEntry(p => [...p, { id: uid(), ...b.make!() }])}
                 className="flex h-[38px] items-center gap-2 rounded-lg border border-tm-line bg-tm-inner px-2.5 text-left text-13 text-tm-soft hover:border-tm-line2 hover:text-dracula-fg disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -347,7 +357,7 @@ export default function BuilderPage() {
               </button>
             ))}
           </div>
-          <span className="text-2xs text-tm-muted">블록을 누르면 오른쪽 매수 조건에 추가됩니다. 흐린 블록은 준비 중입니다.</span>
+          <span className="text-2xs text-tm-muted">블록을 누르면 오른쪽 매수 조건에 추가됩니다. 뉴스·공시는 장 마감 뒤 나온 것을 다음 거래일부터 반영합니다. 흐린 블록은 이유를 마우스를 올려 확인하세요.</span>
         </Panel>
 
         {/* ── 캔버스 ─────────────────────────────────────── */}
