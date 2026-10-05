@@ -13,6 +13,7 @@ import OrderBook from "./OrderBook";
 import OrderForm from "./OrderForm";
 import PositionsPanel from "./PositionsPanel";
 import PaperConditionalPanel from "./PaperConditionalPanel";
+import RecentTrades from "./RecentTrades";
 import StockScoreCard from "./StockScoreCard";
 import { fmtKrwCompact, fmtShares, useQuotes } from "./parts";
 import { useStockChart } from "@/hooks/useStockChart";
@@ -206,12 +207,11 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
           active={bookTab}
           onTabChange={(k) => setBookTab(k as BookTab)}
           actions={["plus", "sliders", "expand"]}
-          preview={bookTab === "ticks"}
           className="flex-[0_1_290px]"
           bodyClassName={bookTab === "book" ? "px-0 pb-3 pt-2.5" : undefined}
         >
           {bookTab === "book" && <OrderBook stockId={stockId} prevClose={prevClose} />}
-          {bookTab === "ticks" && <p className="m-0 py-8 text-center text-13 text-tm-muted">실시간 체결(틱) 목록은 준비 중입니다.</p>}
+          {bookTab === "ticks" && <RecentTrades stockId={stockId} />}
           {bookTab === "summary" && (
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-2">
