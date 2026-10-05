@@ -27,82 +27,42 @@ object QuantBacktestEngine {
         }
 
         var cash        = initialCapital
-        var holding     = 0
-        var entryPrice  = 0.0
-        var entryDate   = filtered.first().date
+        var position: SimPosition? = null
         val trades      = mutableListOf<QuantTradeRecord>()
         val equity      = mutableListOf<QuantEquityPoint>()
         var peakEquity  = initialCapital
 
+        // ADR-078 — 하루 판단은 QuantDayStep 한 곳에서만 한다(포워드 테스트와 동일 경로).
         for ((idx, candle) in filtered.withIndex()) {
             val price = candle.close.toDouble()
 
-            // Exit evaluation
-            if (holding > 0) {
-                val shouldExit = RuleEvaluator.evaluateExit(ruleDef.exitRules, filtered, idx, entryPrice, price)
-                if (shouldExit) {
-                    val exitPrice = price * (1 - SLIPPAGE_RATE)
-                    val commission = holding * exitPrice * COMMISSION_RATE
-                    val proceeds = holding * exitPrice - commission
-                    val pnl = proceeds - holding * entryPrice
-                    val pnlPct = (exitPrice - entryPrice) / entryPrice * 100
-                    trades.add(QuantTradeRecord(
-                        entryDate  = entryDate,
-                        exitDate   = candle.date,
-                        entryPrice = entryPrice,
-                        exitPrice  = exitPrice,
-                        quantity   = holding,
-                        pnl        = pnl,
-                        pnlPct     = pnlPct,
-                        exitReason = "SIGNAL",
-                    ))
-                    cash   += proceeds
-                    holding = 0
+            when (val action = QuantDayStep.decide(ruleDef, filtered, idx, cash, position)) {
+                is DayAction.Exit -> {
+                    val pos = position!!
+                    trades.add(closedTrade(pos, candle.date, action.fillPrice, action.proceeds, action.reason))
+                    cash += action.proceeds
+                    position = null
                 }
+                is DayAction.Enter -> {
+                    position = SimPosition(action.qty, action.fillPrice, candle.date)
+                    cash -= action.cost
+                }
+                DayAction.Hold -> {}
             }
 
-            // Entry evaluation
-            if (holding == 0) {
-                val shouldEnter = RuleEvaluator.evaluateEntry(ruleDef.entryRules, filtered, idx, )
-                if (shouldEnter && cash > price) {
-                    val ratio      = ruleDef.positionSizing.value / 100.0
-                    val buyPrice   = price * (1 + SLIPPAGE_RATE)
-                    val budget     = cash * ratio
-                    val qty        = (budget / buyPrice).toInt().coerceAtLeast(1)
-                    val commission = qty * buyPrice * COMMISSION_RATE
-                    val cost       = qty * buyPrice + commission
-                    if (cost <= cash) {
-                        holding    = qty
-                        entryPrice = buyPrice
-                        entryDate  = candle.date
-                        cash      -= cost
-                    }
-                }
-            }
-
-            val totalEquity = cash + holding * price
+            val totalEquity = cash + (position?.qty ?: 0) * price
             peakEquity = max(peakEquity, totalEquity)
             val drawdown = if (peakEquity > 0) (peakEquity - totalEquity) / peakEquity * 100 else 0.0
             equity.add(QuantEquityPoint(candle.date, totalEquity, drawdown))
         }
 
         // Force-close last position
-        if (holding > 0 && filtered.isNotEmpty()) {
+        position?.let { pos ->
             val last       = filtered.last()
             val exitPrice  = last.close.toDouble() * (1 - SLIPPAGE_RATE)
-            val commission = holding * exitPrice * COMMISSION_RATE
-            val proceeds   = holding * exitPrice - commission
-            val pnl        = proceeds - holding * entryPrice
-            trades.add(QuantTradeRecord(
-                entryDate  = entryDate,
-                exitDate   = last.date,
-                entryPrice = entryPrice,
-                exitPrice  = exitPrice,
-                quantity   = holding,
-                pnl        = pnl,
-                pnlPct     = (exitPrice - entryPrice) / entryPrice * 100,
-                exitReason = "END",
-            ))
+            val commission = pos.qty * exitPrice * COMMISSION_RATE
+            val proceeds   = pos.qty * exitPrice - commission
+            trades.add(closedTrade(pos, last.date, exitPrice, proceeds, "END"))
             cash += proceeds
         }
 
@@ -110,6 +70,18 @@ object QuantBacktestEngine {
         val metrics = calcMetrics(initialCapital, finalCapital, trades, equity, filtered)
         return QuantBacktestRunResult(initialCapital, finalCapital, metrics, trades, equity)
     }
+
+    private fun closedTrade(pos: SimPosition, exitDate: java.time.LocalDate, exitPrice: Double, proceeds: Double, reason: String) =
+        QuantTradeRecord(
+            entryDate  = pos.entryDate,
+            exitDate   = exitDate,
+            entryPrice = pos.entryPrice,
+            exitPrice  = exitPrice,
+            quantity   = pos.qty,
+            pnl        = proceeds - pos.qty * pos.entryPrice,
+            pnlPct     = (exitPrice - pos.entryPrice) / pos.entryPrice * 100,
+            exitReason = reason,
+        )
 
     private fun calcMetrics(
         initial: Double,
