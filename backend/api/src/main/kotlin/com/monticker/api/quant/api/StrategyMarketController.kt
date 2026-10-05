@@ -1,6 +1,7 @@
 package com.monticker.api.quant.api
 
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
+import com.monticker.api.common.exception.BusinessRuleException
 import com.monticker.api.quant.application.StrategyPerformanceQuery
 import com.monticker.api.quant.domain.RuleSetStatus
 import com.monticker.api.quant.infrastructure.RuleSetRepository
@@ -17,6 +18,8 @@ data class StrategyShareRequest(
     val description: String? = null,
     val price: BigDecimal = BigDecimal.ZERO,
 )
+
+private val MAX_PRICE = BigDecimal(1_000_000)
 
 @Validated
 @RestController
@@ -78,6 +81,11 @@ class StrategyMarketController(
     ): ResponseEntity<*> {
         val userId = jwtTokenProvider.getUserId(auth.removePrefix("Bearer ").trim())
 
+        // 음수·소수·과도한 가격이 그대로 저장되면 구독 결제 금액이 그 값이 된다.
+        require(req.price >= BigDecimal.ZERO && req.price <= MAX_PRICE && req.price.stripTrailingZeros().scale() <= 0) {
+            "월 구독료는 0원 이상 ${MAX_PRICE.toPlainString()}원 이하의 정수여야 합니다."
+        }
+
         // req.rulesetId를 그대로 믿고 INSERT하면 남의 룰셋 ID를 알아내는 것만으로 그 룰셋을
         // 마켓에 공유해버릴 수 있었다(broken object-level authorization) — 소유권을 먼저 확인한다.
         val doc = ruleSetRepository.findByIdAndUserId(req.rulesetId, userId)
@@ -119,6 +127,13 @@ class StrategyMarketController(
         val rulesetId  = strategy["ruleset_id"] as String
 
         require(creatorId != userId) { "자신의 전략을 구독할 수 없습니다." }
+
+        // ADR-080 — 유료 전략 구독은 결제 흐름(사전 주문·PG 확정·갱신·환불)과 법무 판단(유사투자자문업,
+        // 정산 원천징수)이 정해지기 전까지 서버에서 닫는다. 화면이 막아 두어도 API는 직접 호출할 수 있었고,
+        // Mock PG 환경에서는 실제 결제 없이 제작자 수익이 적립됐다.
+        if (price > BigDecimal.ZERO) {
+            throw BusinessRuleException("유료 전략 구독 결제는 아직 열리지 않았습니다. 무료 전략만 구독할 수 있습니다.")
+        }
 
         val inserted = jdbc.update(
             """INSERT INTO strategy_subscriptions (market_id, user_id, created_at)

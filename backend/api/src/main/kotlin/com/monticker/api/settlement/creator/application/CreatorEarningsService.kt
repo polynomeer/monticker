@@ -51,6 +51,12 @@ class CreatorEarningsService(
             log.debug("무료 전략 구독: strategyId={} subscriberId={}", strategyId, subscriberId)
             return null
         }
+        // ADR-080 — 유료 전략 결제는 닫혀 있다. 아래 경로는 주문 ID·결제 기록·결과 불명 처리 없이
+        // pgClient.requestPayment를 부르고 곧바로 출금 가능한 수익을 적립한다. 호출자가 실수로 열어도
+        // 돈이 움직이지 않도록 여기서 한 번 더 막는다(fail-closed).
+        if (price.signum() != 0) {
+            throw com.monticker.api.common.exception.BusinessRuleException("유료 전략 구독 결제는 아직 열리지 않았습니다.")
+        }
 
         val result = pgClient.requestPayment(
             PaymentRequest(userId = subscriberId, planCode = "STRATEGY_$strategyCode", amount = price)
