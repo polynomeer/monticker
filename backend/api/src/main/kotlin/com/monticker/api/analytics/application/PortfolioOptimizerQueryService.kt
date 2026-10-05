@@ -69,6 +69,23 @@ class PortfolioOptimizerQueryService(
         )
     }
 
+    /**
+     * 주어진 비중의 연 기대수익·연 위험. 최적화와 같은 데이터(최근 1년 일별 수익률, 가장 짧은 종목 길이에
+     * 맞춤)로 계산해 최적 비중과 같은 축에서 비교할 수 있게 한다. 데이터가 부족하면 null.
+     */
+    fun evaluateWeights(rawStockIds: List<Long>, weights: Map<Long, Double>): Pair<Double, Double>? {
+        val stockIds = rawStockIds.distinct()
+        if (stockIds.isEmpty() || stockIds.size > MAX_STOCK_IDS) return null
+        val returnsByStock = loadDailyReturns(stockIds)
+        val minLen = returnsByStock.values.minOfOrNull { it.size } ?: 0
+        if (minLen < 30) return null
+        val aligned = stockIds.map { returnsByStock[it]!!.takeLast(minLen) }
+        val mu = aligned.map { it.average() }.toDoubleArray()
+        val cov = covarianceMatrix(aligned)
+        val w = DoubleArray(stockIds.size) { weights[stockIds[it]] ?: 0.0 }
+        return portfolioReturn(w, mu) * tradingDaysPerYear to portfolioRisk(w, cov) * sqrt(tradingDaysPerYear)
+    }
+
     fun getEfficientFrontierCompute(rawStockIds: List<Long>): List<FrontierPoint> {
         val stockIds = rawStockIds.distinct()
         if (stockIds.size < 2 || stockIds.size > MAX_STOCK_IDS) return emptyList()
