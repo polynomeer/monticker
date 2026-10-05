@@ -49,13 +49,14 @@ async function fetchEvents(stockId: number): Promise<EventMarker[]> {
   const data = await res.json();
   const mapped: EventMarker[] = data.map((e: {
     id: number; eventTime: string; eventType: string;
-    title: string; importanceScore: number;
+    title: string; importanceScore: number; sentimentScore?: number | string | null;
   }) => ({
     id:              e.id,
     time:            Math.floor(new Date(e.eventTime).getTime() / 1000),
     eventType:       e.eventType,
     title:           e.title,
     importanceScore: e.importanceScore,
+    sentimentScore:  e.sentimentScore == null ? null : Number(e.sentimentScore),
   }));
   mapped.sort((a, b) => a.time - b.time);
   return mapped;

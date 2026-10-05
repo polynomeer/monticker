@@ -14,6 +14,24 @@ export interface EventMarker {
   eventType: string;
   title: string;
   importanceScore: number;
+  /** 뉴스 감성 점수(-1~1). 없으면 null — "감성" 레이어가 쓴다 */
+  sentimentScore?: number | null;
+}
+
+/** "퀀트 시그널" 레이어 — 내 전략·구독 전략의 이 종목 신호 */
+export interface SignalMarker {
+  id: number;
+  time: number;   // Unix epoch seconds
+  direction: "BUY" | "SELL";
+  label: string;
+}
+
+/** "감성" 레이어 — 감성 점수가 있는 이벤트 */
+export interface SentimentMarker {
+  id: number;
+  time: number;
+  score: number;
+  title: string;
 }
 
 export interface ChartTheme {
@@ -58,6 +76,10 @@ export interface ChartAdapterProps {
   onEventClick?: (eventId: number) => void;
   /** 메인 차트에 겹쳐 그릴 지표. 미지정 시 MA5/MA20만(기존 기본값과 동일). */
   enabledIndicators?: IndicatorKey[];
+  /** 퀀트 시그널(매수▲·매도▼) 마커 */
+  signalMarkers?: SignalMarker[];
+  /** 감성 점수 마커(양수 초록·음수 빨강) */
+  sentimentMarkers?: SentimentMarker[];
   /** 실전투자 미체결 주문을 가격선으로 표시 */
   orderLines?: OrderLine[];
   onCancelOrderLine?: (orderId: number) => void;
