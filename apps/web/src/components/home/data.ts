@@ -104,9 +104,14 @@ export function useDailyCloses(stockIds: number[]) {
   return out;
 }
 
-/** KST 기준 시각 문자열(HH:MM) */
-export function kstTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Seoul" });
+/** KST 기준 시각 문자열 — 오늘이면 HH:MM, 이전 날짜면 MM.DD HH:MM(시각만 보이면 며칠 전 이벤트가 오늘 것처럼 읽힌다) */
+export function kstTime(iso: string, now: Date = new Date()) {
+  const d = new Date(iso);
+  const day = (x: Date) => x.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+  const time = d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Seoul" });
+  if (day(d) === day(now)) return time;
+  const [, m, dd] = day(d).split("-");
+  return `${m}.${dd} ${time}`;
 }
 
 /**
