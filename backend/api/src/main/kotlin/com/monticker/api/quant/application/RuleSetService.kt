@@ -18,6 +18,7 @@ class RuleSetService(
     private val backtestResultRepository: QuantBacktestResultRepository,
     private val jdbc: JdbcTemplate,
     private val objectMapper: ObjectMapper,
+    private val performanceQuery: StrategyPerformanceQuery,
 ) {
 
     // ─── CRUD ──────────────────────────────────────────────────────────────────
@@ -37,8 +38,12 @@ class RuleSetService(
         return ruleSetRepository.save(doc).toResponse()
     }
 
-    fun findByUser(userId: Long): List<RuleSetResponse> =
-        ruleSetRepository.findAllByUserId(userId).map { it.toResponse() }
+    /** ADR-078 — 목록에는 카드용 성과 요약(최신 백테스트·포워드)을 같이 싣는다. */
+    fun findByUser(userId: Long): List<RuleSetResponse> {
+        val docs = ruleSetRepository.findAllByUserId(userId)
+        val performance = performanceQuery.summarize(docs.mapNotNull { it.id })
+        return docs.map { it.toResponse().copy(performance = performance[it.id]) }
+    }
 
     fun findById(id: String, userId: Long): RuleSetResponse =
         ruleSetRepository.findByIdAndUserId(id, userId)
@@ -145,15 +150,15 @@ class RuleSetService(
     fun listBacktestResults(id: String, userId: Long): List<QuantBacktestResponse> {
         ruleSetRepository.findByIdAndUserId(id, userId)
             .orElseThrow { NoSuchElementException("RuleSet $id not found") }
-        return backtestResultRepository.findAllByRuleSetId(id).map { it.toResponse() }
+        return backtestResultRepository.findAllByRuleSetIdOrderByCreatedAtDescIdDesc(id).map { it.toResponse() }
     }
 
     /**
      * analytics 모듈(PositionSizerService)이 Kelly 포지션 사이징 계산에 사용하는 조회 API.
      */
     fun getLatestBacktestResult(ruleSetId: String): QuantBacktestResponse? =
-        backtestResultRepository.findAllByRuleSetId(ruleSetId)
-            .maxByOrNull { it.createdAt }
+        backtestResultRepository.findAllByRuleSetIdOrderByCreatedAtDescIdDesc(ruleSetId)
+            .firstOrNull()
             ?.toResponse()
 
     // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -309,6 +314,8 @@ data class RuleSetResponse(
     val versionCount: Int,
     val createdAt: String,
     val updatedAt: String,
+    /** 목록 조회에서만 채운다(ADR-078). 단건 조회는 null */
+    val performance: StrategyPerformance? = null,
 )
 
 data class QuantBacktestResponse(

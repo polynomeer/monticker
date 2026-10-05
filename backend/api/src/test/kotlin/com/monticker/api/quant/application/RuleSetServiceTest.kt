@@ -18,7 +18,8 @@ class RuleSetServiceTest {
     private val ruleSetRepository = mockk<RuleSetRepository>()
     private val backtestResultRepository = mockk<QuantBacktestResultRepository>()
     private val jdbc = mockk<JdbcTemplate>()
-    private val service = RuleSetService(ruleSetRepository, backtestResultRepository, jdbc, ObjectMapper())
+    private val performanceQuery = mockk<StrategyPerformanceQuery>()
+    private val service = RuleSetService(ruleSetRepository, backtestResultRepository, jdbc, ObjectMapper(), performanceQuery)
 
     private fun doc(status: String) = RuleSetDocument(id = "rs1", userId = 1L, name = "original", status = status)
 
@@ -98,5 +99,20 @@ class RuleSetServiceTest {
         service.delete("rs1", 1L)
 
         io.mockk.verify { ruleSetRepository.delete(any()) }
+    }
+
+    // ── ADR-078 목록 성과 요약 ────────────────────────────────────────────────────
+
+    @Test
+    fun `findByUser attaches the batched performance summary to each ruleset`() {
+        every { ruleSetRepository.findAllByUserId(1L) } returns listOf(doc(RuleSetStatus.BACKTESTED.name), doc(RuleSetStatus.DRAFT.name).copy(id = "rs2"))
+        val perf = StrategyPerformance(backtest = null, forward = ForwardSummary("RUNNING", "2026-01-01T00:00:00Z", null, 0.9, 9, 10))
+        every { performanceQuery.summarize(listOf("rs1", "rs2")) } returns mapOf("rs1" to perf)
+
+        val list = service.findByUser(1L)
+
+        assertThat(list.first { it.id == "rs1" }.performance).isEqualTo(perf)
+        assertThat(list.first { it.id == "rs2" }.performance).isNull()
+        io.mockk.verify(exactly = 1) { performanceQuery.summarize(any()) }
     }
 }
