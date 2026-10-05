@@ -108,6 +108,27 @@ class CreatorEarningsService(
             )
         }
 
+    /** 제작자 대시보드 월별 차트용 — [since] 이후 월(KST)별 순수익(취소 제외). 수익이 없는 달은 빠진다. */
+    @Transactional(readOnly = true)
+    fun getMonthlyNet(creatorId: Long, since: java.time.Instant): List<MonthlyNet> =
+        earningRepo.sumMonthlyNet(creatorId, since).map { row ->
+            MonthlyNet(month = row[0] as String, net = toBigDecimal(row[1]))
+        }
+
+    /** 전략별 누적·[since] 이후 순수익(취소 제외). 키는 strategy_market.id */
+    @Transactional(readOnly = true)
+    fun getStrategyNet(creatorId: Long, since: java.time.Instant): Map<Long, StrategyNet> =
+        earningRepo.sumNetByStrategy(creatorId, since).associate { row ->
+            (row[0] as Number).toLong() to StrategyNet(total = toBigDecimal(row[1]), sinceNet = toBigDecimal(row[2]))
+        }
+
+    private fun toBigDecimal(v: Any?): BigDecimal = when (v) {
+        null -> BigDecimal.ZERO
+        is BigDecimal -> v
+        is Number -> BigDecimal(v.toString())
+        else -> BigDecimal(v.toString())
+    }
+
     // ── 출금 ──────────────────────────────────────────────────────────────────
 
     @Transactional
@@ -175,3 +196,10 @@ class CreatorEarningsService(
 }
 
 data class StrategyEarningSummary(val strategyId: Long, val totalNet: BigDecimal)
+
+/** quant 모듈(제작자 대시보드)이 받는 집계 타입 — 서비스와 함께 공개한다. */
+@NamedInterface("api")
+data class MonthlyNet(val month: String, val net: BigDecimal)
+
+@NamedInterface("api")
+data class StrategyNet(val total: BigDecimal, val sinceNet: BigDecimal)
