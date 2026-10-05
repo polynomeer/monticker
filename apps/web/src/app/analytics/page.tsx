@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
 import {
-  AutoGrid, Bar, Btn, Chip, Field, IconBtn, Notice, Panel, PanelRow, Pill, PreviewTag, Stat, TerminalPage,
+  AutoGrid, Bar, Btn, Chip, Field, IconBtn, Notice, Panel, PanelRow, Pill, Stat, TerminalPage,
 } from "@/components/terminal";
 import { FrontierChart } from "@/components/analytics/FrontierChart";
 import { usePaperPortfolio } from "@/hooks/usePaperTrade";
+import { getScreenerQuotes } from "@/services/screener";
+import { saveRebalanceDraft, toDraftWeights } from "@/lib/rebalanceDraft";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -301,6 +304,37 @@ export default function AnalyticsPage() {
   };
 
   const run = () => { opt.refetch(); frontier.refetch(); };
+
+  // 추천 비중을 리밸런싱 화면에 "편집 중 초안"으로 넘긴다. 서버에는 아무것도 저장하지 않는다 —
+  // 목표 저장·미리보기·실행 확인은 리밸런싱 화면에서 사용자가 직접 한다.
+  const router = useRouter();
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const sendToRebalance = async () => {
+    if (!data) return;
+    setSendError(null);
+    setSending(true);
+    try {
+      const weights = toDraftWeights(Object.entries(data.weights).map(([id, w]) => ({ stockId: Number(id), weight: w })));
+      const quotes = await getScreenerQuotes(weights.map(w => w.stockId));
+      const bySymbol = new Map(quotes.map(q => [q.stockId, q]));
+      const missing = weights.filter(w => !bySymbol.has(w.stockId));
+      if (missing.length > 0) throw new Error(`종목 코드를 찾지 못했습니다: ${missing.map(w => labelOf(w.stockId)).join(", ")}`);
+      const ok = saveRebalanceDraft({
+        createdAt: Date.now(),
+        rows: weights.map(w => ({ stockId: w.stockId, symbol: bySymbol.get(w.stockId)!.symbol, name: bySymbol.get(w.stockId)!.name, weightPct: w.weightPct })),
+        expectedReturn: data.expectedReturn,
+        expectedRisk: data.expectedRisk,
+        suggestion: data.suggestion,
+      });
+      if (!ok) throw new Error("초안을 넘기지 못했습니다. 브라우저 저장소 설정을 확인하세요.");
+      router.push("/brokerage/rebalance");
+    } catch (e) {
+      setSendError((e as Error).message);
+    } finally {
+      setSending(false);
+    }
+  };
   const optSharpe = data ? sharpe(data.expectedReturn, data.expectedRisk) : null;
   const eqSharpe = data ? sharpe(data.currentEqualWeightReturn, data.currentEqualWeightRisk) : null;
   const heldSharpe = held ? sharpe(held.expectedReturn, held.expectedRisk) : null;
@@ -398,10 +432,11 @@ export default function AnalyticsPage() {
             <p className="m-0 py-4 text-center text-13 text-tm-muted">최적 비중을 계산하면 종목별 추천 비중이 표시됩니다.</p>
           )}
           {data?.suggestion && <Notice tone="info">{data.suggestion}</Notice>}
-          <div className="flex items-center gap-2">
-            <Btn full disabled title="리밸런싱 화면 연동은 준비 중입니다">리밸런싱으로 보내기</Btn>
-            <PreviewTag />
-          </div>
+          <Btn full onClick={sendToRebalance} disabled={!data || sending} title={data ? "추천 비중을 리밸런싱 화면에 초안으로 채웁니다 — 저장·실행은 그 화면에서 직접" : "먼저 최적 비중을 계산하세요"}>
+            {sending ? "넘기는 중..." : "리밸런싱으로 보내기"}
+          </Btn>
+          {sendError && <Notice tone="danger">{sendError}</Notice>}
+          <span className="text-2xs text-tm-muted">실전 계좌 리밸런싱 화면에 초안으로만 채웁니다. 목표 저장과 주문 실행은 그 화면에서 직접 확인해야 하며, 자동으로 주문하지 않습니다.</span>
           <span className="text-2xs text-tm-muted">보유 일봉 수익률 기반 평균-분산 최적화(목표 수익 대비 최소 분산). 샤프는 무위험 수익률 0 가정. 추정치이며 보장되지 않습니다.</span>
         </Panel>
       </PanelRow>
