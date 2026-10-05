@@ -47,6 +47,37 @@ export interface RuleSet {
   versionCount?: number;
   createdAt: string;
   updatedAt: string;
+  /** ADR-078 — 목록 조회(GET /api/quant/rulesets)에서만 채워진다. */
+  performance?: StrategyPerformance | null;
+}
+
+/** 카드용 최신 백테스트 요약 — 지표와 다운샘플 자산 곡선(최대 48점). 수익률·MDD는 % 단위, MDD는 양수. */
+export interface BacktestSummary {
+  id: number;
+  stockId: number;
+  startDate: string;
+  endDate: string;
+  totalReturn: number | null;
+  annualReturn: number | null;
+  mdd: number | null;
+  sharpe: number | null;
+  tradeCount: number | null;
+  reliabilityScore: string | null;
+  curve: number[];
+}
+
+export interface ForwardSummary {
+  status: "RUNNING" | "STOPPED" | string;
+  startedAt: string;
+  stoppedAt: string | null;
+  matchRate: number | null;
+  matchedSignals: number | null;
+  comparedSignals: number | null;
+}
+
+export interface StrategyPerformance {
+  backtest: BacktestSummary | null;
+  forward: ForwardSummary | null;
 }
 
 export interface QuantTradeRecord {
@@ -136,6 +167,14 @@ export interface ForwardTestResult {
   currentEquity: number;
   startedAt: string;
   stoppedAt: string | null;
+  /**
+   * ADR-078 — 포워드 일치율(0~1): 실제 포워드 신호와 같은 기간·같은 룰 재실행 신호의
+   * (평가일, 방향) 자카드 지수. 비교할 신호가 아직 없거나 계산 전이면 null.
+   */
+  matchRate: number | null;
+  matchedSignals: number | null;
+  comparedSignals: number | null;
+  matchEvaluatedAt: string | null;
   equityCurve: ForwardTestEquityPoint[];
   signals: ForwardTestSignal[];
 }
