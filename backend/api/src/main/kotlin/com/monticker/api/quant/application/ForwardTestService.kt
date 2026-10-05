@@ -165,6 +165,7 @@ class ForwardTestService(
                     direction     = signal,
                     signalTime    = Instant.now(),
                     evalDate      = asOfDate,
+                    price         = BigDecimal.valueOf(price),
                 )
             )
             log.info("포워드 테스트 신호 발생: forwardTestId={} direction={} price={}", ft.id, signal, price)
@@ -172,6 +173,8 @@ class ForwardTestService(
                 "/topic/rulesets/${ft.ruleSetId}/signals",
                 mapOf(
                     "type" to "SIGNAL",
+                    // 한 연결에서 여러 전략 토픽을 받는 클라이언트가 출처를 알 수 있게(웹 useRuleSetSignalsWs)
+                    "rulesetId" to ft.ruleSetId,
                     "direction" to signal.name,
                     "stockId" to ft.stockId,
                     "price" to price,
