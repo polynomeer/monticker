@@ -79,7 +79,7 @@ export default function BacktestResultView({ result }: Props) {
         <AutoGrid min={110}>
           <Stat big label="총 수익" value={fmtPct(metrics.totalReturn, 1)} valueClassName={tone(metrics.totalReturn)} sub={`최종 ${fmtNum(finalCapital)}원`} />
           <Stat big label="CAGR" value={metrics.annualizedReturn == null ? "—" : fmtPct(metrics.annualizedReturn, 1)} valueClassName={metrics.annualizedReturn == null ? "text-tm-muted" : tone(metrics.annualizedReturn)} />
-          <Stat big label="MDD" value={`-${metrics.maxDrawdown.toFixed(1)}%`} valueClassName="text-down" />
+          <Stat big label="MDD" value={metrics.maxDrawdown > 0.05 ? `-${metrics.maxDrawdown.toFixed(1)}%` : "0.0%"} valueClassName={metrics.maxDrawdown > 0.05 ? "text-down" : undefined} />
           <Stat big label="승률" value={`${metrics.winRate.toFixed(0)}%`} sub={`${metrics.profitTrades}/${metrics.totalTrades}건`} />
           <Stat big label="거래" value={`${metrics.totalTrades}회`} sub={`평균 보유 ${metrics.avgHoldingDays.toFixed(1)}일`} />
           <Stat big label="샤프" value={metrics.sharpeRatio.toFixed(2)} sub={`손익비 ${metrics.profitFactor.toFixed(2)}`} />

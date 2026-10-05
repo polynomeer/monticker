@@ -282,6 +282,8 @@ export function fmtNum(v: number | null | undefined, digits = 0) {
 
 export function fmtPct(v: number | null | undefined, digits = 2) {
   if (v == null || Number.isNaN(v)) return "—";
+  // 반올림하면 0이 되는 값은 부호 없이 — "-0.00%" 방지
+  if (Math.abs(v) < 0.5 * 10 ** -digits) return `${(0).toFixed(digits)}%`;
   return `${v > 0 ? "+" : ""}${v.toFixed(digits)}%`;
 }
 

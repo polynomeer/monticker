@@ -80,14 +80,27 @@ interface Props {
   onCancelOrderLine: (orderId: number) => void;
 }
 
-function useChartHeight() {
+/**
+ * 차트 높이 — 패널이 옆 열(주문폼) 높이만큼 늘어나면 남는 공간까지 차트가 채운다(시안처럼 빈 바닥이 없게).
+ * 최소 높이는 좁은 화면 320, 그 외 470.
+ */
+function useChartHeight(box: React.RefObject<HTMLDivElement | null>) {
   const [h, setH] = useState(470);
   useEffect(() => {
-    const f = () => setH(window.innerWidth < 640 ? 320 : 470);
-    f();
-    window.addEventListener("resize", f);
-    return () => window.removeEventListener("resize", f);
-  }, []);
+    const el = box.current;
+    const measure = () => {
+      const min = window.innerWidth < 640 ? 320 : 470;
+      setH(Math.max(min, Math.floor(el?.clientHeight ?? 0)));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    const ro = el && typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    if (el && ro) ro.observe(el);
+    return () => {
+      window.removeEventListener("resize", measure);
+      ro?.disconnect();
+    };
+  }, [box]);
   return h;
 }
 
@@ -136,7 +149,8 @@ function ChartBody({ stockId, symbol, stockName, currentPrice, dayChange, dayCha
   const [drawings, setDrawings] = useState<Drawing[]>([]);
   const [hideDrawings, setHideDrawings] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const height = useChartHeight();
+  const chartBox = useRef<HTMLDivElement>(null);
+  const height = useChartHeight(chartBox);
 
   const { candles, events, loading } = useStockChart(stockId, interval);
   const { data: vwapData } = useVwap(stockId);
@@ -270,7 +284,7 @@ function ChartBody({ stockId, symbol, stockName, currentPrice, dayChange, dayCha
         </div>
       </div>
 
-      <div className="flex min-w-0 gap-1.5">
+      <div className="flex min-h-0 min-w-0 flex-1 gap-1.5">
         <div className="flex flex-col gap-0.5 border-r border-tm-line pr-1.5" role="toolbar" aria-label="그리기 도구" aria-orientation="vertical">
           {tools.map((t) => (
             <IconBtn
@@ -301,6 +315,9 @@ function ChartBody({ stockId, symbol, stockName, currentPrice, dayChange, dayCha
               <span className="num">—</span>
             )}
           </div>
+          {/* 이 상자가 남는 높이를 차지하고, 그 높이를 재서 차트에 넘긴다(차트 자체는 높이를 정해 받아야 그린다) */}
+          <div ref={chartBox} className="relative min-h-[320px] flex-1 sm:min-h-[470px]">
+          <div className="absolute inset-x-0 top-0">
           {loading ? (
             <div className="grid animate-pulse place-items-center rounded-lg bg-tm-inner text-13 text-tm-muted" style={{ height }}>
               차트 로딩 중...
@@ -320,6 +337,8 @@ function ChartBody({ stockId, symbol, stockName, currentPrice, dayChange, dayCha
               onDrawingsChange={persistDrawings}
             />
           )}
+          </div>
+          </div>
           {!loading && candles.length > 0 && subPane !== "none" && (
             <div style={{ height: 100 }}>
               {subPane === "volume" && <VolumeChart candles={candles} height={100} />}
