@@ -104,7 +104,40 @@ export function useDailyCloses(stockIds: number[]) {
   return out;
 }
 
-/** KST 기준 시각 문자열 — 오늘이면 HH:MM, 이전 날짜면 MM.DD HH:MM(시각만 보이면 며칠 전 이벤트가 오늘 것처럼 읽힌다) */
+/** GET /api/market/indices 응답(ADR-071). isMocked=true면 개발용 모의 값이다 — 화면에 "모의"로 표시한다. */
+export interface MarketIndex {
+  code: string;
+  name: string;
+  value: number;
+  prevClose: number | null;
+  change: number | null;
+  changeRate: number | null;
+  asOf: string;
+  source: string;
+  isMocked: boolean;
+  closes: number[];
+}
+
+/** 지수·환율 — 30초 폴링(worker 수집 주기와 같다). 홈 카드와 상단 스탯이 같은 키를 공유한다. */
+export function useMarketIndices() {
+  return useQuery<MarketIndex[]>({
+    queryKey: ["market", "indices"],
+    queryFn: async () => {
+      const r = await fetch("/api/market/indices");
+      return r.ok ? r.json() : [];
+    },
+    refetchInterval: 30_000,
+    staleTime: 30_000,
+  });
+}
+
+/** 지수·환율 값 — 소수 2자리 */
+export function fmtIndexValue(v: number | null | undefined) {
+  if (v == null || Number.isNaN(v)) return "—";
+  return v.toLocaleString("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** KST 기준 시각 문자열 —오늘이면 HH:MM, 이전 날짜면 MM.DD HH:MM(시각만 보이면 며칠 전 이벤트가 오늘 것처럼 읽힌다) */
 export function kstTime(iso: string, now: Date = new Date()) {
   const d = new Date(iso);
   const day = (x: Date) => x.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
