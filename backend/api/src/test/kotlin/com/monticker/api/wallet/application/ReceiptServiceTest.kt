@@ -24,7 +24,7 @@ class ReceiptServiceTest {
     @Test
     fun `getReceipt computes fee as 0_015 percent of the trade amount`() {
         val trade = PaperTradeSummary(id = 1L, userId = 1L, stockId = 100L, side = "BUY", quantity = 3, price = BigDecimal("70000"), amount = BigDecimal("210000"), tradedAt = java.time.Instant.now())
-        every { tradeQueryService.getById(1L) } returns trade
+        every { tradeQueryService.findById(1L) } returns trade
         every { jdbc.queryForMap(any<String>(), eq(100L)) } returns mapOf("symbol" to "005930", "name" to "삼성전자")
         every { ledgerRepo.findTopByPaperTradeIdOrderByIdDesc(any()) } returns null
 
@@ -37,7 +37,7 @@ class ReceiptServiceTest {
     @Test
     fun `getReceipt adds fee on top of amount for a BUY (settled amount is the total cash outflow)`() {
         val trade = PaperTradeSummary(id = 1L, userId = 1L, stockId = 100L, side = "BUY", quantity = 1, price = BigDecimal("100000"), amount = BigDecimal("100000"), tradedAt = java.time.Instant.now())
-        every { tradeQueryService.getById(1L) } returns trade
+        every { tradeQueryService.findById(1L) } returns trade
         every { jdbc.queryForMap(any<String>(), eq(100L)) } returns mapOf("symbol" to "005930", "name" to "삼성전자")
         every { ledgerRepo.findTopByPaperTradeIdOrderByIdDesc(any()) } returns null
 
@@ -51,7 +51,7 @@ class ReceiptServiceTest {
     @Test
     fun `getReceipt subtracts fee from amount for a SELL (settled amount is the net proceeds)`() {
         val trade = PaperTradeSummary(id = 1L, userId = 1L, stockId = 100L, side = "SELL", quantity = 1, price = BigDecimal("100000"), amount = BigDecimal("100000"), tradedAt = java.time.Instant.now())
-        every { tradeQueryService.getById(1L) } returns trade
+        every { tradeQueryService.findById(1L) } returns trade
         every { jdbc.queryForMap(any<String>(), eq(100L)) } returns mapOf("symbol" to "005930", "name" to "삼성전자")
         every { ledgerRepo.findTopByPaperTradeIdOrderByIdDesc(any()) } returns null
 
@@ -63,7 +63,7 @@ class ReceiptServiceTest {
     @Test
     fun `getReceipt resolves balanceBefore from the matching ledger entry for a BUY`() {
         val trade = PaperTradeSummary(id = 1L, userId = 1L, stockId = 100L, side = "BUY", quantity = 1, price = BigDecimal("100000"), amount = BigDecimal("100000"), tradedAt = java.time.Instant.now())
-        every { tradeQueryService.getById(1L) } returns trade
+        every { tradeQueryService.findById(1L) } returns trade
         every { jdbc.queryForMap(any<String>(), eq(100L)) } returns mapOf("symbol" to "005930", "name" to "삼성전자")
         val ledgerEntry = LedgerEvent(
             id = 1L, userId = 1L, eventType = LedgerEventType.FILL,
@@ -81,7 +81,7 @@ class ReceiptServiceTest {
     @Test
     fun `getReceipt resolves balanceBefore from the matching ledger entry for a SELL`() {
         val trade = PaperTradeSummary(id = 1L, userId = 1L, stockId = 100L, side = "SELL", quantity = 1, price = BigDecimal("100000"), amount = BigDecimal("100000"), tradedAt = java.time.Instant.now())
-        every { tradeQueryService.getById(1L) } returns trade
+        every { tradeQueryService.findById(1L) } returns trade
         every { jdbc.queryForMap(any<String>(), eq(100L)) } returns mapOf("symbol" to "005930", "name" to "삼성전자")
         val ledgerEntry = LedgerEvent(
             id = 1L, userId = 1L, eventType = LedgerEventType.SETTLEMENT,
@@ -98,7 +98,7 @@ class ReceiptServiceTest {
     @Test
     fun `getReceipt leaves balance fields null when no ledger entry is found for the trade`() {
         val trade = PaperTradeSummary(id = 1L, userId = 1L, stockId = 100L, side = "BUY", quantity = 1, price = BigDecimal("100000"), amount = BigDecimal("100000"), tradedAt = java.time.Instant.now())
-        every { tradeQueryService.getById(1L) } returns trade
+        every { tradeQueryService.findById(1L) } returns trade
         every { jdbc.queryForMap(any<String>(), eq(100L)) } returns mapOf("symbol" to "005930", "name" to "삼성전자")
         every { ledgerRepo.findTopByPaperTradeIdOrderByIdDesc(any()) } returns null
 
@@ -113,7 +113,7 @@ class ReceiptServiceTest {
     @Test
     fun `getReceipt looks the ledger row up by trade id instead of scanning the whole ledger`() {
         val trade = PaperTradeSummary(id = 1L, userId = 1L, stockId = 100L, side = "BUY", quantity = 1, price = BigDecimal("100000"), amount = BigDecimal("100000"), tradedAt = java.time.Instant.now())
-        every { tradeQueryService.getById(1L) } returns trade
+        every { tradeQueryService.findById(1L) } returns trade
         every { jdbc.queryForMap(any<String>(), eq(100L)) } returns mapOf("symbol" to "005930", "name" to "삼성전자")
         val newest = LedgerEvent(
             id = 2L, userId = 1L, eventType = LedgerEventType.FILL, amount = BigDecimal("-100000"),
@@ -130,25 +130,29 @@ class ReceiptServiceTest {
 
     @Test
     fun `getReceipt throws when the trade does not exist`() {
-        every { tradeQueryService.getById(99L) } throws NoSuchElementException("Paper trade not found: 99")
+        every { tradeQueryService.findById(99L) } returns null
 
         assertThatThrownBy { service.getReceipt(1L, 99L) }
             .isInstanceOf(NoSuchElementException::class.java)
+            .hasMessage("Paper trade not found: 99")
     }
 
     @Test
-    fun `getReceipt throws when the trade belongs to a different user`() {
+    fun `getReceipt treats another user's trade exactly like a missing one`() {
         val trade = PaperTradeSummary(id = 1L, userId = 999L, stockId = 100L, side = "BUY", quantity = 1, price = BigDecimal("100000"), amount = BigDecimal("100000"), tradedAt = java.time.Instant.now())
-        every { tradeQueryService.getById(1L) } returns trade
+        every { tradeQueryService.findById(1L) } returns trade
 
+        // 400(IllegalArgumentException)이면 404인 없는 거래와 구분돼 id를 열거할 수 있다
         assertThatThrownBy { service.getReceipt(1L, 1L) }
-            .isInstanceOf(IllegalArgumentException::class.java)
+            .isInstanceOf(NoSuchElementException::class.java)
+            .hasMessage("Paper trade not found: 1")
+        verify(exactly = 0) { jdbc.queryForMap(any<String>(), *anyVararg()) }
     }
 
     @Test
     fun `getReceipt always reports status SETTLED in the mock environment`() {
         val trade = PaperTradeSummary(id = 1L, userId = 1L, stockId = 100L, side = "BUY", quantity = 1, price = BigDecimal("100000"), amount = BigDecimal("100000"), tradedAt = java.time.Instant.now())
-        every { tradeQueryService.getById(1L) } returns trade
+        every { tradeQueryService.findById(1L) } returns trade
         every { jdbc.queryForMap(any<String>(), eq(100L)) } returns mapOf("symbol" to "005930", "name" to "삼성전자")
         every { ledgerRepo.findTopByPaperTradeIdOrderByIdDesc(any()) } returns null
 

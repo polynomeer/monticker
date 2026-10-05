@@ -35,8 +35,10 @@ class ReceiptService(
 ) {
 
     fun getReceipt(userId: Long, tradeId: Long): ReceiptResponse {
-        val trade = tradeQueryService.getById(tradeId)
-        require(trade.userId == userId) { "접근 권한 없음" }
+        // 남의 거래도 없는 거래와 같은 404·같은 메시지로 응답해 거래 id 존재 여부를 열거할 수 없게 한다
+        val trade = tradeQueryService.findById(tradeId)
+            ?.takeIf { it.userId == userId }
+            ?: throw NoSuchElementException("Paper trade not found: $tradeId")
 
         val stockInfo = jdbc.queryForMap("SELECT symbol, name FROM stocks WHERE id = ?", trade.stockId)
         val symbol = stockInfo["symbol"] as String
