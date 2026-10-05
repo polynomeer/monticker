@@ -64,6 +64,7 @@ class BrokerageService(
     private val tradingHaltService: TradingHaltService,
     private val pendingBuyQuery: PendingBuyQuery,
     private val consentService: ConsentService,
+    private val outcomeNotices: OrderOutcomeNotices,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -318,6 +319,8 @@ class BrokerageService(
             SubmitOutcome.REJECTED -> order.reject(result.rejectReason ?: "증권사 거부")
             SubmitOutcome.INDETERMINATE -> {
                 order.markUnknown(result.rejectReason ?: "증권사 응답 없음 — 접수 여부 확인 중")
+                // 사용자가 "실패했다"고 다시 누르기 전에 알린다(이중 주문 방지). 이 트랜잭션이 커밋돼야 나간다.
+                outcomeNotices.unknown(order)
                 log.error("주문 결과 불명: orderId={} userId={} symbol={} side={} qty={} reason={}",
                     order.id, order.userId, order.symbol, order.side, order.quantity, result.rejectReason)
             }
@@ -412,6 +415,7 @@ class BrokerageService(
             order.resolutionNote = note.trim()
             order.needsReview = false
             log.warn("결과 불명 주문 수동 확정: orderId={} by={} → {} (pgOrderId={}, note={})", order.id, adminId, order.status, order.pgOrderId, note)
+            outcomeNotices.resolved(order)
             orderRepo.save(order)
         }!!
     }
@@ -537,6 +541,7 @@ class BrokerageService(
             }
             is UnknownOrderMatcher.Decision.Ambiguous -> {
                 if (!order.needsReview) {
+                    outcomeNotices.needsReview(order)
                     log.error("결과 불명 주문 매칭 모호 — 수동 검토 필요: orderId={} userId={} symbol={} candidates={}",
                         order.id, order.userId, order.symbol, d.candidates)
                 }
@@ -553,6 +558,7 @@ class BrokerageService(
         }
         orderRepo.save(order)
         if (result == ReconcileResult.MATCHED || result == ReconcileResult.NOT_FOUND) {
+            outcomeNotices.resolved(order)
             log.info("결과 불명 주문 해소: orderId={} → {} (pgOrderId={}, attempts={})",
                 order.id, order.status, order.pgOrderId, order.reconcileAttempts)
         }

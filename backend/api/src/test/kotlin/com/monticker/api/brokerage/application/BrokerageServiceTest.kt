@@ -23,6 +23,7 @@ import com.monticker.api.brokerage.infrastructure.BrokerageToken
 import com.monticker.api.brokerage.infrastructure.MockBrokerageClient
 import com.monticker.api.common.aop.RiskLimitException
 import com.monticker.api.common.exception.BusinessRuleException
+import com.monticker.api.common.notification.UserNotificationCommand
 import com.monticker.api.common.consent.ConsentGroup
 import com.monticker.api.common.consent.ConsentService
 import com.monticker.api.common.consent.ConsentSource
@@ -64,9 +65,11 @@ class BrokerageServiceTest {
     }
 
     private val consentService = mockk<ConsentService>(relaxed = true)
+    private val events = mockk<org.springframework.context.ApplicationEventPublisher>(relaxed = true)
+    private val outcomeNotices = OrderOutcomeNotices(events)
     private val connectConsents = listOf("BROKERAGE_DELEGATION", "BROKERAGE_NO_CUSTODY", "BROKERAGE_LOSS_ATTRIBUTION")
 
-    private val service = BrokerageService(clientRegistry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService)
+    private val service = BrokerageService(clientRegistry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService, outcomeNotices)
 
     private val approvedRisk = RiskCheckResult(approved = true, blockedBy = null, severity = "APPROVED", checks = emptyList())
 
@@ -305,7 +308,7 @@ class BrokerageServiceTest {
 
     private fun serviceWithFakeClient(fakeClient: BrokerageClient): BrokerageService {
         val registry = BrokerageClientRegistry(BrokerageProvider.entries.associateWith { fakeClient })
-        return BrokerageService(registry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService)
+        return BrokerageService(registry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService, outcomeNotices)
     }
 
     @Test
@@ -955,12 +958,92 @@ class BrokerageServiceTest {
     @Test
     fun `connect is refused before calling the broker when the notice consents are missing (ADR-068)`() {
         val brokerClient = mockk<BrokerageClient>()
-        val svc = BrokerageService(BrokerageClientRegistry(BrokerageProvider.entries.associateWith { brokerClient }), accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService)
+        val svc = BrokerageService(BrokerageClientRegistry(BrokerageProvider.entries.associateWith { brokerClient }), accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService, outcomeNotices)
         every { consentService.requireAndRecord(1L, ConsentGroup.BROKERAGE_CONNECT, emptyList(), ConsentSource.BROKERAGE_CONNECT) } throws IllegalArgumentException("필수 동의 항목이 빠졌습니다")
 
         assertThrows<IllegalArgumentException> {
             svc.connect(userId = 1L, provider = BrokerageProvider.KIS, appKey = "k", appSecret = "s", accountNumber = "1", consents = emptyList())
         }
         verify(exactly = 0) { brokerClient.issueToken(any(), any()) }
+    }
+
+    // ── 결과 불명 주문 알림 ────────────────────────────────────────────────────
+
+    private fun publishedOfType(type: String): List<UserNotificationCommand> {
+        val all = mutableListOf<Any>()
+        verify(atLeast = 0) { events.publishEvent(capture(all)) }
+        return all.filterIsInstance<UserNotificationCommand>().filter { it.data["type"] == type }
+    }
+
+    @Test
+    fun `an order whose outcome is unknown tells the user right away not to resubmit`() {
+        val orderSlot = slot<BrokerageOrder>()
+        val (svc, _) = fakeClientService(BrokerageOrderResult.indeterminate("read timeout"), orderSlot)
+
+        val order = svc.submitOrder(1L, req)
+
+        val sent = publishedOfType("ORDER_OUTCOME_UNKNOWN")
+        assertThat(sent).hasSize(1)
+        assertThat(sent.single().userId).isEqualTo(1L)
+        assertThat(sent.single().body).contains("다시 내지 마세요")
+        assertThat(sent.single().dedupKey).isEqualTo("brokerage-order-unknown:${order.id}")
+    }
+
+    @Test
+    fun `an accepted order sends no outcome notice`() {
+        val orderSlot = slot<BrokerageOrder>()
+        val (svc, _) = fakeClientService(BrokerageOrderResult.rejected("주문가능수량 초과"), orderSlot)
+
+        svc.submitOrder(1L, req)
+
+        assertThat(publishedOfType("ORDER_OUTCOME_UNKNOWN")).isEmpty()
+    }
+
+    @Test
+    fun `reconciliation that finds the order tells the user it was filled`() {
+        val order = makeSellOrder(BrokerageOrderStatus.UNKNOWN, submittedAt = Instant.now().minusSeconds(40))
+        val client = stubReconcile(order, listOf(snapshot("ODNO-9", order.submittedAt.plusSeconds(1))))
+
+        serviceWithFakeClient(client).reconcileUnresolved(order.id)
+
+        val sent = publishedOfType("ORDER_OUTCOME_RESOLVED")
+        assertThat(sent).hasSize(1)
+        assertThat(sent.single().data["status"]).isEqualTo("FILLED")
+    }
+
+    @Test
+    fun `reconciliation that confirms the order never reached the broker says so`() {
+        val order = makeSellOrder(BrokerageOrderStatus.UNKNOWN, submittedAt = Instant.now().minusSeconds(180))
+        val client = stubReconcile(order, emptyList())
+
+        serviceWithFakeClient(client).reconcileUnresolved(order.id)
+
+        assertThat(publishedOfType("ORDER_OUTCOME_RESOLVED").single().body).contains("들어가지 않은 것으로 확인")
+    }
+
+    @Test
+    fun `an ambiguous match is announced once, not on every retry`() {
+        val order = makeSellOrder(BrokerageOrderStatus.UNKNOWN, submittedAt = Instant.now().minusSeconds(40))
+        val client = stubReconcile(order, listOf(
+            snapshot("A", order.submittedAt.plusSeconds(1)), snapshot("B", order.submittedAt.plusSeconds(2)),
+        ))
+        val svc = serviceWithFakeClient(client)
+
+        svc.reconcileUnresolved(order.id)
+        svc.reconcileUnresolved(order.id)
+
+        assertThat(publishedOfType("ORDER_NEEDS_REVIEW")).hasSize(1)
+        assertThat(publishedOfType("ORDER_OUTCOME_RESOLVED")).isEmpty()
+    }
+
+    @Test
+    fun `a lookup failure sends nothing — the outcome is still unknown`() {
+        val order = makeSellOrder(BrokerageOrderStatus.UNKNOWN, submittedAt = Instant.now().minusSeconds(40))
+        val client = stubReconcile(order, null)
+
+        serviceWithFakeClient(client).reconcileUnresolved(order.id)
+
+        assertThat(publishedOfType("ORDER_OUTCOME_RESOLVED")).isEmpty()
+        assertThat(publishedOfType("ORDER_NEEDS_REVIEW")).isEmpty()
     }
 }
