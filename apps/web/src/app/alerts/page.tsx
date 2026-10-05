@@ -3,15 +3,16 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
-  BtnLink, Panel, PanelRow, PreviewTag, Seg, TerminalPage, TitleBlock, Toggle,
+  BtnLink, Notice, Panel, PanelRow, Seg, TerminalPage, TitleBlock, Toggle,
 } from "@/components/terminal";
 import { useIsLoggedIn, useQuotes } from "@/components/home/data";
 import {
-  describeRule, ruleMeta, useAlertHistory, useAlertRules, useAlertStats, type AlertCategory,
+  describeRule, ruleMeta, useAlertHistory, useAlertMutations, useAlertRules, useAlertStats, type AlertCategory,
 } from "@/components/alerts/data";
 
 const FILTERS = [
   { value: "all", label: "전체" },
+  { value: "unread", label: "읽지 않음" },
   { value: "price", label: "가격" },
   { value: "event", label: "이벤트" },
   { value: "signal", label: "시그널" },
@@ -37,9 +38,12 @@ export default function AlertsPage() {
   const isLoggedIn = useIsLoggedIn();
   const [filter, setFilter] = useState<Filter>("all");
 
-  const { data: alerts = [], isLoading: loadingHistory } = useAlertHistory(isLoggedIn);
+  const { data: alerts = [], isLoading: loadingHistory, dataUpdatedAt: historyFetchedAt } = useAlertHistory(isLoggedIn);
   const { data: rules = [], isLoading: loadingRules } = useAlertRules(isLoggedIn);
   const { data: stats } = useAlertStats(isLoggedIn);
+  const { toggleRule, markRead, markAllRead } = useAlertMutations();
+  const unreadCount = stats?.unread ?? null;
+  const actionError = (toggleRule.error ?? markAllRead.error) as Error | null;
 
   const stockIds = Array.from(new Set([...alerts, ...rules].map((a) => a.stockId).filter((v): v is number => v != null)));
   const quotes = useQuotes(stockIds, "alerts");
@@ -47,6 +51,7 @@ export default function AlertsPage() {
 
   const shown = alerts.filter((a) => {
     if (filter === "all") return true;
+    if (filter === "unread") return !a.readAt;
     if (filter === "signal") return false; // 퀀트 시그널 알림은 아직 알림 이력에 쌓이지 않는다
     return ruleMeta(a.ruleType).category === (filter as AlertCategory);
   });
@@ -59,7 +64,7 @@ export default function AlertsPage() {
       left={<TitleBlock title="알림" crumb="계정" />}
       stats={isLoggedIn ? [
         { label: "오늘", value: todayCount == null ? "—" : `${todayCount}건` },
-        { label: "읽지 않음", value: "—", tone: "text-dracula-pink" },
+        { label: "읽지 않음", value: unreadCount == null ? "—" : `${unreadCount}건`, tone: "text-dracula-pink" },
         { label: "활성 규칙", value: `${stats?.activeRules ?? rules.length}개` },
         { label: "전달 채널", value: "—" },
       ] : []}
@@ -84,19 +89,25 @@ export default function AlertsPage() {
         <div className="flex flex-wrap items-center gap-2 border-b border-tm-line px-3.5 py-2.5">
           <Seg size="sm" options={FILTERS} value={filter} onChange={setFilter} />
           <span className="ml-auto flex items-center gap-1.5">
-            <button type="button" disabled className="text-xs text-dracula-purple disabled:opacity-50" title="읽음 상태는 아직 지원하지 않습니다">
+            <button
+              type="button"
+              disabled={!unreadCount || markAllRead.isPending}
+              onClick={() => markAllRead.mutate(new Date(historyFetchedAt || Date.now()))}
+              className="text-xs text-dracula-purple hover:underline disabled:opacity-50 disabled:no-underline"
+              title="지금 보이는 시점까지 받은 알림을 모두 읽음으로 표시합니다"
+            >
               모두 읽음
             </button>
-            <PreviewTag />
           </span>
         </div>
+        {actionError && <Notice tone="warn" className="m-3.5 mb-0">{actionError.message}</Notice>}
         {loadingHistory ? (
           <div className="m-3.5 h-32 animate-shimmer rounded-lg bg-gradient-to-r from-tm-inner via-tm-raised to-tm-inner bg-[length:200%_100%]" />
         ) : shown.length === 0 ? (
           <div className="flex flex-col items-center gap-1.5 px-4 py-16 text-center">
             <span className="text-sm font-semibold text-tm-soft">알림 이력이 없습니다</span>
             <span className="text-xs text-tm-muted">
-              {filter === "signal" ? "퀀트 시그널 알림은 준비 중입니다." : "종목 상세 페이지에서 가격 알림을 설정해보세요."}
+              {filter === "signal" ? "퀀트 시그널 알림은 준비 중입니다." : filter === "unread" ? "최근 알림을 모두 읽었습니다." : "종목 상세 페이지에서 가격 알림을 설정해보세요."}
             </span>
           </div>
         ) : (
@@ -104,8 +115,13 @@ export default function AlertsPage() {
             {shown.map((a) => {
               const m = ruleMeta(a.ruleType);
               const failed = a.deliveryStatus === "FAILED";
+              const unread = !a.readAt;
               return (
-                <li key={a.id} className="flex gap-3 border-b border-tm-line px-3.5 py-3">
+                <li
+                  key={a.id}
+                  className={`flex gap-3 border-b border-tm-line px-3.5 py-3 ${unread ? "cursor-pointer bg-tm-raised/40" : ""}`}
+                  onClick={unread ? () => markRead.mutate(a.id) : undefined}
+                >
                   <span
                     className="num grid h-8 w-8 flex-none place-items-center rounded-full border-[1.5px] text-xs font-bold"
                     style={{ borderColor: m.color, color: m.color }}
@@ -114,13 +130,27 @@ export default function AlertsPage() {
                     {m.letter}
                   </span>
                   <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
-                    <span className="text-sm font-semibold">{stockName(a.stockId)} {m.tag}</span>
+                    <span className="flex items-center gap-1.5 text-sm font-semibold">
+                      {unread && <span className="h-[7px] w-[7px] rounded-full bg-dracula-pink" aria-label="읽지 않음" />}
+                      {stockName(a.stockId)} {m.tag}
+                    </span>
                     <span className="text-13 text-tm-soft">{a.message}</span>
                     <span className="text-2xs text-tm-muted">
                       {m.tag} · <span className={failed ? "text-[#ff8a8a]" : undefined}>{STATUS_LABEL[a.deliveryStatus] ?? a.deliveryStatus}</span>
                     </span>
                   </div>
-                  <span className="num text-xs text-tm-muted">{whenLabel(a.triggeredAt)}</span>
+                  <span className="flex flex-col items-end gap-1">
+                    <span className="num text-xs text-tm-muted">{whenLabel(a.triggeredAt)}</span>
+                    {unread && (
+                      <button
+                        type="button"
+                        className="text-2xs text-dracula-purple hover:underline"
+                        onClick={(e) => { e.stopPropagation(); markRead.mutate(a.id); }}
+                      >
+                        읽음
+                      </button>
+                    )}
+                  </span>
                 </li>
               );
             })}
@@ -133,17 +163,21 @@ export default function AlertsPage() {
         {loadingRules ? (
           <div className="h-24 animate-pulse rounded-lg bg-tm-inner" />
         ) : rules.length === 0 ? (
-          <p className="py-6 text-center text-13 text-tm-muted">활성 알림 규칙이 없습니다.</p>
+          <p className="py-6 text-center text-13 text-tm-muted">알림 규칙이 없습니다.</p>
         ) : (
           <ul className="m-0 list-none p-0">
             {rules.map((r) => (
               <li key={r.id} className="flex items-center gap-3 border-b border-tm-line py-[11px]">
-                <div className="flex flex-1 flex-col gap-0.5">
+                <div className={`flex flex-1 flex-col gap-0.5 ${r.isActive ? "" : "opacity-60"}`}>
                   <span className="font-semibold">{stockName(r.stockId)}</span>
-                  <span className="text-xs text-tm-muted">{describeRule(r)}</span>
+                  <span className="text-xs text-tm-muted">{describeRule(r)}{r.isActive ? "" : " · 꺼짐"}</span>
                 </div>
-                {/* 켜고 끄기: 서버에는 비활성화(DELETE)만 있고 다시 켜는 API가 없어 아직 조작할 수 없다 */}
-                <Toggle checked={r.isActive} label={`${stockName(r.stockId)} 알림 (켜고 끄기 준비 중)`} disabled />
+                <Toggle
+                  checked={r.isActive}
+                  label={`${stockName(r.stockId)} 알림 ${r.isActive ? "끄기" : "켜기"}`}
+                  disabled={toggleRule.isPending && toggleRule.variables?.id === r.id}
+                  onChange={(v) => toggleRule.mutate({ id: r.id, isActive: v })}
+                />
               </li>
             ))}
           </ul>
