@@ -17,6 +17,10 @@ export interface RecentEvent {
   description?: string | null;
   importanceScore: number;
   eventTime: string;
+  /** 이벤트 구간 변동률(%) — /api/events/recent만 채운다. 1분봉이 모자라면 null */
+  windowChangePct?: number | null;
+  /** 이벤트 직후 5분 ÷ 직전 60분 평균 거래량 */
+  volumeMultiple?: number | null;
 }
 
 export interface WatchlistItem { id: number; stockId: number; symbol: string; name: string; memo?: string | null; }
@@ -129,6 +133,12 @@ export function useMarketIndices() {
     refetchInterval: 30_000,
     staleTime: 30_000,
   });
+}
+
+/** 거래량 배수 표시 — 2.4× */
+export function fmtMult(v: number | null | undefined, digits = 1) {
+  if (v == null || !Number.isFinite(v)) return "—";
+  return `${v.toFixed(digits)}×`;
 }
 
 /** 지수·환율 값 — 소수 2자리 */
