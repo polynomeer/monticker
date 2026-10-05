@@ -1,6 +1,7 @@
 package com.monticker.api.quant.application
 
 import com.monticker.api.quant.domain.DailyCandle
+import com.monticker.api.quant.domain.QuantAuxData
 import com.monticker.api.quant.domain.RuleDefinition
 import com.monticker.api.quant.domain.SignalDirection
 import java.time.Instant
@@ -43,6 +44,7 @@ object ForwardReplay {
         fromDate: LocalDate,
         toDate: LocalDate,
         lookbackDays: Long = ForwardTestService.LOOKBACK_DAYS,
+        aux: QuantAuxData = QuantAuxData.EMPTY,
     ): List<ReplaySignal> {
         val sorted = candles.sortedBy { it.date }
         val signals = mutableListOf<ReplaySignal>()
@@ -58,7 +60,7 @@ object ForwardReplay {
             while (sorted[lo].date < day.minusDays(lookbackDays)) lo++
             val window = sorted.subList(lo, i + 1)
 
-            when (val action = QuantDayStep.decide(ruleDef, window, window.lastIndex, cash, position)) {
+            when (val action = QuantDayStep.decide(ruleDef, window, window.lastIndex, cash, position, aux)) {
                 is DayAction.Enter -> {
                     position = SimPosition(action.qty, action.fillPrice, day)
                     cash -= action.cost

@@ -127,7 +127,8 @@ class ForwardTestService(
         val position = if (ft.isHolding) {
             SimPosition(ft.holdingQty, ft.holdingEntryPrice!!.toDouble(), ft.holdingEntryDate ?: asOfDate)
         } else null
-        when (val action = QuantDayStep.decide(ruleDef, candles, idx, ft.cash.toDouble(), position)) {
+        val aux = ruleSetService.loadAuxData(ft.stockId, candles.first().date, asOfDate, ruleDef)
+        when (val action = QuantDayStep.decide(ruleDef, candles, idx, ft.cash.toDouble(), position, aux)) {
             is DayAction.Exit -> {
                 ft.closePosition(BigDecimal.valueOf(action.fillPrice), BigDecimal.valueOf(action.commission))
                 signal = SignalDirection.SELL
@@ -193,7 +194,8 @@ class ForwardTestService(
             val from = ForwardReplay.firstEvaluationDate(ft.startedAt)
             if (to < from) return
             val candles = ruleSetService.loadDailyCandles(ft.stockId, from.minusDays(LOOKBACK_DAYS), to)
-            val replayed = ForwardReplay.replay(candles, ruleDef, ft.initialCapital.toDouble(), from, to)
+            val aux = ruleSetService.loadAuxData(ft.stockId, from.minusDays(LOOKBACK_DAYS), to, ruleDef)
+            val replayed = ForwardReplay.replay(candles, ruleDef, ft.initialCapital.toDouble(), from, to, aux = aux)
             val actual = signalRepository.findAllByForwardTestIdOrderBySignalTimeDesc(ft.id)
                 .mapNotNull { s -> s.evalDate?.let { ReplaySignal(it, s.direction) } }
             val match = ForwardReplay.compare(actual, replayed)

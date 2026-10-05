@@ -115,4 +115,39 @@ class RuleSetServiceTest {
         assertThat(list.first { it.id == "rs2" }.performance).isNull()
         io.mockk.verify(exactly = 1) { performanceQuery.summarize(any()) }
     }
+
+    // ── ADR-079 보조 데이터 지표 입력 검증 ─────────────────────────────────────────
+
+    private fun defWith(cond: Map<String, Any>) = mapOf(
+        "entryRules" to mapOf("operator" to "AND", "conditions" to listOf(cond)),
+        "exitRules" to mapOf("operator" to "OR", "conditions" to emptyList<Any>()),
+        "positionSizing" to mapOf("type" to "FIXED_RATIO", "value" to 10),
+    )
+
+    @Test
+    fun `create rejects an unknown disclosure category`() {
+        assertThrows<IllegalArgumentException> {
+            service.create(1L, CreateRuleSetRequest(name = "x", ruleDefinition = defWith(
+                mapOf("indicator" to "DISCLOSURE", "comparator" to "WHATEVER", "params" to mapOf("period" to 5)),
+            )))
+        }
+    }
+
+    @Test
+    fun `create rejects a news sentiment threshold outside -1 to 1`() {
+        assertThrows<IllegalArgumentException> {
+            service.create(1L, CreateRuleSetRequest(name = "x", ruleDefinition = defWith(
+                mapOf("indicator" to "NEWS_SENTIMENT", "comparator" to "GT", "params" to mapOf("period" to 5), "value" to 30),
+            )))
+        }
+    }
+
+    @Test
+    fun `create accepts valid aux indicator conditions`() {
+        every { ruleSetRepository.save(any()) } answers { firstArg<RuleSetDocument>().copy(id = "generated") }
+
+        service.create(1L, CreateRuleSetRequest(name = "x", ruleDefinition = defWith(
+            mapOf("indicator" to "NEWS_SENTIMENT", "comparator" to "GT", "params" to mapOf("period" to 5), "value" to 0.3),
+        )))
+    }
 }

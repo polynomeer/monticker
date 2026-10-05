@@ -26,6 +26,7 @@ class RuleSetService(
     fun create(userId: Long, req: CreateRuleSetRequest): RuleSetResponse {
         @Suppress("UNCHECKED_CAST")
         val defMap = objectMapper.convertValue(req.ruleDefinition, Map::class.java) as Map<String, Any>
+        validateDefinition(defMap)
         val fingerprint = sha256(objectMapper.writeValueAsString(defMap))
         val doc = RuleSetDocument(
             userId             = userId,
@@ -62,6 +63,7 @@ class RuleSetService(
         req.description?.let { doc.updateDescription(it) }
         req.ruleDefinition?.let {
             val defMap = toStringAnyMap(it)
+            validateDefinition(defMap)
             doc.updateDefinition(defMap, sha256(objectMapper.writeValueAsString(defMap)), req.changeSummary)
         }
         req.universeJson?.let { doc.updateUniverse(toStringAnyMap(it)) }
@@ -112,6 +114,7 @@ class RuleSetService(
             initialCapital = req.initialCapital,
             fromDate       = req.startDate,
             toDate         = req.endDate,
+            aux            = loadAuxData(req.stockId, req.startDate, req.endDate, ruleDef),
         )
 
         val m = result.metrics
@@ -193,6 +196,46 @@ class RuleSetService(
             stockId, from, to,
         )
 
+    /**
+     * ADR-079 — 룰이 쓰는 보조 데이터만 읽는다. 키는 이용 가능일(장 마감 후 정보는 다음 날)이라
+     * 하루 앞서서부터 읽는다.
+     */
+    internal fun loadAuxData(stockId: Long, from: LocalDate, to: LocalDate, ruleDef: RuleDefinition): QuantAuxData {
+        val needsNews = AuxIndicators.uses(ruleDef, AuxIndicators.NEWS_SENTIMENT)
+        val needsDisclosure = AuxIndicators.uses(ruleDef, AuxIndicators.DISCLOSURE)
+        if (!needsNews && !needsDisclosure) return QuantAuxData.EMPTY
+
+        val kst = java.time.ZoneId.of("Asia/Seoul")
+        val fromTs = java.sql.Timestamp.from(from.minusDays(1).atStartOfDay(kst).toInstant())
+        val toTs = java.sql.Timestamp.from(to.plusDays(1).atStartOfDay(kst).toInstant())
+
+        val sentiment = if (!needsNews) emptyMap() else jdbc.query(
+            """SELECT published_at, sentiment FROM news_articles
+               WHERE stock_id = ? AND sentiment IS NOT NULL AND published_at >= ? AND published_at < ?""",
+            { rs, _ ->
+                val day = AuxIndicators.availableDate(rs.getTimestamp("published_at").toInstant())
+                day to when (rs.getString("sentiment")) {
+                    "POSITIVE" -> SentimentCount(positive = 1)
+                    "NEGATIVE" -> SentimentCount(negative = 1)
+                    else       -> SentimentCount(neutral = 1)
+                }
+            },
+            stockId, fromTs, toTs,
+        ).groupBy({ it.first }, { it.second }).mapValues { (_, v) -> v.reduce(SentimentCount::plus) }
+
+        val disclosures = if (!needsDisclosure) emptyMap() else jdbc.query(
+            """SELECT event_time, metadata_json->>'reportName' AS report_name FROM stock_events
+               WHERE stock_id = ? AND event_type = 'DISCLOSURE_PUBLISHED' AND event_time >= ? AND event_time < ?""",
+            { rs, _ ->
+                AuxIndicators.availableDate(rs.getTimestamp("event_time").toInstant()) to
+                    AuxIndicators.classifyDisclosure(rs.getString("report_name") ?: "")
+            },
+            stockId, fromTs, toTs,
+        ).groupBy({ it.first }, { it.second }).mapValues { (_, v) -> v.flatten().toSet() }
+
+        return QuantAuxData(sentiment, disclosures)
+    }
+
     @Suppress("UNCHECKED_CAST")
     internal fun parseRuleDefinition(def: Map<String, Any>): RuleDefinition {
         fun parseCondition(raw: Map<*, *>): RuleCondition {
@@ -221,6 +264,31 @@ class RuleSetService(
             exitRules      = parseGroup(def["exitRules"] as Map<*, *>),
             positionSizing = parseSizing(def["positionSizing"] as Map<*, *>),
         )
+    }
+
+    /**
+     * 저장 전 입력 검증. 엔진은 모르는 값을 만나면 조용히 false로 평가하므로, 사용자가 잘못 넣은
+     * 값이 "조건이 한 번도 안 맞는 전략"으로 굳기 전에 400으로 돌려보낸다. 보조 데이터 지표(ADR-079)부터
+     * 적용한다 — 기존 지표의 느슨한 동작은 그대로 둔다.
+     */
+    internal fun validateDefinition(def: Map<String, Any>) {
+        val conditions = listOf("entryRules", "exitRules").flatMap { key ->
+            ((def[key] as? Map<*, *>)?.get("conditions") as? List<*>)?.filterIsInstance<Map<*, *>>() ?: emptyList()
+        }
+        for (c in conditions) {
+            val indicator = (c["indicator"] as? String)?.uppercase() ?: continue
+            if (indicator != AuxIndicators.NEWS_SENTIMENT && indicator != AuxIndicators.DISCLOSURE) continue
+            val period = ((c["params"] as? Map<*, *>)?.get("period") as? Number)?.toDouble() ?: 5.0
+            require(period >= 1 && period <= 60 && period % 1.0 == 0.0) { "$indicator 기간은 1~60 거래일 정수여야 합니다." }
+            val comparator = (c["comparator"] as? String)?.uppercase()
+            if (indicator == AuxIndicators.DISCLOSURE) {
+                require(comparator in AuxIndicators.DISCLOSURE_CATEGORIES) { "알 수 없는 공시 유형입니다: $comparator" }
+            } else {
+                require(comparator in setOf("GT", "GTE", "LT", "LTE")) { "뉴스 감성은 크다/작다 비교만 쓸 수 있습니다." }
+                val v = (c["value"] as? Number)?.toDouble()
+                require(v != null && v >= -1.0 && v <= 1.0) { "뉴스 감성 기준값은 -1~1 사이여야 합니다." }
+            }
+        }
     }
 
     internal fun verifyFingerprint(doc: RuleSetDocument): Boolean =

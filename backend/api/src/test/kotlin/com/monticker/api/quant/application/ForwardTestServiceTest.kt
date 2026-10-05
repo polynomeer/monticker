@@ -27,6 +27,10 @@ class ForwardTestServiceTest {
         signalRepository, equityRepository, messagingTemplate,
     )
 
+    init {
+        every { ruleSetService.loadAuxData(any(), any(), any(), any()) } returns QuantAuxData.EMPTY
+    }
+
     private fun candle(date: LocalDate, close: Double) = DailyCandle(
         date = date, open = BigDecimal(close), high = BigDecimal(close),
         low = BigDecimal(close), close = BigDecimal(close), volume = 1000L,

@@ -80,6 +80,27 @@ data class QuantBacktestMetrics(
     val reliabilityNotes: Map<String, Any>,
 )
 
+// ── ADR-079 보조 데이터(뉴스 감성·공시) ─────────────────────────────────────────────
+
+/** 하루(이용 가능일 기준)에 모인 뉴스 감성 건수 — news_articles.sentiment(POSITIVE/NEGATIVE/NEUTRAL) */
+data class SentimentCount(val positive: Int = 0, val negative: Int = 0, val neutral: Int = 0) {
+    val total: Int get() = positive + negative + neutral
+    operator fun plus(o: SentimentCount) = SentimentCount(positive + o.positive, negative + o.negative, neutral + o.neutral)
+}
+
+/**
+ * 일봉 외 지표 입력. 키는 "이용 가능일"이다 — 장 마감(KST 15:30) 이후에 나온 뉴스·공시는 그날 종가
+ * 판단에 쓸 수 없으므로 다음 날로 넘긴다(미래 정보 누수 방지).
+ */
+data class QuantAuxData(
+    val sentimentByDate: Map<LocalDate, SentimentCount> = emptyMap(),
+    val disclosuresByDate: Map<LocalDate, Set<String>> = emptyMap(),
+) {
+    companion object {
+        val EMPTY = QuantAuxData()
+    }
+}
+
 data class QuantBacktestRunResult(
     val initialCapital: Double,
     val finalCapital: Double,

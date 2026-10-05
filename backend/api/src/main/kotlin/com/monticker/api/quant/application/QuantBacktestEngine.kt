@@ -17,6 +17,7 @@ object QuantBacktestEngine {
         initialCapital: Double,
         fromDate: java.time.LocalDate,
         toDate: java.time.LocalDate,
+        aux: QuantAuxData = QuantAuxData.EMPTY,
     ): QuantBacktestRunResult {
         val filtered = candles
             .filter { it.date >= fromDate && it.date <= toDate }
@@ -36,7 +37,7 @@ object QuantBacktestEngine {
         for ((idx, candle) in filtered.withIndex()) {
             val price = candle.close.toDouble()
 
-            when (val action = QuantDayStep.decide(ruleDef, filtered, idx, cash, position)) {
+            when (val action = QuantDayStep.decide(ruleDef, filtered, idx, cash, position, aux)) {
                 is DayAction.Exit -> {
                     val pos = position!!
                     trades.add(closedTrade(pos, candle.date, action.fillPrice, action.proceeds, action.reason))

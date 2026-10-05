@@ -1,6 +1,7 @@
 package com.monticker.api.quant.application
 
 import com.monticker.api.quant.domain.DailyCandle
+import com.monticker.api.quant.domain.QuantAuxData
 import com.monticker.api.quant.domain.RuleDefinition
 import java.time.LocalDate
 
@@ -41,11 +42,12 @@ internal object QuantDayStep {
         idx: Int,
         cash: Double,
         position: SimPosition?,
+        aux: QuantAuxData = QuantAuxData.EMPTY,
     ): DayAction {
         val price = candles[idx].close.toDouble()
 
         if (position != null) {
-            if (!RuleEvaluator.evaluateExit(ruleDef.exitRules, candles, idx, position.entryPrice, price)) {
+            if (!RuleEvaluator.evaluateExit(ruleDef.exitRules, candles, idx, position.entryPrice, price, aux)) {
                 return DayAction.Hold
             }
             val fill = price * (1 - QuantBacktestEngine.SLIPPAGE_RATE)
@@ -58,7 +60,7 @@ internal object QuantDayStep {
         }
 
         if (cash <= price) return DayAction.Hold
-        if (!RuleEvaluator.evaluateEntry(ruleDef.entryRules, candles, idx)) return DayAction.Hold
+        if (!RuleEvaluator.evaluateEntry(ruleDef.entryRules, candles, idx, aux)) return DayAction.Hold
 
         val ratio      = ruleDef.positionSizing.value / 100.0
         val fill       = price * (1 + QuantBacktestEngine.SLIPPAGE_RATE)
