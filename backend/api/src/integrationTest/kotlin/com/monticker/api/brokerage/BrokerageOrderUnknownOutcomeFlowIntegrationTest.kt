@@ -1,6 +1,7 @@
 package com.monticker.api.brokerage
 
 import com.monticker.api.brokerage.application.BrokerageService
+import com.monticker.api.brokerage.application.OrderOutcomeNotices
 import com.monticker.api.brokerage.application.PendingBuyQuery
 import com.monticker.api.brokerage.application.TradingHaltService
 import com.monticker.api.brokerage.domain.BrokerageAccount
@@ -110,6 +111,7 @@ class BrokerageOrderUnknownOutcomeFlowIntegrationTest {
             BrokerageClientRegistry(BrokerageProvider.entries.associateWith { mockBroker }),
             accountRepo, orderRepo, settlementRepo, mockk(relaxed = true), riskChecker, jdbc,
             txManager, SimpleMeterRegistry(), TradingHaltService(jdbc, SimpleMeterRegistry()), PendingBuyQuery(jdbc),
+            mockk(relaxed = true), OrderOutcomeNotices(mockk(relaxed = true)),
         )
         // 운영처럼 @Transactional 프록시를 씌운다. 직접 생성한 인스턴스는 애노테이션이 무시돼, 예컨대 syncOrderStatus에
         // 바깥 트랜잭션이 생겨 캐시된(해소 전) 엔티티를 돌려주는 회귀를 이 테스트가 잡지 못했다.
