@@ -134,31 +134,7 @@ class RiskRuleQueryService(
         // 노출 한도는 위험을 늘리는 주문만 막아야 한다. 매도는 노출을 줄이는데, 이전엔 보유 종목의 VaR가 한도를 넘으면
         // 매도까지 막혀 "위험한 포지션을 정리할 수 없는" 상태가 됐다(로컬 데이터의 −72% 일봉으로 재현). 파사드 전환으로
         // 포트폴리오 화면의 매도에도 이 게이트가 걸리게 되면서 드러났다.
-        val stockIds = snapshot.holdings.map { it.stockId }.distinct()
-        val varValue = if (side == "BUY" && stockIds.isNotEmpty()) {
-            val placeholders = stockIds.joinToString(",") { "?" }
-            // candles_1d의 "오늘" 행은 장중 계속 바뀌는 미확정 값이라 VaR 수익률 계산에서 제외한다.
-            val todayStartKst = Instant.now().atZone(ZoneId.of("Asia/Seoul")).toLocalDate().atStartOfDay(ZoneId.of("Asia/Seoul")).toInstant()
-            val rows = jdbc.queryForList(
-                """SELECT stock_id, close FROM candles_1d
-                   WHERE stock_id IN ($placeholders) AND candle_time < ?
-                   ORDER BY stock_id, candle_time DESC LIMIT ${stockIds.size * 20}""",
-                *stockIds.toTypedArray(), java.sql.Timestamp.from(todayStartKst),
-            )
-            val allReturns = rows.groupBy { (it["stock_id"] as Number).toLong() }.values.flatMap { r ->
-                r.map { (it["close"] as BigDecimal).toDouble() }
-                    .zipWithNext { a, b -> if (b != 0.0) (a - b) / b else 0.0 }
-            }
-            if (allReturns.size >= 5) {
-                val sorted = allReturns.sorted()
-                -sorted[(sorted.size * 0.05).toInt().coerceAtLeast(0)] * 100
-            } else {
-                val mean = if (allReturns.isEmpty()) 0.0 else allReturns.average()
-                val std  = if (allReturns.isEmpty()) 0.0 else
-                    Math.sqrt(allReturns.sumOf { (it - mean) * (it - mean) } / allReturns.size)
-                std * 1.65 * 100
-            }
-        } else 0.0
+        val varValue = if (side == "BUY") historicalVaRPct(snapshot.holdings.map { it.stockId }) else 0.0
         val varLimit = limits.varLimitPct.toDouble()
         if (side == "BUY") checks.add(RuleResult(
             rule    = "VaRRule",
@@ -200,6 +176,37 @@ class RiskRuleQueryService(
     }
 
     /**
+     * 보유 종목들의 1일 역사적 VaR(95%, %) — 최근 20개 확정 일봉 수익률의 5% 분위수. 매수 게이트(VaRRule)와 한도 근접 경고
+     * (RiskLimitNearWarningJob)가 같은 값을 보도록 한 곳에 둔다. 수익률이 5개 미만이면 정규 근사(1.65σ)로 대신한다.
+     * candles_1d의 "오늘" 행은 장중 계속 바뀌는 미확정 값이라 제외한다.
+     */
+    fun historicalVaRPct(holdingStockIds: List<Long>): Double {
+        val stockIds = holdingStockIds.distinct()
+        if (stockIds.isEmpty()) return 0.0
+        val placeholders = stockIds.joinToString(",") { "?" }
+        val todayStartKst = Instant.now().atZone(KST).toLocalDate().atStartOfDay(KST).toInstant()
+        val rows = jdbc.queryForList(
+            """SELECT stock_id, close FROM candles_1d
+               WHERE stock_id IN ($placeholders) AND candle_time < ?
+               ORDER BY stock_id, candle_time DESC LIMIT ${stockIds.size * 20}""",
+            *stockIds.toTypedArray(), java.sql.Timestamp.from(todayStartKst),
+        )
+        val allReturns = rows.groupBy { (it["stock_id"] as Number).toLong() }.values.flatMap { r ->
+            r.map { (it["close"] as BigDecimal).toDouble() }
+                .zipWithNext { a, b -> if (b != 0.0) (a - b) / b else 0.0 }
+        }
+        return if (allReturns.size >= 5) {
+            val sorted = allReturns.sorted()
+            -sorted[(sorted.size * 0.05).toInt().coerceAtLeast(0)] * 100
+        } else {
+            val mean = if (allReturns.isEmpty()) 0.0 else allReturns.average()
+            val std  = if (allReturns.isEmpty()) 0.0 else
+                Math.sqrt(allReturns.sumOf { (it - mean) * (it - mean) } / allReturns.size)
+            std * 1.65 * 100
+        }
+    }
+
+    /**
      * 종목의 최근가(candles_1m 마지막 close). 보유 종목 평가와 MARKET 주문의 추정가 폴백
      * (RiskCheckerService.check) 양쪽이 쓴다 — 사가(OrderSagaOrchestrator.getCurrentPrice)가
      * 예약금을 잡는 기준과 같은 조회라, 게이트와 예약이 서로 다른 가격을 보지 않는다.
@@ -217,7 +224,12 @@ class RiskRuleQueryService(
             stockId,
         ).firstOrNull() ?: BigDecimal.ZERO
 
+    internal fun symbolOf(stockId: Long): String? =
+        jdbc.query("SELECT symbol FROM stocks WHERE id = ?", { rs, _ -> rs.getString(1) }, stockId).firstOrNull()
+
     companion object {
+        private val KST: ZoneId = ZoneId.of("Asia/Seoul")
+
         /**
          * 계좌의 실행 기록은 paper_trades 하나다 (ADR-047: 매칭 엔진 체결도 PaperExecutionListener가 여기 미러링한다).
          * ADR-047 이전엔 fills와의 합집합을 봤다 — 이제 합집합이면 같은 체결을 두 번 센다.
@@ -262,7 +274,8 @@ class RiskRuleQueryService(
         ).firstOrNull() ?: BigDecimal.ZERO
     }
 
-    private fun paperSnapshot(userId: Long): PortfolioSnapshot {
+    /** 모의계좌의 현재 포트폴리오 상태 — 매수 게이트와 한도 근접 경고가 같이 쓴다. */
+    fun paperSnapshot(userId: Long): PortfolioSnapshot {
         val accountCash = jdbc.query(
             "SELECT COALESCE(cash, 0) FROM paper_accounts WHERE user_id = ?",
             { rs, _ -> rs.getBigDecimal(1) },
