@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Client, type StompSubscription } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
+import { authFetch } from "@/services/api";
+import { DEFAULT_CRITERIA, toQuery, type ScreenerCriteria } from "@/components/screener/criteria";
 
 export interface ScreenerItem {
   rank: number;
@@ -22,6 +24,10 @@ export interface ScreenerItem {
   per: number | null;
   pbr: number | null;
   isFundamentalsMocked: boolean;
+  /** 최신 일봉 거래량 ÷ 직전 20거래일 평균(ADR-072). 일봉이 모자라면 null */
+  volumeMultiple?: number | null;
+  /** 오늘(KST) 생긴 이벤트 유형(서버 EventType, 중요도 높은 순) */
+  todayEvents?: string[];
 }
 
 interface ScreenerState {
@@ -41,7 +47,12 @@ interface WsMessage {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
-export function useScreener(tab: string, market: string, sort: string, marketCapTier: string = "all") {
+/** 서버가 조건을 거부했을 때(400)·퀀트 시그널 조건을 비로그인으로 썼을 때(401) 보여줄 메시지 */
+export interface ScreenerError { status: number; message: string }
+
+export function useScreener(tab: string, criteria: ScreenerCriteria = DEFAULT_CRITERIA) {
+  const [error, setError] = useState<ScreenerError | null>(null);
+  const criteriaKey = JSON.stringify(criteria);
   const [state, setState] = useState<ScreenerState>({
     items: [], total: 0, hasMore: false,
     loading: true, loadingMore: false, wsConnected: false,
@@ -62,11 +73,18 @@ export function useScreener(tab: string, market: string, sort: string, marketCap
     setState(p => ({ ...p, loading: reset, loadingMore: !reset }));
 
     try {
-      const res = await fetch(
-        `/api/screener?tab=${tab}&market=${market}&sort=${sort}&limit=20&offset=${offset}&marketCapTier=${marketCapTier}`,
+      // 퀀트 시그널 조건은 로그인 사용자 기준이라 토큰을 실어 보낸다(없으면 그냥 익명 요청)
+      const res = await authFetch(
+        `/api/screener?${toQuery(tab, JSON.parse(criteriaKey) as ScreenerCriteria, 20, offset)}`,
         { signal: abortRef.current.signal }
       );
-      if (!res.ok) return;
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setError({ status: res.status, message: body?.message ?? "조건을 처리하지 못했습니다" });
+        setState(p => ({ ...p, items: reset ? [] : p.items, total: reset ? 0 : p.total, hasMore: false, loading: false, loadingMore: false }));
+        return;
+      }
+      setError(null);
       const data = await res.json();
 
       // prevClose 캐시 업데이트
@@ -92,7 +110,7 @@ export function useScreener(tab: string, market: string, sort: string, marketCap
       if ((e as Error).name !== "AbortError")
         setState(p => ({ ...p, loading: false, loadingMore: false }));
     }
-  }, [tab, market, sort, marketCapTier]);
+  }, [tab, criteriaKey]);
 
   useEffect(() => {
     offsetRef.current = 0;
@@ -166,5 +184,5 @@ export function useScreener(tab: string, market: string, sort: string, marketCap
     fetch_(false);
   }, [state.hasMore, state.loadingMore, fetch_]);
 
-  return { ...state, loadMore };
+  return { ...state, loadMore, error };
 }

@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
 import {
-  Btn, BtnLink, DataTable, EventBadge, Icon, IconBtn, Panel, PanelRow, Seg, SelectBox, TerminalPage, TitleBlock,
+  Btn, BtnLink, DataTable, EventBadge, Icon, IconBtn, Panel, PanelRow, Seg, SelectBox, Sparkline, TerminalPage, TitleBlock,
   dirClass, fmtNum, fmtPct, fmtSigned, type Column,
 } from "@/components/terminal";
 import {
@@ -15,6 +15,8 @@ import {
 } from "@/components/home/data";
 import SelectedStockPanel from "@/components/watchlist/SelectedStockPanel";
 import RowMenu from "@/components/watchlist/RowMenu";
+import { useIntradaySeriesChunked } from "@/hooks/useIntradaySeries";
+import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
 
 interface AlertRule { id: number; stockId: number | null; ruleType: string; }
 
@@ -56,6 +58,9 @@ export default function WatchlistPage() {
 
   const stockIds = Array.from(new Set(groups.flatMap(g => g.items.map(i => i.stockId))));
   const quoteByStockId = useQuotes(stockIds, "watchlist-page", 15_000);
+  // 오늘 열 — 장중 10분 간격 종가(/api/market/intraday, 50개씩 나눠 요청)
+  const intradayByStockId = useIntradaySeriesChunked(stockIds, isLoggedIn);
+  const chartTheme = useThemeStore((s) => CHART_THEMES[s.chartTheme]);
   const { data: events = [] } = useRecentEvents();
 
   const { data: alertRules = [] } = useQuery<AlertRule[]>({
@@ -209,8 +214,28 @@ export default function WatchlistPage() {
     { key: "price", header: "현재가", align: "right", cell: (it) => { const q = quoteByStockId.get(it.stockId); return <span className="num">{q ? `${isDomestic(q.market) ? "" : "$"}${fmtNum(q.price, isDomestic(q.market) ? 0 : 2)}` : "—"}</span>; } },
     { key: "rate", header: "등락률", align: "right", cell: (it) => { const r = quoteByStockId.get(it.stockId)?.changeRate ?? null; return <span className={`num ${dirClass(r)}`}>{fmtPct(r)}</span>; } },
     { key: "diff", header: "전일 대비", align: "right", cell: (it) => { const q = quoteByStockId.get(it.stockId); return <span className={`num ${dirClass(q?.changeAmount)}`}>{fmtSigned(q?.changeAmount)}</span>; } },
-    { key: "today", header: "오늘", cell: () => <span className="text-tm-muted">—</span> },
-    { key: "vol", header: "거래량 배수", align: "right", cell: () => <span className="text-tm-muted">—</span> },
+    {
+      key: "today",
+      header: "오늘",
+      cell: (it) => {
+        const pts = intradayByStockId.get(it.stockId);
+        const r = quoteByStockId.get(it.stockId)?.changeRate ?? 0;
+        return pts && pts.length > 1
+          ? <Sparkline values={pts} color={r >= 0 ? chartTheme.upColor : chartTheme.downColor} width={88} height={24} />
+          : <span className="text-tm-muted">—</span>;
+      },
+    },
+    {
+      key: "vol",
+      header: <span title="최신 일봉 거래량 ÷ 직전 20거래일 평균">거래량 배수</span>,
+      align: "right",
+      cell: (it) => {
+        const m = quoteByStockId.get(it.stockId)?.volumeMultiple ?? null;
+        return m == null
+          ? <span className="text-tm-muted">—</span>
+          : <span className={`num ${m >= 2 ? "font-semibold text-dracula-purple" : ""}`}>{m.toFixed(1)}×</span>;
+      },
+    },
     { key: "event", header: "이벤트", cell: (it) => { const e = latestEventByStock.get(it.stockId); return e ? <span title={e.title}><EventBadge type={eventLabel(e.eventType)} /></span> : <EventBadge type={null} />; } },
     {
       key: "alert",

@@ -28,6 +28,7 @@ import java.time.Duration
  *   pattern           30분  — ZigZag + 패턴 탐지 CPU 절감
  *   portfolio-optimizer 30분 — Markowitz/Kelly 행렬 연산 비용 절감
  *   stock-score        1시간  — 밸류에이션 백분위 계산 시 전체 종목 스캔 비용 절감 (원본 데이터도 일 단위 갱신)
+ *   intraday          30초  — 장중 미니 시계열 일괄 조회(ADR-072). 10분 버킷이라 30초 지연은 모양에 영향 없음
  *
  * 기본 직렬화: GenericJackson2JsonRedisSerializer (타입 정보 포함)
  * → Redis 에서 inspect 가능하며 역직렬화 시 클래스 정보 보존.
@@ -73,6 +74,7 @@ class CacheConfig(
         const val PATTERN             = "pattern"
         const val PORTFOLIO_OPTIMIZER = "portfolio-optimizer"
         const val STOCK_SCORE         = "stock-score"
+        const val INTRADAY            = "intraday"
     }
 
     @Bean
@@ -100,6 +102,7 @@ class CacheConfig(
             .withCacheConfiguration(PATTERN,             config(Duration.ofMinutes(30)))
             .withCacheConfiguration(PORTFOLIO_OPTIMIZER, config(Duration.ofMinutes(30)))
             .withCacheConfiguration(STOCK_SCORE,         config(Duration.ofHours(1)))
+            .withCacheConfiguration(INTRADAY,            config(Duration.ofSeconds(30)))
             .build()
     }
 }

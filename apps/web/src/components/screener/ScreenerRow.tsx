@@ -1,7 +1,9 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { Icon } from "@/components/terminal";
+import { EventBadge, Icon, Sparkline } from "@/components/terminal";
+import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
+import { eventLabel } from "@/components/home/data";
 import BuySellBar from "./BuySellBar";
 import ChangeRateBadge from "./ChangeRateBadge";
 import AmountLabel from "./AmountLabel";
@@ -9,7 +11,7 @@ import { useWatchlistIds } from "@/hooks/useWatchlistIds";
 import type { ScreenerItem } from "@/hooks/useScreener";
 import type { ColumnKey, ScreenerColumn } from "./ScreenerTable";
 
-interface Props { item: ScreenerItem; columns: ScreenerColumn[]; }
+interface Props { item: ScreenerItem; columns: ScreenerColumn[]; /** 오늘 10분 간격 종가 */ intraday?: number[]; }
 
 const Dash = () => <span className="text-tm-muted">—</span>;
 
@@ -17,7 +19,8 @@ const Dash = () => <span className="text-tm-muted">—</span>;
  * div 기반 행 — TanStack Virtual의 absolute 포지셔닝과 호환.
  * 헤더와 같은 columns 배열(폭 클래스 공유)로 그려서 정렬이 어긋나지 않는다.
  */
-export default function ScreenerRow({ item, columns }: Props) {
+export default function ScreenerRow({ item, columns, intraday }: Props) {
+  const theme = useThemeStore((s) => CHART_THEMES[s.chartTheme]);
   const isKR = ["KOSPI", "KOSDAQ"].includes(item.market);
   const { isLoggedIn, isWatched, toggle } = useWatchlistIds();
   const watched = isWatched(item.stockId);
@@ -54,11 +57,26 @@ export default function ScreenerRow({ item, columns }: Props) {
         return <span className="num font-medium">{isKR ? "₩" : "$"}{item.price.toLocaleString("ko-KR")}</span>;
       case "change":
         return <ChangeRateBadge rate={item.changeRate} amount={item.changeAmount} />;
-      // 시안 컬럼 중 아직 데이터가 없는 것 — 가짜 숫자를 보여주지 않는다(docs/design-rollout-plan.md)
       case "volMult":
+        return item.volumeMultiple == null ? <Dash /> : (
+          <span className={cn("num", item.volumeMultiple >= 2 ? "font-semibold text-dracula-purple" : "text-tm-soft")} title="최신 일봉 거래량 ÷ 직전 20거래일 평균">
+            {item.volumeMultiple.toFixed(1)}×
+          </span>
+        );
       case "today":
-      case "event":
-        return <Dash />;
+        return intraday && intraday.length > 1
+          ? <Sparkline values={intraday} color={item.changeRate >= 0 ? theme.upColor : theme.downColor} width={96} height={26} />
+          : <Dash />;
+      case "event": {
+        const ev = item.todayEvents ?? [];
+        if (ev.length === 0) return <Dash />;
+        return (
+          <span className="flex items-center gap-1" title={ev.map(eventLabel).join(", ")}>
+            <EventBadge type={eventLabel(ev[0])} />
+            {ev.length > 1 && <span className="num text-2xs text-tm-muted">+{ev.length - 1}</span>}
+          </span>
+        );
+      }
       case "marketCap":
         return (
           <span className="flex items-center gap-1">

@@ -58,8 +58,12 @@ class SecurityConfig(
                     .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/stocks/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/events/**").permitAll()
+                    // ADR-072 — 저장 스크린은 사용자 데이터라 아래 /api/screener/** 공개 규칙보다 먼저 막는다
+                    .requestMatchers("/api/screener/saved", "/api/screener/saved/**").authenticated()
                     .requestMatchers(HttpMethod.GET, "/api/screener/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/market/summary").permitAll()   // ADR-039 — 홈 위젯 초기값, 비로그인 공개
+                    .requestMatchers(HttpMethod.GET, "/api/market/indices", "/api/market/indices/**").permitAll()   // ADR-071 — 지수·환율, 비로그인 공개
+                    .requestMatchers(HttpMethod.GET, "/api/market/intraday").permitAll()   // ADR-072 — 장중 미니 시계열, 비로그인 공개
                     .requestMatchers("/api/backtest/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/latency/**").permitAll()
                     .requestMatchers("/actuator/health", "/actuator/info").permitAll()
