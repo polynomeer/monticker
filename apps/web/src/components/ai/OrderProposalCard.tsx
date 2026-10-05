@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Sparkle } from "@phosphor-icons/react";
-import { Card } from "@/components/ui/Card";
+import { Btn, Pill } from "@/components/terminal";
 import { authFetch } from "@/services/api";
 import type { OrderProposal } from "@monticker/types";
 
@@ -59,59 +59,56 @@ export default function OrderProposalCard({ stockId, onApprove, disclaimer = DEF
   });
 
   const isExpired = proposal ? new Date(proposal.expiresAt).getTime() < Date.now() : false;
-  const sideStyle = proposal?.side === "BUY" ? "border-[#ff5050]/30 bg-[#ff5050]/5"
-    : proposal?.side === "SELL" ? "border-[#4a8fd4]/30 bg-[#4a8fd4]/5"
-    : "border-gray-300 dark:border-dracula-line bg-gray-50 dark:bg-dracula-bg";
+  const sideStyle = proposal?.side === "BUY" ? "border-up/40 bg-up/5"
+    : proposal?.side === "SELL" ? "border-down/40 bg-down/5"
+    : "border-tm-line2 bg-tm-inner";
   const sideLabel = proposal?.side === "BUY" ? "매수 제안" : proposal?.side === "SELL" ? "매도 제안" : "보류 제안";
-  const sideColor = proposal?.side === "BUY" ? "text-[#ff5050]" : proposal?.side === "SELL" ? "text-[#4a8fd4]" : "text-gray-500 dark:text-dracula-comment";
+  const sideColor = proposal?.side === "BUY" ? "text-up" : proposal?.side === "SELL" ? "text-down" : "text-tm-muted";
 
   return (
-    <Card className="p-5 space-y-3">
+    <section className="flex flex-col gap-3 rounded-[10px] bg-tm-panel p-3.5">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-dracula-fg inline-flex items-center gap-1.5">
+        <h2 className="m-0 inline-flex items-center gap-1.5 text-15 font-bold text-dracula-fg">
           <Sparkle size={14} weight="bold" className="text-dracula-purple" aria-hidden /> AI 주문 제안
         </h2>
-        <button onClick={() => createMutation.mutate()} disabled={createMutation.isPending}
-          className="shrink-0 text-xs px-3 py-1.5 rounded-lg bg-dracula-purple/10 text-dracula-purple font-medium hover:bg-dracula-purple/20 active:scale-95 transition-all duration-150 disabled:opacity-40">
+        <Btn kind="soft" size="sm" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
           {createMutation.isPending ? "생성 중..." : "제안 받기"}
-        </button>
+        </Btn>
       </div>
-      <p className="text-[11px] text-gray-400 dark:text-dracula-comment">{disclaimer}</p>
+      <p className="m-0 text-2xs text-tm-muted">{disclaimer}</p>
 
       {createMutation.isError && (
-        <p className="text-xs text-dracula-red">{(createMutation.error as Error).message}</p>
+        <p role="alert" className="m-0 text-xs text-[#ff8a8a]">{(createMutation.error as Error).message}</p>
       )}
 
       {proposal && (
-        <div className={`p-3 rounded-xl border text-xs space-y-2 animate-fade-up ${sideStyle}`}>
-          <div className="flex items-center justify-between">
+        <div className={`flex flex-col gap-2 rounded-[10px] border p-3 text-xs ${sideStyle}`}>
+          <div className="flex items-center justify-between gap-2">
             <span className={`font-bold ${sideColor}`}>{sideLabel}</span>
-            <span className="text-gray-400 dark:text-dracula-comment">
+            <Pill tone={proposal.status === "APPROVED" ? "green" : proposal.status === "REJECTED" || isExpired ? "muted" : "purple"}>
               {proposal.status === "APPROVED" ? "승인됨"
                 : proposal.status === "REJECTED" ? "거부됨"
                 : isExpired ? "만료됨"
                 : `~${new Date(proposal.expiresAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}까지 유효`}
-            </span>
+            </Pill>
           </div>
-          <p className="text-gray-600 dark:text-dracula-fg">{proposal.reasoning}</p>
+          <p className="m-0 leading-relaxed text-tm-soft">{proposal.reasoning}</p>
 
           {proposal.status === "PENDING" && !isExpired && proposal.side !== "HOLD" && (
             <div className="grid grid-cols-2 gap-2 pt-1">
-              <button onClick={() => rejectMutation.mutate()} disabled={rejectMutation.isPending}
-                className="py-1.5 rounded-lg border border-gray-300 dark:border-dracula-line text-gray-500 dark:text-dracula-comment text-xs font-medium hover:bg-gray-100 dark:hover:bg-dracula-line/30 active:scale-95 transition-all duration-150 disabled:opacity-40">
+              <Btn kind="ghost" size="sm" onClick={() => rejectMutation.mutate()} disabled={rejectMutation.isPending}>
                 거부
-              </button>
-              <button onClick={() => approveMutation.mutate()} disabled={approveMutation.isPending}
-                className="py-1.5 rounded-lg bg-dracula-purple text-white text-xs font-semibold hover:opacity-90 active:scale-95 transition-all duration-150 disabled:opacity-40">
+              </Btn>
+              <Btn kind="primary" size="sm" onClick={() => approveMutation.mutate()} disabled={approveMutation.isPending}>
                 승인 — 주문폼에 반영
-              </button>
+              </Btn>
             </div>
           )}
           {(approveMutation.isError || rejectMutation.isError) && (
-            <p className="text-dracula-red">{((approveMutation.error ?? rejectMutation.error) as Error).message}</p>
+            <p role="alert" className="m-0 text-[#ff8a8a]">{((approveMutation.error ?? rejectMutation.error) as Error).message}</p>
           )}
         </div>
       )}
-    </Card>
+    </section>
   );
 }
