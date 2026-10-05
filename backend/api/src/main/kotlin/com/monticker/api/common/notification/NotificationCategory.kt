@@ -10,6 +10,8 @@ enum class NotificationCategory(val alwaysOn: Boolean = false) {
     ORDER_OUTCOME(alwaysOn = true),
     /** 조건부 주문 발동 실패 — 보호가 사라졌다(ADR-065). */
     CONDITIONAL_ORDER(alwaysOn = true),
+    /** 리스크 한도 80% 근접(ADR-070) — 하루 한 번이라 끌 수 없게 둔다. 넘으면 매수가 막히므로 미리 아는 게 중요하다. */
+    RISK_WARNING(alwaysOn = true),
     /** 실거래 체결·정산 완료. */
     FILLS,
     /** 내 포워드 테스트 매수·매도 신호. */

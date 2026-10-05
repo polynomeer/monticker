@@ -1,5 +1,6 @@
 package com.monticker.api.risk.application
 
+import com.monticker.api.common.notification.NotificationCategory
 import com.monticker.api.common.notification.UserNotificationCommand
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
@@ -110,6 +111,7 @@ class RiskLimitNearWarningJob(
         val subject = u.subject?.let { " ($it)" } ?: ""
         return UserNotificationCommand(
             userId = userId,
+            category = NotificationCategory.RISK_WARNING,
             title = "리스크 한도 ${pct}% 사용 — ${u.label}",
             body = "${u.label}$subject ${fmt(u.current)}%가 한도 ${fmt(u.limit)}%의 ${pct}%에 이르렀습니다. " +
                 "한도를 넘으면 위험을 늘리는 매수 주문이 차단됩니다. 리스크 화면에서 확인하세요.",
