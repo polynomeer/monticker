@@ -94,4 +94,39 @@ describe("WatchRuleForm", () => {
     render(<WatchRuleForm onSubmit={vi.fn()} submitting />);
     expect(screen.getByRole("button", { name: "저장 중..." })).toBeDisabled();
   });
+
+  // ADR-077 — 이름·복합 조건·하루 한도는 값이 있을 때만 담긴다
+  it("이름·복합 조건·하루 최대 발동을 함께 제출한다", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(<WatchRuleForm onSubmit={onSubmit} submitting={false} />);
+
+    await pickStock(user);
+    await user.type(screen.getByLabelText("규칙 이름"), "거래량+급등");
+    await user.click(screen.getByRole("button", { name: "+ 가격 급등" }));
+    await user.selectOptions(screen.getByLabelText("복합 조건 시간 창"), "3600");
+    await user.type(screen.getByLabelText("하루 최대 발동"), "3");
+    await user.click(screen.getByRole("button", { name: "규칙 저장" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: "VOLUME_SURGE",
+      name: "거래량+급등",
+      requiredEventTypes: ["PRICE_SPIKE"],
+      conditionWindowSec: 3600,
+      dailyLimit: 3,
+    }));
+  });
+
+  it("하루 최대 발동이 범위를 벗어나면 제출하지 않는다", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(<WatchRuleForm onSubmit={onSubmit} submitting={false} />);
+
+    await pickStock(user);
+    await user.type(screen.getByLabelText("하루 최대 발동"), "0");
+    await user.click(screen.getByRole("button", { name: "규칙 저장" }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(await screen.findByRole("alert")).toHaveTextContent("1~1000");
+  });
 });
