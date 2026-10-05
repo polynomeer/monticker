@@ -147,6 +147,8 @@ export interface MarketStrategy {
   created_at: string;
   // ADR-035 — 현재 로그인 사용자가 이 전략을 구독 중인지. 비로그인 조회 시 항상 false.
   isSubscribed: boolean;
+  /** ADR-078 — 최신 백테스트 요약·포워드 일치율. 룰 정의는 포함하지 않는다. */
+  performance?: StrategyPerformance | null;
 }
 
 // Quant Lab forward test (ADR-024) — /api/quant/rulesets/{id}/forward-test*
