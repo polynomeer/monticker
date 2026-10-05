@@ -3,7 +3,11 @@ import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import BacktestResultView, { type BacktestResult } from "@/components/backtest/BacktestResultView";
-import { Btn, Checkbox, Field, Notice, Panel, PanelCol, PanelRow, PreviewTag, SelectBox, TerminalPage } from "@/components/terminal";
+import { Btn, Checkbox, Field, Notice, Panel, PanelCol, PanelRow, SelectBox, TerminalPage } from "@/components/terminal";
+
+// ADR-079 — 비용 가정값(%). 세율은 시기·시장별로 달라 서버가 단정하지 않고 이 값을 그대로 쓴다.
+// 국내(KOSPI·KOSDAQ) 종목 매도에만 세금을 적용한다.
+const COST = { commissionPct: 0.015, sellTaxPct: 0.18, slippagePct: 0.05 } as const;
 
 const STOCKS = [
   { id: 2, symbol: "005930", name: "삼성전자" },
@@ -27,6 +31,8 @@ export default function BacktestPage() {
   const [capital,    setCapital]    = useState(10000000);
   const [stopLoss,   setStopLoss]   = useState(5);
   const [takeProfit, setTakeProfit] = useState(10);
+  const [applyFees,  setApplyFees]  = useState(true);
+  const [applySlip,  setApplySlip]  = useState(true);
   const [submitted,  setSubmitted]  = useState<object | null>(null);
   const [ranAt,      setRanAt]      = useState<Date | null>(null);
 
@@ -50,6 +56,8 @@ export default function BacktestPage() {
       stockId, strategy, fromDate, toDate,
       initialCapital: capital,
       stopLossPct: stopLoss, takeProfitPct: takeProfit,
+      ...(applyFees && { commissionPct: COST.commissionPct, sellTaxPct: COST.sellTaxPct }),
+      ...(applySlip && { slippagePct: COST.slippagePct }),
     });
     setRanAt(new Date());
   };
@@ -87,9 +95,8 @@ export default function BacktestPage() {
             <Field label="손절" unit="%" type="number" step={1} min={1} max={50} value={stopLoss} onChange={e => setStopLoss(Number(e.target.value))} inputClassName="text-down" />
             <Field label="익절" unit="%" type="number" step={1} min={1} max={200} value={takeProfit} onChange={e => setTakeProfit(Number(e.target.value))} inputClassName="text-up" />
           </div>
-          {/* 단순 백테스트 엔진(/api/backtest)은 아직 비용을 반영하지 않는다 — 룰셋 백테스트만 반영 */}
-          <div className="flex items-start gap-2"><Checkbox checked={false} disabled label="수수료 0.015% · 세금 0.18% 반영" /><PreviewTag className="mt-0.5" /></div>
-          <div className="flex items-start gap-2"><Checkbox checked={false} disabled label="슬리피지 0.05% 반영" /><PreviewTag className="mt-0.5" /></div>
+          <Checkbox checked={applyFees} onChange={setApplyFees} label={`수수료 ${COST.commissionPct}% · 세금 ${COST.sellTaxPct}% 반영`} sub="세금은 국내 종목 매도에만 · 세율은 가정값" />
+          <Checkbox checked={applySlip} onChange={setApplySlip} label={`슬리피지 ${COST.slippagePct}% 반영`} sub="매수는 비싸게, 매도는 싸게 체결된 것으로 계산" />
           <Btn icon="play" full size="lg" onClick={handleRun} disabled={isLoading}>
             {isLoading ? "시뮬레이션 중..." : "백테스트 실행"}
           </Btn>
