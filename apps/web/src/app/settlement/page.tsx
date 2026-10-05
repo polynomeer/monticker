@@ -8,6 +8,7 @@ import { SettlementCalendar, nextBusinessDays, signedNet, ymd, type PaperSettlem
 import { useStockMeta } from "@/components/portfolio/useStockMeta";
 import { LoginRequired, Skeleton } from "@/components/portfolio/PaperStates";
 import { downloadCsv } from "@/components/portfolio/csv";
+import { reconciliationLabel, useReconciliation } from "@/components/wallet/useReconciliation";
 import { fmtMonthDay } from "@/components/portfolio/format";
 import { Btn, DataTable, Num, Panel, Pill, Seg, TerminalPage, fmtNum, fmtSigned, type Column, type Tone } from "@/components/terminal";
 
@@ -65,6 +66,8 @@ export default function SettlementPage() {
     },
     enabled: isLoggedIn,
   });
+  const { data: recon } = useReconciliation(isLoggedIn);
+  const reconLabel = reconciliationLabel(recon);
 
   const today = ymd(new Date());
   const [, d1, d2] = nextBusinessDays(3).map(ymd);
@@ -116,8 +119,8 @@ export default function SettlementPage() {
         { label: "내일 정산", value: fmtSigned(sumOn(d1)), tone: tone(sumOn(d1)) },
         { label: "모레 정산", value: fmtSigned(sumOn(d2)), tone: tone(sumOn(d2)) },
         { label: "이번 주 정산 예정", value: fmtSigned(weekNet), tone: tone(weekNet) },
-        // 원장 대사(LedgerReconciliationService) 결과는 아직 API가 없다
-        { label: "불일치", value: "—", tone: "text-tm-muted" },
+        // ADR-043 일일 원장 대사(스냅샷) 결과
+        { label: "잔액 불일치", value: reconLabel.value, tone: reconLabel.tone },
       ]}
     >
       <Panel tabs={["정산 캘린더"]} actions={["expand"]}>
