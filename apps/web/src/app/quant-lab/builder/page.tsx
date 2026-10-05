@@ -86,6 +86,7 @@ interface ParsedRuleDefinition {
   entryRules?: { operator?: RuleOperator; conditions?: RuleCondition[] };
   exitRules?: { operator?: RuleOperator; conditions?: RuleCondition[] };
   positionSizing?: { value?: number };
+  hardExits?: { maxHoldDays?: number; trailingStopPct?: number };
 }
 
 function uid() { return Math.random().toString(36).slice(2, 8); }
@@ -208,6 +209,8 @@ export default function BuilderPage() {
   const [entry,                  setEntry]                  = useState<Condition[]>(DEFAULT_ENTRY);
   const [exit,                   setExit]                   = useState<Condition[]>(DEFAULT_EXIT);
   const [positionPct,            setPositionPct]            = useState(10);
+  const [maxHoldDays,            setMaxHoldDays]            = useState<number | null>(null);
+  const [trailingPct,            setTrailingPct]            = useState<number | null>(null);
   const [universeMarket,         setUniverseMarket]         = useState("all");
   const [universeMarketCapTier,  setUniverseMarketCapTier]  = useState("all");
   const [blockQuery,             setBlockQuery]             = useState("");
@@ -236,6 +239,8 @@ export default function BuilderPage() {
       setEntry(def.entryRules?.conditions?.map((c, i) => ({ ...c, id: `e${i}`, params: (c as Condition).params ?? {} })) ?? []);
       setExit(def.exitRules?.conditions?.map((c, i) => ({ ...c, id: `x${i}`, params: (c as Condition).params ?? {} })) ?? []);
       setPositionPct(def.positionSizing?.value ?? 10);
+      setMaxHoldDays(def.hardExits?.maxHoldDays ?? null);
+      setTrailingPct(def.hardExits?.trailingStopPct ?? null);
     } catch {}
     try {
       const universe: { market?: string; marketCapTier?: string } = JSON.parse(existing.universeJson || "{}");
@@ -251,6 +256,10 @@ export default function BuilderPage() {
       entryRules:    { operator: entryOp, conditions: entry.map(({ id: _id, ...c }) => c) },
       exitRules:     { operator: exitOp,  conditions: exit.map(({ id: _id, ...c }) => c) },
       positionSizing: { type: "FIXED_RATIO", value: positionPct },
+      // 비워 두면 보내지 않는다 — 기존 룰셋의 지문(fingerprint)이 괜히 바뀌지 않게.
+      ...(maxHoldDays != null || trailingPct != null
+        ? { hardExits: { ...(maxHoldDays != null && { maxHoldDays }), ...(trailingPct != null && { trailingStopPct: trailingPct }) } }
+        : {}),
     },
     universeJson: { market: universeMarket, marketCapTier: universeMarketCapTier },
   });
@@ -275,7 +284,11 @@ export default function BuilderPage() {
     onError: () => toast({ type: "error", title: "저장 실패", message: "다시 시도해주세요." }),
   });
 
-  const canSave = name.trim().length > 0 && entry.length > 0 && exit.length > 0;
+  const maxHoldValid = maxHoldDays == null || (Number.isInteger(maxHoldDays) && maxHoldDays >= 1 && maxHoldDays <= 500);
+  const trailingValid = trailingPct == null || (trailingPct > 0 && trailingPct <= 50);
+  // 강제 청산(최대 보유·트레일링)만으로도 청산될 수 있으니 매도 조건 대신 쓸 수 있다.
+  const hasExit = exit.length > 0 || maxHoldDays != null || trailingPct != null;
+  const canSave = name.trim().length > 0 && entry.length > 0 && hasExit && maxHoldValid && trailingValid;
 
   const addEntry = () => setEntry(p => [...p, { id: uid(), indicator: "CLOSE_VS_MA",  comparator: "GT",  params: { period: 20 } }]);
   const addExit  = () => setExit(p => [...p,  { id: uid(), indicator: "CLOSE_VS_MA",  comparator: "LT",  params: { period: 20 } }]);
@@ -390,8 +403,8 @@ export default function BuilderPage() {
           <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))" }}>
             <NumField label="손절" unit="%" value={typeof lossCond?.value === "number" ? lossCond.value : null} onCommit={v => setBound("LOSS_RATE", v)} placeholder="예: -4" inputClassName="text-down" />
             <NumField label="익절" unit="%" value={typeof profitCond?.value === "number" ? profitCond.value : null} onCommit={v => setBound("PROFIT_RATE", v)} placeholder="예: 8" inputClassName="text-up" />
-            <Field label="최대 보유" unit="거래일" placeholder="준비 중" disabled className="opacity-60" />
-            <Field label="트레일링" unit="%" placeholder="준비 중" disabled className="opacity-60" />
+            <NumField label="최대 보유" unit="거래일" value={maxHoldDays} onCommit={setMaxHoldDays} placeholder="예: 20" inputMode="numeric" />
+            <NumField label="트레일링" unit="%" value={trailingPct} onCommit={setTrailingPct} placeholder="예: 7" inputClassName="text-down" />
           </div>
           {otherExits.map((c, i) => (
             <div key={c.id} className="flex flex-col gap-3">
@@ -468,12 +481,23 @@ export default function BuilderPage() {
               계좌의 <span className="num text-dracula-fg">{positionPct}%</span>로 매수합니다.{" "}
               {exit.length === 0 ? <span className="text-tm-muted">(매도 조건 없음)</span> : joinNodes(exit, ", ", 2)}
               {exit.length > 1 ? (exitOp === "OR" ? " 중 하나라도 충족하면" : " 을 모두 충족하면") : " 이면"} 청산합니다.
+              {(maxHoldDays != null || trailingPct != null) && (
+                <>
+                  {" "}또한{" "}
+                  {maxHoldDays != null && <span className="num text-dracula-cyan">{maxHoldDays}거래일 보유</span>}
+                  {maxHoldDays != null && trailingPct != null && " 또는 "}
+                  {trailingPct != null && <span className="num text-dracula-pink">고점 대비 -{trailingPct}%</span>}
+                  {" "}에 도달하면 조건과 관계없이 청산합니다.
+                </>
+              )}
             </p>
             {!canSave && (
               <Notice tone="warn">
                 {!name.trim() && <div>· 전략 이름을 입력하세요</div>}
                 {entry.length === 0 && <div>· 매수 조건을 1개 이상 추가하세요</div>}
-                {exit.length === 0 && <div>· 매도 조건을 1개 이상 추가하세요</div>}
+                {!hasExit && <div>· 매도 조건이나 최대 보유·트레일링을 1개 이상 정하세요</div>}
+                {!maxHoldValid && <div>· 최대 보유는 1~500 거래일 정수여야 합니다</div>}
+                {!trailingValid && <div>· 트레일링은 0% 초과 50% 이하여야 합니다</div>}
               </Notice>
             )}
             <Btn icon="check" full size="lg" onClick={() => saveMutation.mutate()} disabled={!canSave || saveMutation.isPending}>

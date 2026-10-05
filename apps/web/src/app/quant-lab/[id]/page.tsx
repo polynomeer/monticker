@@ -25,6 +25,8 @@ const EXIT_REASON_LABEL: Record<string, { label: string; tone: "green" | "red" |
   END: { label: "기간 종료", tone: "muted" },
   TAKE_PROFIT: { label: "익절", tone: "green" },
   STOP_LOSS: { label: "손절", tone: "red" },
+  MAX_HOLD: { label: "최대 보유", tone: "muted" },
+  TRAILING_STOP: { label: "트레일링", tone: "red" },
 };
 
 const SIGNAL_DIRECTION_LABEL: Record<string, string> = { BUY: "매수", SELL: "매도" };
