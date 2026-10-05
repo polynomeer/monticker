@@ -76,8 +76,8 @@ export default function AppearanceSettingsPage() {
             <ThemeCard name="다크 (Dracula)" bg="#1b1c24" panel="#282a36" rail="#343746" on={!highContrast} onClick={() => setHighContrast(false)} />
             {/* 앱은 다크 전용(ThemeProvider forcedTheme="dark") — 시스템 테마 추종은 아직 없다 */}
             <ThemeCard name={<>시스템 설정 따르기 <PreviewTag /></>} bg="#2a2b33" panel="#3a3c48" rail="#4a4c58" on={false} disabled />
-            {/* 고대비 = a11yStore.highContrast — 뮤트 글자·옅은 테두리를 진하게, 포커스 표시를 뚜렷하게 */}
-            <ThemeCard name="고대비 다크" bg="#000000" panel="#14141a" rail="#2b2b36" on={highContrast} onClick={() => setHighContrast(true)} />
+            {/* 고대비 = a11yStore.highContrast → html[data-contrast="high"] — globals.css가 tm-* 표면을 검정 쪽으로, 뮤트 글자·테두리를 밝게 덮는다. 미리보기 색도 그 값 */}
+            <ThemeCard name="고대비 다크" bg="#000000" panel="#14141a" rail="#2e2f3d" on={highContrast} onClick={() => setHighContrast(true)} />
           </div>
 
           <H2 sub="차트·호가·등락률 전체에 적용">시세 색상</H2>

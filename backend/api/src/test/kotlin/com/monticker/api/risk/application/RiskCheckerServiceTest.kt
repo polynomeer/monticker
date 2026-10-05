@@ -21,9 +21,14 @@ class RiskCheckerServiceTest {
     private val objectMapper = ObjectMapper()
     private val riskRuleQueryService = RiskRuleQueryService(jdbc)
     private val auditLogger = RiskCheckAuditLogger(jdbc, objectMapper)
-    private val service = RiskCheckerService(riskLimitRepo, riskRuleQueryService, auditLogger, io.micrometer.core.instrument.simple.SimpleMeterRegistry(), jdbc)
+    private val service = RiskCheckerService(RiskLimitService(riskLimitRepo, jdbc), riskRuleQueryService, auditLogger, io.micrometer.core.instrument.simple.SimpleMeterRegistry(), jdbc)
 
     private val userId = 1L
+
+    init {
+        // ADR-069 — 대기 중인 한도 완화 없음(유효 한도 = 저장된 한도)
+        every { jdbc.query(match<String> { it.contains("risk_limit_pending_changes") }, any<RowMapper<Any>>(), *anyVararg()) } returns emptyList()
+    }
     private val stockId = 100L
     private val estimatedPrice = BigDecimal("1000")
 
@@ -388,5 +393,45 @@ class RiskCheckerServiceTest {
         }
         // 감사 로그 INSERT 는 실행되지 않아야 한다 (FK 위반 500 방지)
         verify(exactly = 0) { jdbc.update(match<String> { it.contains("risk_check_logs") }, *anyVararg()) }
+    }
+
+    // ── ADR-069 — 리스크 체크 끄기 ────────────────────────────────────────────
+
+    private fun inactiveLimits() = RiskLimit(userId = userId, dailyLossLimitPct = BigDecimal("3.00"), isActive = false)
+
+    @Test
+    fun `모의계좌에서 리스크 체크를 끄면 한도를 넘어도 통과하고 그 사실을 기록한다`() {
+        stubSafeDefaults(inactiveLimits())
+        every { jdbc.query(match<String> { it.contains("avg_cost") }, any<RowMapper<BigDecimal>>(), userId, any()) } returns listOf(BigDecimal("-400000"))
+
+        val result = service.check(userId, stockId, "BUY", 1, estimatedPrice)
+
+        assertThat(result.approved).isTrue()
+        assertThat(result.checks.map { it.rule }).containsExactly("RiskChecksDisabled")
+        verify { jdbc.update(match<String> { it.contains("INSERT INTO risk_check_logs") }, *anyVararg()) }
+    }
+
+    @Test
+    fun `리스크 체크를 꺼도 0 이하 수량은 막는다`() {
+        stubSafeDefaults(inactiveLimits())
+
+        val result = service.check(userId, stockId, "BUY", 0, estimatedPrice)
+
+        assertThat(result.approved).isFalse()
+        assertThat(result.blockedBy).isEqualTo("QuantityRule")
+    }
+
+    @Test
+    fun `실거래 게이트는 리스크 체크를 꺼도 한도를 적용한다`() {
+        stubSafeDefaults(inactiveLimits())
+        val snapshot = PortfolioSnapshot(
+            cash = BigDecimal("10000000"), holdings = emptyList(), dailyPnl = BigDecimal("-400000"), recentOrderCount = 0,
+            totalAssets = BigDecimal("10000000"),
+        )
+
+        val result = service.checkBrokerageOrder(userId, stockId, "BUY", 1, estimatedPrice, snapshot)
+
+        assertThat(result.approved).isFalse()
+        assertThat(result.blockedBy).isEqualTo("DailyLossRule")
     }
 }

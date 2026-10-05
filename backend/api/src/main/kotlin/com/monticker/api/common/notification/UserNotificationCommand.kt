@@ -14,6 +14,8 @@ import org.springframework.modulith.events.Externalized
 @Externalized("notify.user::#{#this.userId}")
 data class UserNotificationCommand(
     val userId: Long,
+    /** ADR-082 — 설정을 적용할 종류. 기본값이 없다: 새 알림은 끌 수 있는지부터 정해야 한다. */
+    val category: NotificationCategory,
     val title: String,
     val body: String,
     val dedupKey: String,

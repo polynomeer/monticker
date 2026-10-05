@@ -1,6 +1,7 @@
 package com.monticker.api.brokerage.application
 
 import com.monticker.api.brokerage.domain.ConditionalTriggerType
+import com.monticker.api.common.notification.NotificationCategory
 import com.monticker.api.common.notification.UserNotificationCommand
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.context.ApplicationEventPublisher
@@ -52,6 +53,7 @@ class ConditionalOrderFailures(
         }
         return UserNotificationCommand(
             userId = closed.userId,
+            category = NotificationCategory.CONDITIONAL_ORDER,
             title = "${closed.symbol} $label 주문이 실행되지 않았습니다",
             body = "조건이 충족돼 발동했지만 주문이 나가지 않았습니다: $reason. 이 주문은 더 이상 걸려 있지 않습니다 — 확인 후 다시 등록해주세요.",
             dedupKey = "conditional-order-failed:$id",

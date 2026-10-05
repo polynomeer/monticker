@@ -51,12 +51,20 @@ class ConsentController(
         return status(auth)
     }
 
+    /** 선택 동의(마케팅) 하나에 (다시) 동의한다 — 설정 화면. 필수 항목은 400(가입·동의 화면에서 묶음으로 받는다). */
+    @PutMapping("/{type}")
+    fun agreeOne(@RequestHeader("Authorization") auth: String, @PathVariable type: String): ResponseEntity<ConsentStatusResponse> {
+        consentService.agreeOptional(userId(auth), parseType(type), ConsentSource.SETTINGS)
+        return status(auth)
+    }
+
     /** 선택 동의(마케팅) 철회. 필수 동의는 철회할 수 없다(400). */
     @DeleteMapping("/{type}")
     fun withdraw(@RequestHeader("Authorization") auth: String, @PathVariable type: String): ResponseEntity<ConsentStatusResponse> {
-        val consentType = ConsentType.entries.firstOrNull { it.name == type.uppercase() }
-            ?: throw IllegalArgumentException("알 수 없는 동의 항목: $type")
-        consentService.withdraw(userId(auth), consentType, ConsentSource.SETTINGS)
+        consentService.withdraw(userId(auth), parseType(type), ConsentSource.SETTINGS)
         return status(auth)
     }
+
+    private fun parseType(type: String) =
+        ConsentType.entries.firstOrNull { it.name == type.uppercase() } ?: throw IllegalArgumentException("알 수 없는 동의 항목: $type")
 }

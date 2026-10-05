@@ -592,6 +592,47 @@ class SubscriptionServiceTest {
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
+    // ── billingSchedule (ADR-083) ────────────────────────────────────────────
+
+    @Test
+    fun `다음 결제일은 만료 하루 전 이후의 첫 갱신 잡 실행 시각(01시 KST)이다`() {
+        val pro = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val sub = makeSubscription(pro).apply { expiresAt = Instant.parse("2026-11-05T05:00:00Z") }   // KST 11-05 14:00
+        every { billingKeyRepo.findByUserId(1L) } returns Optional.of(billingKey())
+
+        val s = service.billingSchedule(sub, now = Instant.parse("2026-10-06T00:00:00Z"))
+
+        // 만료 −1일 = KST 11-04 14:00 → 다음 01:00 KST = 11-05 01:00 KST = 11-04T16:00Z. 그 실행의 리더 기준(+1일)이 만료를 덮는다.
+        assertThat(s.nextBillingAt).isEqualTo(Instant.parse("2026-11-04T16:00:00Z"))
+        assertThat(s.amount).isEqualByComparingTo("9900")
+        assertThat(s.nextBillingAt!!.plus(RenewalSchedule.LOOKAHEAD)).isAfterOrEqualTo(sub.expiresAt)
+    }
+
+    @Test
+    fun `만료 하루 전이 이미 지났으면(보류된 갱신) 지금 이후의 첫 실행이다`() {
+        val sub = makeSubscription(makePlan(PlanCode.PRO, BigDecimal("9900"))).apply { expiresAt = Instant.parse("2026-10-06T03:00:00Z") }
+        every { billingKeyRepo.findByUserId(1L) } returns Optional.of(billingKey())
+
+        val s = service.billingSchedule(sub, now = Instant.parse("2026-10-06T02:00:00Z"))   // KST 11:00
+
+        assertThat(s.nextBillingAt).isEqualTo(Instant.parse("2026-10-06T16:00:00Z"))      // 10-07 01:00 KST
+    }
+
+    @Test
+    fun `무료·해지·카드 없음은 청구 예정이 없고 이유를 준다`() {
+        every { billingKeyRepo.findByUserId(1L) } returns Optional.empty()
+        val future = Instant.now().plusSeconds(86_400 * 10)
+
+        val free = makeSubscription(makePlan(PlanCode.FREE, BigDecimal.ZERO)).apply { expiresAt = future }
+        val cancelled = makeSubscription(makePlan(PlanCode.PRO, BigDecimal("9900")), SubscriptionStatus.CANCELLED).apply { expiresAt = future }
+        val noCard = makeSubscription(makePlan(PlanCode.PRO, BigDecimal("9900"))).apply { expiresAt = future }
+
+        assertThat(service.billingSchedule(free).noChargeReason).isEqualTo(BillingSchedule.NoChargeReason.FREE_PLAN)
+        assertThat(service.billingSchedule(cancelled).noChargeReason).isEqualTo(BillingSchedule.NoChargeReason.CANCELLED)
+        assertThat(service.billingSchedule(noCard).noChargeReason).isEqualTo(BillingSchedule.NoChargeReason.NO_BILLING_KEY)
+        assertThat(service.billingSchedule(noCard).nextBillingAt).isNull()
+    }
+
     private fun makePlan(code: PlanCode, price: BigDecimal) = SubscriptionPlan(
         id = code.ordinal.toLong() + 1,
         code = code,

@@ -1,6 +1,7 @@
 package com.monticker.api.batch
 
 import com.monticker.api.common.cache.CacheConfig
+import com.monticker.api.subscription.application.RenewalSchedule
 import org.slf4j.LoggerFactory
 import org.springframework.batch.core.Job
 import org.springframework.batch.core.JobParameters
@@ -54,7 +55,8 @@ class BatchJobScheduler(
     // 한 달 밀린다. 잡은 (구독, 청구주기)에서 유도한 결정적 orderId 로 멱등하므로 매일 돌려도
     // 같은 주기를 두 번 청구하지 않는다. 리더는 `expiresAt <= now + 1일` 만 집어가므로
     // 평소 실행은 대상 0건이다 (ADR-059).
-    @Scheduled(cron = "0 0 1 * * *", zone = "Asia/Seoul")
+    // 시각은 RenewalSchedule 한 곳에서 정한다 — 화면의 "다음 결제일"이 같은 값으로 계산된다(ADR-083).
+    @Scheduled(cron = RenewalSchedule.CRON, zone = RenewalSchedule.ZONE)
     fun runSubscriptionRenewal() {
         log.info("Subscription renewal job starting...")
         runJob(subscriptionRenewalJob, JobParametersBuilder()

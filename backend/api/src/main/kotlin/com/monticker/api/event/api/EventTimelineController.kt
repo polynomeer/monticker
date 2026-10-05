@@ -1,5 +1,6 @@
 package com.monticker.api.event.api
 
+import com.monticker.api.event.application.EventMarketContextService
 import com.monticker.api.event.application.EventSearchResult
 import com.monticker.api.event.application.EventSearchService
 import com.monticker.api.event.application.EventTimelineService
@@ -15,6 +16,7 @@ import java.time.temporal.ChronoUnit
 class EventTimelineController(
     private val eventTimelineService: EventTimelineService,
     private val eventSearchService: EventSearchService,
+    private val eventMarketContextService: EventMarketContextService,
 ) {
     /**
      * 종목별 이벤트 타임라인.
@@ -88,6 +90,7 @@ class EventTimelineController(
         @RequestParam(defaultValue = "10") limit: Int,
     ): ResponseEntity<List<StockEventResponse>> {
         val events = eventTimelineService.getRecentEvents(limit.coerceIn(1, 50))
-        return ResponseEntity.ok(events.map { StockEventResponse.from(it) })
+        val context = eventMarketContextService.contextFor(events)
+        return ResponseEntity.ok(events.map { StockEventResponse.from(it, context[it.id]) })
     }
 }

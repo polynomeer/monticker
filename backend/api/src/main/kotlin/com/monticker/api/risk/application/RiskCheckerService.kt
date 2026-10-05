@@ -1,8 +1,6 @@
 package com.monticker.api.risk.application
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.monticker.api.risk.domain.RiskLimit
-import com.monticker.api.risk.infrastructure.RiskLimitRepository
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.modulith.NamedInterface
 import org.springframework.stereotype.Service
@@ -61,7 +59,7 @@ data class RiskCheckResult(
 @Service
 @Transactional
 class RiskCheckerService(
-    private val riskLimitRepo: RiskLimitRepository,
+    private val limitService: RiskLimitService,
     private val riskRuleQueryService: RiskRuleQueryService,
     private val auditLogger: RiskCheckAuditLogger,
     private val registry: io.micrometer.core.instrument.MeterRegistry,
@@ -97,7 +95,16 @@ class RiskCheckerService(
         estimatedPrice: BigDecimal,
     ): RiskCheckResult {
         ensureStockExists(stockId)
-        val limits = riskLimitRepo.findByUserId(userId).orElseGet { RiskLimit(userId = userId) }
+        val limits = limitService.effective(userId)
+        // ADR-069 — 리스크 체크를 끈 모의계좌는 한도 규칙을 평가하지 않는다. 수량 검증은 사용자 선호가 아니라 입력 검증이라 남긴다.
+        // 판정과 감사 기록은 그대로 남긴다("꺼져 있어서 통과했다"는 사실도 기록이다).
+        if (!limits.isActive) {
+            val checks = riskRuleQueryService.quantityGuard(qty) + RuleResult(
+                rule = "RiskChecksDisabled", passed = true, detail = "리스크 체크가 꺼져 있어 한도 규칙을 평가하지 않았습니다(모의투자).",
+                current = 0.0, limit = 0.0,
+            )
+            return finalize(userId, stockId, side, qty, checks, accountType = "PAPER")
+        }
         val price = if (estimatedPrice > BigDecimal.ZERO) estimatedPrice else riskRuleQueryService.currentPrice(stockId)
         val checks = riskRuleQueryService.evaluate(userId, stockId, side, qty, price, limits)
         return finalize(userId, stockId, side, qty, checks, accountType = "PAPER")
@@ -117,7 +124,9 @@ class RiskCheckerService(
         snapshot: PortfolioSnapshot,
     ): RiskCheckResult {
         ensureStockExists(stockId)
-        val limits = riskLimitRepo.findByUserId(userId).orElseGet { RiskLimit(userId = userId) }
+        // ADR-069 — 실거래는 isActive를 보지 않는다. 리스크 체크 끄기는 모의투자에만 적용되고, 실거래 게이트는 항상 돈다.
+        // 한도 값은 같은 유효 한도(완화 24시간 지연 포함)를 쓴다.
+        val limits = limitService.effective(userId)
         val checks = riskRuleQueryService.evaluateWithSnapshot(stockId, side, qty, estimatedPrice, limits, snapshot)
         return finalize(userId, stockId, side, qty, checks, accountType = "REAL")
     }
@@ -139,7 +148,7 @@ class RiskCheckerService(
         }
 
         auditLogger.record(userId, stockId, side, qty, approved, blockedBy, checks, accountType)
-        // Trading 대시보드 "리스크 거부율" — 감사 로그는 DB에만 있어 추이를 볼 수 없었다. 룰 라벨은 5개로 유계.
+        // Trading 대시보드 "리스크 거부율" — 감사 로그는 DB에만 있어 추이를 볼 수 없었다. 룰 라벨은 규칙 수(7개)로 유계.
         registry.counter("risk_check_total", "account", accountType, "side", side,
             "result", if (approved) "approved" else "blocked", "rule", blockedBy ?: "none").increment()
 

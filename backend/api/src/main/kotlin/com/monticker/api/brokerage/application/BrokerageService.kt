@@ -65,6 +65,7 @@ class BrokerageService(
     private val pendingBuyQuery: PendingBuyQuery,
     private val consentService: ConsentService,
     private val outcomeNotices: OrderOutcomeNotices,
+    private val priceGuard: OrderPriceGuard,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -241,7 +242,6 @@ class BrokerageService(
             throw halt.toException()
         }
         val client = clientRegistry.get(account.provider)
-        val credentials = requireCredentials(account)
         if (request.orderType == "LIMIT" && request.limitPrice == null) {
             throw IllegalArgumentException("지정가 주문에는 가격이 필요합니다.")
         }
@@ -250,6 +250,9 @@ class BrokerageService(
         // 우회 수단이었다(docs/validation-hardening-plan.md V-C1) — 건너뛰지 않고 거부한다.
         val stockId = resolveStockId(request.symbol)
             ?: throw IllegalArgumentException("등록되지 않은 종목입니다: ${request.symbol}")
+        // ADR-081 — KRX 호가 단위·가격제한폭. 자격증명 재발급(증권사 인증 호출)보다도 먼저 — 입력 오류는 어떤 증권사 호출도 부르지 않는다.
+        priceGuard.check(stockId, request, { client.movesRealMoney })
+        val credentials = requireCredentials(account)
 
         // ADR-056 — 결과를 모르는 같은 종목·방향 주문이 있으면 새 주문을 받지 않는다. 이중 주문의 가장 흔한 경로는
         // "실패한 줄 알고 다시 누르기"다. 해소(보통 1~2분)되면 다시 낼 수 있다.
@@ -331,11 +334,15 @@ class BrokerageService(
     }
 
     /** 증권사가 알려준 상태를 주문에 반영한다. 제출 직후·수동 동기화·대조 잡이 같은 규칙을 쓴다. */
-    private fun applyBrokerStatus(account: BrokerageAccount, order: BrokerageOrder, status: String, filledQty: Int, avgFillPrice: BigDecimal?) {
+    // notifyFill=false: 결과 불명 해소 경로 — 해소 알림(outcomeNotices.resolved)이 체결을 이미 알린다.
+    private fun applyBrokerStatus(
+        account: BrokerageAccount, order: BrokerageOrder, status: String, filledQty: Int, avgFillPrice: BigDecimal?, notifyFill: Boolean = true,
+    ) {
         when (status) {
             "FILLED" -> if (avgFillPrice != null && order.status != BrokerageOrderStatus.FILLED) {
                 order.fill(filledQty, avgFillPrice)
                 createSettlementFromFill(account, order, avgFillPrice)
+                if (notifyFill) outcomeNotices.filled(order)   // ADR-082 — 같은 트랜잭션: 커밋돼야 나간다
             }
             "CANCELLED" -> order.cancel()
             "REJECTED"  -> order.reject("증권사 거부")
@@ -408,7 +415,7 @@ class BrokerageService(
                 )!! > 0
                 if (linkedElsewhere) throw BusinessRuleException("$brokerOrderId 는 이미 다른 주문에 연결돼 있습니다.")
                 order.markSubmitted(snapshot.brokerOrderId, snapshot.brokerOrderRef)
-                applyBrokerStatus(account, order, snapshot.status, snapshot.filledQty, snapshot.avgFillPrice)
+                applyBrokerStatus(account, order, snapshot.status, snapshot.filledQty, snapshot.avgFillPrice, notifyFill = false)
             }
             order.resolvedBy = OrderResolution.MANUAL
             order.resolvedByUser = adminId
@@ -552,7 +559,7 @@ class BrokerageService(
                 order.markSubmitted(d.snapshot.brokerOrderId, d.snapshot.brokerOrderRef)
                 order.resolvedBy = OrderResolution.BROKER_LOOKUP
                 order.needsReview = false
-                applyBrokerStatus(account, order, d.snapshot.status, d.snapshot.filledQty, d.snapshot.avgFillPrice)
+                applyBrokerStatus(account, order, d.snapshot.status, d.snapshot.filledQty, d.snapshot.avgFillPrice, notifyFill = false)
                 ReconcileResult.MATCHED
             }
         }
@@ -625,6 +632,7 @@ class BrokerageService(
             side         = settlement.side,
             netAmount    = settlement.netAmount,
         )
+        outcomeNotices.settled(settlement)   // ADR-082
         log.info("증권사 정산 완료: id={} symbol={} side={} qty={}", settlement.id, settlement.symbol, settlement.side, settlement.quantity)
     }
 
