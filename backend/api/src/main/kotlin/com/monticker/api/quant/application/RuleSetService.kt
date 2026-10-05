@@ -259,10 +259,15 @@ class RuleSetService(
             type  = raw["type"] as String,
             value = (raw["value"] as Number).toDouble(),
         )
+        val hard = def["hardExits"] as? Map<*, *>
         return RuleDefinition(
             entryRules     = parseGroup(def["entryRules"] as Map<*, *>),
             exitRules      = parseGroup(def["exitRules"] as Map<*, *>),
             positionSizing = parseSizing(def["positionSizing"] as Map<*, *>),
+            hardExits      = HardExits(
+                maxHoldDays     = (hard?.get("maxHoldDays") as? Number)?.toInt(),
+                trailingStopPct = (hard?.get("trailingStopPct") as? Number)?.toDouble(),
+            ),
         )
     }
 
@@ -272,6 +277,15 @@ class RuleSetService(
      * 적용한다 — 기존 지표의 느슨한 동작은 그대로 둔다.
      */
     internal fun validateDefinition(def: Map<String, Any>) {
+        (def["hardExits"] as? Map<*, *>)?.let { h ->
+            (h["maxHoldDays"] as? Number)?.let {
+                require(it.toDouble() % 1.0 == 0.0 && it.toInt() in 1..500) { "최대 보유 기간은 1~500 거래일 정수여야 합니다." }
+            }
+            (h["trailingStopPct"] as? Number)?.let {
+                require(it.toDouble() > 0.0 && it.toDouble() <= 50.0) { "트레일링 스탑은 0% 초과 50% 이하여야 합니다." }
+            }
+            require(h.keys.all { it == "maxHoldDays" || it == "trailingStopPct" }) { "알 수 없는 강제 청산 항목입니다: ${h.keys}" }
+        }
         val conditions = listOf("entryRules", "exitRules").flatMap { key ->
             ((def[key] as? Map<*, *>)?.get("conditions") as? List<*>)?.filterIsInstance<Map<*, *>>() ?: emptyList()
         }

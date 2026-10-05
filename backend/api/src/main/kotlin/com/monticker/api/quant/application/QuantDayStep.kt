@@ -47,15 +47,15 @@ internal object QuantDayStep {
         val price = candles[idx].close.toDouble()
 
         if (position != null) {
-            if (!RuleEvaluator.evaluateExit(ruleDef.exitRules, candles, idx, position.entryPrice, price, aux)) {
-                return DayAction.Hold
-            }
+            val reason = hardExitReason(ruleDef.hardExits, candles, idx, position)
+                ?: "SIGNAL".takeIf { RuleEvaluator.evaluateExit(ruleDef.exitRules, candles, idx, position.entryPrice, price, aux) }
+                ?: return DayAction.Hold
             val fill = price * (1 - QuantBacktestEngine.SLIPPAGE_RATE)
             return DayAction.Exit(
                 qty        = position.qty,
                 fillPrice  = fill,
                 commission = position.qty * fill * QuantBacktestEngine.COMMISSION_RATE,
-                reason     = "SIGNAL",
+                reason     = reason,
             )
         }
 
@@ -67,5 +67,25 @@ internal object QuantDayStep {
         val qty        = (cash * ratio / fill).toInt().coerceAtLeast(1)
         val enter      = DayAction.Enter(qty, fill, qty * fill * QuantBacktestEngine.COMMISSION_RATE)
         return if (enter.cost <= cash) enter else DayAction.Hold
+    }
+
+    /**
+     * ADR-079 — 강제 청산. 보유 거래일은 진입일 다음 거래일부터 센다(진입 당일 = 0일).
+     * 트레일링 기준 고점은 진입일 종가를 포함한 이후 최고 종가다.
+     */
+    internal fun hardExitReason(h: com.monticker.api.quant.domain.HardExits, candles: List<DailyCandle>, idx: Int, position: SimPosition): String? {
+        if (h.maxHoldDays == null && h.trailingStopPct == null) return null
+        var held = 0
+        var peak = Double.NEGATIVE_INFINITY
+        for (i in idx downTo 0) {
+            val c = candles[i]
+            if (c.date < position.entryDate) break
+            if (c.date > position.entryDate) held++
+            peak = maxOf(peak, c.close.toDouble())
+        }
+        if (h.maxHoldDays != null && held >= h.maxHoldDays) return "MAX_HOLD"
+        val pct = h.trailingStopPct
+        if (pct != null && peak.isFinite() && candles[idx].close.toDouble() <= peak * (1 - pct / 100.0)) return "TRAILING_STOP"
+        return null
     }
 }

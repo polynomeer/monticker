@@ -29,8 +29,10 @@ object RuleEvaluator {
         return combine(group.operator, results)
     }
 
+    // 조건이 하나도 없는 그룹은 절대 충족되지 않는다 — all()은 빈 목록에서 true라, 강제 청산만 두고
+    // 매도 조건을 비운 AND 룰이 매일 청산되는 일이 생긴다.
     private fun combine(operator: String, results: List<Boolean>): Boolean =
-        when (operator.uppercase()) {
+        if (results.isEmpty()) false else when (operator.uppercase()) {
             "AND" -> results.all { it }
             "OR"  -> results.any { it }
             else  -> results.all { it }

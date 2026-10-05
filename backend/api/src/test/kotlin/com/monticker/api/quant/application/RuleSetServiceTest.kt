@@ -150,4 +150,25 @@ class RuleSetServiceTest {
             mapOf("indicator" to "NEWS_SENTIMENT", "comparator" to "GT", "params" to mapOf("period" to 5), "value" to 0.3),
         )))
     }
+
+    @Test
+    fun `create rejects out-of-range hard exits`() {
+        val base = defWith(mapOf("indicator" to "RSI", "comparator" to "LT", "value" to 30))
+        assertThrows<IllegalArgumentException> {
+            service.create(1L, CreateRuleSetRequest(name = "x", ruleDefinition = base + ("hardExits" to mapOf("maxHoldDays" to 0))))
+        }
+        assertThrows<IllegalArgumentException> {
+            service.create(1L, CreateRuleSetRequest(name = "x", ruleDefinition = base + ("hardExits" to mapOf("trailingStopPct" to 80))))
+        }
+    }
+
+    @Test
+    fun `parseRuleDefinition reads hard exits and defaults to none`() {
+        val base = defWith(mapOf("indicator" to "RSI", "comparator" to "LT", "value" to 30))
+
+        assertThat(service.parseRuleDefinition(base).hardExits.maxHoldDays).isNull()
+        val parsed = service.parseRuleDefinition(base + ("hardExits" to mapOf("maxHoldDays" to 20, "trailingStopPct" to 7.5)))
+        assertThat(parsed.hardExits.maxHoldDays).isEqualTo(20)
+        assertThat(parsed.hardExits.trailingStopPct).isEqualTo(7.5)
+    }
 }
