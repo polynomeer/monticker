@@ -521,7 +521,7 @@ export default function BuilderPage() {
                 <AutoGrid min={110}>
                   <Stat big label="CAGR" value={fmtPct(latest.annualReturn, 1)} valueClassName={(latest.annualReturn ?? 0) >= 0 ? "text-up" : "text-down"} />
                   <Stat big label="MDD" value={fmtMdd(latest.mdd)} valueClassName={(latest.mdd ?? 0) > 0.05 ? "text-down" : undefined} />
-                  <Stat big label="샤프" value="—" valueClassName="text-tm-muted" />
+                  <Stat big label="샤프" value={latest.sharpe == null ? "—" : latest.sharpe.toFixed(2)} valueClassName={latest.sharpe == null ? "text-tm-muted" : undefined} />
                   <Stat big label="거래 수" value={fmtNum(latest.tradeCount)} />
                 </AutoGrid>
                 {curve.length > 1 && <LineChart series={[{ values: curve, color: "#bd93f9", fill: true }]} width={360} height={150} label="빠른 백테스트 수익 곡선" xLabels={[[0, latest.startDate.slice(0, 7)], [0.85, latest.endDate.slice(0, 7)]]} />}

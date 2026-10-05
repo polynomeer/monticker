@@ -270,7 +270,7 @@ export default function QuantLabDetailPage() {
                   <Stat big label="누적 수익" value={fmtPct(latestResult.totalReturn, 1)} valueClassName={(latestResult.totalReturn ?? 0) >= 0 ? "text-up" : "text-down"} sub={`벤치마크 ${fmtPct(latestResult.benchmarkReturn, 1)} · 초과 ${fmtPct(latestResult.excessReturn, 1)}`} />
                   <Stat big label="CAGR" value={fmtPct(latestResult.annualReturn, 1)} valueClassName={(latestResult.annualReturn ?? 0) >= 0 ? "text-up" : "text-down"} sub={years ? `${years.toFixed(1)}년` : undefined} />
                   <Stat big label="MDD" value={fmtMdd(latestResult.mdd)} valueClassName={(latestResult.mdd ?? 0) > 0.05 ? "text-down" : undefined} />
-                  <Stat big label="샤프" value="—" valueClassName="text-tm-muted" sub="준비 중" />
+                  <Stat big label="샤프" value={latestResult.sharpe == null ? "—" : latestResult.sharpe.toFixed(2)} valueClassName={latestResult.sharpe == null ? "text-tm-muted" : undefined} sub={latestResult.sharpe == null ? "이전 결과는 다시 실행하면 계산" : "연환산 · 무위험 3%"} />
                   <Stat big label="승률" value={latestResult.winRate == null ? "—" : `${latestResult.winRate.toFixed(0)}%`} sub={`${latestResult.tradeCount ?? "—"}회 · 평균 보유 ${latestResult.avgHoldingDays?.toFixed(1) ?? "—"}일`} />
                   <Stat big label="손익비" value={latestResult.profitFactor?.toFixed(2) ?? "—"} sub="평균 익/손" />
                 </AutoGrid>
