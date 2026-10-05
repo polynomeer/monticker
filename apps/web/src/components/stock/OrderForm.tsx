@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { BtnLink, BuySell, Btn, Chip, Field, Icon, PreviewTag, SelectBox, fmtNum } from "@/components/terminal";
 import TradeReceipt from "@/components/wallet/TradeReceipt";
-import { usePaperPortfolio, usePaperTrade } from "@/hooks/usePaperTrade";
+import { sellableQuantity, usePaperOpenOrders, usePaperOrder, usePaperPortfolio } from "@/hooks/usePaperTrade";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
 import { authFetch } from "@/services/api";
@@ -55,30 +55,41 @@ const EMOTION_TAGS = [
 ] as const;
 
 /**
- * 시안 Main의 주문 패널 — 모의투자 주문(usePaperTrade). 기존 TradePanel과 같은 훅·검증·영수증 흐름을 쓴다.
- * 모의투자 API는 시장가 즉시 체결만 받는다: 지정가·익절/손절은 화면만 있고 비활성(준비 중).
+ * 시안 Main의 주문 패널 — 모의투자 주문(`POST /api/paper/orders`, ADR-074). 시장가는 즉시 체결,
+ * 지정가는 교차하면 즉시 체결·아니면 미체결로 남아 서버 스위퍼가 시세 교차 시 체결한다.
  * 실전 탭은 이 폼에서 주문을 보내지 않는다 — 실주문은 검증 경로가 있는 실전투자 화면에서만.
  */
 export default function OrderForm({ stock, currentPrice, brokerageConnected }: Props) {
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
+  const [orderType, setOrderType] = useState<"MARKET" | "LIMIT">("MARKET");
+  const [limitInput, setLimitInput] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [error, setError] = useState("");
   const [emotionKey, setEmotionKey] = useState<string | null>(null);
   const [receiptTradeId, setReceiptTradeId] = useState<number | null>(null);
-  const { buy, sell } = usePaperTrade();
+  const { place } = usePaperOrder();
   const { data: portfolio } = usePaperPortfolio();
   const { isLoggedIn } = useAuth();
+  const { data: openOrders = [] } = usePaperOpenOrders(isLoggedIn);
   const { toast } = useToast();
 
   const isBuy = side === "BUY";
-  const totalAmount = quantity * currentPrice;
+  const isLimit = orderType === "LIMIT";
+  const limitPrice = Number(limitInput.replace(/,/g, ""));
+  const limitValid = !isLimit || (Number.isFinite(limitPrice) && limitPrice > 0);
+  // 지정가 매수는 서버가 지정가 × 수량을 예약한다 — 주문 가능 수량도 지정가로 계산한다
+  const unitPrice = isLimit ? (limitValid ? limitPrice : 0) : currentPrice;
+  const totalAmount = quantity * unitPrice;
   const cash = portfolio?.cash ?? 0;
   const holding = portfolio?.holdings.find((h) => h.stockId === stock.id);
   const ownedQty = holding?.quantity ?? 0;
-  const maxBuy = currentPrice > 0 ? Math.floor(cash / currentPrice) : 0;
-  const max = isBuy ? maxBuy : ownedQty;
-  const isValid = Number.isInteger(quantity) && quantity > 0 && quantity <= max;
-  const isPending = buy.isPending || sell.isPending;
+  const sellable = sellableQuantity(ownedQty, openOrders, stock.id);
+  const maxBuy = unitPrice > 0 ? Math.floor(cash / unitPrice) : 0;
+  const max = isBuy ? maxBuy : sellable;
+  const isValid = Number.isInteger(quantity) && quantity > 0 && quantity <= max && limitValid;
+  const isPending = place.isPending;
+  // 지정가가 이미 교차하면 즉시 체결된다(서버 사가와 같은 판정)
+  const crossesNow = isLimit && limitValid && currentPrice > 0 && (isBuy ? limitPrice >= currentPrice : limitPrice <= currentPrice);
   const ratio = max > 0 ? Math.min(100, Math.round((quantity / max) * 100)) : 0;
 
   const { data: receipt } = useQuery({
@@ -97,7 +108,7 @@ export default function OrderForm({ stock, currentPrice, brokerageConnected }: P
       const res = await authFetch("/api/risk/check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stockId: stock.id, side, quantity, estimatedPrice: currentPrice }),
+        body: JSON.stringify({ stockId: stock.id, side, quantity, estimatedPrice: unitPrice }),
       });
       if (!res.ok) {
         const e = await res.json().catch(() => null);
@@ -107,18 +118,27 @@ export default function OrderForm({ stock, currentPrice, brokerageConnected }: P
     },
   });
   const resetRisk = risk.reset;
-  // 수량·방향이 바뀌면 이전 점검 결과는 더 이상 이 주문의 결과가 아니다.
-  useEffect(() => { resetRisk(); }, [side, quantity, resetRisk]);
+  // 수량·방향·가격이 바뀌면 이전 점검 결과는 더 이상 이 주문의 결과가 아니다.
+  useEffect(() => { resetRisk(); }, [side, quantity, orderType, limitInput, resetRisk]);
 
   const setQty = (raw: number) => setQuantity(Math.min(Math.max(max, 1), Math.max(1, Math.floor(raw) || 1)));
 
   const handleSubmit = async () => {
     setError("");
     try {
-      let result: { tradeId?: number; id?: number } = {};
-      if (isBuy) result = await buy.mutateAsync({ stockId: stock.id, quantity });
-      else result = await sell.mutateAsync({ stockId: stock.id, quantity });
-      const tid = result?.tradeId ?? result?.id;
+      const result = await place.mutateAsync({
+        stockId: stock.id, side, orderType, quantity, ...(isLimit ? { limitPrice } : {}),
+      });
+      if (result.status === "PENDING") {
+        toast({
+          type: "success",
+          title: "지정가 주문 접수",
+          message: `${fmtNum(limitPrice)}원 ${fmtNum(quantity)}주 ${isBuy ? "매수" : "매도"} — 가격이 닿으면 체결됩니다. 아래 '미체결 주문'에서 취소할 수 있어요.`,
+        });
+        setQuantity(1);
+        return;
+      }
+      const tid = result.tradeId;
       if (tid) {
         const tag = EMOTION_TAGS.find((t) => t.key === emotionKey);
         if (tag) {
@@ -170,12 +190,30 @@ export default function OrderForm({ stock, currentPrice, brokerageConnected }: P
         <>
           <BuySell value={side} onChange={setSide} />
 
-          <SelectBox label="주문 유형" value="MARKET" onChange={() => {}}>
+          <SelectBox label="주문 유형" value={orderType} onChange={(e) => {
+            const t = e.target.value as "MARKET" | "LIMIT";
+            setOrderType(t);
+            // 지정가로 바꿀 때 현재가로 채워 둔다 — 빈 칸에서 시작하면 엉뚱한 가격을 넣기 쉽다
+            if (t === "LIMIT" && !limitInput && currentPrice > 0) setLimitInput(String(currentPrice));
+          }}>
             <option value="MARKET">시장가</option>
-            <option value="LIMIT" disabled>지정가 (준비 중)</option>
+            <option value="LIMIT">지정가</option>
           </SelectBox>
 
-          <Field label="시장가 · 현재가 기준" unit="원" value={currentPrice > 0 ? fmtNum(currentPrice) : "—"} readOnly tabIndex={-1} />
+          {isLimit ? (
+            <Field
+              label={crossesNow ? "지정가 · 지금 가격이면 즉시 체결" : "지정가"}
+              unit="원"
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step="any"
+              value={limitInput}
+              onChange={(e) => setLimitInput(e.target.value)}
+            />
+          ) : (
+            <Field label="시장가 · 현재가 기준" unit="원" value={currentPrice > 0 ? fmtNum(currentPrice) : "—"} readOnly tabIndex={-1} />
+          )}
 
           <div className="flex gap-2">
             <Field
@@ -221,6 +259,7 @@ export default function OrderForm({ stock, currentPrice, brokerageConnected }: P
               <span>주문 가능 <span className="num text-dracula-fg">{fmtNum(cash)}원</span></span>
               <span>
                 보유 <span className="num text-dracula-fg">{holding ? `${fmtNum(holding.quantity)}주 · 평균 ${fmtNum(holding.avgPrice)}` : "—"}</span>
+                {holding && sellable < ownedQty && <span className="num ml-1">(미체결 매도 {fmtNum(ownedQty - sellable)}주)</span>}
                 {holding && (
                   <span className={cn("num ml-1", holding.pnl >= 0 ? "text-up" : "text-down")}>
                     ({holding.pnlRate >= 0 ? "+" : ""}{holding.pnlRate.toFixed(2)}%)
@@ -272,14 +311,21 @@ export default function OrderForm({ stock, currentPrice, brokerageConnected }: P
           {error && <p role="alert" className="m-0 text-xs text-[#ff8a8a]">{error}</p>}
           {quantity > max && (
             <p className="m-0 text-xs text-[#ff8a8a]">
-              {isBuy ? `잔고 부족 (최대 ${max}주 가능)` : `보유 수량 초과 (최대 ${max}주)`}
+              {isBuy ? `잔고 부족 (최대 ${max}주 가능)` : `매도 가능 수량 초과 (최대 ${max}주)`}
             </p>
           )}
+          {isLimit && !limitValid && <p className="m-0 text-xs text-[#ff8a8a]">지정가를 0보다 크게 입력하세요</p>}
 
           <p className="m-0 text-center text-xs leading-normal text-tm-muted">
-            {currentPrice > 0 ? `${fmtNum(currentPrice)}원 시장가로 ${fmtNum(quantity)}주 ${isBuy ? "매수" : "매도"}` : "현재가를 불러오는 중입니다"} · 즉시 체결(모의투자)
+            {isLimit
+              ? limitValid
+                ? `${fmtNum(limitPrice)}원 지정가로 ${fmtNum(quantity)}주 ${isBuy ? "매수" : "매도"} · ${crossesNow ? "즉시 체결" : "가격 도달 시 체결"}(모의투자)`
+                : "지정가를 입력하세요"
+              : currentPrice > 0
+                ? `${fmtNum(currentPrice)}원 시장가로 ${fmtNum(quantity)}주 ${isBuy ? "매수" : "매도"} · 즉시 체결(모의투자)`
+                : "현재가를 불러오는 중입니다"}
           </p>
-          <Btn kind={isBuy ? "buy" : "sell"} full className="h-[46px]" onClick={handleSubmit} disabled={!isValid || isPending || currentPrice <= 0}>
+          <Btn kind={isBuy ? "buy" : "sell"} full className="h-[46px]" onClick={handleSubmit} disabled={!isValid || isPending || (!isLimit && currentPrice <= 0)}>
             {isPending ? "처리 중..." : `${stock.name} ${isBuy ? "매수" : "매도"}`}
           </Btn>
         </>

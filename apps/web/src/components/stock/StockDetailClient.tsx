@@ -19,7 +19,7 @@ import { useStockPrice } from "@/hooks/useStockPrice";
 import { useRecentlyViewedStocks } from "@/hooks/useRecentlyViewedStocks";
 import { useActiveBrokerageOrdersForSymbol, useBrokerageAccount, useCancelBrokerageOrder } from "@/hooks/useBrokerage";
 import { useToast } from "@/hooks/useToast";
-import { usePaperPortfolio } from "@/hooks/usePaperTrade";
+import { usePaperOpenOrders, usePaperOrder, usePaperPortfolio } from "@/hooks/usePaperTrade";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
@@ -75,26 +75,45 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
   }, []);
   const showEvents = useCallback(() => setEventsTab("events"), []);
 
-  // 실전투자 미체결 주문을 차트 위 주문선으로 — 모의투자는 시장가 즉시체결이라 "미체결"이 없다(paper 모듈).
+  // 미체결 주문을 차트 위 주문선으로 — 실전(brokerage)과 모의 지정가(ADR-074, 매칭 엔진 orders) 둘 다.
+  const { isLoggedIn } = useAuth();
   const { data: brokerageAccount } = useBrokerageAccount();
   const brokerageConnected = !!brokerageAccount;
   const { data: activeOrders = [] } = useActiveBrokerageOrdersForSymbol(symbol, brokerageConnected);
   const cancelOrder = useCancelBrokerageOrder();
+  const { data: paperOpenAll = [] } = usePaperOpenOrders(isLoggedIn);
+  const paperOpen = useMemo(() => paperOpenAll.filter(o => o.stockId === stockId), [paperOpenAll, stockId]);
+  const { cancel: cancelPaper } = usePaperOrder();
   // react-query 데이터가 그대로면 같은 배열을 넘긴다 — 새 배열이면 EChartsAdapter가 차트를 통째로 다시 만든다.
-  const orderLines: OrderLine[] = useMemo(() => activeOrders
-    .filter(o => o.limitPrice != null)
-    .map(o => ({ id: o.id, price: o.limitPrice as number, side: o.side, label: o.side === "BUY" ? "매수 대기" : "매도 대기" })), [activeOrders]);
+  // 주문선 id: 실전은 양수, 모의는 음수(-orderId) — 차트의 취소 콜백 하나로 두 계좌를 구분한다.
+  const orderLines: OrderLine[] = useMemo(() => [
+    ...activeOrders
+      .filter(o => o.limitPrice != null)
+      .map(o => ({ id: o.id, price: o.limitPrice as number, side: o.side, label: o.side === "BUY" ? "실전 매수 대기" : "실전 매도 대기" })),
+    ...paperOpen
+      .filter(o => o.limitPrice != null)
+      .map(o => ({ id: -o.id, price: o.limitPrice as number, side: o.side, label: o.side === "BUY" ? "모의 매수 대기" : "모의 매도 대기" })),
+  ], [activeOrders, paperOpen]);
   const handleCancelOrder = useCallback((orderId: number) => {
     cancelOrder.mutate(orderId, {
       onSuccess: () => toast({ type: "success", title: "주문 취소", message: "미체결 주문이 취소되었습니다." }),
       onError:   (e) => toast({ type: "error", title: "취소 실패", message: (e as Error).message }),
     });
   }, [cancelOrder, toast]);
+  const handleCancelPaperOrder = useCallback((orderId: number) => {
+    cancelPaper.mutate(orderId, {
+      onSuccess: () => toast({ type: "success", title: "주문 취소", message: "모의투자 지정가 주문이 취소되었습니다." }),
+      onError:   (e) => toast({ type: "error", title: "취소 실패", message: (e as Error).message }),
+    });
+  }, [cancelPaper, toast]);
+  const handleCancelOrderLine = useCallback((id: number) => {
+    if (id < 0) handleCancelPaperOrder(-id);
+    else handleCancelOrder(id);
+  }, [handleCancelOrder, handleCancelPaperOrder]);
 
   const { candles: dailyCandles, events } = useStockChart(stockId, "1d");
   const { price: livePrice } = useStockPrice(stockId);
   const quote = useQuotes([stockId])[stockId];
-  const { isLoggedIn } = useAuth();
   const { data: paper } = usePaperPortfolio();
 
   const latestDaily = dailyCandles[dailyCandles.length - 1];
@@ -214,7 +233,7 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
           onEventClick={handleEventMarkerClick}
           onShowEvents={showEvents}
           orderLines={orderLines}
-          onCancelOrderLine={handleCancelOrder}
+          onCancelOrderLine={handleCancelOrderLine}
         />
       </PanelRow>
 
@@ -224,6 +243,9 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
         activeOrders={activeOrders}
         onCancelOrder={handleCancelOrder}
         cancelPending={cancelOrder.isPending}
+        paperOrders={paperOpen}
+        onCancelPaperOrder={handleCancelPaperOrder}
+        paperCancelPending={cancelPaper.isPending}
       />
     </TerminalPage>
   );
