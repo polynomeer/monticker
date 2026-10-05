@@ -17,6 +17,11 @@ export interface Portfolio {
 export interface TradeHistory {
   id: number; side: string; stockId: number; symbol: string; name: string;
   quantity: number; price: number; amount: number; tradedAt: string;
+  /** 경로 — 직접 주문·Watch Rule(ADR-051)·조건부 주문(ADR-075) */
+  source?: "MANUAL" | "WATCH_RULE" | "CONDITIONAL";
+  watchRuleId?: number | null;
+  conditionalOrderId?: number | null;
+  orderType?: "MARKET" | "LIMIT";
 }
 
 async function fetchPortfolio(): Promise<Portfolio> {
