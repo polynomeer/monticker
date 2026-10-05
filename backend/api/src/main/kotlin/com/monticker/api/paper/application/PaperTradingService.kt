@@ -22,6 +22,7 @@ class PaperTradingService(
     private val eventPublisher: ApplicationEventPublisher,
     private val projection: PortfolioPositionProjection,
     private val orderSubmitter: OrderSubmitter,
+    private val conditionalService: PaperConditionalOrderService,
 ) {
     private fun getOrCreateAccount(userId: Long): PaperAccount =
         accountRepo.findByUserId(userId).orElseGet {
@@ -37,7 +38,11 @@ class PaperTradingService(
 
     fun sell(userId: Long, stockId: Long, quantity: Int): TradeResultResponse = execute(userId, stockId, "SELL", quantity)
 
-    private fun execute(userId: Long, stockId: Long, side: String, quantity: Int): TradeResultResponse {
+    private fun execute(userId: Long, stockId: Long, side: String, quantity: Int): TradeResultResponse =
+        executeMarket(userId, stockId, side, quantity).first
+
+    /** @return 응답과 매칭 엔진 주문 id(자동 등록 조건부 주문의 부모) */
+    private fun executeMarket(userId: Long, stockId: Long, side: String, quantity: Int): Pair<TradeResultResponse, Long> {
         require(quantity > 0) { "수량은 1 이상이어야 합니다" }
         getOrCreateAccount(userId)
         val result = orderSubmitter.submitMarket(userId, stockId, side, quantity)
@@ -46,7 +51,7 @@ class PaperTradingService(
         // 사가가 cash를 JDBC로 바꿨다 — 같은 트랜잭션의 JPA 1차 캐시 엔티티는 갱신 전 값이라 JDBC로 읽는다
         val cash = jdbc.query("SELECT cash FROM paper_accounts WHERE user_id = ?", { rs, _ -> rs.getBigDecimal("cash") }, userId)
             .firstOrNull() ?: BigDecimal.ZERO
-        return TradeResultResponse(side, stockId, quantity, result.fillPrice, result.amount, cash, trade.id)
+        return TradeResultResponse(side, stockId, quantity, result.fillPrice, result.amount, cash, trade.id) to result.orderId
     }
 
     /**
@@ -56,11 +61,36 @@ class PaperTradingService(
     fun placeOrder(userId: Long, req: PaperOrderRequest): PaperOrderResponse {
         require(req.side == "BUY" || req.side == "SELL") { "side는 BUY 또는 SELL이어야 합니다" }
         require(req.quantity > 0) { "수량은 1 이상이어야 합니다" }
+        val bracket = req.takeProfitPrice != null || req.stopLossPrice != null
+        if (bracket) validateBracket(req)
+        val placed = placeOrderOnly(userId, req)
+        if (!bracket) return placed
+        // ADR-075 "체결 시 자동 등록" — 같은 트랜잭션. 즉시 체결이면 바로 ACTIVE, 미체결 지정가면 체결 때 깨어난다.
+        val parentOrderId = placed.orderId ?: throw IllegalStateException("자동 등록할 부모 주문을 찾을 수 없습니다")
+        val legs = conditionalService.attachBracket(
+            userId, req.stockId, req.quantity, parentOrderId, parentFilled = placed.status == "FILLED",
+            takeProfitPrice = req.takeProfitPrice, stopLossPrice = req.stopLossPrice,
+        )
+        return placed.copy(conditionalOrderIds = legs.map { it.id })
+    }
+
+    /** 익절/손절은 매수에만 붙는다. 기준가(지정가 또는 최근 체결가)보다 익절은 위, 손절은 아래여야 한다 — 아니면 즉시 발동한다. */
+    private fun validateBracket(req: PaperOrderRequest) {
+        require(req.side == "BUY") { "익절/손절 자동 등록은 매수 주문에만 쓸 수 있습니다" }
+        val ref = if (req.orderType == "LIMIT") req.limitPrice else
+            jdbc.query("SELECT close FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1",
+                { rs, _ -> rs.getBigDecimal("close") }, req.stockId).firstOrNull()
+        require(ref != null) { "기준가를 알 수 없어 익절/손절을 등록할 수 없습니다" }
+        req.takeProfitPrice?.let { require(it > ref) { "익절가는 기준가(${ref.toPlainString()})보다 높아야 합니다" } }
+        req.stopLossPrice?.let { require(it > BigDecimal.ZERO && it < ref) { "손절가는 0보다 크고 기준가(${ref.toPlainString()})보다 낮아야 합니다" } }
+    }
+
+    private fun placeOrderOnly(userId: Long, req: PaperOrderRequest): PaperOrderResponse {
         return when (req.orderType) {
             "MARKET" -> {
-                val r = execute(userId, req.stockId, req.side, req.quantity)
+                val (r, orderId) = executeMarket(userId, req.stockId, req.side, req.quantity)
                 PaperOrderResponse(
-                    orderId = null, status = "FILLED", orderType = "MARKET", side = r.side, stockId = r.stockId,
+                    orderId = orderId, status = "FILLED", orderType = "MARKET", side = r.side, stockId = r.stockId,
                     quantity = r.quantity, limitPrice = null, price = r.price, amount = r.amount,
                     remainingCash = r.remainingCash, tradeId = r.tradeId,
                 )
@@ -99,6 +129,7 @@ class PaperTradingService(
         check(openOrders == 0L) { "미체결 주문 ${openOrders}건이 있어 초기화 불가 — 먼저 취소하세요" }
 
         val account = getOrCreateAccount(userId)
+        conditionalService.cancelAllLive(userId)   // ADR-075 — 보유가 사라지면 익절·손절도 의미가 없다
         val previousCash = account.cash.amount
         account.reset()
         accountRepo.save(account)
@@ -115,6 +146,10 @@ data class PaperOrderRequest(
     val orderType: String = "MARKET",
     val quantity: Int,
     val limitPrice: BigDecimal? = null,
+    /** ADR-075 — 매수 체결 시 자동 등록할 익절가(OCO). */
+    val takeProfitPrice: BigDecimal? = null,
+    /** ADR-075 — 매수 체결 시 자동 등록할 손절가(OCO). */
+    val stopLossPrice: BigDecimal? = null,
 )
 
 /** status: FILLED(즉시 체결 — tradeId 있음) | PENDING(미체결 지정가 — orderId로 취소·조회). */
@@ -130,6 +165,8 @@ data class PaperOrderResponse(
     val amount: BigDecimal?,
     val remainingCash: BigDecimal,
     val tradeId: Long?,
+    /** 자동 등록된 조건부 주문 id(익절·손절). 없으면 빈 목록. */
+    val conditionalOrderIds: List<Long> = emptyList(),
 )
 
 data class PortfolioResponse(val cash: BigDecimal, val totalValue: BigDecimal, val totalPnl: BigDecimal, val totalPnlRate: Double, val holdings: List<HoldingResponse>)
