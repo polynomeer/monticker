@@ -39,6 +39,12 @@ class BacktestController(
             breakoutMultiplier = req.breakoutMultiplier ?: 1.5,
             stopLossPct       = req.stopLossPct   ?: 5.0,
             takeProfitPct     = req.takeProfitPct ?: 10.0,
+            // CostModel init의 require가 범위를 벗어난 값을 IllegalArgumentException(400)으로 막는다.
+            costs             = CostModel(
+                commissionPct = req.commissionPct ?: 0.0,
+                sellTaxPct    = req.sellTaxPct    ?: 0.0,
+                slippagePct   = req.slippagePct   ?: 0.0,
+            ),
         )
 
         // CompletableFuture.get()은 실행 중 던져진 예외를 ExecutionException으로 감싼다 —
@@ -81,4 +87,8 @@ data class BacktestRequestDto(
     val breakoutMultiplier: Double? = null,
     val stopLossPct: Double? = null,
     val takeProfitPct: Double? = null,
+    /** ADR-079 — % 단위. 비우면 미적용 */
+    val commissionPct: Double? = null,
+    val sellTaxPct: Double? = null,
+    val slippagePct: Double? = null,
 )

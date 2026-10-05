@@ -19,8 +19,10 @@ class BacktestService(private val jdbc: JdbcTemplate) {
             "backtest.fromDate" to request.fromDate.toString(),
             "backtest.toDate"   to request.toDate.toString(),
         )) { span ->
-            val info   = jdbc.queryForMap("SELECT symbol, name FROM stocks WHERE id = ?", request.stockId)
+            val info   = jdbc.queryForMap("SELECT symbol, name, market FROM stocks WHERE id = ?", request.stockId)
             val symbol = info["symbol"] as String
+            // 증권거래세 가정은 국내 시장에만 적용한다(ADR-079).
+            val domestic = (info["market"] as? String)?.uppercase() in setOf("KOSPI", "KOSDAQ")
             span.setAttribute("backtest.symbol", symbol)
 
             val maxRange = request.fromDate.plusYears(2)
@@ -58,7 +60,7 @@ class BacktestService(private val jdbc: JdbcTemplate) {
             span.setAttribute("backtest.candleCount", candles.size.toLong())
 
             val result = Tracing.span("backtest.simulate") { _ ->
-                BacktestEngine.run(candles, request, symbol)
+                BacktestEngine.run(candles, request, symbol, domestic)
             }
             span.setAttribute("backtest.tradeCount",  result.trades.size.toLong())
             span.setAttribute("backtest.totalReturn",  result.metrics.totalReturn)
