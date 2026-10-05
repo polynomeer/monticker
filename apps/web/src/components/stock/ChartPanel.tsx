@@ -33,12 +33,12 @@ export const CHART_TABS: { key: ChartTab; label: string }[] = [
   { key: "watchlist", label: "관심종목" },
 ];
 
-/** 시안의 타임프레임 7개 + 기존에 있던 장기 범위 2개. 3분·15분·1시간 봉은 서버에 아직 없다. */
+/** 시안의 타임프레임 7개 + 기존에 있던 장기 범위 2개. 3분·15분·1시간은 서버가 분봉을 묶어 준다(ADR-076). */
 const INTERVALS: { label: string; value: string | null }[] = [
   { label: "1분", value: "1m" },
-  { label: "3분", value: null },
-  { label: "15분", value: null },
-  { label: "1시간", value: null },
+  { label: "3분", value: "3m" },
+  { label: "15분", value: "15m" },
+  { label: "1시간", value: "1h" },
   { label: "일", value: "1d" },
   { label: "주", value: "1w" },
   { label: "월", value: "1M" },
