@@ -69,7 +69,7 @@ class ScreenerService(
             else     -> normalized.sort
         })
         val pageSize = limit.coerceIn(1, 50)
-        val safeOffset = offset.coerceAtLeast(0)
+        val safeOffset = offset.coerceIn(0, 1000)   // ScreenerController.MAX_OFFSET과 같은 상한(다른 호출자 방어)
         return Tracing.span("screener.getItems", mapOf(
             "screener.tab"           to tab,
             "screener.market"        to effective.market,

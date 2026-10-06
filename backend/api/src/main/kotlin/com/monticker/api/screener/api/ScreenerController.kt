@@ -31,6 +31,15 @@ class ScreenerController(
     private fun requireUserId(): Long = optionalUserId()
         ?: throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다")
 
+    /** 공개 경로라 깊은 OFFSET 스캔을 비로그인으로 반복시킬 수 있다 — 상한을 둔다(보안 리뷰 2026-10). 음수는 0으로 본다. */
+    private fun requireOffset(offset: Int) {
+        require(offset <= MAX_OFFSET) { "offset은 $MAX_OFFSET 이하여야 합니다" }
+    }
+
+    companion object {
+        const val MAX_OFFSET = 1000
+    }
+
     /**
      * 시세 기반 스크리너. 조건은 ADR-072.
      *
@@ -53,6 +62,7 @@ class ScreenerController(
         @RequestParam(required = false)          minVolMult: Double?,
         @RequestParam(required = false)          events: String?,
     ): ResponseEntity<ScreenerResponse> {
+        requireOffset(offset)
         val criteria = ScreenerCriteria(
             market        = market,
             marketCapTier = marketCapTier,
@@ -110,6 +120,7 @@ class ScreenerController(
         @RequestParam(defaultValue = "20") limit: Int,
         @RequestParam(defaultValue = "0") offset: Int,
     ): ResponseEntity<ScreenerResponse> {
+        requireOffset(offset)
         val saved = savedScreenService.get(requireUserId(), id)
         return run(tab, saved.criteria, limit, offset)
     }

@@ -50,4 +50,22 @@ class ScreenerCriteriaTest {
         assertThat(ScreenerCriteria(events = listOf(ScreenerEventFilter.DISCLOSURE, ScreenerEventFilter.QUANT_SIGNAL)).stockEventTypes)
             .containsExactly("DISCLOSURE_PUBLISHED")
     }
+
+    // 보안 리뷰 — 섹터를 `|`로 이어 붙인 키는 이스케이프가 없어 ["a|b"]와 ["a","b"]가 같은 캐시 항목을 썼다(공유 캐시).
+    @Test
+    fun `cache key does not collide when a sector contains the old separator`() {
+        val joined = ScreenerCriteria(sectors = listOf("a|b")).normalized()
+        val split = ScreenerCriteria(sectors = listOf("a", "b")).normalized()
+        assertThat(joined.cacheKey()).isNotEqualTo(split.cacheKey())
+
+        val colon = ScreenerCriteria(sectors = listOf("x:all")).normalized()
+        val plain = ScreenerCriteria(sectors = listOf("x")).normalized()
+        assertThat(colon.cacheKey()).isNotEqualTo(plain.cacheKey())
+    }
+
+    @Test
+    fun `cache key is a fixed-length hash`() {
+        val key = ScreenerCriteria(sectors = listOf("반도체".repeat(30))).normalized().cacheKey()
+        assertThat(key).matches("[0-9a-f]{64}")
+    }
 }

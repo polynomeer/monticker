@@ -43,6 +43,10 @@ data class ScreenerCriteria(
         const val CHANGE_CEIL = 1000.0
         const val VOL_MULT_CEIL = 1000.0
 
+        /** 캐시 키 직렬화 — 속성 순서를 고정한다(필드 선언 순서가 바뀌어도 키가 흔들리지 않게). */
+        private val CACHE_KEY_MAPPER = com.fasterxml.jackson.module.kotlin.jacksonObjectMapper()
+            .configure(com.fasterxml.jackson.databind.MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, true)
+
         /** "a,b,c" → 목록. 빈 값은 버린다. */
         fun splitList(raw: String?): List<String> =
             raw?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
@@ -85,8 +89,13 @@ data class ScreenerCriteria(
     @get:JsonIgnore
     val hasComputedFilter: Boolean get() = minChange != null || maxChange != null || minVolMult != null
 
-    fun cacheKey(): String = listOf(
-        market, marketCapTier, sort, sectors.joinToString("|"),
-        minChange ?: "", maxChange ?: "", minVolMult ?: "", events.joinToString("|"),
-    ).joinToString(":")
+    /**
+     * 공유 캐시 키 — 정규화된 조건의 JSON을 SHA-256으로 줄인 64자 hex. 예전에는 섹터를 `|`, 필드를 `:`로 이어 붙여
+     * 이스케이프가 없었다 — ["a|b"]와 ["a","b"]가 같은 키가 되어 서로 다른 조건이 같은 캐시 결과를 받았다(보안 리뷰 2026-10).
+     * JSON은 문자열을 인용·이스케이프하므로 경계가 모호하지 않고, 해시는 길이를 고정한다. 호출자는 [normalized]한 사본으로 부른다.
+     */
+    fun cacheKey(): String {
+        val json = CACHE_KEY_MAPPER.writeValueAsBytes(this)
+        return java.security.MessageDigest.getInstance("SHA-256").digest(json).joinToString("") { "%02x".format(it) }
+    }
 }
