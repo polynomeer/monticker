@@ -122,10 +122,14 @@ class BrokerageServiceTest {
         every { accountRepo.findByUserIdAndProviderAndAccountNumber(1L, BrokerageProvider.TOSS, "98765432") } returns Optional.empty()
         every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(oldAccount)
         every { accountRepo.save(capture(accountSlots)) } answers { firstArg() }
+        every { jdbc.queryForObject(match<String> { it.contains("FROM brokerage_orders") && it.contains("COUNT") }, Long::class.java, oldAccount.id) } returns 0L
 
         service.connect(userId = 1L, provider = BrokerageProvider.TOSS, appKey = "key2", appSecret = "secret2", accountNumber = "98765432", consents = connectConsents)
 
         assertThat(oldAccount.isActive).isFalse()
+        // ADR-067 — 열린 주문이 없는 옛 계좌의 키는 지운다
+        assertThat(oldAccount.appKey).isNull()
+        assertThat(oldAccount.disconnectedAt).isNotNull()
         val newAccount = accountSlots.first { it !== oldAccount }
         assertThat(newAccount.provider).isEqualTo(BrokerageProvider.TOSS)
         assertThat(newAccount.accountNumber).isEqualTo("98765432")
@@ -1045,5 +1049,65 @@ class BrokerageServiceTest {
 
         assertThat(publishedOfType("ORDER_OUTCOME_RESOLVED")).isEmpty()
         assertThat(publishedOfType("ORDER_NEEDS_REVIEW")).isEmpty()
+    }
+
+    // ── 보안 리뷰(2026-10) 후속 ────────────────────────────────────────────────
+
+    @Test
+    fun `switching accounts keeps the old keys while that account still has an open order`() {
+        val oldAccount = makeAccount()
+        every { accountRepo.findByUserIdAndProviderAndAccountNumber(1L, BrokerageProvider.TOSS, "98765432") } returns Optional.empty()
+        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(oldAccount)
+        every { accountRepo.save(any()) } answers { firstArg() }
+        every { jdbc.queryForObject(match<String> { it.contains("FROM brokerage_orders") && it.contains("COUNT") }, Long::class.java, oldAccount.id) } returns 1L
+
+        service.connect(userId = 1L, provider = BrokerageProvider.TOSS, appKey = "k", appSecret = "s", accountNumber = "98765432", consents = connectConsents)
+
+        assertThat(oldAccount.isActive).isFalse()
+        assertThat(oldAccount.appKey).isEqualTo("test-app-key")   // 대조에 필요
+    }
+
+    @Test
+    fun `the disconnect guard also counts partially filled orders`() {
+        stubDisconnect(linkedAccount())
+
+        service.disconnect(1L)
+
+        verify { jdbc.queryForObject(match<String> { it.contains("FROM brokerage_orders") && it.contains("PARTIALLY_FILLED") }, Long::class.java, 7L) }
+    }
+
+    @Test
+    fun `disconnect locks the account row that token refresh locks`() {
+        stubDisconnect(linkedAccount())
+
+        service.disconnect(1L)
+
+        verify { jdbc.query(match<String> { it.contains("FROM brokerage_accounts") && it.contains("FOR UPDATE") }, any<org.springframework.jdbc.core.RowCallbackHandler>(), 7L) }
+    }
+
+    @Test
+    fun `token refresh does not write a new token onto an account that was disconnected meanwhile`() {
+        val account = makeAccount(tokenExpiresAt = Instant.now().minusSeconds(10)).apply { isActive = false }
+        val fakeClient = mockk<BrokerageClient>()
+        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
+
+        assertThrows<ReconnectRequiredException> { serviceWithFakeClient(fakeClient).getBalance(1L) }
+
+        verify(exactly = 0) { fakeClient.issueToken(any(), any()) }
+        assertThat(account.accessToken).isEqualTo("mock_token_test")
+    }
+
+    @Test
+    fun `user-initiated real-money requests need the current signup consents`() {
+        every { consentService.missingRequired(1L, ConsentGroup.SIGNUP) } returns setOf(com.monticker.api.common.consent.ConsentType.TERMS)
+
+        assertThrows<BusinessRuleException> { service.requireCurrentConsents(1L) }
+    }
+
+    @Test
+    fun `current consents pass`() {
+        every { consentService.missingRequired(1L, ConsentGroup.SIGNUP) } returns emptySet()
+
+        service.requireCurrentConsents(1L)
     }
 }

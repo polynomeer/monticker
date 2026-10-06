@@ -181,9 +181,11 @@ class BrokerageController(
     ): ResponseEntity<OrderResponse> {
         val side = OrderSide.valueOf(req.side.uppercase())
         val orderType = OrderType.valueOf(req.orderType.uppercase())
+        val uid = userId(token)
+        brokerageService.requireCurrentConsents(uid)   // ADR-068
 
         val order = brokerageService.submitOrder(
-            userId(token),
+            uid,
             BrokerageOrderRequest(
                 symbol     = req.symbol,
                 side       = side.name,

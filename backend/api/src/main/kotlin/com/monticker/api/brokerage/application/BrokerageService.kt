@@ -98,6 +98,8 @@ class BrokerageService(
     fun connect(userId: Long, provider: BrokerageProvider, appKey: String, appSecret: String, accountNumber: String, consents: Collection<String>): BrokerageAccount {
         // ADR-068 — 위임·자금 미보관·손실 귀속 고지 동의가 없으면 증권사 호출 전에 거부한다(400). 연동이 실패하면 같은 트랜잭션이라 기록도 롤백된다.
         consentService.requireAndRecord(userId, ConsentGroup.BROKERAGE_CONNECT, consents, ConsentSource.BROKERAGE_CONNECT)
+        // 주문 준비·해지와 같은 사용자 락 — 갈아타기 중에 옛 계좌로 주문이 끼어들지 않게
+        jdbc.query("SELECT pg_advisory_xact_lock(?, (? % 2147483647)::int)", { _ -> }, ADVISORY_NS_ORDER, userId)
         val client = clientRegistry.get(provider)
         val token = client.issueToken(appKey, appSecret)
         // ADR-026 — Toss는 계좌번호만으로 호출할 수 없고 별도 조회로 얻는 accountSeq가
@@ -111,9 +113,14 @@ class BrokerageService(
         // 하나로 유지한다(주문/정산 내역은 계좌별로 그대로 남는다).
         accountRepo.findByUserIdAndIsActiveTrue(userId)
             .filter { it.id != account.id }
-            .ifPresent { old -> old.isActive = false; accountRepo.save(old) }
+            .ifPresent { old ->
+                // ADR-067 — 결과가 열린 주문이 없으면 옛 키도 지운다. 있으면 대조에 필요하니 비활성화만 한다(정리 잡은 후속).
+                if (openOrderCount(old.id) == 0L) old.disconnect() else old.isActive = false
+                accountRepo.save(old)
+            }
 
         account.isActive = true
+        account.disconnectedAt = null
         account.updateToken(token.accessToken, token.expiresIn)
         // ADR-025 — appKey/appSecret도 저장한다. 토큰 발급 이후의 모든 호출도
         // appkey/appsecret(또는 client_id/secret) 헤더를 요구하므로, 여기서 버리면 이후 호출이 전부 거부된다.
@@ -140,15 +147,9 @@ class BrokerageService(
         jdbc.query("SELECT pg_advisory_xact_lock(?, (? % 2147483647)::int)", { _ -> }, ADVISORY_NS_ORDER, userId)
         val account = getAccount(userId)
 
-        val openOrders = jdbc.queryForObject(
-            """
-            SELECT COUNT(*) FROM brokerage_orders
-            WHERE account_id = ?
-              AND (status IN ('PENDING_SUBMIT', 'UNKNOWN')
-                   OR (status = 'SUBMITTED' AND submitted_at > now() - interval '24 hours'))
-            """.trimIndent(),
-            Long::class.java, account.id,
-        ) ?: 0L
+        // 토큰 재발급(refreshToken)과 같은 행 락 — 그쪽이 지운 키로 새 토큰을 써넣지 못하게 한다(advisory → 행 순서는 주문 준비와 같다)
+        jdbc.query("SELECT id FROM brokerage_accounts WHERE id = ? FOR UPDATE", { _ -> }, account.id)
+        val openOrders = openOrderCount(account.id)
         if (openOrders > 0) {
             throw BusinessRuleException("체결 여부를 증권사에서 아직 확인 중인 주문이 ${openOrders}건 있어 연동을 해지할 수 없습니다. 미체결 주문을 취소하거나 확인이 끝난 뒤 다시 시도해주세요.")
         }
@@ -173,6 +174,33 @@ class BrokerageService(
         // 키·토큰 값은 절대 로그에 남기지 않는다
         log.info("증권사 연동 해지: userId={} accountId={} provider={} cancelledConditionalOrders={}", userId, account.id, account.provider, cancelled)
         return DisconnectResult(accountId = account.id, cancelledConditionalOrders = cancelled)
+    }
+
+    /**
+     * ADR-067 — 증권사에서 아직 결과가 열린 주문 수. 대조·상태 동기화가 이 계좌의 키를 써야 하는 주문이다.
+     * 접수·일부 체결은 최근 24시간만 센다 — 국내 주문은 당일 유효라 그보다 오래된 것은 동기화 잡도 보지 않고 더 체결될 수 없다.
+     */
+    private fun openOrderCount(accountId: Long): Long = jdbc.queryForObject(
+        """
+        SELECT COUNT(*) FROM brokerage_orders
+        WHERE account_id = ?
+          AND (status IN ('PENDING_SUBMIT', 'UNKNOWN')
+               OR (status IN ('SUBMITTED', 'PARTIALLY_FILLED') AND submitted_at > now() - interval '24 hours'))
+        """.trimIndent(),
+        Long::class.java, accountId,
+    ) ?: 0L
+
+    /**
+     * ADR-068 — 사용자가 직접 실거래를 시작하는 요청(주문·조건부 주문 등록·리밸런싱 실행)은 현재 버전의 가입 필수 동의가 있어야 한다.
+     * 화면 게이트만으로는 API를 직접 부르는 경로를 막지 못한다. 이미 걸어 둔 조건부 주문의 **발동**에는 적용하지 않는다 —
+     * 약관이 개정됐다는 이유로 손절이 나가지 않으면 그게 더 큰 손해다.
+     */
+    @Transactional(readOnly = true)
+    fun requireCurrentConsents(userId: Long) {
+        val missing = consentService.missingRequired(userId, ConsentGroup.SIGNUP)
+        if (missing.isNotEmpty()) {
+            throw BusinessRuleException("약관·개인정보 처리방침 동의가 필요합니다. 화면에서 동의한 뒤 다시 시도해주세요.")
+        }
     }
 
     @Transactional(readOnly = true)
@@ -643,7 +671,7 @@ class BrokerageService(
         val appSecret = account.appSecret ?: throw ReconnectRequiredException("증권사 계좌 정보가 불완전합니다. 재연동이 필요합니다.")
 
         if (!account.isTokenValid()) {
-            refreshToken(account, appKey, appSecret)
+            refreshToken(account)
         }
 
         return BrokerageCredentials(
@@ -665,11 +693,15 @@ class BrokerageService(
      * 매 요청마다 브로커 인증 엔드포인트를 두드리지 않기 위해서다. 쿨다운이 지나면 다시
      * 자동 재시도한다(일시적 장애였다면 스스로 복구된다).
      */
-    private fun refreshToken(account: BrokerageAccount, appKey: String, appSecret: String) {
+    private fun refreshToken(account: BrokerageAccount) {
         // 같은 계좌의 재발급을 직렬화한다(2026-10 리뷰): 동시 요청 둘이 각자 재발급하면 KIS는 토큰 발급을 1분 1회로 막아 두 번째가
         // 실패하고, 그 실패가 authFailedAt을 찍어 5분간 "재연동 필요"로 잠긴다. 락을 얻은 뒤 다시 읽어 그새 재발급됐으면 그대로 쓴다.
         jdbc.query("SELECT id FROM brokerage_accounts WHERE id = ? FOR UPDATE", { _ -> }, account.id)
         entityManager?.refresh(account)
+        // ADR-067 — 락을 기다리는 사이 해지됐으면 지워진 키로 토큰을 다시 써넣지 않는다
+        if (!account.isActive || account.appKey == null || account.appSecret == null) {
+            throw ReconnectRequiredException("연동이 해지된 계좌입니다. 다시 연동해주세요.")
+        }
         if (account.isTokenValid()) return
         val recentFailure = account.authFailedAt?.isAfter(Instant.now().minusSeconds(AUTH_RETRY_COOLDOWN_SECONDS)) == true
         if (recentFailure) {
@@ -677,7 +709,8 @@ class BrokerageService(
         }
 
         try {
-            val token = clientRegistry.get(account.provider).issueToken(appKey, appSecret)
+            // 락 뒤에 다시 읽은 키를 쓴다(그새 재연동으로 바뀌었을 수 있다)
+            val token = clientRegistry.get(account.provider).issueToken(account.appKey!!, account.appSecret!!)
             account.updateToken(token.accessToken, token.expiresIn)
             account.authFailedAt = null
             accountRepo.save(account)

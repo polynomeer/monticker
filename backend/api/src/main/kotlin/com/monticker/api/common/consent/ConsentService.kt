@@ -35,6 +35,19 @@ class ConsentService(private val repo: UserConsentRepository) {
         return accepted
     }
 
+    /**
+     * 동의 화면(재동의) — 지금 빠진 필수 항목만 있으면 된다. 약관만 개정되면 빠진 건 TERMS 하나인데, 가입처럼 필수 전부를 요구하면
+     * 400이 나고 화면 게이트가 계속 동의 화면으로 되돌려 보내 사용자가 앱에 들어가지 못했다(보안 리뷰).
+     */
+    fun requireMissingAndRecord(userId: Long, group: ConsentGroup, given: Collection<String>, source: ConsentSource): Set<ConsentType> {
+        val types = parse(given)
+        val stillMissing = missingRequired(userId, group) - types
+        require(stillMissing.isEmpty()) { "필수 동의 항목이 빠졌습니다: ${stillMissing.joinToString { label(it) }}" }
+        val accepted = types.filter { it in group.required || it in group.optional }.toSet()
+        record(userId, accepted, source)
+        return accepted
+    }
+
     /** 현재 버전 기준으로 아직 동의하지 않은(또는 철회했거나 옛 버전에만 동의한) 필수 항목. */
     @Transactional(readOnly = true)
     fun missingRequired(userId: Long, group: ConsentGroup): Set<ConsentType> {

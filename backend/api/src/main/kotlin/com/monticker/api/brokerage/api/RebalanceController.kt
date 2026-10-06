@@ -1,6 +1,7 @@
 package com.monticker.api.brokerage.api
 
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
+import com.monticker.api.brokerage.application.BrokerageService
 import com.monticker.api.brokerage.application.RebalanceExecutionService
 import com.monticker.api.brokerage.application.RebalanceLegPlan
 import com.monticker.api.brokerage.application.RebalancePreview
@@ -78,6 +79,7 @@ data class RebalanceExecutionLegResponse(
 class RebalanceController(
     private val targetService: RebalanceTargetService,
     private val executionService: RebalanceExecutionService,
+    private val brokerageService: BrokerageService,
     private val jwtTokenProvider: JwtTokenProvider,
 ) {
     private fun userId(token: String) =
@@ -109,6 +111,7 @@ class RebalanceController(
     @RateLimited(limit = 10, windowSec = 60, keyPrefix = "rebalance.execute")
     fun execute(@RequestHeader("Authorization") token: String): ResponseEntity<RebalanceExecutionResponse> {
         val uid = userId(token)
+        brokerageService.requireCurrentConsents(uid)   // ADR-068
         val execution = executionService.execute(uid)
         return ResponseEntity.ok(execution.toResponse(executionService.getLegs(execution.id)))
     }
