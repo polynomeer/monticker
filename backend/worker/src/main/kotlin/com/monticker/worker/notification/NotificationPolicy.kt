@@ -80,10 +80,13 @@ object NotificationPolicy {
         // 광고성 정보는 수신 동의가 없으면 설정과 무관하게 보내지 않는다(정보통신망법 §50, ADR-068).
         if (category == NotificationCategory.STRATEGY_MARKET && !marketingAgreed) return DeliveryPlan.NONE
         val (wantPush, wantEmail) = pref.channels(category)
+        val push = pref.pushEnabled && wantPush
         return DeliveryPlan(
-            push = pref.pushEnabled && wantPush,
+            push = push,
             email = pref.emailEnabled && wantEmail,
-            emailIfPushMissed = pref.emailEnabled && wantPush && !wantEmail,
+            // 대체 이메일은 "푸시를 보내려 했는데 닿지 않은" 경우만이다. 푸시 채널을 끈 사용자에게는 보낼 푸시가 없으므로 대체도 없다.
+            // 광고성 정보는 사용자가 고른 채널로만 보낸다 — 푸시 실패를 이유로 이메일로 옮기지 않는다(ADR-068).
+            emailIfPushMissed = push && pref.emailEnabled && !wantEmail && category != NotificationCategory.STRATEGY_MARKET,
         )
     }
 }

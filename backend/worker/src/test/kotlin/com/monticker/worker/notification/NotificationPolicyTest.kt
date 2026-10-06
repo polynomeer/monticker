@@ -47,4 +47,27 @@ class NotificationPolicyTest {
         assertThat(NotificationPolicy.plan(on, NotificationCategory.STRATEGY_MARKET, marketingAgreed = false).none).isTrue()
         assertThat(NotificationPolicy.plan(on, NotificationCategory.STRATEGY_MARKET, marketingAgreed = true).push).isTrue()
     }
+
+    // 보안 리뷰 — 푸시 채널을 끈 사용자에게 "푸시가 안 닿았다"며 이메일을 보내면 안 된다(끈 것은 푸시이지 실패가 아니다).
+    @Test
+    fun `푸시 채널을 끈 사용자에게는 푸시 대체 이메일을 보내지 않는다`() {
+        val pushOff = NotificationPreference(pushEnabled = false)
+        assertThat(NotificationPolicy.plan(pushOff, NotificationCategory.PRICE_ALERT).none).isTrue()
+        assertThat(NotificationPolicy.plan(pushOff, NotificationCategory.FILLS).none).isTrue()
+    }
+
+    @Test
+    fun `푸시를 끄고 이메일을 고른 종류는 이메일만 보낸다`() {
+        val pref = NotificationPreference(pushEnabled = false, priceAlertEmail = true)
+        assertThat(NotificationPolicy.plan(pref, NotificationCategory.PRICE_ALERT))
+            .isEqualTo(DeliveryPlan(push = false, email = true, emailIfPushMissed = false))
+    }
+
+    // 광고성 정보는 사용자가 고른 채널로만 보낸다 — 푸시 실패를 이유로 이메일로 옮기지 않는다(ADR-068).
+    @Test
+    fun `광고성 소식은 푸시가 닿지 않아도 이메일로 대신 보내지 않는다`() {
+        val on = NotificationPreference(strategyMarketNewsPush = true)
+        assertThat(NotificationPolicy.plan(on, NotificationCategory.STRATEGY_MARKET, marketingAgreed = true))
+            .isEqualTo(DeliveryPlan(push = true, email = false, emailIfPushMissed = false))
+    }
 }
