@@ -150,7 +150,7 @@
 | /quant-lab/builder, [id] | 샤프 지수 | `—` | `QuantBacktestResult.sharpe`(단순 백테스트 엔진에는 이미 있음) | P1 | ✅ |
 | /backtest | 수수료·세금·슬리피지 반영 | 비활성 체크 | `BacktestService` 비용 모델 | P1 | ✅ |
 | /analytics | 현재 포트폴리오 비중 비교 | 동일가중 기준 | 사용자 보유 비중으로 최적화 비교 | P1 | ✅ |
-| /analytics | "리밸런싱으로 보내기" | 비활성. 실거래 화면이라 연결하지 않았다 | 추천 비중을 리밸런싱 **초안**으로 넘기는 흐름. 실주문 검증 선행 | P1 | ✅ 저장 안 된 초안으로만 |
+| /analytics | "분석 비중을 리밸런싱 초안으로"(구 "리밸런싱으로 보내기") | 비활성. 실거래 화면이라 연결하지 않았다 | 분석 결과 비중을 리밸런싱 **초안**으로 넘기는 흐름. 실주문 검증 선행 | P1 | ✅ 저장 안 된 초안으로만 |
 | /quant-lab/market | 카드 성과(CAGR·MDD·포워드·곡선) | `—` | 마켓 목록 API에 성과 요약 포함 | P1 | ✅ |
 | /quant-lab/market | 신호 이력·이번 달 신호 | 화면을 연 뒤 들어온 WS 신호만 | 구독 전략 신호 이력 API, WS를 단일 연결 다중 토픽으로 통합 | P1 | ✅ |
 | /quant-lab/market | 유료 구독 | 비활성(기존과 동일) | PG 결제 연동([ADR-035](decisions/035-strategy-market-signal-access-control.md)) | P1 | 보류 — 서버가 유료 구독을 거부하도록 막음, 법무 결정 필요 ([ADR-080](decisions/080-paid-strategy-subscription-closed.md)) |
