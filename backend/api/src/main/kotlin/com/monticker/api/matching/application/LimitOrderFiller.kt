@@ -1,5 +1,7 @@
 package com.monticker.api.matching.application
 
+import com.monticker.api.common.domain.CandleFreshness
+import com.monticker.api.common.domain.LatestClose
 import com.monticker.api.common.domain.Money
 import com.monticker.api.common.domain.Price
 import com.monticker.api.matching.domain.Fill
@@ -52,7 +54,7 @@ class LimitOrderFiller(
     companion object {
         const val LOCK_SQL =
             "SELECT id FROM orders WHERE id = ? AND order_type = 'LIMIT' AND status IN ('PENDING', 'PARTIALLY_FILLED') FOR UPDATE SKIP LOCKED"
-        const val LATEST_PRICE_SQL = "SELECT close FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1"
+        const val LATEST_PRICE_SQL = "SELECT close, candle_time FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1"
     }
 
     @Transactional
@@ -65,8 +67,12 @@ class LimitOrderFiller(
         ) return LimitFillOutcome.SKIPPED
 
         val limit = order.limitPrice ?: return LimitFillOutcome.SKIPPED
-        val current = jdbc.query(LATEST_PRICE_SQL, { rs, _ -> rs.getBigDecimal("close") }, order.stockId)
-            .firstOrNull()?.takeIf { it > BigDecimal.ZERO }?.let { Price.of(it) }
+        // 오래된 봉(시세 단절·장 마감 후)으로는 체결하지 않는다 — 이번 주기를 건너뛴다(CandleFreshness).
+        val current = jdbc.query(LATEST_PRICE_SQL, { rs, _ ->
+            LatestClose(rs.getBigDecimal("close"), rs.getTimestamp("candle_time").toInstant())
+        }, order.stockId)
+            .firstOrNull()?.takeIf { it.close > BigDecimal.ZERO && CandleFreshness.isFresh(it.candleTime) }
+            ?.let { Price.of(it.close) }
             ?: return LimitFillOutcome.NOT_CROSSED
         val crossed = if (order.side == OrderSide.BUY) limit >= current else limit <= current
         if (!crossed) return LimitFillOutcome.NOT_CROSSED

@@ -1,5 +1,6 @@
 package com.monticker.api.matching.application
 
+import com.monticker.api.common.domain.CandleFreshness
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.jdbc.core.JdbcTemplate
@@ -27,7 +28,9 @@ class LimitOrderSweeper(
         const val CANDIDATES_SQL = """
             SELECT o.id FROM orders o
             JOIN LATERAL (
-                SELECT c.close FROM candles_1m c WHERE c.stock_id = o.stock_id ORDER BY c.candle_time DESC LIMIT 1
+                SELECT c.close FROM candles_1m c
+                WHERE c.stock_id = o.stock_id AND c.candle_time >= now() - interval '${CandleFreshness.MAX_AGE_SQL}'
+                ORDER BY c.candle_time DESC LIMIT 1
             ) p ON true
             WHERE o.order_type = 'LIMIT' AND o.status IN ('PENDING', 'PARTIALLY_FILLED')
               AND ((o.side = 'BUY' AND o.limit_price >= p.close) OR (o.side = 'SELL' AND o.limit_price <= p.close))

@@ -1,5 +1,7 @@
 package com.monticker.api.matching.application
 
+import com.monticker.api.common.domain.CandleFreshness
+import com.monticker.api.common.domain.LatestClose
 import com.monticker.api.common.domain.Price
 import com.monticker.api.matching.domain.Fill
 import com.monticker.api.matching.domain.Order
@@ -50,8 +52,8 @@ class LimitOrderFillerTest {
         every { jdbc.query(LimitOrderFiller.LOCK_SQL, any<RowMapper<Long>>(), 7L) } returns if (acquired) listOf(7L) else emptyList()
     }
 
-    private fun stubPrice(price: String) {
-        every { jdbc.query(LimitOrderFiller.LATEST_PRICE_SQL, any<RowMapper<BigDecimal>>(), 100L) } returns listOf(BigDecimal(price))
+    private fun stubPrice(price: String, at: java.time.Instant = java.time.Instant.now()) {
+        every { jdbc.query(LimitOrderFiller.LATEST_PRICE_SQL, any<RowMapper<LatestClose>>(), 100L) } returns listOf(LatestClose(BigDecimal(price), at))
     }
 
     private fun stubSaves() {
@@ -179,5 +181,22 @@ class LimitOrderFillerTest {
         filler.fillIfCrossed(7L)
 
         verify(exactly = 0) { riskChecker.checkPaperFill(any(), any(), any(), any(), any()) }
+    }
+
+    // 보안 리뷰 — 시세가 끊긴 뒤의 마지막 1분봉(몇 시간·며칠 전 값)으로 체결하지 않는다. 이번 주기를 건너뛴다.
+    @Test
+    fun `does not fill on a stale candle`() {
+        val o = order(OrderSide.BUY, "1000")
+        stubLock(true); stubPrice("900", at = java.time.Instant.now().minus(CandleFreshness.MAX_AGE).minusSeconds(60))
+        every { orderRepo.findById(7L) } returns Optional.of(o)
+
+        assertThat(filler.fillIfCrossed(7L)).isEqualTo(LimitFillOutcome.NOT_CROSSED)
+        assertThat(o.status).isEqualTo(OrderStatus.PENDING)
+        verify(exactly = 0) { fillRepo.save(any()) }
+    }
+
+    @Test
+    fun `sweep candidates ignore stale candles`() {
+        assertThat(LimitOrderSweeper.CANDIDATES_SQL).contains("candle_time >= now() - interval '${CandleFreshness.MAX_AGE_SQL}'")
     }
 }

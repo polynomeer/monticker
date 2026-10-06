@@ -1,5 +1,7 @@
 package com.monticker.api.paper.application
 
+import com.monticker.api.common.domain.CandleFreshness
+import com.monticker.api.common.domain.LatestClose
 import com.monticker.api.matching.submit.OrderSubmitter
 import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
@@ -28,7 +30,7 @@ class PaperConditionalOrderFirer(
     companion object {
         const val LOCK_SQL = "SELECT id, user_id, stock_id, side, trigger_type, trigger_price, quantity, oco_group_id " +
             "FROM paper_conditional_orders WHERE id = ? AND status = 'ACTIVE' FOR UPDATE SKIP LOCKED"
-        const val LATEST_PRICE_SQL = "SELECT close FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1"
+        const val LATEST_PRICE_SQL = "SELECT close, candle_time FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1"
     }
 
     private data class Row(
@@ -46,7 +48,10 @@ class PaperConditionalOrderFirer(
             )
         }, id).firstOrNull() ?: return PaperConditionalOutcome.SKIPPED   // 다른 pod가 처리 중이거나 이미 취소·발동됨
 
-        val price = jdbc.query(LATEST_PRICE_SQL, { rs, _ -> rs.getBigDecimal("close") }, row.stockId).firstOrNull()
+        // 오래된 봉(시세 단절·장 마감 후)으로는 발동하지 않는다 — 이번 주기를 건너뛴다(CandleFreshness).
+        val price = jdbc.query(LATEST_PRICE_SQL, { rs, _ ->
+            LatestClose(rs.getBigDecimal("close"), rs.getTimestamp("candle_time").toInstant())
+        }, row.stockId).firstOrNull()?.takeIf { CandleFreshness.isFresh(it.candleTime) }?.close
             ?: return PaperConditionalOutcome.NOT_TRIGGERED
         if (!row.triggerType.isTriggered(price, row.triggerPrice)) return PaperConditionalOutcome.NOT_TRIGGERED
 
@@ -98,7 +103,9 @@ class PaperConditionalOrderTrigger(
         const val CANDIDATES_SQL = """
             SELECT co.id FROM paper_conditional_orders co
             JOIN LATERAL (
-                SELECT c.close FROM candles_1m c WHERE c.stock_id = co.stock_id ORDER BY c.candle_time DESC LIMIT 1
+                SELECT c.close FROM candles_1m c
+                WHERE c.stock_id = co.stock_id AND c.candle_time >= now() - interval '${CandleFreshness.MAX_AGE_SQL}'
+                ORDER BY c.candle_time DESC LIMIT 1
             ) p ON true
             WHERE co.status = 'ACTIVE'
               AND (((co.trigger_type IN ('TAKE_PROFIT', 'PRICE_ABOVE')) AND p.close >= co.trigger_price)

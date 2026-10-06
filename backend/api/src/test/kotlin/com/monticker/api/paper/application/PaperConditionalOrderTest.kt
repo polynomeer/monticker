@@ -95,8 +95,23 @@ class PaperConditionalOrderTest {
         }
     }
 
-    private fun stubPrice(p: String) {
-        every { jdbc.query(PaperConditionalOrderFirer.LATEST_PRICE_SQL, any<RowMapper<BigDecimal>>(), 5L) } returns listOf(BigDecimal(p))
+    private fun stubPrice(p: String, at: Instant = Instant.now()) {
+        every { jdbc.query(PaperConditionalOrderFirer.LATEST_PRICE_SQL, any<RowMapper<com.monticker.api.common.domain.LatestClose>>(), 5L) } returns
+            listOf(com.monticker.api.common.domain.LatestClose(BigDecimal(p), at))
+    }
+
+    // 보안 리뷰 — 오래된 1분봉으로 손절·익절을 발동하지 않는다(시세가 끊긴 동안의 마지막 값). 이번 주기를 건너뛴다.
+    @Test
+    fun `does not fire on a stale candle`() {
+        stubRow(); stubPrice("800", at = Instant.now().minus(com.monticker.api.common.domain.CandleFreshness.MAX_AGE).minusSeconds(60))
+        assertThat(firer.fire(9L)).isEqualTo(PaperConditionalOutcome.NOT_TRIGGERED)
+        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `trigger candidates ignore stale candles`() {
+        assertThat(PaperConditionalOrderTrigger.CANDIDATES_SQL)
+            .contains("candle_time >= now() - interval '${com.monticker.api.common.domain.CandleFreshness.MAX_AGE_SQL}'")
     }
 
     @Test
