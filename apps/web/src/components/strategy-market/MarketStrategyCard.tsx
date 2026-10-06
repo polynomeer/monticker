@@ -87,7 +87,7 @@ export function MarketStrategyCard({ strategy }: { strategy: MarketStrategy }) {
         <div className="flex min-w-0 flex-col gap-[3px]">
           <h3 className="m-0 truncate text-15 font-bold">{strategy.name}</h3>
           <span className="text-xs text-tm-muted">
-            by {strategy.author_email.split("@")[0]} · 구독 <span className="num">{strategy.subscribe_count.toLocaleString()}</span>
+            by {strategy.author_nickname} · 구독 <span className="num">{strategy.subscribe_count.toLocaleString()}</span>
           </span>
         </div>
         {/* 검증 배지(포워드 12주·일치율) 심사는 아직 없다 */}
