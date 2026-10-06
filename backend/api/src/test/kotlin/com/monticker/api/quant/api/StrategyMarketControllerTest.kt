@@ -157,4 +157,15 @@ class StrategyMarketControllerTest {
             jdbc.queryForList(match<String> { it.contains("FROM strategy_market") && !it.contains("email") && it.contains("u.nickname AS author_nickname") }, any<Int>(), any<Int>())
         }
     }
+
+    // 보안 리뷰 — 없는 마켓 id 구독은 EmptyResultDataAccessException → 500이었다. 404(NoSuchElementException)로 답한다.
+    @Test
+    fun `subscribe to an unknown market id is not found`() {
+        every { jwtTokenProvider.getUserId("token") } returns 9L
+        every { jdbc.queryForMap(match<String> { it.contains("FROM strategy_market WHERE id = ?") }, 404L) } throws
+            org.springframework.dao.EmptyResultDataAccessException(1)
+
+        assertThrows<NoSuchElementException> { controller.subscribe("Bearer token", 404L) }
+        verify(exactly = 0) { jdbc.update(any<String>(), *anyVararg()) }
+    }
 }

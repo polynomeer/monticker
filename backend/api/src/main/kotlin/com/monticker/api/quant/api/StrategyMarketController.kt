@@ -119,10 +119,12 @@ class StrategyMarketController(
     ): ResponseEntity<Map<String, Any>> {
         val userId = jwtTokenProvider.getUserId(auth.removePrefix("Bearer ").trim())
 
-        // 전략 정보 조회 (creator, price)
-        val strategy = jdbc.queryForMap(
-            "SELECT user_id AS creator_id, price, ruleset_id FROM strategy_market WHERE id = ?", id
-        )
+        // 전략 정보 조회 (creator, price). queryForMap은 0건이면 EmptyResultDataAccessException(→ 500)이라 404로 바꾼다.
+        val strategy = try {
+            jdbc.queryForMap("SELECT user_id AS creator_id, price, ruleset_id FROM strategy_market WHERE id = ?", id)
+        } catch (e: org.springframework.dao.EmptyResultDataAccessException) {
+            throw NoSuchElementException("전략을 찾을 수 없습니다: $id")
+        }
         val creatorId  = (strategy["creator_id"] as Number).toLong()
         val price      = (strategy["price"] as? java.math.BigDecimal) ?: BigDecimal.ZERO
         val rulesetId  = strategy["ruleset_id"] as String
