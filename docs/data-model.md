@@ -380,7 +380,9 @@ CREATE TABLE risk_check_logs (
     approved     BOOLEAN     NOT NULL,
     blocked_by   VARCHAR(100),
     checks_json  JSONB,      -- 각 규칙 통과/실패 상세
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    account_type VARCHAR(10) NOT NULL DEFAULT 'PAPER', -- V34: PAPER | REAL
+    dry_run      BOOLEAN     NOT NULL DEFAULT false    -- V79: 설정 화면 사전 점검(POST /api/risk/check). 차단 기록·집계에서 제외
 );
 CREATE INDEX idx_risk_check_logs_user ON risk_check_logs (user_id, created_at DESC);
 ```
