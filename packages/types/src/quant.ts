@@ -143,7 +143,8 @@ export interface MarketStrategy {
   description: string | null;
   price: number;
   subscribe_count: number;
-  author_email: string;
+  /** 작성자 닉네임. 이메일(로그인 ID)은 내보내지 않는다(보안 리뷰 2026-10). */
+  author_nickname: string;
   created_at: string;
   // ADR-035 — 현재 로그인 사용자가 이 전략을 구독 중인지. 비로그인 조회 시 항상 false.
   isSubscribed: boolean;
