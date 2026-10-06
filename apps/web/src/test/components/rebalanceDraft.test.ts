@@ -59,3 +59,28 @@ describe("rebalance draft handoff", () => {
     expect(takeRebalanceDraft()).toBeNull();
   });
 });
+
+// 보안 리뷰 — 초안(종목·비중)은 계정의 실거래 리밸런싱 입력이다. 같은 탭에서 로그아웃한 뒤 다른 사람이 로그인하면 그대로
+// 채워지지 않도록 로그아웃(로컬 토큰 정리) 때 지운다.
+describe("로그아웃", () => {
+  beforeEach(() => sessionStorage.clear());
+
+  it("logout은 서버 응답과 무관하게 리밸런싱 초안을 지운다", async () => {
+    const { logout } = await import("@/services/auth");
+    expect(saveRebalanceDraft(draft())).toBe(true);
+    globalThis.fetch = (() => Promise.reject(new Error("offline"))) as typeof fetch;
+
+    await logout().catch(() => {});
+
+    expect(takeRebalanceDraft()).toBeNull();
+  });
+
+  it("세션 만료로 토큰만 정리할 때도 지운다", async () => {
+    const { clearTokens } = await import("@/services/auth");
+    expect(saveRebalanceDraft(draft())).toBe(true);
+
+    clearTokens();
+
+    expect(takeRebalanceDraft()).toBeNull();
+  });
+});

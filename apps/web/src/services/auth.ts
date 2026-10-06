@@ -1,3 +1,5 @@
+import { clearRebalanceDraft } from "@/lib/rebalanceDraft";
+
 const API = "";
 
 export const AUTH_CHANGED_EVENT = "auth-changed";
@@ -77,9 +79,13 @@ export function getAccessToken(): string | null {
   return typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
 }
 
-/** 로컬 저장소만 지운다 — 서버 쪽 refresh token은 살아있다. 실제 로그아웃은 logout()을 쓸 것. */
+/**
+ * 로컬 저장소만 지운다 — 서버 쪽 refresh token은 살아있다. 실제 로그아웃은 logout()을 쓸 것.
+ * 계정에 묶인 탭 상태(리밸런싱 초안)도 함께 지운다 — 같은 탭에서 다음에 로그인한 사람에게 채워지지 않게.
+ */
 export function clearTokens() {
   localStorage.removeItem("accessToken");
+  clearRebalanceDraft();
   notifyAuthChanged();
 }
 

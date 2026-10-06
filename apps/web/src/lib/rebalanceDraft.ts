@@ -67,6 +67,15 @@ export function saveRebalanceDraft(draft: RebalanceDraft): boolean {
   }
 }
 
+/** 로그아웃·세션 만료 때 지운다(services/auth.clearTokens) — 같은 탭의 다음 사용자에게 이전 계정의 초안이 채워지지 않게. */
+export function clearRebalanceDraft(): void {
+  try {
+    sessionStorage.removeItem(KEY);
+  } catch {
+    // 저장소 접근 불가(프라이빗 모드 등) — 지울 것도 없다
+  }
+}
+
 /** 한 번 읽으면 지운다. 없거나 깨졌거나 오래됐으면 null. */
 export function takeRebalanceDraft(now = Date.now()): RebalanceDraft | null {
   let raw: string | null = null;
