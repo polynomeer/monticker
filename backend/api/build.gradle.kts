@@ -72,7 +72,7 @@ dependencies {
 	testImplementation("io.mockk:mockk:1.14.11")
 	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0")
 	implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
-	implementation("net.logstash.logback:logstash-logback-encoder:7.4")
+	implementation("net.logstash.logback:logstash-logback-encoder:9.0")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
