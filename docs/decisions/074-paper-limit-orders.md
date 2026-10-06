@@ -50,6 +50,7 @@ LimitOrderSweeper (@Scheduled 3s, app.matching.limit-sweep.*)
 
 1. **체결가는 그 순간의 최신 종가**다(BUY는 ≤ 지정가, SELL은 ≥ 지정가). 사가의 즉시 체결과 같은 규칙이다.
 2. **리스크 게이트는 제출 시점에 한 번.** 이후 체결은 이미 승인된 주문의 이행이다. 실브로커도 접수 시점에 판정한다.
+   — 2026-10 보안 리뷰로 보완: BUY는 체결 직전에 한 번 더 본다(아래 Note).
 3. **매도 가능 수량 = 보유 − 미체결 SELL 잔량.** 사가가 포지션 행을 `FOR UPDATE`로 잡고 판정해 같은 종목의 동시 매도
    제출을 직렬화한다. 스위퍼는 체결 직전에 포지션을 다시 확인하고, 없으면 체결 대신 취소(사유 기록)한다.
 4. **취소와 체결의 경합**: 사용자 취소(`findWithLockById`, FOR UPDATE)와 스위퍼(SKIP LOCKED)는 같은 행 락으로
@@ -74,6 +75,32 @@ LimitOrderSweeper (@Scheduled 3s, app.matching.limit-sweep.*)
 - 힙 호가창은 표시용 사본으로 남는다. 다른 pod의 사본에는 체결된 주문이 남아 있을 수 있다(ADR-048과 같은 한계).
 - 장 운영 시간을 보지 않는다 — 캔들이 갱신되지 않으면 판정도 바뀌지 않으므로 장외에는 자연히 멈춘다.
 - 부분 체결은 없다(전량 체결). 모의투자에 유동성 모형이 없기 때문이다.
+
+## Note (2026-10 보안 리뷰 후속 — 미체결 지정가 매수와 리스크 한도)
+
+리뷰에서 **미체결 모의 지정가 BUY가 집중도·섹터·보유 종목 수·일간 손실 한도를 우회**한다는 점이 확인됐다(HIGH).
+
+- 모의계좌 스냅샷(`RiskRuleQueryService.paperSnapshot`)에 `pendingBuys`가 비어 있었다. 실거래는 ADR-058의 `PendingBuyQuery`로
+  진행 중 매수를 세는데, 모의투자는 "사가가 원자적으로 바꾼다"는 전제로 비워 두었다 — 지정가가 생긴 뒤로는 틀린 전제다.
+  한도 30%에 25%짜리 지정가 매수를 두 건 걸면 각각 통과했고, 신규 종목 지정가를 여러 건 걸어 종목 수 한도도 넘었다.
+- 제출 시점 판정(Decision 2)만 있어서, 그 사이 다른 매수가 체결되거나 손실이 커져도 미체결 주문은 그대로 체결됐다.
+
+변경:
+
+1. **스냅샷에 미체결 매수를 넣는다.** `orders`의 `side='BUY' AND status IN ('PENDING','PARTIALLY_FILLED')` 잔량을 종목별로
+   `pendingBuys`에 더한다(ADR-058과 같은 의미 — 노출을 늘리는 쪽만). 예약금(`limit_price × 잔량`)은 제출 때 이미 현금에서
+   빠졌으므로 `PortfolioSnapshot.reservedCash`로 분모(`현금 + 예약금 + Σ보유`)와 일간 손실 기준 금액에 되돌린다 —
+   그렇지 않으면 같은 노출이 분자에 더해지고 분모에서 빠져 이중으로 불리해진다(지갑 화면의 총자산과 같은 정의).
+   제출 게이트(@RiskChecked)·조건부 주문 발동(`PaperConditionalOrderTrigger` → `OrderSubmitter`)·한도 근접 경고
+   (`PaperRiskUsage`)가 모두 이 스냅샷을 쓰므로 함께 바뀐다. risk 모듈은 `orders`를 SQL로만 읽어 모듈 경계는 그대로다.
+2. **체결 직전에 BUY를 다시 판정한다.** `LimitOrderFiller`가 행 락(`FOR UPDATE SKIP LOCKED`)을 잡은 같은 트랜잭션에서
+   `RiskCheckerService.checkPaperFill`(잔량 × 체결가)을 부른다. 이 주문 자신은 대기 매수 수량에서 빼고(이번 수량으로 한 번만
+   센다) 예약금은 분모에 남긴다. 빈도 한도(TradingFrequencyRule)는 제출 때 이미 센 주문이라 다시 걸지 않는다.
+   막히면 체결하지 않고 **취소 + 예약금 전액 환불 + `OrderCancelledEvent`** — 사용자 취소와 같은 상태 전이·이벤트이며
+   `reject_reason`에 차단 규칙을 남긴다. 판정은 `risk_check_logs`에 감사 기록된다.
+
+트레이드오프: 장 중 손실이 커지면 걸어 둔 지정가 매수가 체결 시점에 취소될 수 있다. 실브로커는 접수 후 판정하지 않으므로
+모의투자가 더 엄격하다 — 한도는 노출을 늘리는 순간에 지켜져야 한다는 쪽을 택했다.
 
 ## Revisit When
 
