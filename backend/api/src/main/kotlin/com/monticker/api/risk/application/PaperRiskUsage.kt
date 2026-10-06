@@ -18,7 +18,7 @@ data class RuleUsage(
 
 /**
  * ADR-070 — 모의계좌의 한도 사용률. 매수 게이트(RiskRuleQueryService)와 같은 입력(paperSnapshot·최근가·역사적 VaR)과 같은
- * 기준 금액을 쓴다: 집중도 분모는 현금+보유 평가액, 일간 손실 기준은 현금(게이트의 모의투자 기준과 같다).
+ * 기준 금액을 쓴다: 집중도 분모는 현금+예약금+보유 평가액, 일간 손실 기준은 현금+예약금(게이트의 모의투자 기준과 같다).
  *
  * 값을 모르는 것은 "안전"으로도 "근접"으로도 판정하지 않고 뺀다 — 가격 없는 보유가 있으면 집중도는 건너뛴다.
  * 경고는 주문을 막지 않으므로, 모르면 막는 게이트와 달리 근거 없는 경고를 내지 않는 쪽이 맞다.
@@ -32,7 +32,7 @@ class PaperRiskUsage(
         val out = mutableListOf<RuleUsage>()
 
         // 일간 손실 — 오늘 실현 손실 / (현금 × 한도%)
-        val cash = snap.cash.toDouble()
+        val cash = snap.cashAssets.toDouble()   // 가용 현금 + 미체결 매수 예약금 — 게이트의 모의투자 기준과 같다(ADR-074 Note)
         if (cash > 0 && snap.dailyPnl < BigDecimal.ZERO) {
             out += RuleUsage("DAILY_LOSS", "일일 손실", -snap.dailyPnl.toDouble() / cash * 100, limits.dailyLossLimitPct.toDouble())
         }

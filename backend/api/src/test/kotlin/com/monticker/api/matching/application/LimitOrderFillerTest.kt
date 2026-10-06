@@ -11,6 +11,8 @@ import com.monticker.api.matching.events.OrderFilledEvent
 import com.monticker.api.matching.infrastructure.FillRepository
 import com.monticker.api.matching.infrastructure.OrderRepository
 import com.monticker.api.matching.statemachine.OrderStateMachineService
+import com.monticker.api.risk.application.RiskCheckResult
+import com.monticker.api.risk.application.RiskCheckerService
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -31,7 +33,13 @@ class LimitOrderFillerTest {
     private val events = mockk<ApplicationEventPublisher>(relaxed = true)
     private val jdbc = mockk<JdbcTemplate>(relaxed = true)
     private val book = mockk<MatchingOrderBookService>(relaxed = true)
-    private val filler = LimitOrderFiller(orderRepo, fillRepo, stateMachine, events, jdbc, book)
+    private val riskChecker = mockk<RiskCheckerService>()
+    private val filler = LimitOrderFiller(orderRepo, fillRepo, stateMachine, events, jdbc, book, riskChecker)
+
+    init {
+        every { riskChecker.checkPaperFill(any(), any(), any(), any(), any()) } returns
+            RiskCheckResult(approved = true, blockedBy = null, severity = "APPROVED", checks = emptyList())
+    }
 
     private fun order(side: OrderSide, limit: String, qty: Int = 10, status: OrderStatus = OrderStatus.PENDING) = Order(
         id = 7L, userId = 1L, stockId = 100L, side = side, orderType = OrderType.LIMIT, quantity = qty,
@@ -127,5 +135,49 @@ class LimitOrderFillerTest {
         assertThat(o.rejectReason).contains("보유 수량 부족")
         verify(exactly = 0) { fillRepo.save(any()) }
         verify { events.publishEvent(match<Any> { it is OrderCancelledEvent && it.refundAmount.signum() == 0 }) }
+    }
+
+    // ADR-074 Note — 미체결 지정가 매수는 체결 시점에 리스크 게이트를 다시 통과해야 한다. 막히면 취소 + 예약금 전액 환불.
+    @Test
+    fun `re-checks risk for a crossed BUY at the fill price with the order excluded`() {
+        val o = order(OrderSide.BUY, "1000")
+        stubLock(true); stubPrice("950"); stubSaves()
+        every { orderRepo.findById(7L) } returns Optional.of(o)
+
+        filler.fillIfCrossed(7L)
+
+        verify { riskChecker.checkPaperFill(1L, 100L, 10, match { it.compareTo(BigDecimal("950")) == 0 }, 7L) }
+    }
+
+    @Test
+    fun `cancels a crossed BUY and refunds the whole reservation when the fill-time risk check blocks`() {
+        val o = order(OrderSide.BUY, "1000")
+        stubLock(true); stubPrice("950")
+        every { orderRepo.findById(7L) } returns Optional.of(o)
+        every { orderRepo.save(any()) } answers { firstArg() }
+        every { riskChecker.checkPaperFill(any(), any(), any(), any(), any()) } returns
+            RiskCheckResult(approved = false, blockedBy = "ConcentrationRule", severity = "BLOCKED", checks = emptyList())
+
+        assertThat(filler.fillIfCrossed(7L)).isEqualTo(LimitFillOutcome.REJECTED)
+
+        assertThat(o.status).isEqualTo(OrderStatus.CANCELLED)
+        assertThat(o.rejectReason).contains("ConcentrationRule")
+        verify(exactly = 0) { fillRepo.save(any()) }
+        // 예약금 1000×10 = 10,000 전액 환불
+        verify { jdbc.update(match<String> { it.startsWith("UPDATE paper_accounts SET cash = cash +") }, match<BigDecimal> { it.compareTo(BigDecimal("10000")) == 0 }, 1L) }
+        verify { events.publishEvent(match<Any> { it is OrderCancelledEvent && it.refundAmount.compareTo(BigDecimal("10000")) == 0 }) }
+        verify(exactly = 0) { events.publishEvent(match<Any> { it is OrderFilledEvent }) }
+    }
+
+    @Test
+    fun `does not risk-check SELL fills`() {
+        val o = order(OrderSide.SELL, "1000", qty = 3)
+        stubLock(true); stubPrice("1020"); stubSaves()
+        every { orderRepo.findById(7L) } returns Optional.of(o)
+        every { jdbc.query(match<String> { it.contains("FROM portfolio_positions") }, any<RowMapper<Int>>(), 1L, 100L) } returns listOf(3)
+
+        filler.fillIfCrossed(7L)
+
+        verify(exactly = 0) { riskChecker.checkPaperFill(any(), any(), any(), any(), any()) }
     }
 }

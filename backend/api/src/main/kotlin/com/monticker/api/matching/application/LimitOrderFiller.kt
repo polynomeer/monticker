@@ -13,6 +13,7 @@ import com.monticker.api.matching.infrastructure.OrderRepository
 import com.monticker.api.matching.statemachine.OrderEvents
 import com.monticker.api.matching.statemachine.OrderStateMachineService
 import com.monticker.api.matching.statemachine.OrderStates
+import com.monticker.api.risk.application.RiskCheckerService
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.jdbc.core.JdbcTemplate
@@ -32,6 +33,9 @@ enum class LimitFillOutcome { FILLED, NOT_CROSSED, SKIPPED, REJECTED }
  *
  * 돈: BUY는 제출 때 `limit_price × 잔량`을 예약했으므로 체결가(≤ 지정가)와의 차액만 돌려준다. SELL은 체결 대금을
  * 더한다. 체결 기록은 사가와 같은 OrderFilledEvent → paper.PaperExecutionListener(동기, 같은 트랜잭션)로 남는다.
+ *
+ * 리스크(ADR-074 Note): BUY는 체결 직전에 잔량 × 체결가로 리스크 게이트를 다시 돈다(주문 자신은 대기 매수에서 뺀다). 제출 이후
+ * 다른 매수·체결·손실로 한도를 넘게 됐으면 체결하지 않고 취소하며 예약금 전액을 돌려준다 — 사용자 취소와 같은 이벤트·환불이다.
  */
 @Service
 class LimitOrderFiller(
@@ -41,6 +45,7 @@ class LimitOrderFiller(
     private val eventPublisher: ApplicationEventPublisher,
     private val jdbc: JdbcTemplate,
     private val orderBookService: MatchingOrderBookService,
+    private val riskChecker: RiskCheckerService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -67,6 +72,13 @@ class LimitOrderFiller(
         if (!crossed) return LimitFillOutcome.NOT_CROSSED
 
         val qty = order.remainingQty
+        if (order.side == OrderSide.BUY) {
+            val risk = riskChecker.checkPaperFill(order.userId, order.stockId, qty, current.amount, order.id)
+            if (!risk.approved) {
+                cancelForRisk(order.id, risk.blockedBy ?: "Unknown risk rule")
+                return LimitFillOutcome.REJECTED
+            }
+        }
         if (order.side == OrderSide.SELL) {
             // 제출 때 미체결 매도 잔량까지 빼고 판정했으므로 정상 흐름에선 항상 충분하다. 계좌 초기화 등으로
             // 포지션이 사라졌다면 체결하지 않고 거절한다 — 공매도를 만들지 않는다(ADR-047 §5).
@@ -125,6 +137,24 @@ class LimitOrderFiller(
             refundAmount = BigDecimal.ZERO,
         ))
         log.warn("[LimitSweep] SELL orderId={} cancelled — position missing (held={}, qty={})", order.id, held, qty)
+    }
+
+    /** 체결 시점 리스크 차단 — 사용자 취소(MatchingService.cancelOrder)와 같은 상태 전이·예약금 환불·취소 이벤트. */
+    private fun cancelForRisk(orderId: Long, blockedBy: String) {
+        val order = orderRepo.findById(orderId).orElseThrow()
+        val previous = OrderStates.valueOf(order.status.name)
+        val refund = order.limitPrice?.toMoney(order.remainingQty)?.amount ?: BigDecimal.ZERO
+        order.cancel()
+        order.rejectReason = "체결 시점 리스크 한도 초과: $blockedBy"
+        stateMachineService.transition(orderId = order.id, currentState = previous, event = OrderEvents.CANCEL)
+        orderRepo.save(order)
+        runCatching { orderBookService.cancel(order.stockId, order.id, order.side) }
+        if (refund > BigDecimal.ZERO) adjustCash(order.userId, refund)
+        eventPublisher.publishEvent(OrderCancelledEvent(
+            orderId = order.id, userId = order.userId, stockId = order.stockId, side = order.side.name,
+            refundAmount = refund,
+        ))
+        log.warn("[LimitSweep] BUY orderId={} cancelled at fill — risk blocked by {}", order.id, blockedBy)
     }
 
     private fun adjustCash(userId: Long, delta: BigDecimal) {

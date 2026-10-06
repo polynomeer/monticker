@@ -111,6 +111,30 @@ class RiskCheckerService(
     }
 
     /**
+     * ADR-074 Note — 미체결 모의 지정가 매수의 체결 직전 재판정(matching.LimitOrderFiller). 제출 시점 판정 이후 다른 매수·체결·손실로
+     * 상태가 바뀌었을 수 있으므로 잔량을 체결가로 다시 본다. 주문 자신은 대기 매수에서 빼서 이중으로 세지 않는다.
+     * 리스크 체크를 끈 계좌는 [check]와 같이 수량 검증만 한다. 감사 기록은 남긴다(체결 시점 차단도 차단이다).
+     */
+    fun checkPaperFill(
+        userId: Long,
+        stockId: Long,
+        qty: Int,
+        fillPrice: BigDecimal,
+        orderId: Long,
+    ): RiskCheckResult {
+        val limits = limitService.effective(userId)
+        val checks = if (!limits.isActive) {
+            riskRuleQueryService.quantityGuard(qty) + RuleResult(
+                rule = "RiskChecksDisabled", passed = true, detail = "리스크 체크가 꺼져 있어 한도 규칙을 평가하지 않았습니다(모의투자).",
+                current = 0.0, limit = 0.0,
+            )
+        } else {
+            riskRuleQueryService.evaluatePaperFill(userId, orderId, stockId, qty, fillPrice, limits)
+        }
+        return finalize(userId, stockId, "BUY", qty, checks, accountType = "PAPER")
+    }
+
+    /**
      * ADR-025 — 실거래(BYOK) 주문용. 페이퍼와 동일한 5개 룰을 쓰되, 포트폴리오 상태는
      * 호출자(BrokerageService)가 브로커 API로 직접 조회해 넘긴다 — paper_accounts/
      * paper_trades를 실거래 판정에 잘못 쓰는 사고를 피하기 위해서다.

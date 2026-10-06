@@ -21,7 +21,7 @@ data class PortfolioSnapshot(
     val recentOrderCount: Long,   // 최근 1시간
     /**
      * ADR-058 — 아직 보유 내역에 없을 수 있는 매수(stockId → 수량): 결과 불명·미체결 잔량·막 체결된 것. 노출을 늘리는 쪽으로만
-     * 센다(진행 중 매도는 넣지 않는다). 모의투자는 사가가 현금·보유를 원자적으로 바꾸므로 비어 있다.
+     * 센다(진행 중 매도는 넣지 않는다). 모의투자는 미체결 지정가 매수(PENDING·PARTIALLY_FILLED)의 잔량이다(ADR-074 Note).
      */
     val pendingBuys: Map<Long, Int> = emptyMap(),
     /**
@@ -29,7 +29,19 @@ data class PortfolioSnapshot(
      * 이중으로 들어가지 않는다). null이면 `cash + Σ보유`(모의투자 — 체결 즉시 현금이 줄어든다).
      */
     val totalAssets: BigDecimal? = null,
-)
+    /**
+     * ADR-074 Note — 모의투자 미체결 매수의 예약금(지정가 × 잔량). 제출 때 현금에서 이미 빠졌지만 여전히 계좌 자산이다 —
+     * [totalAssets]가 없을 때 분모(`cash + reservedCash + Σ보유`)와 일간 손실 기준 금액에 되돌린다. 실거래는 0.
+     */
+    val reservedCash: BigDecimal = BigDecimal.ZERO,
+) {
+    /** totalAssets가 없을 때(모의투자)의 현금성 자산 — 가용 현금 + 미체결 매수 예약금. */
+    val cashAssets: BigDecimal get() = cash + reservedCash
+}
+
+/** ADR-074 Note — 모의계좌의 미체결 매수 한 건(잔량·지정가). */
+@NamedInterface("api")
+data class PaperPendingBuy(val orderId: Long, val stockId: Long, val qty: Int, val limitPrice: BigDecimal?)
 
 @Service
 @Transactional(readOnly = true)
@@ -47,6 +59,21 @@ class RiskRuleQueryService(
     ): List<RuleResult> =
         evaluateWithSnapshot(stockId, side, qty, estimatedPrice, limits, paperSnapshot(userId))
 
+    /**
+     * ADR-074 Note — 미체결 모의 지정가 매수의 체결 시점 재판정. 주문 자신([orderId])은 대기 매수에서 빼고(이번 수량으로 한 번만
+     * 센다) 예약금은 분모에 그대로 둔다(아직 현금에서 빠져 있다). 빈도 한도는 제출 시점에 이미 센 주문이라 다시 걸지 않는다.
+     */
+    fun evaluatePaperFill(
+        userId: Long,
+        orderId: Long,
+        stockId: Long,
+        qty: Int,
+        fillPrice: BigDecimal,
+        limits: RiskLimit,
+    ): List<RuleResult> =
+        evaluateWithSnapshot(stockId, "BUY", qty, fillPrice, limits, paperSnapshot(userId, excludeOrderId = orderId))
+            .filter { it.rule != "TradingFrequencyRule" }
+
     /** 실거래 — 호출자(BrokerageService)가 브로커 API/로컬 테이블에서 직접 조립한 스냅샷을 넘긴다. */
     fun evaluateWithSnapshot(
         stockId: Long,
@@ -57,7 +84,6 @@ class RiskRuleQueryService(
         snapshot: PortfolioSnapshot,
     ): List<RuleResult> {
         val checks = mutableListOf<RuleResult>()
-        val accountCash = snapshot.cash
 
         // 0. Quantity Guard
         checks.addAll(quantityGuard(qty))
@@ -66,7 +92,7 @@ class RiskRuleQueryService(
         // 남아 부푼다), 모의투자면 현금(체결 즉시 줄어든다).
         // 매도에는 걸지 않는다(VaR와 같은 이유, ADR-063): 손실 한도는 위험을 더 늘리는 주문을 멈추는 장치다. 매도까지 막으면 손실 매도
         // 한 번 뒤에 스탑로스·리밸런싱 매도가 전부 막혀 사용자를 떨어지는 포지션에 가둔다(일간 손실이 실현손익이 되면서 드러났다).
-        val lossLimitAmt = (snapshot.totalAssets ?: accountCash).multiply(limits.dailyLossLimitPct)
+        val lossLimitAmt = (snapshot.totalAssets ?: snapshot.cashAssets).multiply(limits.dailyLossLimitPct)
             .divide(BigDecimal("100"), 4, java.math.RoundingMode.HALF_UP)
         val dailyLossPassed = snapshot.dailyPnl >= lossLimitAmt.negate()
         if (side == "BUY") checks.add(RuleResult(
@@ -91,7 +117,7 @@ class RiskRuleQueryService(
                     limit   = concentrationLimit,
                 ))
             } else {
-                val totalAssets = snapshot.totalAssets?.toDouble() ?: (accountCash.toDouble() + snapshot.holdings.sumOf { h ->
+                val totalAssets = snapshot.totalAssets?.toDouble() ?: (snapshot.cashAssets.toDouble() + snapshot.holdings.sumOf { h ->
                     currentPrice(h.stockId).multiply(BigDecimal(h.qty)).toDouble()
                 })
                 val currentQty       = snapshot.holdings.find { it.stockId == stockId }?.qty ?: 0
@@ -256,7 +282,7 @@ class RiskRuleQueryService(
 
         // 분모 — 단일 종목 집중도와 같다: 실거래는 증권사 총평가액, 모의투자는 현금 + 보유 평가액.
         val totalAssets = snapshot.totalAssets?.toDouble()
-            ?: (snapshot.cash.toDouble() + held.entries.sumOf { (id, q) -> currentPrice(id).multiply(BigDecimal(q)).toDouble() })
+            ?: (snapshot.cashAssets.toDouble() + held.entries.sumOf { (id, q) -> currentPrice(id).multiply(BigDecimal(q)).toDouble() })
         if (totalAssets <= 0) return result(false, "총자산을 확인할 수 없어 섹터 집중도를 판정할 수 없습니다.")
 
         var sectorValue = 0.0
@@ -313,6 +339,15 @@ class RiskRuleQueryService(
             FROM t JOIN cost c USING (stock_id)
             WHERE t.side = 'SELL' AND t.at >= ?"""
 
+        /**
+         * ADR-074 Note — 미체결 매수(잔량 > 0). 지정가는 제출 때 `limit_price × 잔량`을 예약했고 체결까지 현금에서 빠져 있다.
+         * 시장가 행은 사가가 즉시 체결·종결하므로 보통 없지만, 잠깐 보이면 수량만 세고 예약금은 0으로 본다.
+         */
+        const val PAPER_PENDING_BUYS_SQL = """
+            SELECT id, stock_id, quantity - filled_qty AS qty, limit_price
+            FROM orders
+            WHERE user_id = ? AND side = 'BUY' AND status IN ('PENDING', 'PARTIALLY_FILLED') AND quantity > filled_qty"""
+
         /** 보유 종목 — 순수량. */
         const val HOLDINGS_SQL = PAPER_TRADES_CTE + """
             SELECT stock_id, SUM(CASE WHEN side = 'BUY' THEN quantity ELSE -quantity END) AS qty
@@ -333,8 +368,19 @@ class RiskRuleQueryService(
         ).firstOrNull() ?: BigDecimal.ZERO
     }
 
-    /** 모의계좌의 현재 포트폴리오 상태 — 매수 게이트와 한도 근접 경고가 같이 쓴다. */
-    fun paperSnapshot(userId: Long): PortfolioSnapshot {
+    /** 모의계좌의 미체결 매수(ADR-074 Note). */
+    fun paperPendingBuys(userId: Long): List<PaperPendingBuy> =
+        jdbc.query(
+            PAPER_PENDING_BUYS_SQL,
+            { rs, _ -> PaperPendingBuy(rs.getLong("id"), rs.getLong("stock_id"), rs.getInt("qty"), rs.getBigDecimal("limit_price")) },
+            userId,
+        )
+
+    /**
+     * 모의계좌의 현재 포트폴리오 상태 — 매수 게이트와 한도 근접 경고가 같이 쓴다.
+     * [excludeOrderId] — 체결 시점 재판정(ADR-074 Note)에서 그 주문 자신을 대기 매수 수량에서 뺀다. 예약금은 빼지 않는다.
+     */
+    fun paperSnapshot(userId: Long, excludeOrderId: Long? = null): PortfolioSnapshot {
         val accountCash = jdbc.query(
             "SELECT COALESCE(cash, 0) FROM paper_accounts WHERE user_id = ?",
             { rs, _ -> rs.getBigDecimal(1) },
@@ -357,6 +403,17 @@ class RiskRuleQueryService(
             userId, java.sql.Timestamp.from(oneHourAgo),
         ).firstOrNull() ?: 0L
 
-        return PortfolioSnapshot(accountCash, holdings, dailyPnl, recentOrderCount)
+        // ADR-074 Note — 미체결 지정가 매수도 노출이다. 빠지면 체결 전까지 집중도·섹터·종목 수 한도를 우회해 여러 건을 걸 수 있었다.
+        val resting = paperPendingBuys(userId)
+        val pendingBuys = resting.filter { it.orderId != excludeOrderId && it.qty > 0 }
+            .groupBy { it.stockId }.mapValues { (_, v) -> v.sumOf { it.qty } }
+        val reservedCash = resting.fold(BigDecimal.ZERO) { acc, b ->
+            acc + (b.limitPrice?.multiply(BigDecimal(b.qty)) ?: BigDecimal.ZERO)
+        }
+
+        return PortfolioSnapshot(
+            cash = accountCash, holdings = holdings, dailyPnl = dailyPnl, recentOrderCount = recentOrderCount,
+            pendingBuys = pendingBuys, reservedCash = reservedCash,
+        )
     }
 }
