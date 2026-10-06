@@ -136,4 +136,27 @@ class ConsentServiceTest {
         every { repo.findAllByUserIdOrderByRecordedAtDescIdDesc(1L) } returns listOf(row(ConsentType.MARKETING, agreed = true, version = "v0"))
         assertThat(service.isAgreed(1L, ConsentType.MARKETING)).isFalse()
     }
+
+    @Test
+    fun `re-consent after a terms revision needs only the revised item`() {
+        every { repo.findAllByUserIdOrderByRecordedAtDescIdDesc(1L) } returns listOf(
+            row(ConsentType.TERMS, true, version = "terms-old"),
+            row(ConsentType.PRIVACY, true),
+            row(ConsentType.AGE_OVER_19, true),
+        )
+        every { repo.saveAll(any<Iterable<UserConsent>>()) } answers { firstArg<Iterable<UserConsent>>().toList() }
+
+        val accepted = service.requireMissingAndRecord(1L, ConsentGroup.SIGNUP, listOf("TERMS"), ConsentSource.CONSENT_PROMPT)
+
+        assertThat(accepted).containsExactly(ConsentType.TERMS)
+    }
+
+    @Test
+    fun `re-consent still refuses when a missing item is left out`() {
+        every { repo.findAllByUserIdOrderByRecordedAtDescIdDesc(1L) } returns emptyList()
+
+        assertThrows<IllegalArgumentException> {
+            service.requireMissingAndRecord(1L, ConsentGroup.SIGNUP, listOf("TERMS"), ConsentSource.CONSENT_PROMPT)
+        }
+    }
 }

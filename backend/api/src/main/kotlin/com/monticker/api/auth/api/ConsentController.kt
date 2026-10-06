@@ -1,6 +1,7 @@
 package com.monticker.api.auth.api
 
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
+import com.monticker.api.common.aop.RateLimited
 import com.monticker.api.common.consent.ConsentGroup
 import com.monticker.api.common.consent.ConsentService
 import com.monticker.api.common.consent.ConsentSource
@@ -45,9 +46,10 @@ class ConsentController(
 
     /** 가입 필수 동의를 (다시) 받는다. 필수가 빠지면 400. */
     @PostMapping
+    @RateLimited(limit = 20, windowSec = 60, keyPrefix = "consent.write")
     fun agree(@RequestHeader("Authorization") auth: String, @RequestBody body: ConsentRequest): ResponseEntity<ConsentStatusResponse> {
         val userId = userId(auth)
-        consentService.requireAndRecord(userId, ConsentGroup.SIGNUP, body.consents, ConsentSource.CONSENT_PROMPT)
+        consentService.requireMissingAndRecord(userId, ConsentGroup.SIGNUP, body.consents, ConsentSource.CONSENT_PROMPT)
         return status(auth)
     }
 
@@ -60,6 +62,7 @@ class ConsentController(
 
     /** 선택 동의(마케팅) 철회. 필수 동의는 철회할 수 없다(400). */
     @DeleteMapping("/{type}")
+    @RateLimited(limit = 20, windowSec = 60, keyPrefix = "consent.write")
     fun withdraw(@RequestHeader("Authorization") auth: String, @PathVariable type: String): ResponseEntity<ConsentStatusResponse> {
         consentService.withdraw(userId(auth), parseType(type), ConsentSource.SETTINGS)
         return status(auth)

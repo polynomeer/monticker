@@ -48,8 +48,20 @@ export async function withdrawConsent(type: ConsentType): Promise<ConsentStatus>
   return read(await authFetch(`/api/users/me/consents/${type}`, { method: "DELETE" }));
 }
 
-/** 동의 화면에서 돌아갈 곳 — 앱 안의 상대 경로만 허용한다(열린 리다이렉트 방지). */
-export function safeNext(next: string | null | undefined): string {
-  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) return "/";
-  return next;
+/**
+ * 동의 화면에서 돌아갈 곳 — 앱 안의 상대 경로만 허용한다(열린 리다이렉트 방지).
+ * 브라우저는 URL에서 탭·줄바꿈을 지우므로 `/\t/evil.com`이 `//evil.com`이 된다(보안 리뷰) — 제어 문자·역슬래시는 통째로 거부하고,
+ * 마지막으로 같은 origin으로 해석되는지 URL 파서로 확인한다.
+ */
+export function safeNext(next: string | null | undefined, origin = "http://app.invalid"): string {
+  if (!next || !next.startsWith("/") || next.startsWith("//")) return "/";
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f\\]/.test(next)) return "/";
+  try {
+    const u = new URL(next, origin);
+    if (u.origin !== origin) return "/";
+    return `${u.pathname}${u.search}${u.hash}`;
+  } catch {
+    return "/";
+  }
 }
