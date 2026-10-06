@@ -522,4 +522,46 @@ class RiskCheckerServiceTest {
         assertThat(result.approved).isFalse()
         assertThat(result.blockedBy).isEqualTo("ConcentrationRule")
     }
+
+    // ── 보안 리뷰 — side는 메트릭 라벨·감사 행이 된다. 자유 문자열이면 시계열이 무한히 늘어난다 ──
+
+    @Test
+    fun `check rejects a side other than BUY or SELL before any audit row`() {
+        stubSafeDefaults()
+
+        org.assertj.core.api.Assertions.assertThatThrownBy { service.check(userId, stockId, "HOLD-${'$'}{System.nanoTime()}", 1, estimatedPrice) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+        verify(exactly = 0) { jdbc.update(match<String> { it.contains("INSERT INTO risk_check_logs") }, *anyVararg()) }
+    }
+
+    @Test
+    fun `checkBrokerageOrder rejects a side other than BUY or SELL`() {
+        stubSafeDefaults()
+        val snapshot = PortfolioSnapshot(BigDecimal("10000000"), emptyList(), BigDecimal.ZERO, 0, totalAssets = BigDecimal("10000000"))
+
+        org.assertj.core.api.Assertions.assertThatThrownBy { service.checkBrokerageOrder(userId, stockId, "buy", 1, estimatedPrice, snapshot) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+    }
+
+    @Test
+    fun `dry run is audited as a dry run and not counted in the risk metric`() {
+        stubSafeDefaults()
+        val registry = io.micrometer.core.instrument.simple.SimpleMeterRegistry()
+        val svc = RiskCheckerService(RiskLimitService(riskLimitRepo, jdbc), riskRuleQueryService, auditLogger, registry, jdbc)
+
+        val result = svc.dryRun(userId, stockId, "BUY", 4000, estimatedPrice)
+
+        assertThat(result.approved).isFalse()
+        verify { jdbc.update(match<String> { it.contains("INSERT INTO risk_check_logs") }, *anyVararg(), true) }
+        assertThat(registry.find("risk_check_total").counters()).isEmpty()
+    }
+
+    @Test
+    fun `a real check is audited as not a dry run`() {
+        stubSafeDefaults()
+
+        service.check(userId, stockId, "BUY", 1, estimatedPrice)
+
+        verify { jdbc.update(match<String> { it.contains("INSERT INTO risk_check_logs") }, *anyVararg(), false) }
+    }
 }

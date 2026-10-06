@@ -28,7 +28,7 @@ data class RiskDecisionSummary(val blockedThisMonth: Long, val monthStart: Insta
 
 /**
  * 리스크 게이트 판정 이력 조회 — 본인 것만. 판정 기록은 이미 RiskCheckAuditLogger가 모든 판정(모의·실거래)을 남기고 있다.
- * 화면("차단·경고 기록")은 막힌 판정만 보여 준다. 승인 로그는 주문마다 쌓여 대부분을 차지하고, 경고(통과하되 알림) 모드는 아직 없다.
+ * 화면("차단·경고 기록")은 막힌 판정만 보여 준다. 설정 화면의 사전 점검(`dry_run`)은 주문이 아니므로 목록·집계에서 뺀다. 승인 로그는 주문마다 쌓여 대부분을 차지하고, 경고(통과하되 알림) 모드는 아직 없다.
  */
 @Service
 @Transactional(readOnly = true)
@@ -43,7 +43,7 @@ class RiskDecisionQueryService(private val jdbc: JdbcTemplate) {
             """SELECT l.id, l.created_at, l.account_type, l.stock_id, s.symbol, s.name, l.side, l.quantity, l.blocked_by,
                       (SELECT c->>'detail' FROM jsonb_array_elements(l.checks_json) c WHERE c->>'rule' = l.blocked_by LIMIT 1) AS detail
                FROM risk_check_logs l LEFT JOIN stocks s ON s.id = l.stock_id
-               WHERE l.user_id = ? AND l.approved = false
+               WHERE l.user_id = ? AND l.approved = false AND l.dry_run = false
                ORDER BY l.created_at DESC, l.id DESC
                LIMIT ? OFFSET ?""",
             { rs, _ ->
@@ -69,7 +69,7 @@ class RiskDecisionQueryService(private val jdbc: JdbcTemplate) {
     fun summary(userId: Long): RiskDecisionSummary {
         val monthStart = clock.instant().atZone(KST).toLocalDate().withDayOfMonth(1).atStartOfDay(KST).toInstant()
         val count = jdbc.query(
-            "SELECT COUNT(*) FROM risk_check_logs WHERE user_id = ? AND approved = false AND created_at >= ?",
+            "SELECT COUNT(*) FROM risk_check_logs WHERE user_id = ? AND approved = false AND dry_run = false AND created_at >= ?",
             { rs, _ -> rs.getLong(1) },
             userId, Timestamp.from(monthStart),
         ).firstOrNull() ?: 0L

@@ -1,5 +1,6 @@
 package com.monticker.api.matching.api
 
+import com.monticker.api.common.aop.RateLimited
 import com.monticker.api.risk.application.RiskCheckResult
 import com.monticker.api.risk.application.RiskCheckerService
 import com.monticker.api.risk.application.PendingLimitChange
@@ -102,9 +103,16 @@ class RiskController(
     fun updateRiskLimits(@RequestBody req: UpdateRiskLimitsRequest): ResponseEntity<RiskLimitsDto> =
         ResponseEntity.ok(limitService.update(userId(), req.changes()).toDto())
 
+    /**
+     * 사전 점검 — 주문 없이 게이트만 돌린다. 판정·감사 비용이 주문과 같으므로 호출 수를 제한하고, side·수량은 감사 행·메트릭
+     * 라벨이 되기 전에 여기서 거부한다(보안 리뷰 2026-10). 감사 기록은 dry_run으로 남아 차단 기록·집계에 섞이지 않는다.
+     */
+    @RateLimited(limit = 30, windowSec = 60, keyPrefix = "risk.dryrun")
     @PostMapping("/check")
     fun dryRunCheck(@RequestBody req: DryRunCheckRequest): ResponseEntity<RiskCheckResult> {
-        val result = riskChecker.check(userId(), req.stockId, req.side, req.quantity, req.estimatedPrice)
+        require(req.side == "BUY" || req.side == "SELL") { "side는 BUY 또는 SELL이어야 합니다." }
+        require(req.quantity > 0) { "수량은 0보다 커야 합니다." }
+        val result = riskChecker.dryRun(userId(), req.stockId, req.side, req.quantity, req.estimatedPrice)
         return ResponseEntity.ok(result)
     }
 

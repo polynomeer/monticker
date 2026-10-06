@@ -48,4 +48,17 @@ class RiskDecisionQueryServiceTest {
         assertThat(s.blockedThisMonth).isEqualTo(4L)
         assertThat(s.monthStart).isEqualTo(Instant.parse("2026-09-30T15:00:00Z")) // 10-01 00:00 KST
     }
+
+    // 보안 리뷰 — 설정 화면의 사전 점검(POST /api/risk/check)은 주문이 아니다. 차단 기록·이번 달 차단 수에 넣지 않는다.
+    @Test
+    fun `사전 점검(dry run)은 차단 기록과 이번 달 차단 수에서 뺀다`() {
+        every { jdbc.query(any<String>(), any<RowMapper<RiskDecision>>(), *anyVararg()) } returns emptyList()
+        every { jdbc.query(match<String> { it.contains("COUNT(*)") }, any<RowMapper<Long>>(), 9L, any<Timestamp>()) } returns listOf(0L)
+
+        service.blocked(9L, 0, 20)
+        service.summary(9L)
+
+        verify { jdbc.query(match<String> { it.contains("approved = false") && it.contains("dry_run = false") }, any<RowMapper<RiskDecision>>(), *anyVararg()) }
+        verify { jdbc.query(match<String> { it.contains("COUNT(*)") && it.contains("dry_run = false") }, any<RowMapper<Long>>(), 9L, any<Timestamp>()) }
+    }
 }
