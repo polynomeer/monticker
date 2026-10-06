@@ -381,7 +381,7 @@ export default function RebalancePage() {
 
           <div className="flex flex-col gap-2 px-1.5 pt-1">
             {fromAnalytics && isDirty && (
-              <Notice tone="warn">포트폴리오 분석 화면의 추천 비중을 초안으로 채웠습니다. 아직 저장되지 않았고 주문도 나가지 않았습니다 — 비중을 확인한 뒤 저장하고, 괴리 미리보기와 실행 확인을 거쳐야 실제 주문이 제출됩니다.</Notice>
+              <Notice tone="warn">포트폴리오 분석 화면의 분석 결과 비중을 초안으로 채웠습니다. 아직 저장되지 않았고 주문도 나가지 않았습니다 — 비중을 확인한 뒤 저장하고, 괴리 미리보기와 실행 확인을 거쳐야 실제 주문이 제출됩니다.</Notice>
             )}
             {optimizeError && <Notice tone="danger">{optimizeError}</Notice>}
             {optimizeInfo && optimizeInfo.suggestion && <Notice tone="info">{optimizeInfo.suggestion}</Notice>}

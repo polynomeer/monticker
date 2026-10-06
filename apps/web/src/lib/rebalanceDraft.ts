@@ -1,4 +1,4 @@
-// /analytics → /brokerage/rebalance 로 추천 비중을 "초안"으로 넘기는 통로.
+// /analytics → /brokerage/rebalance 로 분석 결과 비중을 "초안"으로 넘기는 통로.
 //
 // 실거래 화면이라 서버에 아무것도 저장하지 않는다. 같은 탭의 sessionStorage에 한 번만 읽히는
 // 초안을 두고, 리밸런싱 화면은 이것을 편집 중(저장 안 됨) 상태로 채우기만 한다. 목표 비중 저장·

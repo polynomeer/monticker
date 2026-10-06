@@ -87,7 +87,7 @@ function StockTabs({ value, onChange }: { value: number; onChange: (id: number) 
   );
 }
 
-// ── 1. Portfolio Optimizer — 효율적 프론티어 + 추천 비중 ─────────────────────
+// ── 1. Portfolio Optimizer — 효율적 프론티어 + 분석 결과 비중 ─────────────────────
 
 function usePortfolioOptimizer(selected: number[]) {
   const opt = useQuery<OptimizationResult>({
@@ -305,7 +305,7 @@ export default function AnalyticsPage() {
 
   const run = () => { opt.refetch(); frontier.refetch(); };
 
-  // 추천 비중을 리밸런싱 화면에 "편집 중 초안"으로 넘긴다. 서버에는 아무것도 저장하지 않는다 —
+  // 분석 결과 비중을 리밸런싱 화면에 "편집 중 초안"으로 넘긴다. 서버에는 아무것도 저장하지 않는다 —
   // 목표 저장·미리보기·실행 확인은 리밸런싱 화면에서 사용자가 직접 한다.
   const router = useRouter();
   const [sendError, setSendError] = useState<string | null>(null);
@@ -407,7 +407,7 @@ export default function AnalyticsPage() {
           )}
         </Panel>
 
-        <Panel tabs={["추천 비중"]} actions={[]} closable={false} className="flex-[1_1_360px]">
+        <Panel tabs={["분석 결과 비중"]} actions={[]} closable={false} className="flex-[1_1_360px]">
           <AutoGrid min={100}>
             <Stat big label="기대 수익률 (연)" value={data ? pct(data.expectedReturn) : "—"} valueClassName={!data ? "text-tm-muted" : data.expectedReturn >= 0 ? "text-up" : "text-down"} />
             <Stat big label="예상 위험" value={data ? pct(data.expectedRisk) : "—"} valueClassName={data ? undefined : "text-tm-muted"} />
@@ -429,11 +429,11 @@ export default function AnalyticsPage() {
               })}
             </div>
           ) : (
-            <p className="m-0 py-4 text-center text-13 text-tm-muted">최적 비중을 계산하면 종목별 추천 비중이 표시됩니다.</p>
+            <p className="m-0 py-4 text-center text-13 text-tm-muted">최적 비중을 계산하면 종목별 분석 결과 비중이 표시됩니다.</p>
           )}
           {data?.suggestion && <Notice tone="info">{data.suggestion}</Notice>}
-          <Btn full onClick={sendToRebalance} disabled={!data || sending} title={data ? "추천 비중을 리밸런싱 화면에 초안으로 채웁니다 — 저장·실행은 그 화면에서 직접" : "먼저 최적 비중을 계산하세요"}>
-            {sending ? "넘기는 중..." : "리밸런싱으로 보내기"}
+          <Btn full onClick={sendToRebalance} disabled={!data || sending} title={data ? "분석 결과 비중을 리밸런싱 화면에 초안으로 채웁니다 — 저장·실행은 그 화면에서 직접" : "먼저 최적 비중을 계산하세요"}>
+            {sending ? "넘기는 중..." : "분석 비중을 리밸런싱 초안으로"}
           </Btn>
           {sendError && <Notice tone="danger">{sendError}</Notice>}
           <span className="text-2xs text-tm-muted">실전 계좌 리밸런싱 화면에 초안으로만 채웁니다. 목표 저장과 주문 실행은 그 화면에서 직접 확인해야 하며, 자동으로 주문하지 않습니다.</span>
