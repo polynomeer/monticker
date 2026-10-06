@@ -59,7 +59,7 @@ export default function SignupPage() {
     setErrors({});
     setLoading(true);
     try {
-      // 동의 항목은 아직 서버에 기록되지 않는다(SignupRequest에 필드 없음) — 화면에서 필수 동의만 막는다.
+      // ADR-068 — 체크한 동의 항목을 함께 보낸다. 필수가 빠지면 서버도 400으로 거부한다.
       const codes: Record<ConsentKey, SignupConsent> = { terms: "TERMS", privacy: "PRIVACY", age: "AGE_OVER_19", marketing: "MARKETING" };
       const tokens = await signup(email, password, nickname, (Object.keys(codes) as ConsentKey[]).filter((k) => consent[k]).map((k) => codes[k]));
       saveTokens(tokens);
