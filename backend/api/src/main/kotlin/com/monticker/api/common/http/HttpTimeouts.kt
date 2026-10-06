@@ -1,5 +1,13 @@
 package com.monticker.api.common.http
 
+import org.springframework.http.HttpMethod
+import org.springframework.http.client.ClientHttpRequest
+import org.springframework.http.client.ClientHttpRequestFactory
+import org.springframework.http.client.ClientHttpResponse
+import java.net.URI
+import java.net.http.HttpTimeoutException
+import java.util.concurrent.CancellationException
+
 import org.springframework.http.client.JdkClientHttpRequestFactory
 import java.net.http.HttpClient
 import java.time.Duration
@@ -27,8 +35,29 @@ object HttpTimeouts {
     val INTERNAL_READ: Duration = Duration.ofSeconds(5)
 
     /** RestClient / RestTemplate 용. 호출부마다 factory를 직접 만들면 하나씩 빠뜨린다. */
-    fun requestFactory(read: Duration): JdkClientHttpRequestFactory =
-        JdkClientHttpRequestFactory(
-            HttpClient.newBuilder().connectTimeout(CONNECT).build()
-        ).apply { setReadTimeout(read) }
+    fun requestFactory(read: Duration): ClientHttpRequestFactory =
+        TimeoutAsIoFactory(
+            JdkClientHttpRequestFactory(
+                HttpClient.newBuilder().connectTimeout(CONNECT).build()
+            ).apply { setReadTimeout(read) }
+        )
+
+    /**
+     * Spring 6.2의 JDK 클라이언트는 read 타임아웃 때 응답 future를 취소하는데, 타이밍에 따라 `CancellationException`이 그대로
+     * 새어 나온다(CI에서 간헐 재현). IOException이 아니면 RestClient가 `ResourceAccessException`으로 감싸지 않아, 브로커 호출을
+     * "통신 실패"로 분류하는 쪽(결과 불명 판정, 서킷브레이커 집계)이 예상하지 못한 예외를 받는다. 타임아웃은 항상 IOException으로 낸다.
+     */
+    internal class TimeoutAsIoFactory(private val delegate: ClientHttpRequestFactory) : ClientHttpRequestFactory {
+        override fun createRequest(uri: URI, httpMethod: HttpMethod): ClientHttpRequest {
+            val request = delegate.createRequest(uri, httpMethod)
+            return object : ClientHttpRequest by request {
+                override fun execute(): ClientHttpResponse =
+                    try {
+                        request.execute()
+                    } catch (e: CancellationException) {
+                        throw HttpTimeoutException("응답 대기 시간 초과: $httpMethod $uri").apply { initCause(e) }
+                    }
+            }
+        }
+    }
 }

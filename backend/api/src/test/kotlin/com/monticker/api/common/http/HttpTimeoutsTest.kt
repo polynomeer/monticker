@@ -55,4 +55,20 @@ class HttpTimeoutsTest {
         assertThat(HttpTimeouts.BROKER_READ).isGreaterThan(Duration.ofSeconds(3))
         assertThat(HttpTimeouts.CONNECT).isLessThanOrEqualTo(Duration.ofSeconds(3))
     }
+
+    @Test
+    fun `a cancelled response future surfaces as an IOException timeout`() {
+        val request = io.mockk.mockk<org.springframework.http.client.ClientHttpRequest>()
+        io.mockk.every { request.execute() } throws java.util.concurrent.CancellationException()
+        val delegate = io.mockk.mockk<org.springframework.http.client.ClientHttpRequestFactory> {
+            io.mockk.every { createRequest(any(), any()) } returns request
+        }
+
+        val wrapped = HttpTimeouts.TimeoutAsIoFactory(delegate)
+            .createRequest(java.net.URI("http://broker/order"), org.springframework.http.HttpMethod.POST)
+
+        assertThatThrownBy { wrapped.execute() }
+            .isInstanceOf(java.net.http.HttpTimeoutException::class.java)
+            .isInstanceOf(java.io.IOException::class.java)
+    }
 }
