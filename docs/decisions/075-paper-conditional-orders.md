@@ -73,6 +73,12 @@ POST /api/paper/orders {…, takeProfitPrice?, stopLossPrice?}   ← 주문 패�
   3초마다 반복하는 것보다 낫다고 판단했다.
 - 실전 화면의 조건부 주문(`/brokerage/conditional-orders`)과 모의 조건부 주문은 화면에서도 계좌 표시(모의/실전)로 구분한다.
 
+## Note (2026-10 보안 리뷰 후속)
+
+- 발동 판정은 최신 1분봉이 5분(`CandleFreshness.MAX_AGE`) 이내일 때만 한다. 시세가 끊긴 동안의 마지막 봉으로 손절·익절이
+  발동하지 않도록 그 주기를 건너뛴다(ADR-074 Note와 같은 기준).
+- 발동 주문의 리스크 게이트(@RiskChecked)는 이제 미체결 모의 지정가 매수도 노출로 센다(ADR-074 Note).
+
 ## Revisit When
 
 - 모의투자에도 틱 단위 반응성이 필요해질 때(예: 장중 대회) — B1로 옮긴다.
