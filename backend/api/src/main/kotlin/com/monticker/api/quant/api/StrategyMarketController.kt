@@ -43,8 +43,9 @@ class StrategyMarketController(
 
         val rows = jdbc.queryForList(
             // ADR-035 — price가 빠져 있으면 구매자가 얼마가 청구될지 모른 채 구독을 누르게 된다.
+            // 작성자는 닉네임으로만 표시한다 — 이 목록은 비로그인에도 열려 있고, 이메일은 로그인 ID다(보안 리뷰 2026-10).
             """SELECT sm.id, sm.ruleset_id, sm.description, sm.price, sm.subscribe_count, sm.created_at,
-                      u.email AS author_email
+                      u.nickname AS author_nickname
                FROM strategy_market sm
                JOIN users u ON u.id = sm.user_id
                ORDER BY sm.subscribe_count DESC, sm.created_at DESC

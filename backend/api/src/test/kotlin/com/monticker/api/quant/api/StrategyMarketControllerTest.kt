@@ -85,7 +85,7 @@ class StrategyMarketControllerTest {
 
     private fun stubListRows(marketId: Long = 1L) {
         every { jdbc.queryForList(match<String> { it.contains("FROM strategy_market") }, any<Int>(), any<Int>()) } returns listOf(
-            linkedMapOf<String, Any?>("id" to marketId, "ruleset_id" to "rs1", "description" to null, "price" to BigDecimal("5000"), "subscribe_count" to 3, "created_at" to null, "author_email" to "a@b.com")
+            linkedMapOf<String, Any?>("id" to marketId, "ruleset_id" to "rs1", "description" to null, "price" to BigDecimal("5000"), "subscribe_count" to 3, "created_at" to null, "author_nickname" to "작성자")
         )
         every { ruleSetRepository.findAllById(listOf("rs1")) } returns listOf(doc(1L, RuleSetStatus.BACKTESTED.name))
         every { performanceQuery.summarize(listOf("rs1")) } returns mapOf(
@@ -144,5 +144,17 @@ class StrategyMarketControllerTest {
 
         assertThrows<IllegalArgumentException> { controller.share("Bearer token", StrategyShareRequest(rulesetId = "rs1", price = BigDecimal("-1"))) }
         assertThrows<IllegalArgumentException> { controller.share("Bearer token", StrategyShareRequest(rulesetId = "rs1", price = BigDecimal("100.5"))) }
+    }
+
+    // 보안 리뷰 — 마켓 목록은 비로그인에도 열려 있다. 작성자 이메일(로그인 ID)을 내보내지 않고 닉네임만 싣는다.
+    @Test
+    fun `list exposes the author nickname, never the email`() {
+        stubListRows()
+
+        controller.list(auth = null, page = 0, size = 20)
+
+        verify {
+            jdbc.queryForList(match<String> { it.contains("FROM strategy_market") && !it.contains("email") && it.contains("u.nickname AS author_nickname") }, any<Int>(), any<Int>())
+        }
     }
 }
