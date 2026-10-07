@@ -160,7 +160,7 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 
 | 트랙 | 상태 | PR | 비고 |
 |---|---|---|---|
-| (선행) web React 19.3 | PR 열림 | #129 | #121·#122를 대체. 모바일은 18 유지 |
-| (선행) react-query packageExtensions 범위화 | #117에 포함 | #117 | 고정 버전 키 때문에 타입 검사가 깨졌던 것 |
-| (선행) dependabot ignore·groups | PR 열림 | 이 문서와 같은 PR | §5 |
+| (선행) web React 19.3 | 완료 | #129 | #121·#122를 대체. 모바일은 18 유지 |
+| (선행) react-query packageExtensions 범위화 | 완료 | #117 | 고정 버전 키 때문에 타입 검사가 깨졌던 것 |
+| (선행) dependabot ignore·groups | 완료 | #130 | §5 |
 | B1~B4, W1~W3, M1 | 시작 전 | — | |
