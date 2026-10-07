@@ -389,7 +389,7 @@ NoSuchElementException(<없는 경우와 같은 메시지>)`. 행 락 조회(`fi
   존재 여부가 비밀이 아니다. 그대로 둔다.
 - `MarketSignalQueryService.strategyHistory` — 구독하지 않은 마켓 전략의 신호 이력은 403. 마켓 등록 전략은 목록 API로 공개돼
   있어 존재 여부가 비밀이 아니고, 403은 "구독 필요"라는 권한 안내다. 그대로 둔다.
-- `EmotionTagService`는 위 H5(PR #95)에서 고쳤다. `ReceiptService`(H5 "남은 것")는 PR #96에서 고친다.
+- `EmotionTagService`는 위 H5(PR #95)에서 고쳤다. `ReceiptService`(H5 "남은 것")는 PR #96에서 고쳤다.
 - 위 패턴(`require(x.userId == userId)`)을 새로 쓰지 않도록 막는 정적 검사는 아직 없다. 새 소유 리소스 엔드포인트는
   `findByIdAndUserId`/`WHERE ... AND user_id = ?` 또는 위 `takeIf` 형태로 쓴다.
 
