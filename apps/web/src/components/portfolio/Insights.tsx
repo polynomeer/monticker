@@ -4,8 +4,11 @@ import { useMemo } from "react";
 import type { Holding } from "@/hooks/usePaperTrade";
 import { Donut, Notice, dirClass, fmtSigned } from "@/components/terminal";
 import StockChart from "@/components/stock/chart/StockChart";
-import type { EventMarker, IndicatorKey, OrderLine } from "@/components/stock/chart/types";
+import type { EventMarker, IndicatorKey, OrderLine, TradeMarker } from "@/components/stock/chart/types";
+import { bucketOf } from "@/components/stock/chart/tradeMarkers";
 import { useStockChart } from "@/hooks/useStockChart";
+import { usePaperFills } from "@/hooks/usePaperFills";
+import type { TradeHistory } from "@/hooks/usePaperTrade";
 import type { StockMeta } from "./useStockMeta";
 import { EmptyNote, Skeleton } from "./PaperStates";
 
@@ -98,9 +101,25 @@ export function SectorConcentration({ holdings, cash, meta }: { holdings: Holdin
 const NO_EVENTS: EventMarker[] = [];
 const NO_INDICATORS: IndicatorKey[] = [];
 
-/** 보유 종목 일봉 위에 내 평균단가를 가로선으로 겹친다(기존 ECharts 어댑터의 주문선 기능). */
+/** 한 종목의 모의 체결을 차트 거래 마커로 바꾼다. 시각을 읽을 수 없는 행은 버린다. */
+export function fillsToTradeMarkers(fills: TradeHistory[], stockId: number): TradeMarker[] {
+  return fills
+    .filter((f) => f.stockId === stockId && (f.side === "BUY" || f.side === "SELL"))
+    .map((f) => ({ id: f.id, time: Math.floor(Date.parse(f.tradedAt) / 1000), side: f.side as "BUY" | "SELL", price: Number(f.price), qty: Number(f.quantity) }))
+    .filter((t) => Number.isFinite(t.time));
+}
+
+/** 보유 종목 일봉 위에 내 평균단가를 가로선으로, 내 모의 체결을 매수▲·매도▼ 마커로 겹친다. */
 export function AvgPriceOverlay({ holding }: { holding: Holding | null }) {
   const { candles, loading } = useStockChart(holding?.stockId ?? null, "1d");
+  const { data: fillData } = usePaperFills(!!holding);
+  const stockId = holding?.stockId;
+  const trades = useMemo(
+    () => (fillData && stockId != null ? fillsToTradeMarkers(fillData.fills, stockId) : []),
+    [fillData, stockId],
+  );
+  const firstCandle = candles[0]?.time;
+  const outOfRange = firstCandle == null ? 0 : trades.filter((t) => bucketOf(t.time, "1d") < bucketOf(firstCandle, "1d")).length;
   const avg = holding?.avgPrice;
   // 포트폴리오는 5초마다 새 객체로 오므로 평균단가 값이 바뀔 때만 선을 새로 만든다(차트 재생성 방지)
   const lines: OrderLine[] = useMemo(
@@ -110,8 +129,17 @@ export function AvgPriceOverlay({ holding }: { holding: Holding | null }) {
   if (!holding) return <EmptyNote>보유 종목을 고르면 평균단가선을 겹쳐 보여 줍니다.</EmptyNote>;
   if (loading && candles.length === 0) return <Skeleton className="h-[230px]" />;
   return (
-    <div className="overflow-hidden rounded-lg">
-      <StockChart candles={candles} events={NO_EVENTS} height={230} orderLines={lines} enabledIndicators={NO_INDICATORS} />
-    </div>
+    <>
+      <div className="overflow-hidden rounded-lg">
+        <StockChart candles={candles} events={NO_EVENTS} height={230} orderLines={lines} trades={trades} interval="1d" enabledIndicators={NO_INDICATORS} />
+      </div>
+      {(outOfRange > 0 || fillData?.truncated) && (
+        <span className="text-2xs text-tm-muted">
+          {outOfRange > 0 && `차트 구간 이전 체결 ${outOfRange}건은 표시하지 않음`}
+          {outOfRange > 0 && fillData?.truncated && " · "}
+          {fillData?.truncated && "최근 500건 체결까지만 표시"}
+        </span>
+      )}
+    </>
   );
 }
