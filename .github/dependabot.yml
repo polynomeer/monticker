@@ -67,8 +67,6 @@ updates:
       jjwt:
         patterns: ["io.jsonwebtoken:*"]
     ignore:
-      - dependency-name: "io.jsonwebtoken:*"              # B3 — 0.x라 minor가 breaking이다
-        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "org.springframework.boot"       # B4
         update-types: ["version-update:semver-major"]
       - dependency-name: "io.spring.dependency-management" # B4
@@ -91,8 +89,6 @@ updates:
       jjwt:
         patterns: ["io.jsonwebtoken:*"]
     ignore:
-      - dependency-name: "io.jsonwebtoken:*"              # B3 — 0.x라 minor가 breaking이다
-        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "org.springframework.boot"       # B4
         update-types: ["version-update:semver-major"]
       - dependency-name: "io.spring.dependency-management" # B4
