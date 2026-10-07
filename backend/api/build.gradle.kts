@@ -1,9 +1,9 @@
 plugins {
-	kotlin("jvm") version "1.9.25"
-	kotlin("plugin.spring") version "1.9.25"
+	kotlin("jvm") version "2.3.21"
+	kotlin("plugin.spring") version "2.3.21"
 	id("org.springframework.boot") version "3.5.16"
 	id("io.spring.dependency-management") version "1.1.7"
-	kotlin("plugin.jpa") version "1.9.25"
+	kotlin("plugin.jpa") version "2.3.21"
 }
 
 // Spring Modulith BOM
@@ -108,7 +108,12 @@ val integrationTest = tasks.register<Test>("integrationTest") {
 
 kotlin {
 	compilerOptions {
-		freeCompilerArgs.addAll("-Xjsr305=strict")
+		freeCompilerArgs.addAll(
+			"-Xjsr305=strict",
+			// K2(2.2+)는 생성자 프로퍼티 파라미터의 어노테이션(@Value·@Qualifier·@JsonProperty 등)이 앞으로 필드에도
+			// 붙는다고 경고한다. Kotlin 1.9와 같은 동작(파라미터에만)을 명시해 고정한다 — 바꾸려면 별도 PR로 영향부터 본다.
+			"-Xannotation-default-target=first-only",
+		)
 	}
 }
 
