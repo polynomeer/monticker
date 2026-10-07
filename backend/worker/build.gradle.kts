@@ -53,7 +53,7 @@ dependencies {
 	implementation("org.flywaydb:flyway-database-postgresql")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	implementation("com.google.guava:guava:33.7.2-jre")
-	implementation("com.anthropic:anthropic-java:2.34.0")
+	implementation("com.anthropic:anthropic-java:2.68.0")
 	implementation("org.springframework.boot:spring-boot-starter-mail")
 	runtimeOnly("org.postgresql:postgresql")
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
