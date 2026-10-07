@@ -425,6 +425,14 @@ CREATE TABLE simulation_trades (
 [ADR-047](decisions/047-single-execution-path-for-paper-account.md): `paper_trades`는 계좌의 실행 기록이고 매칭 엔진 체결
 (`fills`)과 `fill_id`(UNIQUE, nullable)로 1:1 링크된다. ADR-047 이전 구 페이퍼 경로의 거래는 NULL.
 
+### orders.origin · paper_trades.origin (V81·V82 — done)
+
+[ADR-085](decisions/085-paper-order-entry-origin.md): 진입 출처 `origin VARCHAR(20)`(CHECK: `MANUAL`·`WATCH_RULE`·`CONDITIONAL`·`STRATEGY`)과
+`origin_ref BIGINT`(규칙 id·조건부 주문 id·룰셋 id, FK 없음)를 `orders`와 `paper_trades` 둘 다에 둔다. 서버 제출 경로가 정하고
+체결이 주문의 값을 복사한다. NULL = 판정 불가(V82가 서버 링크로 증명하지 못한 과거 행). 인덱스
+`(user_id, origin, origin_ref) WHERE origin IS NOT NULL AND origin <> 'MANUAL'`.
+`order_emotion_tags.emotion`은 CHECK 없는 VARCHAR(30)이라 `PLANNED`·`IMPATIENT` 추가에 스키마 변경이 없다(V82가 데이터만 이관).
+
 ### ledger_events
 
 모든 잔고 변화의 append-only 원장. ~~잔고는 이벤트를 replay해서 계산한다.~~ **잔고의 authoritative
