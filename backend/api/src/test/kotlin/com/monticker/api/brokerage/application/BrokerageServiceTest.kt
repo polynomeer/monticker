@@ -304,6 +304,41 @@ class BrokerageServiceTest {
         }
     }
 
+    private fun othersOrder() = BrokerageOrder(
+        id = 1L, userId = 2L, accountId = 9L, symbol = "005930",
+        side = OrderSide.BUY, orderType = OrderType.MARKET, quantity = 10,
+        status = BrokerageOrderStatus.SUBMITTED, pgOrderId = "KIS999", brokerOrderRef = "00950",
+    )
+
+    @Test
+    fun `남의 주문 취소는 없는 주문과 똑같이 응답하고 증권사를 부르지 않는다`() {
+        val order = othersOrder()
+        val fakeClient = mockk<BrokerageClient>()
+        stubCancel(order, makeAccount())
+        val othersError = runCatching { serviceWithFakeClient(fakeClient).cancelOrder(userId = 1L, orderId = 1L) }.exceptionOrNull()
+
+        every { orderRepo.findWithLockById(1L) } returns null
+        val missingError = runCatching { serviceWithFakeClient(fakeClient).cancelOrder(userId = 1L, orderId = 1L) }.exceptionOrNull()
+
+        // 같은 예외·같은 메시지(→ 같은 404)여야 주문 id 존재 여부를 열거할 수 없다
+        assertThat(othersError).isInstanceOf(NoSuchElementException::class.java)
+        assertThat(othersError!!.message).isEqualTo(missingError!!.message)
+        assertThat(order.status).isEqualTo(BrokerageOrderStatus.SUBMITTED)
+        verify(exactly = 0) { fakeClient.cancelOrder(any(), any(), any()) }
+    }
+
+    @Test
+    fun `남의 주문 상태 동기화는 없는 주문과 똑같이 응답한다`() {
+        every { orderRepo.findById(1L) } returns Optional.of(othersOrder())
+        val othersError = runCatching { service.syncOrderStatus(userId = 1L, orderId = 1L) }.exceptionOrNull()
+
+        every { orderRepo.findById(1L) } returns Optional.empty()
+        val missingError = runCatching { service.syncOrderStatus(userId = 1L, orderId = 1L) }.exceptionOrNull()
+
+        assertThat(othersError).isInstanceOf(NoSuchElementException::class.java)
+        assertThat(othersError!!.message).isEqualTo(missingError!!.message)
+    }
+
     @Test
     fun `취소 — 잔량 취소 전에 일부가 체결됐으면 체결분만 FILLED와 정산으로 남긴다(2026-10 리뷰)`() {
         val order = makeOrder(status = BrokerageOrderStatus.SUBMITTED, pgOrderId = "KIS123", brokerOrderRef = "00950")

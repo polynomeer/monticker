@@ -381,8 +381,9 @@ class BrokerageService(
     // 읽어야 한다. 바깥 트랜잭션이 있으면 영속성 컨텍스트가 대조 전 엔티티를 캐시해 해소 전 상태를 돌려주고, 요청 하나가
     // 커넥션 두 개를 잡는다.
     fun syncOrderStatus(userId: Long, orderId: Long): BrokerageOrder {
-        val order   = orderRepo.findById(orderId).orElseThrow { NoSuchElementException("주문 없음: $orderId") }
-        require(order.userId == userId) { "접근 권한 없음" }
+        // 남의 주문은 없는 주문과 같은 404 — 400/403으로 구분하면 주문 id 존재 여부를 열거할 수 있다
+        val order   = orderRepo.findById(orderId).orElse(null)?.takeIf { it.userId == userId }
+            ?: throw NoSuchElementException("주문 없음: $orderId")
 
         if (order.status in listOf(BrokerageOrderStatus.FILLED, BrokerageOrderStatus.CANCELLED, BrokerageOrderStatus.REJECTED)) {
             return order
@@ -610,8 +611,8 @@ class BrokerageService(
         val account = getAccount(userId)
         val credentials = credentialsFor(account.id)
         return requiresNew.execute {
-            val order = orderRepo.findWithLockById(orderId) ?: throw NoSuchElementException("주문 없음: $orderId")
-            require(order.userId == userId) { "접근 권한 없음" }
+            val order = orderRepo.findWithLockById(orderId)?.takeIf { it.userId == userId }
+                ?: throw NoSuchElementException("주문 없음: $orderId")   // 남의 주문도 같은 404(id 열거 방지)
             require(order.status == BrokerageOrderStatus.SUBMITTED) { "취소 불가 상태: ${order.status}" }
 
             val client = clientRegistry.get(account.provider)
