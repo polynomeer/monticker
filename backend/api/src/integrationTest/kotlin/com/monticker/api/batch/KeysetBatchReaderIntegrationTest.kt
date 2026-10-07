@@ -3,6 +3,7 @@ package com.monticker.api.batch
 import com.monticker.api.brokerage.domain.BrokerageSettlement
 import com.monticker.api.brokerage.infrastructure.BrokerageSettlementRepository
 import com.monticker.api.paper.domain.PaperSettlement
+import com.monticker.api.paper.domain.PaperTrade
 import com.monticker.api.paper.infrastructure.PaperSettlementRepository
 import com.monticker.api.subscription.domain.PaymentRecord
 import com.monticker.api.subscription.domain.PaymentStatus
@@ -45,6 +46,7 @@ class KeysetBatchReaderIntegrationTest : PostgresIntegrationTest() {
         jdbcTemplate.execute("SELECT 1")   // lazy dataSource → Flyway 먼저
         sessionFactory = Configuration()
             .addAnnotatedClass(PaperSettlement::class.java)
+            .addAnnotatedClass(PaperTrade::class.java)   // findUpcomingPendingDates(ADR-086)가 체결 시각을 조인해 읽는다
             .addAnnotatedClass(BrokerageSettlement::class.java)
             .addAnnotatedClass(PaymentRecord::class.java)
             .addAnnotatedClass(UserSubscription::class.java)
