@@ -2,7 +2,7 @@
 
 monticker 백엔드에 적용된 ES 인덱스·API·파이프라인 레퍼런스.
 
-- **ES 버전**: 8.13.4
+- **ES 버전**: 8.18.1 — api·worker의 `elasticsearch-java` 클라이언트(Spring Boot BOM) 버전과 맞춘다. 서버가 더 낮으면 응답 해석이 깨진다(8.13.4에서 health 체크가 항상 DOWN)
 - **Spring Data ES**: 5.x
 - **분석기**: nori_analyzer (한국어 형태소)
 - **인덱스**: 6개 · **도메인**: 8개 · **신규 API**: 14개

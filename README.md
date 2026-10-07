@@ -209,17 +209,20 @@ POST /api/matching/orders
 git clone git@github.com:polynomeer/monticker.git
 cd monticker
 cp .env.example .env        # 외부 API 키 없이도 Mock으로 동작합니다
-./dev.sh
+scripts/dev/up.sh
 ```
 
-`dev.sh`는 Docker 인프라 → API(8080) → Worker(8081) → Web(3000)을 순서대로 띄우고 헬스체크가 통과할 때까지 기다린 뒤 접속 URL을 출력합니다. 포트가 점유되어 있으면 자동으로 다음 빈 포트로 우회합니다. `Ctrl+C`로 전부 정리됩니다.
+`scripts/dev/up.sh`는 Docker 인프라 → API(8080) → Worker(8081) → Web(3000)을 순서대로 띄우고 헬스체크가 통과할 때까지 기다린 뒤 접속 URL을 출력합니다. 포트가 점유되어 있으면 자동으로 다음 빈 포트로 우회합니다. `Ctrl+C`로 전부 정리됩니다.
 
 | 옵션 | 동작 |
 |------|------|
-| `./dev.sh` | 기본 — API + Worker(MockPriceGenerator) + Web. 외부 키 불필요 |
-| `./dev.sh --kafka` | Kafka + Go market-gateway 추가. 실제 시세 파이프라인 경로(Go → Kafka → Worker)로 동작 |
-| `./dev.sh --msa` | `--kafka` + 워커를 market/event/alert 역할로 분리 |
-| `./dev.sh --pinpoint` | Pinpoint APM 포함(HBase 초기화 2~3분) |
+| `scripts/dev/up.sh` | 기본 — API + Worker(MockPriceGenerator) + Web. 외부 키 불필요 |
+| `scripts/dev/up.sh --kafka` | Kafka + Go market-gateway 추가. 실제 시세 파이프라인 경로(Go → Kafka → Worker)로 동작 |
+| `scripts/dev/up.sh --msa` | `--kafka` + 워커를 market/event/alert 역할로 분리 |
+| `scripts/dev/up.sh --pinpoint` | Pinpoint APM 포함(HBase 초기화 2~3분) |
+
+같은 기능을 `make dev` · `make dev-kafka` · `make dev-msa`로도 부를 수 있습니다. 다른 터미널에서 상태 확인은 `make dev-status`, 정리는 `make dev-down`,
+기동 전 환경 점검은 `make doctor`. 전체 목록은 [scripts/README.md](scripts/README.md).
 
 접속:
 
@@ -244,7 +247,7 @@ cd backend/worker && ./gradlew bootRun                # 터미널 2
 make web-install && make web-dev                      # 터미널 3 — pnpm --filter @monticker/web dev
 ```
 
-> `ALLOW_INSECURE_DEV_SECRETS=true`가 없으면 API는 git에 커밋된 개발용 JWT/암호화 키를 감지하고 **기동을 거부**합니다(`InsecureSecretGuard`). `dev.sh`와 `docker-compose.yml`은 이 값을 자동으로 넣어주지만, 프로덕션에서는 절대 설정하지 말고 `JWT_SECRET`·`CREDENTIAL_ENCRYPTION_KEY`를 새로 발급하세요.
+> `ALLOW_INSECURE_DEV_SECRETS=true`가 없으면 API는 git에 커밋된 개발용 JWT/암호화 키를 감지하고 **기동을 거부**합니다(`InsecureSecretGuard`). `scripts/dev/up.sh`와 `docker-compose.yml`은 이 값을 자동으로 넣어주지만, 프로덕션에서는 절대 설정하지 말고 `JWT_SECRET`·`CREDENTIAL_ENCRYPTION_KEY`를 새로 발급하세요.
 
 ### 3) 전부 컨테이너로
 
@@ -348,9 +351,9 @@ monticker/
 ├── docs/                    ← 문서 전체 (아래 문서 지도 참고)
 ├── .github/workflows/       backend-ci · web-ci · e2e-ci · mobile-ci · deploy-images · pr-review
 ├── .claude/                 Claude Code 서브에이전트·설정 (docs/workflow.md)
-├── dev.sh                   원커맨드 로컬 기동 스크립트
+├── scripts/                 로컬 기동(dev/up.sh·down·status·doctor)·CI 검사(check.sh)·백필 — scripts/README.md
 ├── docker-compose.yml       프로파일: (기본) · full · kafka · msa · pinpoint
-├── Makefile                 up / up-full / up-msa / api-run / web-dev / k8s-* / db-backup ...
+├── Makefile                 dev / dev-down / dev-status / check / up-full / k8s-* / db-backup ...
 └── CLAUDE.md                Claude Code 프로젝트 지침 (ADR 규칙, 커밋 컨벤션)
 ```
 

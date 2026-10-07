@@ -32,7 +32,8 @@ class ConditionalOrderEvaluatorTest {
     private val realClient = mockk<com.monticker.api.brokerage.infrastructure.BrokerageClient> { every { movesRealMoney } returns true }
     private val realRegistry = com.monticker.api.brokerage.infrastructure.BrokerageClientRegistry(
         com.monticker.api.brokerage.domain.BrokerageProvider.entries.associateWith { realClient })
-    private val evaluator = ConditionalOrderEvaluator(jdbc, brokerageService, registry, haltService, realRegistry)
+    private val failures = mockk<ConditionalOrderFailures> { every { markFailed(any(), any(), any()) } returns true }
+    private val evaluator = ConditionalOrderEvaluator(jdbc, brokerageService, registry, haltService, realRegistry, failures)
 
     private fun stubActiveRow(
         id: Long = 1L, userId: Long = 1L, symbol: String = "005930", side: String = "SELL",
@@ -118,13 +119,12 @@ class ConditionalOrderEvaluatorTest {
         val groupId = UUID.randomUUID()
         stubActiveRow(ocoGroupId = groupId.toString())
         every { jdbc.update(match<String> { it.contains("SET status = 'TRIGGERED'") }, *anyVararg()) } returns 1
-        every { jdbc.update(match<String> { it.contains("SET status = 'FAILED'") }, *anyVararg()) } returns 1
         every { jdbc.update(match<String> { it.contains("oco_group_id = ?") }, *anyVararg()) } returns 1
         every { brokerageService.submitOrder(1L, any(), any()) } returns makeOrder(100L, BrokerageOrderStatus.REJECTED, "리스크 한도 초과")
 
         evaluator.onTick(tick(stockId = 1L, price = "69000"))
 
-        verify { jdbc.update(match<String> { it.contains("SET status = 'FAILED'") }, "리스크 한도 초과", 100L, any(), 1L) }
+        verify { failures.markFailed(1L, "증권사가 주문을 거부했습니다(리스크 한도 초과)", 100L) }
         verify { jdbc.update(match<String> { it.contains("oco_group_id = ?") }, any(), groupId, 1L) }
     }
 
@@ -132,12 +132,22 @@ class ConditionalOrderEvaluatorTest {
     fun `브로커 호출 자체가 예외를 던지면 FAILED로 기록하고 executed_order_id는 null이다`() {
         stubActiveRow()
         every { jdbc.update(match<String> { it.contains("SET status = 'TRIGGERED'") }, *anyVararg()) } returns 1
-        every { jdbc.update(match<String> { it.contains("SET status = 'FAILED'") }, *anyVararg()) } returns 1
         every { brokerageService.submitOrder(1L, any(), any()) } throws IllegalStateException("리스크 게이트 거부")
 
         evaluator.onTick(tick(stockId = 1L, price = "69000"))
 
-        verify { jdbc.update(match<String> { it.contains("SET status = 'FAILED'") }, "리스크 게이트 거부", null, any(), 1L) }
+        verify { failures.markFailed(1L, "리스크 게이트 거부", null) }
+    }
+
+    @Test
+    fun `결과 불명 주문 중복 가드에 막히면 FAILED로 닫고 막은 주문 번호를 사유에 남긴다`() {
+        stubActiveRow()
+        every { jdbc.update(match<String> { it.contains("SET status = 'TRIGGERED'") }, *anyVararg()) } returns 1
+        every { brokerageService.submitOrder(1L, any(), any()) } throws UnresolvedOrderInProgressException("005930", "SELL", 31L)
+
+        evaluator.onTick(tick(stockId = 1L, price = "69000"))
+
+        verify { failures.markFailed(1L, "증권사 확인 중인 같은 방향 주문(#31)이 있어 새 주문을 낼 수 없었습니다", null) }
     }
 
     // ── ADR-056 — 결과 불명 ──────────────────────────────────────────────────────
@@ -164,7 +174,8 @@ class ConditionalOrderEvaluatorTest {
         evaluator.onTick(tick(stockId = 1L, price = "69000"))
 
         verify { jdbc.update(match<String> { it.contains("SET executed_order_id = ?") }, 100L, any(), 1L) }
-        verify(exactly = 0) { jdbc.update(match<String> { it.contains("SET status = 'FAILED'") || it.contains("SET status = 'EXECUTED'") }, *anyVararg()) }
+        verify(exactly = 0) { jdbc.update(match<String> { it.contains("SET status = 'EXECUTED'") }, *anyVararg()) }
+        verify(exactly = 0) { failures.markFailed(any(), any(), any()) }
     }
 
     @Test
@@ -177,7 +188,7 @@ class ConditionalOrderEvaluatorTest {
         evaluator.onTick(tick(stockId = 1L, price = "69000"))
 
         verify { jdbc.update(match<String> { it.contains("SET executed_order_id = ?") }, 77L, any(), 1L) }
-        verify(exactly = 0) { jdbc.update(match<String> { it.contains("SET status = 'FAILED'") }, *anyVararg()) }
+        verify(exactly = 0) { failures.markFailed(any(), any(), any()) }
     }
 
     // ── ADR-055 — 시세 출처 게이트 ──────────────────────────────────────────────
@@ -263,7 +274,7 @@ class ConditionalOrderEvaluatorTest {
         evaluator.onTick(tick(stockId = 1L, price = "69000"))
 
         verify { jdbc.update(match<String> { it.contains("SET status = 'ACTIVE', triggered_at = NULL") }, any(), 1L) }
-        verify(exactly = 0) { jdbc.update(match<String> { it.contains("SET status = 'FAILED'") }, *anyVararg()) }
+        verify(exactly = 0) { failures.markFailed(any(), any(), any()) }
         verify(exactly = 0) { jdbc.update(match<String> { it.contains("oco_group_id = ?") }, *anyVararg()) }   // OCO 형제도 그대로
     }
 
@@ -274,7 +285,7 @@ class ConditionalOrderEvaluatorTest {
         val mockClient = mockk<com.monticker.api.brokerage.infrastructure.BrokerageClient> { every { movesRealMoney } returns false }
         val mockEvaluator = ConditionalOrderEvaluator(jdbc, brokerageService, registry, haltService,
             com.monticker.api.brokerage.infrastructure.BrokerageClientRegistry(
-                com.monticker.api.brokerage.domain.BrokerageProvider.entries.associateWith { mockClient }))
+                com.monticker.api.brokerage.domain.BrokerageProvider.entries.associateWith { mockClient }), failures)
         stubActiveRow()
         every { jdbc.update(match<String> { it.contains("SET status = 'TRIGGERED'") }, *anyVararg()) } returns 1
         every { jdbc.update(match<String> { it.contains("SET status = 'EXECUTED'") }, *anyVararg()) } returns 1

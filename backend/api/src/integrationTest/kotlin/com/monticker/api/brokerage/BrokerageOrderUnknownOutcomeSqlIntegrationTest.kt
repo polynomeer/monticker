@@ -2,7 +2,10 @@ package com.monticker.api.brokerage
 
 import com.monticker.api.brokerage.application.BrokerageOrderReconciler
 import com.monticker.api.brokerage.application.BrokerageService
+import com.monticker.api.brokerage.application.ConditionalOrderFailures
 import com.monticker.api.brokerage.application.ConditionalOrderReaper
+import com.monticker.api.common.notification.UserNotificationCommand
+import org.springframework.context.ApplicationEventPublisher
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every
 import io.mockk.mockk
@@ -134,11 +137,17 @@ class BrokerageOrderUnknownOutcomeSqlIntegrationTest : PostgresIntegrationTest()
         val recent = conditional("now() - interval '3 minutes'")
         val legacy = conditional("(SELECT installed_on FROM flyway_schema_history WHERE version = '51') - interval '1 hour'")
 
-        ConditionalOrderReaper(jdbcTemplate).reapStuckTriggered()
+        val published = mutableListOf<Any>()
+        val failures = ConditionalOrderFailures(jdbcTemplate, tx, ApplicationEventPublisher { published += it }, SimpleMeterRegistry())
+        ConditionalOrderReaper(jdbcTemplate, failures).reapStuckTriggered()
 
         fun status(id: Long) = jdbcTemplate.queryForObject("SELECT status FROM conditional_orders WHERE id = ?", String::class.java, id)
         assertThat(status(recent)).isEqualTo("FAILED")
         assertThat(status(legacy)).isEqualTo("TRIGGERED")
+        // ADR-065 — 미전송으로 닫은 건 사용자에게 알린다.
+        assertThat(published.filterIsInstance<UserNotificationCommand>().map { it.dedupKey })
+            .contains("conditional-order-failed:$recent")
+            .doesNotContain("conditional-order-failed:$legacy")
     }
 
     @Test

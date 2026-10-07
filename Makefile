@@ -1,6 +1,41 @@
-.PHONY: up up-full up-pinpoint up-msa down logs ps k8s-dev k8s-prod k8s-down k8s-build \
+.PHONY: dev dev-kafka dev-msa dev-down dev-status doctor check check-full backfill \
+        up up-full up-pinpoint up-msa down logs ps api-test api-run web-install web-dev web-build \
+        k8s-build k8s-dev k8s-prod k8s-down k8s-status \
         monitoring-up monitoring-down monitoring-status \
-        pinpoint-up pinpoint-down \
+        db-backup db-restore-rehearsal db-backup-image pinpoint-up pinpoint-down
+
+# ── 로컬 개발 (scripts/README.md) ─────────────────────────────
+# 인프라 컨테이너 + 호스트의 api·worker·web을 한 번에. Ctrl-C로 전부 정리.
+
+dev:
+	scripts/dev/up.sh
+
+dev-kafka:
+	scripts/dev/up.sh --kafka
+
+dev-msa:
+	scripts/dev/up.sh --msa
+
+dev-down:
+	scripts/dev/down.sh
+
+dev-status:
+	scripts/dev/status.sh
+
+doctor:
+	scripts/dev/doctor.sh
+
+# CI(backend-ci·web-ci)와 같은 검사. check-full은 integrationTest와 web build까지.
+check:
+	scripts/check.sh
+
+check-full:
+	scripts/check.sh --full
+
+backfill:
+	python3 scripts/data/backfill-candles.py
+
+# ── docker compose 직접 제어 ──────────────────────────────────
 
 up:
 	docker compose up -d postgres redis
@@ -64,7 +99,7 @@ k8s-status:
 	kubectl get pods,svc,ingress -n monticker
 
 # ── Observability ──────────────────────────────────────────────
-# Prometheus http://localhost:9090  Grafana http://localhost:3001 (admin / monticker)
+# Prometheus http://localhost:9091  Grafana http://localhost:3001 (admin / monticker)
 
 monitoring-up:
 	docker compose up -d prometheus grafana

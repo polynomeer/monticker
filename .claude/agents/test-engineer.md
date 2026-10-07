@@ -70,7 +70,7 @@ Reject or rewrite any test that is:
   behavior. Component-level Vitest tests mock `fetch` and never see these.
 - Location: `apps/web/e2e/*.spec.ts`, run with `pnpm test:e2e` (Playwright).
   Requires a real API + web server running (see `e2e-ci.yml` for the CI setup,
-  or run against your local `dev.sh` stack with `E2E_BASE_URL=http://localhost:3000`).
+  or run against your local `scripts/dev/up.sh` stack with `E2E_BASE_URL=http://localhost:3000`).
 
 ## What Needs Tests
 

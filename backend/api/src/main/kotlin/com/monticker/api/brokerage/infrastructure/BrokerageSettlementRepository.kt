@@ -15,8 +15,12 @@ interface BrokerageSettlementRepository : JpaRepository<BrokerageSettlement, Lon
 
     @Query("""
         SELECT s FROM BrokerageSettlement s
-        WHERE s.status = 'PENDING' AND s.settleDate <= :today
-        ORDER BY s.settleDate ASC
+        WHERE s.status = 'PENDING' AND s.settleDate <= :today AND s.id > :afterId
+        ORDER BY s.id ASC
     """)
-    fun findDueSettlements(@Param("today") today: LocalDate, pageable: Pageable): Page<BrokerageSettlement>
+    fun findDueSettlementsAfter(
+        @Param("today") today: LocalDate,
+        @Param("afterId") afterId: Long,
+        pageable: Pageable,
+    ): List<BrokerageSettlement>
 }

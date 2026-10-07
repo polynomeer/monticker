@@ -199,8 +199,7 @@ class BrokerageService(
         // "실패한 줄 알고 다시 누르기"다. 해소(보통 1~2분)되면 다시 낼 수 있다.
         orderRepo.findAllByUserIdAndSymbolAndStatusIn(userId, request.symbol, UNRESOLVED_STATUSES)
             .firstOrNull { it.side.name == request.side }
-            ?.let { throw BusinessRuleException(
-                "증권사 확인 중인 ${request.symbol} ${request.side} 주문이 있습니다(주문 #${it.id}). 확인이 끝난 뒤 다시 시도해주세요.") }
+            ?.let { throw UnresolvedOrderInProgressException(request.symbol, request.side, it.id) }
 
         // ADR-025 — 페이퍼 트레이딩과 동일한 사전 리스크 게이트. 증권사에 보내기 전에
         // 막는다 — 실패하면 실제 주문은 아예 나가지 않는다.

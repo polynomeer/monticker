@@ -19,8 +19,12 @@ interface PaperSettlementRepository : JpaRepository<PaperSettlement, Long> {
 
     @Query("""
         SELECT s FROM PaperSettlement s
-        WHERE s.status = 'PENDING' AND s.settleDate <= :today
-        ORDER BY s.settleDate ASC
+        WHERE s.status = 'PENDING' AND s.settleDate <= :today AND s.id > :afterId
+        ORDER BY s.id ASC
     """)
-    fun findDueSettlements(@Param("today") today: LocalDate, pageable: Pageable): Page<PaperSettlement>
+    fun findDueSettlementsAfter(
+        @Param("today") today: LocalDate,
+        @Param("afterId") afterId: Long,
+        pageable: Pageable,
+    ): List<PaperSettlement>
 }

@@ -69,12 +69,12 @@ class IndicatorCache(
             """
                     SELECT
                         (SELECT volume FROM candles_1d
-                           WHERE stock_id = ? AND candle_time >= DATE_TRUNC('day', NOW() AT TIME ZONE 'Asia/Seoul')
+                           WHERE stock_id = ? AND candle_time >= DATE_TRUNC('day', NOW() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul'
                         ) AS today_vol,
                         (SELECT AVG(volume) FROM candles_1d
                            WHERE stock_id = ?
                              AND candle_time >= NOW() - INTERVAL '$period days'
-                             AND candle_time < DATE_TRUNC('day', NOW() AT TIME ZONE 'Asia/Seoul')
+                             AND candle_time < DATE_TRUNC('day', NOW() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul'
                         ) AS avg_vol
                     """,
             stockId, stockId,

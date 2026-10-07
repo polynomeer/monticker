@@ -139,8 +139,10 @@ ADR-046(디텍터 상태)·ADR-021(캔들 버퍼)·인메모리 CLOB는 각각 �
 8. 스케줄러 분산 락(ShedLock 등) — 정산·사가 복구·포워드 테스트·Outbox 재발행. 수동 실행의 `runId` 우회 제거.
 9. ~~자격증명 재발급 계정 단위 락~~ (위 사후 리뷰에서 처리) + 401/403에만 `authFailedAt`.
 10. 디텍터 워밍업 강제(N틱 전 판정 금지), 리밸런스 후 `prev` 초기화.
-10a. 정산 리더 페이징 누락 — `status='PENDING'` 필터에 offset 페이징이라, 청크 커밋으로 결과 집합이 줄면 다음 페이지가
-    50건씩 건너뛴다(마감일 정산 50건 초과 시 절반이 다음 날로). 정렬에 `id` 타이브레이커도 없다. 키셋(`id > lastId`) 리더로.
+10a. ✅ ~~정산 리더 페이징 누락~~ (2026-10-05) — 공용 `KeysetItemReader`(`id > lastId`, 마지막 id를 ExecutionContext에 저장)로
+    교체. 같은 결함이 **결제 청소(ADR-059)·구독 갱신 리더**에도 있어 함께 바꿨다(처리하면 PENDING/만료 임박에서 빠지는 건 똑같다).
+    하면서 드러난 것: 결제 청소 리더는 리포지토리가 `List`를 돌려줘 `RepositoryItemReader`의 `Slice` 캐스팅에서 **첫 read부터
+    죽고 있었다** — ADR-059 이후 한 번도 PENDING을 정리하지 못했다. `KeysetBatchReaderIntegrationTest`(실제 Postgres)가 지킨다.
 10b. ADR-055 신선도에 `tradeTime` 검사 추가(거래소 지연 메시지) — Consequences 참고.
 
 ### P2 — 모델

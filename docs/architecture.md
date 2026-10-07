@@ -110,6 +110,8 @@ Start as **Modular Monolith + async workers + Redis + TimescaleDB**. `docker com
 
 ## Tech Stack
 
+> 각 기술을 왜 골랐는지, 근거가 어디에 있는지는 [tech-stack-decisions.md](tech-stack-decisions.md)에 있습니다. 아래 버전 표기 중 Kotlin(실제 1.9.25)·Batch(실제 Spring Batch)·MongoDB 용도(실제 `rule_sets`만)는 코드와 다릅니다 — 같은 문서 §10 참고.
+
 ### Backend
 
 ```
@@ -993,6 +995,7 @@ make up-full
 | `market.events` | `worker-event` (`ingestion.source=kafka` 일 때만) | **없음** — [ADR-033](decisions/033-remove-netty-broadcast-gateway.md)으로 Netty 게이트웨이가 사라진 뒤 주인이 없다. 자동 주문은 아래 `market.event-detected`를 쓴다([ADR-051](decisions/051-event-triggered-paper-orders.md) 참고) |
 | `market.summary` | `worker` `MarketSummaryPublisher` | `backend/api` `MarketSummaryBroadcastConsumer` (틱과 같은 수동 할당 방식) |
 | `notify.commands` | `worker-event` `NotifyKafkaProducer` ([ADR-044](decisions/044-alert-rule-in-memory-index.md)) | `worker-alert` — 평가와 발송을 분리해 발송 지연이 틱 파이프라인을 막지 않게 한다 |
+| `notify.user` | api `UserNotificationCommand` — Modulith 아웃박스([ADR-065](decisions/065-user-notifications-from-api.md)) | `worker-alert` `UserNotifyKafkaConsumer` — 조건부 주문 발동 실패 등 사용자 알림(푸시, 없으면 이메일) |
 | `trading.order-filled` | `backend/api` (Modulith `@Externalized`, Outbox) | (현재 없음 — quant live-tracking 도입 시. api 안에서는 `OrderFilledStrategyListener`가 같은 이벤트를 받는다) |
 | `trading.order-cancelled` | `backend/api` (Modulith `@Externalized`, Outbox) | — |
 | `search.index` | `backend/api`, `worker` (Modulith `@Externalized`, [ADR-042](decisions/042-outbox-based-es-indexing.md)) | `backend/api` `SearchIndexConsumer` |

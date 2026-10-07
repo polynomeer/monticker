@@ -39,6 +39,7 @@ class ConditionalOrderEvaluatorListenerConditionTest {
             ctx.beanFactory.registerSingleton(com.monticker.api.brokerage.infrastructure.BrokerageClientRegistryConfig.BEAN_NAME, registryOf(movesRealMoney))
             ctx.beanFactory.registerSingleton("activeConditionalStocks", mockk<ActiveConditionalStocks> { every { contains(any()) } returns watched })
             ctx.beanFactory.registerSingleton("tradingHaltService", mockk<TradingHaltService> { every { findActive(any(), any()) } returns null })
+            ctx.beanFactory.registerSingleton("conditionalOrderFailures", mockk<ConditionalOrderFailures>(relaxed = true))
             ctx.register(ConditionalOrderEvaluator::class.java)
             ctx.refresh()
             ctx.publishEvent(

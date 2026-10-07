@@ -17,6 +17,9 @@
 
 const { execSync } = require("child_process");
 
+// --audit-level=high는 exit code에만 적용되고 JSON에는 모든 등급이 담긴다
+const BLOCKING_SEVERITIES = new Set(["high", "critical"]);
+
 function parseArgs(argv) {
   const scopePrefixes = [];
   const allowModules = new Set();
@@ -69,6 +72,7 @@ function main() {
   const allowed = [];
 
   for (const advisory of Object.values(advisories)) {
+    if (!BLOCKING_SEVERITIES.has(advisory.severity)) continue;
     const paths = (advisory.findings || []).flatMap((f) => f.paths || []);
     const matchedPaths = paths.filter((p) =>
       scopePrefixes.some((prefix) => p.startsWith(prefix))

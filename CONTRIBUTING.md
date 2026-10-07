@@ -35,18 +35,24 @@
 
 ```bash
 cp .env.example .env
-./dev.sh            # 인프라 → API → Worker → Web 순서로 띄우고 헬스체크 대기
+scripts/dev/up.sh            # 인프라 → API → Worker → Web 순서로 띄우고 헬스체크 대기
 ```
 
-`./dev.sh --help`로 `--kafka` / `--msa` / `--pinpoint` 옵션을 확인하세요. 수동 기동과 컨테이너 전체 기동은 [README.md 빠른 시작](README.md#빠른-시작)에 있습니다.
+`scripts/dev/up.sh --help`로 `--kafka` / `--msa` / `--pinpoint` 옵션을 확인하세요. 수동 기동과 컨테이너 전체 기동은 [README.md 빠른 시작](README.md#빠른-시작)에 있습니다.
 
-로그는 `logs/api.log`, `logs/worker.log`, `logs/web.log`에 쌓입니다. 기동 실패 시 `dev.sh`가 마지막 20줄을 출력합니다.
+로그는 `logs/api.log`, `logs/worker.log`, `logs/web.log`에 쌓입니다. 기동 실패 시 `scripts/dev/up.sh`가 마지막 30줄을 출력합니다.
+상태는 `scripts/dev/status.sh`, 정리는 `scripts/dev/down.sh`, 처음이면 `scripts/dev/doctor.sh`로 환경부터 점검하세요([scripts/README.md](scripts/README.md)).
+
+PR을 올리기 전에는 `scripts/check.sh`(머지 전엔 `--full`)로 CI와 같은 검사를 로컬에서 돌릴 수 있습니다.
 
 ### 처음 띄웠는데 API가 안 뜬다면
 
-- **`InsecureSecretGuard`가 기동을 막았다** — git에 커밋된 개발용 JWT/암호화 키를 그대로 쓰면 API가 거부합니다. `dev.sh`와 `docker-compose.yml`은 `ALLOW_INSECURE_DEV_SECRETS=true`를 자동으로 넣지만, `./gradlew bootRun`을 직접 치면 이 값을 붙여야 합니다.
-- **포트 충돌** — `dev.sh`는 8080/8081/3000이 점유되면 다음 빈 포트로 우회하고 콘솔에 알려줍니다. 이전 `dev.sh` 잔여 프로세스만 정리하고, 관련 없는 프로세스는 절대 죽이지 않습니다.
+- **`InsecureSecretGuard`가 기동을 막았다** — git에 커밋된 개발용 JWT/암호화 키를 그대로 쓰면 API가 거부합니다. `scripts/dev/up.sh`와 `docker-compose.yml`은 `ALLOW_INSECURE_DEV_SECRETS=true`를 자동으로 넣지만, `./gradlew bootRun`을 직접 치면 이 값을 붙여야 합니다.
+- **포트 충돌** — `scripts/dev/up.sh`는 8080/8081/3000이 점유되면 다음 빈 포트로 우회하고 콘솔에 알려줍니다. 이전 `scripts/dev/up.sh` 잔여 프로세스만 정리하고, 관련 없는 프로세스는 절대 죽이지 않습니다.
 - **Elasticsearch/MongoDB healthcheck 대기가 길다** — 첫 이미지 pull 이후에는 빨라집니다. ES가 없어도 검색은 DB 폴백으로 동작합니다.
+- **`elasticsearch 시작 타임아웃` / 컨테이너 exit 137** — Docker VM 메모리 부족으로 OOM kill된 것입니다. `scripts/dev/status.sh`가 메모리를 많이 쓰는
+  컨테이너를 보여줍니다. 다른 프로젝트 컨테이너를 멈추거나 Docker Desktop 메모리를 늘리세요.
+- **터미널을 닫았더니 포트가 계속 잡혀 있다** — `scripts/dev/down.sh`가 남은 bootRun JVM까지 정리합니다.
 - 그 외는 [docs/technical/troubleshooting-casebook.md](docs/technical/troubleshooting-casebook.md)에서 증상으로 검색하세요.
 
 ---
@@ -220,7 +226,7 @@ cd backend/api && MAIL_HOST=localhost MAIL_PORT=1025 MAIL_USERNAME=test MAIL_PAS
 
 > `spring.mail.properties.mail.smtp.auth`가 `true`로 고정돼 있어 `MAIL_USERNAME`/`MAIL_PASSWORD`를 비우면 MailHog가 자격증명을 검사하지 않는데도 "Authentication failed"가 납니다. 아무 문자열이나 넣으세요.
 
-발송된 메일은 http://localhost:8025 에서 확인합니다. `dev.sh`와 `docker compose --profile full`은 이미 MailHog로 연결돼 있습니다.
+발송된 메일은 http://localhost:8025 에서 확인합니다. `scripts/dev/up.sh`와 `docker compose --profile full`은 이미 MailHog로 연결돼 있습니다.
 
 ### 실데이터 호가 (계좌 불필요)
 
@@ -239,7 +245,7 @@ Worker가 `price_ticks` hypertable에 1초마다 틱을 쓰면 TimescaleDB가 `c
 README와 사용자 매뉴얼의 `docs/images/*.png`는 Playwright 스크립트로 생성합니다. 화면이 바뀌면 다시 찍어서 함께 커밋하세요.
 
 ```bash
-./dev.sh                                    # API·Worker·Web 기동
+scripts/dev/up.sh                                    # API·Worker·Web 기동
 BASE=http://localhost:3000 API=http://localhost:8080 \
   pnpm --filter @monticker/web exec node scripts/capture-screenshots.mjs   # 전체
 pnpm --filter @monticker/web exec node scripts/capture-screenshots.mjs wallet matching   # 일부만
@@ -251,11 +257,11 @@ pnpm --filter @monticker/web exec node scripts/capture-screenshots.mjs wallet ma
 ### 관측 도구
 
 ```bash
-make monitoring-up      # Prometheus :9090, Grafana :3001 (admin / monticker)
+make monitoring-up      # Prometheus :9091, Grafana :3001 (admin / monticker)
 make up-pinpoint        # Pinpoint APM :18080 (HBase 초기화 2~3분)
 ```
 
-Jaeger는 `dev.sh`가 기본으로 띄웁니다 (http://localhost:16686).
+Jaeger는 `scripts/dev/up.sh`가 기본으로 띄웁니다 (http://localhost:16686).
 
 ### DB 백업·복구 리허설
 
