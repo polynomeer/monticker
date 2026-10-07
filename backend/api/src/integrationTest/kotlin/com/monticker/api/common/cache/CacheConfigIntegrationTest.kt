@@ -4,6 +4,10 @@ import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import com.monticker.api.screener.application.ScreenerResult
 import com.monticker.api.screener.domain.ScreenerItem
+import com.monticker.api.screener.infrastructure.SectorPerformance
+import com.monticker.api.event.application.EventDaySummary
+import com.monticker.api.event.application.EventTypeCount
+import com.monticker.api.event.application.StockEventCount
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
@@ -96,5 +100,30 @@ class CacheConfigIntegrationTest {
         val cached = cache.get("key", ScreenerResult::class.java)
 
         assertThat(cached).isEqualTo(original)
+    }
+
+    @Test
+    fun `ADR-087 aggregate cache values round-trip, including nullable doubles and List results`() {
+        val cacheManager = CacheConfig(jacksonObjectMapper(), SimpleMeterRegistry()).cacheManager(connectionFactory)
+        cacheManager.afterPropertiesSet()
+
+        val summary = EventDaySummary(
+            date = "2026-10-07", total = 3,
+            byType = listOf(EventTypeCount("PRICE_SPIKE", 2, 1), EventTypeCount("PRICE_DROP", 1, 1)),
+            surgeStocks = 1, plungeStocks = 1,
+        )
+        cacheManager.getCache(CacheConfig.EVENT_SUMMARY)!!.put("2026-10-07", summary)
+        assertThat(cacheManager.getCache(CacheConfig.EVENT_SUMMARY)!!.get("2026-10-07", EventDaySummary::class.java)).isEqualTo(summary)
+
+        val counts = listOf(StockEventCount(1, 0), StockEventCount(2, 5_000_000_000L))
+        cacheManager.getCache(CacheConfig.EVENT_COUNTS)!!.put("k", counts)
+        assertThat(cacheManager.getCache(CacheConfig.EVENT_COUNTS)!!.get("k")?.get()).isEqualTo(counts)
+
+        val sectors = listOf(
+            SectorPerformance("반도체", 10, 9, 1.25, 5, 3, 1, 4),
+            SectorPerformance("빈섹터", 1, 0, null, 0, 0, 0, 0),
+        )
+        cacheManager.getCache(CacheConfig.SECTOR_PERFORMANCE)!!.put("all", sectors)
+        assertThat(cacheManager.getCache(CacheConfig.SECTOR_PERFORMANCE)!!.get("all")?.get()).isEqualTo(sectors)
     }
 }

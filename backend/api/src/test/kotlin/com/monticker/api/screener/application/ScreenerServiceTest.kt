@@ -228,4 +228,22 @@ class ScreenerServiceTest {
 
         assertThat(result.items).hasSize(2)
     }
+
+    @Test
+    fun `sector performance rejects an unknown market before querying`() {
+        assertThatThrownBy { service.getSectorPerformance("'; DROP TABLE stocks; --") }
+            .isInstanceOf(IllegalArgumentException::class.java)
+        verify(exactly = 0) { repo.findSectorPerformance(any(), any(), any()) }
+    }
+
+    @Test
+    fun `sector performance counts events over today's KST day`() {
+        every { repo.findSectorPerformance("domestic", any(), any()) } returns emptyList()
+        service.getSectorPerformance("domestic")
+        verify {
+            repo.findSectorPerformance("domestic", ScreenerService.todayStart(), match {
+                java.time.Duration.between(ScreenerService.todayStart(), it) == java.time.Duration.ofDays(1)
+            })
+        }
+    }
 }
