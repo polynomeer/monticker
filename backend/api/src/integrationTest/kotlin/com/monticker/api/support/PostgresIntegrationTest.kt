@@ -39,7 +39,15 @@ abstract class PostgresIntegrationTest {
         val dataSource: DataSource by lazy {
             DriverManagerDataSource(postgres.jdbcUrl, postgres.username, postgres.password)
                 .apply { setDriverClassName(postgres.driverClassName) }
-                .also { ds -> Flyway.configure().dataSource(ds).load().migrate() }
+                .also { ds ->
+                    // 운영(application.yml spring.flyway.postgresql.transactional-lock=false)과 같이 세션 lock —
+                    // 트랜잭션 lock이면 V84의 CREATE INDEX CONCURRENTLY가 잠금 연결의 트랜잭션을 기다리며 멈춘다
+                    Flyway.configure()
+                        .dataSource(ds)
+                        .configuration(mapOf("flyway.postgresql.transactional.lock" to "false"))
+                        .load()
+                        .migrate()
+                }
         }
     }
 
