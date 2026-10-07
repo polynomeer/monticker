@@ -62,7 +62,7 @@ dependencies {
 	implementation("io.jsonwebtoken:jjwt-api:0.12.6")
 	runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
 	runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
-	implementation("com.anthropic:anthropic-java:2.34.0")
+	implementation("com.anthropic:anthropic-java:2.68.0")
 	implementation("io.github.resilience4j:resilience4j-kotlin:2.4.0")
 	implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.4.0")
 	implementation("io.github.resilience4j:resilience4j-micrometer:2.4.0")
