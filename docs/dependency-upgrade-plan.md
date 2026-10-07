@@ -68,7 +68,11 @@ Kotlin 컴파일러 플러그인(`plugin.spring`·`plugin.jpa`)은 `kotlin("jvm"
 1. BOM을 올리고 컴파일 오류를 따라간다. 쓰는 범위는 `PostgreSQLContainer`·`GenericContainer`·`DockerImageName`과 JUnit5 확장(`@Testcontainers`·`@Container`)으로, 8개 파일이다.
 2. 공유 컨테이너 베이스(`PostgresIntegrationTest`)의 "직접 start(), stop() 안 함" 관례는 유지한다. 이 클래스 주석에 적힌 컨테이너 공유 레이스 때문이다.
 
-**확인할 것**: 모듈 아티팩트 이름과 패키지가 바뀌었는지(예: postgres 모듈 분리). JUnit4 지원 제거가 우리와 무관한지.
+**확인 결과**(2.0.5, [릴리스 노트](https://github.com/testcontainers/testcontainers-java/releases/tag/2.0.0)):
+- 모듈 아티팩트에 `testcontainers-` 접두사가 붙었다: `junit-jupiter` → `testcontainers-junit-jupiter`, `postgresql` → `testcontainers-postgresql`.
+- 컨테이너 클래스가 모듈 패키지로 옮겨졌다: `org.testcontainers.containers.PostgreSQLContainer` → `org.testcontainers.postgresql.PostgreSQLContainer`. 새 클래스는 **제네릭이 아니다**(`PostgreSQLContainer<*>` → `PostgreSQLContainer`). `GenericContainer`·`DockerImageName`·JUnit5 확장(`org.testcontainers.junit.jupiter`)은 그대로다.
+- JUnit4 지원 제거, 모듈 기본 생성자 제거 — 우리는 JUnit5만 쓰고 항상 이미지를 넘겨 생성하므로 영향 없음.
+
 **검증**: api·worker `integrationTest` 전부.
 
 ### B3. jjwt 0.12 → 0.13
@@ -177,4 +181,5 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 | (선행) web React 19.3 | 완료 | #129 | #121·#122를 대체. 모바일은 18 유지 |
 | (선행) react-query packageExtensions 범위화 | 완료 | #117 | 고정 버전 키 때문에 타입 검사가 깨졌던 것 |
 | (선행) dependabot ignore·groups | 완료 | #130 | §5 |
-| B1~B4, W1~W3, M1 | 시작 전 | — | |
+| B2 Testcontainers 2 | 머지 대기 | #143 | 2.0.5. 위 확인 결과 참고 |
+| B0, B1, B3, B4, W1~W3, M1 | 시작 전 | — | |
