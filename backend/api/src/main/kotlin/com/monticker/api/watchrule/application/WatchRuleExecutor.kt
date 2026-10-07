@@ -122,16 +122,22 @@ class WatchRuleExecutor(
             }
         }
 
-        if (inCooldown(rule)) {
-            record(rule, trigger, WatchRuleExecutionStatus.SKIPPED,
-                reason = "쿨다운 ${rule.cooldownSec}초 이내 재발동")
-            return
-        }
-
-        // ADR-077 하루 최대 발동 — 주문 전에 슬롯을 원자적으로 잡는다. 주문이 나가지 않으면 돌려준다.
-        if (!guards.claimDailySlot(rule.id, rule.dailyLimit)) {
-            record(rule, trigger, WatchRuleExecutionStatus.SKIPPED, reason = "하루 최대 발동 ${rule.dailyLimit}회 도달")
-            return
+        // 쿨다운 + 하루 최대 발동(ADR-077) — 규칙 행을 잠근 한 트랜잭션에서 판정하고 발동을 기록한다(WatchRuleGuards).
+        // 같은 규칙에 서로 다른 이벤트가 동시에 와도 하나만 여기를 통과한다. 주문이 나가지 않으면 돌려준다.
+        val claim = when (val c = guards.claimFiring(rule.id)) {
+            is FiringClaim.Claimed -> c
+            is FiringClaim.InCooldown -> {
+                record(rule, trigger, WatchRuleExecutionStatus.SKIPPED, reason = "쿨다운 ${c.cooldownSec}초 이내 재발동")
+                return
+            }
+            is FiringClaim.DailyLimitReached -> {
+                record(rule, trigger, WatchRuleExecutionStatus.SKIPPED, reason = "하루 최대 발동 ${c.limit}회 도달")
+                return
+            }
+            FiringClaim.Inactive -> {
+                log.info("watch rule 발동 직전 비활성화됨 — 건너뜀 ruleId={} {}", rule.id, trigger)
+                return
+            }
         }
 
         var filled = false
@@ -156,17 +162,11 @@ class WatchRuleExecutor(
             // 현재가 없음·시장가 미체결 등. 사용자 잘못이 아니지만 이 이벤트로는 체결되지 않았다.
             record(rule, trigger, WatchRuleExecutionStatus.REJECTED, reason = e.message ?: "주문 실패")
         } finally {
-            // 체결되지 않았으면(거부·인프라 예외 모두) 슬롯을 돌려준다. 그 외(DB·네트워크 등 인프라 예외)는
+            // 체결되지 않았으면(거부·인프라 예외 모두) 슬롯과 쿨다운을 돌려준다. 그 외(DB·네트워크 등 인프라 예외)는
             // 삼키지 않는다 — 호출자를 거쳐 컨슈머 재시도로 간다. 재시도해도 멱등 키 덕에 중복 체결은 없다.
-            if (!filled) runCatching { guards.releaseDailySlot(rule.id) }
-                .onFailure { log.warn("watch rule 슬롯 반환 실패 ruleId={} — 오늘 한도가 1 적게 남는다(안전한 방향)", rule.id) }
+            if (!filled) runCatching { guards.releaseFiring(claim) }
+                .onFailure { log.warn("watch rule 발동권 반환 실패 ruleId={} — 오늘 한도가 1 적고 쿨다운이 이어진다(안전한 방향)", rule.id) }
         }
-    }
-
-    private fun inCooldown(rule: WatchRule): Boolean {
-        if (rule.cooldownSec <= 0) return false
-        val since = Instant.now().minusSeconds(rule.cooldownSec.toLong())
-        return execRepo.existsSince(rule.id, WatchRuleExecutionStatus.EXECUTED, since)
     }
 
     private fun record(
