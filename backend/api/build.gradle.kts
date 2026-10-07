@@ -70,7 +70,7 @@ dependencies {
 	testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
 	testImplementation("org.springframework.security:spring-security-test")
 	testImplementation("io.mockk:mockk:1.14.11")
-	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0")
+	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1")
 	implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
 	implementation("net.logstash.logback:logstash-logback-encoder:7.4")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
