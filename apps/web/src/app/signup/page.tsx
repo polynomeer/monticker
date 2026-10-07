@@ -2,8 +2,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { signup, saveTokens } from "@/services/auth";
-import { Btn, Checkbox, PreviewTag } from "@/components/terminal";
+import { signup, saveTokens, type SignupConsent } from "@/services/auth";
+import { Btn, Checkbox } from "@/components/terminal";
 import { AuthField, AuthHeading, AuthShell, FormError, OrDivider } from "@/components/auth/AuthShell";
 import { SocialButtons } from "@/components/auth/SocialButtons";
 import { cn } from "@/lib/utils";
@@ -59,8 +59,9 @@ export default function SignupPage() {
     setErrors({});
     setLoading(true);
     try {
-      // 동의 항목은 아직 서버에 기록되지 않는다(SignupRequest에 필드 없음) — 화면에서 필수 동의만 막는다.
-      const tokens = await signup(email, password, nickname);
+      // ADR-068 — 체크한 동의 항목을 함께 보낸다. 필수가 빠지면 서버도 400으로 거부한다.
+      const codes: Record<ConsentKey, SignupConsent> = { terms: "TERMS", privacy: "PRIVACY", age: "AGE_OVER_19", marketing: "MARKETING" };
+      const tokens = await signup(email, password, nickname, (Object.keys(codes) as ConsentKey[]).filter((k) => consent[k]).map((k) => codes[k]));
       saveTokens(tokens);
       router.push("/onboarding");
     } catch (err) {
@@ -116,10 +117,7 @@ export default function SignupPage() {
           <ConsentRow checked={consent.terms} onChange={setOne("terms")} label="[필수] 이용약관" href="/terms" />
           <ConsentRow checked={consent.privacy} onChange={setOne("privacy")} label="[필수] 개인정보 수집·이용" href="/privacy" />
           <Checkbox checked={consent.age} onChange={setOne("age")} label="[필수] 만 19세 이상입니다" />
-          <span className="flex items-center gap-2">
-            <Checkbox checked={consent.marketing} onChange={setOne("marketing")} label="[선택] 이벤트·리포트 이메일 수신" />
-            <PreviewTag />
-          </span>
+          <Checkbox checked={consent.marketing} onChange={setOne("marketing")} label="[선택] 이벤트·리포트 이메일 수신" />
           {errors.consent && <span className="text-xs text-[#ff8a8a]">{errors.consent}</span>}
         </fieldset>
 

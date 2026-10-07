@@ -16,7 +16,11 @@ export interface ConnectBrokerageRequest {
   appKey: string;
   appSecret: string;
   accountNumber: string;
+  /** ADR-068 — 연동 고지 동의. 셋 모두 필수. */
+  consents: BrokerageConsent[];
 }
+
+export type BrokerageConsent = "BROKERAGE_DELEGATION" | "BROKERAGE_NO_CUSTODY" | "BROKERAGE_LOSS_ATTRIBUTION";
 
 export interface BrokerageAccountResponse {
   id: number;

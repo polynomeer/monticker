@@ -5,12 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getAccessToken } from "@/services/auth";
 import { useBrokerageAccount, useConnectBrokerage } from "@/hooks/useBrokerage";
+import DisconnectPanel from "@/components/brokerage/DisconnectPanel";
 import { useToast } from "@/hooks/useToast";
 import { Btn, BtnLink, Checkbox, Icon, Notice, Panel, PanelRow, PreviewTag, TerminalPage, TextField, type IconName } from "@/components/terminal";
 import { LoginRequired, maskAccount } from "@/components/brokerage/shared";
 import { BROKERAGE_PROVIDER_LABELS, brokerageProviderLabel } from "@/lib/brokerageProvider";
 import { cn } from "@/lib/utils";
-import type { BrokerageProviderId } from "@monticker/types";
+import type { BrokerageConsent, BrokerageProviderId } from "@monticker/types";
 
 const PROVIDER_META: Record<BrokerageProviderId, {
   sub: string;
@@ -47,6 +48,9 @@ const PROVIDER_META: Record<BrokerageProviderId, {
 const PROVIDERS = Object.keys(PROVIDER_META) as BrokerageProviderId[];
 const STEPS = ["증권사 선택", "API 키 등록", "권한 확인", "완료"];
 
+/** ADR-068 — 아래 CONSENTS 문구와 같은 순서. 서버가 셋 모두 있어야 연동한다. */
+const CONSENT_CODES: BrokerageConsent[] = ["BROKERAGE_DELEGATION", "BROKERAGE_NO_CUSTODY", "BROKERAGE_LOSS_ATTRIBUTION"];
+
 const CONSENTS = [
   "본인 명의 계좌의 API 키이며, 주문 권한을 monticker에 위임하는 것에 동의합니다",
   "monticker는 자금을 보관하지 않고 증권사 API 호출만 대행함을 이해했습니다",
@@ -57,7 +61,7 @@ const SECURITY: { icon: IconName; title: string; desc: string; preview?: boolean
   { icon: "lock", title: "암호화 저장", desc: "API 키는 암호화되어 저장되고 화면·로그에 다시 표시되지 않습니다." },
   { icon: "shield", title: "필요한 권한만", desc: "잔고 조회와 주문 외의 권한은 사용하지 않습니다. monticker를 통해서는 출금·이체를 할 수 없습니다." },
   { icon: "key", title: "비밀번호·인증서 미수집", desc: "계좌 비밀번호나 공동인증서는 요구하지 않습니다." },
-  { icon: "trash", title: "언제든 해지", desc: "연동 해지(등록된 키 즉시 파기) 기능은 준비 중입니다. 다른 계좌로 다시 연동하면 기존 계좌는 비활성화됩니다.", preview: true },
+  { icon: "trash", title: "언제든 해지", desc: "해지하면 등록된 키를 즉시 지우고 대기 중인 조건부 주문을 취소합니다. 연동된 상태에서 이 화면의 ‘연동 해지’로 할 수 있습니다." },
 ];
 
 function Stepper({ current }: { current: number }) {
@@ -112,13 +116,15 @@ export default function BrokerageConnectPage() {
   const allConsented = consents.every(Boolean);
   const isValid = fieldsFilled && allConsented;
   const needsReconnect = !!account && !account.tokenValid;
+  // 해지에 성공하면 계좌가 사라져 해지 패널도 사라진다 — 결과는 토스트로 남긴다
+  const onDisconnected = () => toast({ type: "success", title: "연동 해지", message: "저장된 키를 지우고 연동을 해지했습니다." });
   // 진행 표시 — 증권사는 기본 선택돼 있으니 1단계는 항상 완료. 서버가 토큰을 발급해 보는 동안이 "권한 확인".
   const step = connect.isPending ? 2 : 1;
 
   const handleSubmit = async () => {
     // 비밀값은 상태에만 두고 로그·토스트에 절대 싣지 않는다.
     try {
-      await connect.mutateAsync({ provider, appKey: appKey.trim(), appSecret: appSecret.trim(), accountNumber: accountNumber.trim() });
+      await connect.mutateAsync({ provider, appKey: appKey.trim(), appSecret: appSecret.trim(), accountNumber: accountNumber.trim(), consents: CONSENT_CODES });
       setAppKey("");
       setAppSecret("");
       toast({ type: "success", title: "연동 완료", message: "증권사 계좌가 연동되었습니다." });
@@ -147,6 +153,9 @@ export default function BrokerageConnectPage() {
           </p>
           <BtnLink href="/brokerage">대시보드로 이동</BtnLink>
         </Panel>
+        <div className="mt-2">
+          <DisconnectPanel onDone={onDisconnected} />
+        </div>
       </div>
     </TerminalPage>
   );
@@ -275,6 +284,12 @@ export default function BrokerageConnectPage() {
           </span>
           <span className="text-xs text-tm-muted">실제 자금이 이동하는 기능입니다. 리스크 한도 내에서만 주문이 체결됩니다.</span>
         </Panel>
+        {/* 재인증이 필요한 계좌도 해지할 수 있어야 한다 — 키가 무효여도 저장된 값은 지워야 한다 */}
+        {account && (
+          <div className="flex-[1_1_340px] self-start">
+            <DisconnectPanel onDone={onDisconnected} />
+          </div>
+        )}
       </PanelRow>
     </TerminalPage>
   );

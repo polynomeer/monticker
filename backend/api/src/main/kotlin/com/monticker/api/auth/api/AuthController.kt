@@ -35,7 +35,7 @@ class AuthController(
         @Valid @RequestBody req: SignupRequest,
         response: HttpServletResponse,
     ): ResponseEntity<SignupResponse> {
-        val tokens = authService.signup(req.email, req.password, req.nickname)
+        val tokens = authService.signup(req.email, req.password, req.nickname, req.consents)
         setRefreshCookie(response, tokens.refreshToken)
         return ResponseEntity.ok(SignupResponse(
             accessToken = tokens.accessToken,
@@ -130,6 +130,8 @@ data class SignupRequest(
     @field:Pattern(regexp = PASSWORD_PATTERN, message = PASSWORD_PATTERN_MESSAGE)
     val password: String,
     @field:NotBlank @field:Size(min = 2, max = 30) val nickname: String,
+    /** ADR-068 — 동의한 항목(TERMS, PRIVACY, AGE_OVER_19 필수, MARKETING 선택). */
+    @field:Size(max = 10) val consents: List<String> = emptyList(),
 )
 data class LoginRequest(
     @field:Email @field:NotBlank val email: String,

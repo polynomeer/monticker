@@ -2,6 +2,7 @@ package com.monticker.api.brokerage.api
 
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
 import com.monticker.api.brokerage.application.ConditionalOrderLeg
+import com.monticker.api.brokerage.application.BrokerageService
 import com.monticker.api.brokerage.application.ConditionalOrderService
 import com.monticker.api.brokerage.application.PriceFeed
 import com.monticker.api.brokerage.domain.ConditionalOrder
@@ -80,6 +81,7 @@ data class ConditionalOrderResponse(
 @RequestMapping("/api/brokerage/conditional-orders")
 class ConditionalOrderController(
     private val conditionalOrderService: ConditionalOrderService,
+    private val brokerageService: BrokerageService,
     private val jwtTokenProvider: JwtTokenProvider,
 ) {
     private fun userId(token: String) =
@@ -91,8 +93,10 @@ class ConditionalOrderController(
         @RequestHeader("Authorization") token: String,
         @Valid @RequestBody req: CreateConditionalOrderRequest,
     ): ResponseEntity<ConditionalOrderResponse> {
+        val uid = userId(token)
+        brokerageService.requireCurrentConsents(uid)   // ADR-068 — 등록만. 이미 걸린 주문의 발동은 막지 않는다
         val order = conditionalOrderService.create(
-            userId(token), req.symbol, OrderSide.valueOf(req.side.uppercase()), req.quantity, req.leg.toLeg(),
+            uid, req.symbol, OrderSide.valueOf(req.side.uppercase()), req.quantity, req.leg.toLeg(),
         )
         return ResponseEntity.ok(order.toResponse())
     }
@@ -103,8 +107,10 @@ class ConditionalOrderController(
         @RequestHeader("Authorization") token: String,
         @Valid @RequestBody req: CreateOcoOrderRequest,
     ): ResponseEntity<List<ConditionalOrderResponse>> {
+        val uid = userId(token)
+        brokerageService.requireCurrentConsents(uid)   // ADR-068
         val orders = conditionalOrderService.createOco(
-            userId(token), req.symbol, OrderSide.valueOf(req.side.uppercase()), req.quantity, req.legs.map { it.toLeg() },
+            uid, req.symbol, OrderSide.valueOf(req.side.uppercase()), req.quantity, req.legs.map { it.toLeg() },
         )
         return ResponseEntity.ok(orders.map { it.toResponse() })
     }

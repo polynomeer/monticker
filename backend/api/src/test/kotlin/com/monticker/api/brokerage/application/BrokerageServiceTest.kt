@@ -23,6 +23,10 @@ import com.monticker.api.brokerage.infrastructure.BrokerageToken
 import com.monticker.api.brokerage.infrastructure.MockBrokerageClient
 import com.monticker.api.common.aop.RiskLimitException
 import com.monticker.api.common.exception.BusinessRuleException
+import com.monticker.api.common.notification.UserNotificationCommand
+import com.monticker.api.common.consent.ConsentGroup
+import com.monticker.api.common.consent.ConsentService
+import com.monticker.api.common.consent.ConsentSource
 import com.monticker.api.common.exception.ReconnectRequiredException
 import com.monticker.api.risk.application.RiskCheckResult
 import com.monticker.api.risk.application.RiskCheckerService
@@ -60,7 +64,12 @@ class BrokerageServiceTest {
         every { orderRepo.findAllByAccountIdAndStockIdAndSideAndStatusAndSubmittedAtAfter(any(), any(), any(), any(), any()) } returns emptyList()
     }
 
-    private val service = BrokerageService(clientRegistry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery)
+    private val consentService = mockk<ConsentService>(relaxed = true)
+    private val events = mockk<org.springframework.context.ApplicationEventPublisher>(relaxed = true)
+    private val outcomeNotices = OrderOutcomeNotices(events)
+    private val connectConsents = listOf("BROKERAGE_DELEGATION", "BROKERAGE_NO_CUSTODY", "BROKERAGE_LOSS_ATTRIBUTION")
+
+    private val service = BrokerageService(clientRegistry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService, outcomeNotices)
 
     private val approvedRisk = RiskCheckResult(approved = true, blockedBy = null, severity = "APPROVED", checks = emptyList())
 
@@ -96,7 +105,7 @@ class BrokerageServiceTest {
         every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.empty()
         every { accountRepo.save(capture(accountSlot)) }      returns makeAccount()
 
-        service.connect(userId = 1L, provider = BrokerageProvider.KIS, appKey = "key", appSecret = "secret", accountNumber = "12345678")
+        service.connect(userId = 1L, provider = BrokerageProvider.KIS, appKey = "key", appSecret = "secret", accountNumber = "12345678", consents = connectConsents)
 
         val saved = accountSlot.captured
         assertThat(saved.accessToken).startsWith("mock_token_")
@@ -113,10 +122,14 @@ class BrokerageServiceTest {
         every { accountRepo.findByUserIdAndProviderAndAccountNumber(1L, BrokerageProvider.TOSS, "98765432") } returns Optional.empty()
         every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(oldAccount)
         every { accountRepo.save(capture(accountSlots)) } answers { firstArg() }
+        every { jdbc.queryForObject(match<String> { it.contains("FROM brokerage_orders") && it.contains("COUNT") }, Long::class.java, oldAccount.id) } returns 0L
 
-        service.connect(userId = 1L, provider = BrokerageProvider.TOSS, appKey = "key2", appSecret = "secret2", accountNumber = "98765432")
+        service.connect(userId = 1L, provider = BrokerageProvider.TOSS, appKey = "key2", appSecret = "secret2", accountNumber = "98765432", consents = connectConsents)
 
         assertThat(oldAccount.isActive).isFalse()
+        // ADR-067 — 열린 주문이 없는 옛 계좌의 키는 지운다
+        assertThat(oldAccount.appKey).isNull()
+        assertThat(oldAccount.disconnectedAt).isNotNull()
         val newAccount = accountSlots.first { it !== oldAccount }
         assertThat(newAccount.provider).isEqualTo(BrokerageProvider.TOSS)
         assertThat(newAccount.accountNumber).isEqualTo("98765432")
@@ -299,7 +312,7 @@ class BrokerageServiceTest {
 
     private fun serviceWithFakeClient(fakeClient: BrokerageClient): BrokerageService {
         val registry = BrokerageClientRegistry(BrokerageProvider.entries.associateWith { fakeClient })
-        return BrokerageService(registry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery)
+        return BrokerageService(registry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService, outcomeNotices)
     }
 
     @Test
@@ -365,7 +378,7 @@ class BrokerageServiceTest {
         every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(oldAccount)
         every { accountRepo.save(capture(accountSlot)) } answers { firstArg() }
 
-        service.connect(userId = 1L, provider = BrokerageProvider.KIS, appKey = "key", appSecret = "secret", accountNumber = "12345678")
+        service.connect(userId = 1L, provider = BrokerageProvider.KIS, appKey = "key", appSecret = "secret", accountNumber = "12345678", consents = connectConsents)
 
         assertThat(accountSlot.captured.authFailedAt).isNull()
     }
@@ -877,5 +890,224 @@ class BrokerageServiceTest {
 
         svc.submitOrder(1L, req)
         assertThat(saved.first().costBasisPrice).isEqualByComparingTo(BigDecimal("80000"))
+    }
+
+    // ── 연동 해지 (ADR-067) ────────────────────────────────────────────────────
+
+    private fun linkedAccount() = BrokerageAccount(
+        id = 7L, userId = 1L, provider = BrokerageProvider.KIS, accountNumber = "1234567801",
+        accessToken = "tok", appKey = "key", appSecret = "secret", tokenExpiresAt = Instant.now().plusSeconds(3600),
+        providerAccountRef = "ref",
+    )
+
+    private fun stubDisconnect(account: BrokerageAccount, openOrders: Long = 0, triggered: Long = 0) {
+        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
+        every { accountRepo.save(any()) } answers { firstArg() }
+        every { jdbc.queryForObject(match<String> { it.contains("FROM brokerage_orders") && it.contains("COUNT") }, Long::class.java, account.id) } returns openOrders
+        every { jdbc.queryForObject(match<String> { it.contains("FROM conditional_orders") && it.contains("TRIGGERED") }, Long::class.java, account.id) } returns triggered
+        every { jdbc.update(match<String> { it.contains("UPDATE conditional_orders") }, account.id) } returns 2
+    }
+
+    @Test
+    fun `disconnect wipes the stored keys, deactivates the account and cancels its active conditional orders`() {
+        val account = linkedAccount()
+        stubDisconnect(account)
+
+        val result = service.disconnect(1L)
+
+        assertThat(account.isActive).isFalse()
+        assertThat(account.accessToken).isNull()
+        assertThat(account.appKey).isNull()
+        assertThat(account.appSecret).isNull()
+        assertThat(account.tokenExpiresAt).isNull()
+        assertThat(account.providerAccountRef).isNull()
+        assertThat(account.disconnectedAt).isNotNull()
+        assertThat(result.cancelledConditionalOrders).isEqualTo(2)
+        verify { jdbc.update(match<String> { it.contains("SET status = 'CANCELLED'") && it.contains("status = 'ACTIVE'") }, account.id) }
+        verify { accountRepo.save(account) }
+    }
+
+    @Test
+    fun `disconnect takes the same per-user lock as order preparation so no order slips in between`() {
+        stubDisconnect(linkedAccount())
+
+        service.disconnect(1L)
+
+        verify { jdbc.query(match<String> { it.contains("pg_advisory_xact_lock") }, any<org.springframework.jdbc.core.RowCallbackHandler>(), any(), 1L) }
+    }
+
+    @Test
+    fun `disconnect is refused while an order's outcome at the broker is still open — its keys are needed to reconcile it`() {
+        val account = linkedAccount()
+        stubDisconnect(account, openOrders = 1)
+
+        assertThrows<BusinessRuleException> { service.disconnect(1L) }
+
+        assertThat(account.isActive).isTrue()
+        assertThat(account.appKey).isEqualTo("key")
+        verify(exactly = 0) { accountRepo.save(any()) }
+    }
+
+    @Test
+    fun `disconnect is refused while a triggered conditional order is being submitted`() {
+        val account = linkedAccount()
+        stubDisconnect(account, triggered = 1)
+
+        assertThrows<BusinessRuleException> { service.disconnect(1L) }
+
+        assertThat(account.appSecret).isEqualTo("secret")
+        verify(exactly = 0) { accountRepo.save(any()) }
+    }
+
+    @Test
+    fun `connect is refused before calling the broker when the notice consents are missing (ADR-068)`() {
+        val brokerClient = mockk<BrokerageClient>()
+        val svc = BrokerageService(BrokerageClientRegistry(BrokerageProvider.entries.associateWith { brokerClient }), accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService, outcomeNotices)
+        every { consentService.requireAndRecord(1L, ConsentGroup.BROKERAGE_CONNECT, emptyList(), ConsentSource.BROKERAGE_CONNECT) } throws IllegalArgumentException("필수 동의 항목이 빠졌습니다")
+
+        assertThrows<IllegalArgumentException> {
+            svc.connect(userId = 1L, provider = BrokerageProvider.KIS, appKey = "k", appSecret = "s", accountNumber = "1", consents = emptyList())
+        }
+        verify(exactly = 0) { brokerClient.issueToken(any(), any()) }
+    }
+
+    // ── 결과 불명 주문 알림 ────────────────────────────────────────────────────
+
+    private fun publishedOfType(type: String): List<UserNotificationCommand> {
+        val all = mutableListOf<Any>()
+        verify(atLeast = 0) { events.publishEvent(capture(all)) }
+        return all.filterIsInstance<UserNotificationCommand>().filter { it.data["type"] == type }
+    }
+
+    @Test
+    fun `an order whose outcome is unknown tells the user right away not to resubmit`() {
+        val orderSlot = slot<BrokerageOrder>()
+        val (svc, _) = fakeClientService(BrokerageOrderResult.indeterminate("read timeout"), orderSlot)
+
+        val order = svc.submitOrder(1L, req)
+
+        val sent = publishedOfType("ORDER_OUTCOME_UNKNOWN")
+        assertThat(sent).hasSize(1)
+        assertThat(sent.single().userId).isEqualTo(1L)
+        assertThat(sent.single().body).contains("다시 내지 마세요")
+        assertThat(sent.single().dedupKey).isEqualTo("brokerage-order-unknown:${order.id}")
+    }
+
+    @Test
+    fun `an accepted order sends no outcome notice`() {
+        val orderSlot = slot<BrokerageOrder>()
+        val (svc, _) = fakeClientService(BrokerageOrderResult.rejected("주문가능수량 초과"), orderSlot)
+
+        svc.submitOrder(1L, req)
+
+        assertThat(publishedOfType("ORDER_OUTCOME_UNKNOWN")).isEmpty()
+    }
+
+    @Test
+    fun `reconciliation that finds the order tells the user it was filled`() {
+        val order = makeSellOrder(BrokerageOrderStatus.UNKNOWN, submittedAt = Instant.now().minusSeconds(40))
+        val client = stubReconcile(order, listOf(snapshot("ODNO-9", order.submittedAt.plusSeconds(1))))
+
+        serviceWithFakeClient(client).reconcileUnresolved(order.id)
+
+        val sent = publishedOfType("ORDER_OUTCOME_RESOLVED")
+        assertThat(sent).hasSize(1)
+        assertThat(sent.single().data["status"]).isEqualTo("FILLED")
+    }
+
+    @Test
+    fun `reconciliation that confirms the order never reached the broker says so`() {
+        val order = makeSellOrder(BrokerageOrderStatus.UNKNOWN, submittedAt = Instant.now().minusSeconds(180))
+        val client = stubReconcile(order, emptyList())
+
+        serviceWithFakeClient(client).reconcileUnresolved(order.id)
+
+        assertThat(publishedOfType("ORDER_OUTCOME_RESOLVED").single().body).contains("들어가지 않은 것으로 확인")
+    }
+
+    @Test
+    fun `an ambiguous match is announced once, not on every retry`() {
+        val order = makeSellOrder(BrokerageOrderStatus.UNKNOWN, submittedAt = Instant.now().minusSeconds(40))
+        val client = stubReconcile(order, listOf(
+            snapshot("A", order.submittedAt.plusSeconds(1)), snapshot("B", order.submittedAt.plusSeconds(2)),
+        ))
+        val svc = serviceWithFakeClient(client)
+
+        svc.reconcileUnresolved(order.id)
+        svc.reconcileUnresolved(order.id)
+
+        assertThat(publishedOfType("ORDER_NEEDS_REVIEW")).hasSize(1)
+        assertThat(publishedOfType("ORDER_OUTCOME_RESOLVED")).isEmpty()
+    }
+
+    @Test
+    fun `a lookup failure sends nothing — the outcome is still unknown`() {
+        val order = makeSellOrder(BrokerageOrderStatus.UNKNOWN, submittedAt = Instant.now().minusSeconds(40))
+        val client = stubReconcile(order, null)
+
+        serviceWithFakeClient(client).reconcileUnresolved(order.id)
+
+        assertThat(publishedOfType("ORDER_OUTCOME_RESOLVED")).isEmpty()
+        assertThat(publishedOfType("ORDER_NEEDS_REVIEW")).isEmpty()
+    }
+
+    // ── 보안 리뷰(2026-10) 후속 ────────────────────────────────────────────────
+
+    @Test
+    fun `switching accounts keeps the old keys while that account still has an open order`() {
+        val oldAccount = makeAccount()
+        every { accountRepo.findByUserIdAndProviderAndAccountNumber(1L, BrokerageProvider.TOSS, "98765432") } returns Optional.empty()
+        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(oldAccount)
+        every { accountRepo.save(any()) } answers { firstArg() }
+        every { jdbc.queryForObject(match<String> { it.contains("FROM brokerage_orders") && it.contains("COUNT") }, Long::class.java, oldAccount.id) } returns 1L
+
+        service.connect(userId = 1L, provider = BrokerageProvider.TOSS, appKey = "k", appSecret = "s", accountNumber = "98765432", consents = connectConsents)
+
+        assertThat(oldAccount.isActive).isFalse()
+        assertThat(oldAccount.appKey).isEqualTo("test-app-key")   // 대조에 필요
+    }
+
+    @Test
+    fun `the disconnect guard also counts partially filled orders`() {
+        stubDisconnect(linkedAccount())
+
+        service.disconnect(1L)
+
+        verify { jdbc.queryForObject(match<String> { it.contains("FROM brokerage_orders") && it.contains("PARTIALLY_FILLED") }, Long::class.java, 7L) }
+    }
+
+    @Test
+    fun `disconnect locks the account row that token refresh locks`() {
+        stubDisconnect(linkedAccount())
+
+        service.disconnect(1L)
+
+        verify { jdbc.query(match<String> { it.contains("FROM brokerage_accounts") && it.contains("FOR UPDATE") }, any<org.springframework.jdbc.core.RowCallbackHandler>(), 7L) }
+    }
+
+    @Test
+    fun `token refresh does not write a new token onto an account that was disconnected meanwhile`() {
+        val account = makeAccount(tokenExpiresAt = Instant.now().minusSeconds(10)).apply { isActive = false }
+        val fakeClient = mockk<BrokerageClient>()
+        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
+
+        assertThrows<ReconnectRequiredException> { serviceWithFakeClient(fakeClient).getBalance(1L) }
+
+        verify(exactly = 0) { fakeClient.issueToken(any(), any()) }
+        assertThat(account.accessToken).isEqualTo("mock_token_test")
+    }
+
+    @Test
+    fun `user-initiated real-money requests need the current signup consents`() {
+        every { consentService.missingRequired(1L, ConsentGroup.SIGNUP) } returns setOf(com.monticker.api.common.consent.ConsentType.TERMS)
+
+        assertThrows<BusinessRuleException> { service.requireCurrentConsents(1L) }
+    }
+
+    @Test
+    fun `current consents pass`() {
+        every { consentService.missingRequired(1L, ConsentGroup.SIGNUP) } returns emptySet()
+
+        service.requireCurrentConsents(1L)
     }
 }

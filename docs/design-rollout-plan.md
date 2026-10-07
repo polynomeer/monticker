@@ -23,11 +23,11 @@
 
 | # | 화면 | 항목 | 지금 | 필요한 것 | 상태 |
 |---|---|---|---|---|---|
-| 0-1 | /signup | 약관·개인정보·연령 동의 기록 | 화면에서는 필수 동의를 체크하지 않으면 가입을 막는다. 하지만 **서버에 기록되지 않는다** | `SignupRequest`에 동의 항목·약관 버전·시각을 추가하고 `user_consents` 테이블을 만든다. 철회 이력도 남긴다 | |
-| 0-2 | /brokerage/connect | 연동 동의 3개(위임·자금 미보관·손실 귀속) 기록 | 3개를 모두 체크해야 연동 버튼이 켜진다. 서버 기록은 없다 | connect 요청에 동의 버전·시각을 저장한다(법무 증빙). 0-1과 같은 consent 모델을 쓴다 | |
-| 0-3 | /brokerage/connect | 연동 해지(API 키 즉시 파기) | 보안 설명 패널에 "준비 중"으로 표시. **해지 API가 없다** | `DELETE /api/brokerage/account`: 키 파기, 계좌 비활성화, 조건부 주문 정리. 프론트는 확인 단계를 둔다. 약관 제3조("해지 시 즉시 파기")와 지금 동작이 어긋난다 | |
-| 0-4 | /quant-lab/earnings | 출금 안내(본인 명의·지급 기한·원천징수) | 확인되지 않은 정책이라 "운영 검토 후 지급, 정산 정책을 따름"으로 완화해 두었다 | 정산·원천징수 정책 확정, 법무 검토, 예금주 본인확인을 서버에서 검증 | |
-| 0-5 | /settings/notifications | 리스크 경고·"결과 확인 중" 주문 알림 | 비활성 토글 | 알림 발송 경로를 [ADR-065](decisions/065-user-notifications-from-api.md)의 `notify.user`로 연결한다. 결과 불명 주문([ADR-056](decisions/056-brokerage-order-unknown-outcome.md))은 방해 금지 시간에도 전달한다 | |
+| 0-1 | /signup | 약관·개인정보·연령 동의 기록 | 화면에서는 필수 동의를 체크하지 않으면 가입을 막는다. 하지만 **서버에 기록되지 않는다** | `SignupRequest`에 동의 항목·약관 버전·시각을 추가하고 `user_consents` 테이블을 만든다. 철회 이력도 남긴다 | ✅ [ADR-068](decisions/068-consent-records.md) — 가입 시 서버 검증·기록, 소셜 가입·약관 개정은 `/consent` 게이트 |
+| 0-2 | /brokerage/connect | 연동 동의 3개(위임·자금 미보관·손실 귀속) 기록 | 3개를 모두 체크해야 연동 버튼이 켜진다. 서버 기록은 없다 | connect 요청에 동의 버전·시각을 저장한다(법무 증빙). 0-1과 같은 consent 모델을 쓴다 | ✅ [ADR-068](decisions/068-consent-records.md) — 증권사 호출 전 검증, 같은 트랜잭션에 기록 |
+| 0-3 | /brokerage/connect | 연동 해지(API 키 즉시 파기) | 보안 설명 패널에 "준비 중"으로 표시. **해지 API가 없다** | `DELETE /api/brokerage/account`: 키 파기, 계좌 비활성화, 조건부 주문 정리. 프론트는 확인 단계를 둔다. 약관 제3조("해지 시 즉시 파기")와 지금 동작이 어긋난다 | ✅ [ADR-067](decisions/067-brokerage-disconnect.md) — 결과가 열린 주문이 있으면 거부. 갈아타기로 비활성화된 계좌의 키 정리는 후속 |
+| 0-4 | /quant-lab/earnings | 출금 안내(본인 명의·지급 기한·원천징수) | 확인되지 않은 정책이라 "운영 검토 후 지급, 정산 정책을 따름"으로 완화해 두었다 | 정산·원천징수 정책 확정, 법무 검토, 예금주 본인확인을 서버에서 검증 | 정책·법무 결정 대기 — 코드로 풀 수 없음 |
+| 0-5 | /settings/notifications | 리스크 경고·"결과 확인 중" 주문 알림 | 비활성 토글 | 알림 발송 경로를 [ADR-065](decisions/065-user-notifications-from-api.md)의 `notify.user`로 연결한다. 결과 불명 주문([ADR-056](decisions/056-brokerage-order-unknown-outcome.md))은 방해 금지 시간에도 전달한다 | 부분 ✅ — ‘결과 확인 중’: 결과 불명 진입·확정·수동 검토 때 `notify.user`로 알림(`OrderOutcomeNotices`), 끌 수 없음. 리스크 한도 근접 경고는 주기 평가가 필요해 아래 P1로 분리 |
 
 이번 작업 중 별도로 발견한 보안 결함: **감정 태그 IDOR.** `EmotionTagService.getTag/saveTag`가 거래 소유자를 확인하지 않아,
 다른 사용자의 감정 태그와 메모를 읽거나 덮어쓸 수 있다. 별도 작업으로 분리했다.
@@ -42,6 +42,7 @@
 | 패널 헤더 + / 설정 / 확대 아이콘 | 아이콘만 있고 동작 없음. 내보내기는 일부 화면(포트폴리오·지갑)만 CSV로 동작 | 패널 확대 모달, 탭 추가, 패널별 설정을 키트 `Panel`에 구현 | P2 | |
 | 상단 계좌 칩 잔액 | 잔액 없이 "모의투자 계좌 / 실전 계좌"만 표시 | 모의 총자산·실계좌 가용 현금 요약 조회를 셸에서 공유 | P2 | |
 | 라이트·시스템 테마 | 다크 고정(`forcedTheme`) | 토큰을 CSS 변수로 바꾸고 테마별 값 세트를 둔다([ADR-066](decisions/066-terminal-ui-shell.md) Revisit) | P2 | |
+| 리스크 한도 근접 경고(80%) | 없음(P0-5에서 분리) | VaR·집중도·일간 손실 사용률을 주기적으로 평가해 임계값을 넘는 순간 한 번 알림(사용자·규칙·일자별 dedupKey). 차단된 조건부 주문은 이미 ADR-065로 알린다 | P1 | |
 | 고대비 모드 | `a11yStore.highContrast`는 연결돼 있다. 하지만 globals.css 규칙이 옛 토큰(`dracula-comment`)만 덮어 새 화면에서는 효과가 약하다 | `tm-muted`·`tm-line2` 등 새 토큰용 고대비 규칙 | P1 | |
 | 접근성 설정: 글자 "작게", 움직임 줄이기, 숫자 고정폭, 가격 깜빡임 | 비활성 | `a11yStore` 필드를 추가하고 ECharts 애니메이션·`.num` 글꼴을 설정값에 연동 | P2 | |
 | 고정폭 숫자 글꼴 | 시스템 모노 스택(OS마다 다름) | 모노 웹폰트를 self-host(CSP `font-src 'self'`)할지 결정 | P2 | |
@@ -186,7 +187,7 @@
 
 | 화면 | 항목 | 지금 | 필요한 것 | 우선순위 | 상태 |
 |---|---|---|---|---|---|
-| /signup | [선택] 마케팅 수신 동의 | 체크되지만 전송 안 함 | 수신 동의 저장·철회 API, 알림 설정 연동 | P1 | |
+| /signup | [선택] 마케팅 수신 동의 | 동의는 저장된다(ADR-068). 철회는 `DELETE /api/users/me/consents/MARKETING` | 설정 화면에 철회 토글, 실제 마케팅 발송 경로가 최신 동의를 확인 | P1 | 부분 ✅ |
 | /subscription | 다음 결제일 | 만료일(`expiresAt`)로 표시 | 정기결제 스케줄(`next_billing_at`) | P1 | |
 | /subscription | FAQ 답변(플랜별 기능 범위·환불) | 사실에 맞게 고쳤고, 환불은 "[법률 검토 후 확정]" | 플랜별 기능 게이팅 정책, 환불 정책 | P1 | |
 | /settings/notifications | 전체 알림, 거래량 급증, 퀀트 시그널, 체결·정산, 전략 마켓 소식 | 비활성 토글 | `NotificationPreferenceRequest` 필드 추가와 발송 경로 확인(리스크·결과 확인 중은 0-5) | P1 | |

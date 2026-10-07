@@ -2,6 +2,7 @@ package com.monticker.api.brokerage.api
 
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
 import com.monticker.api.brokerage.application.BrokerageService
+import com.monticker.api.brokerage.application.DisconnectResult
 import com.monticker.api.brokerage.application.TradingHaltService
 import com.monticker.api.brokerage.domain.*
 import com.monticker.api.brokerage.infrastructure.BrokerageBalance
@@ -9,6 +10,7 @@ import com.monticker.api.brokerage.infrastructure.BrokerageOrderRequest
 import com.monticker.api.common.aop.RateLimited
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Size
 import jakarta.validation.constraints.Positive
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
@@ -26,6 +28,8 @@ data class ConnectRequest(
     @field:NotBlank val appKey: String,
     @field:NotBlank val appSecret: String,
     @field:NotBlank val accountNumber: String,
+    /** ADR-068 — BROKERAGE_DELEGATION, BROKERAGE_NO_CUSTODY, BROKERAGE_LOSS_ATTRIBUTION 모두 필수. */
+    @field:Size(max = 10) val consents: List<String> = emptyList(),
 )
 
 data class OrderRequest(
@@ -115,7 +119,7 @@ class BrokerageController(
         @Valid @RequestBody req: ConnectRequest,
     ): ResponseEntity<AccountResponse> {
         val provider = BrokerageProvider.valueOf(req.provider.uppercase())
-        val account = brokerageService.connect(userId(token), provider, req.appKey, req.appSecret, req.accountNumber)
+        val account = brokerageService.connect(userId(token), provider, req.appKey, req.appSecret, req.accountNumber, req.consents)
         return ResponseEntity.ok(account.toResponse())
     }
 
@@ -128,6 +132,11 @@ class BrokerageController(
         val halt = tradingHaltService.findActive(provider, userId)
         return ResponseEntity.ok(TradingStatusResponse(halted = halt != null, scope = halt?.scope?.name, message = halt?.userMessage))
     }
+
+    // ADR-067 — 연동 해지: 저장된 키를 지우고 대기 중인 조건부 주문을 취소한다. 결과가 열린 주문이 있으면 409.
+    @DeleteMapping("/account")
+    fun disconnect(@RequestHeader("Authorization") token: String): ResponseEntity<DisconnectResult> =
+        ResponseEntity.ok(brokerageService.disconnect(userId(token)))
 
     // 연동 계좌 조회
     @GetMapping("/account")
@@ -172,9 +181,11 @@ class BrokerageController(
     ): ResponseEntity<OrderResponse> {
         val side = OrderSide.valueOf(req.side.uppercase())
         val orderType = OrderType.valueOf(req.orderType.uppercase())
+        val uid = userId(token)
+        brokerageService.requireCurrentConsents(uid)   // ADR-068
 
         val order = brokerageService.submitOrder(
-            userId(token),
+            uid,
             BrokerageOrderRequest(
                 symbol     = req.symbol,
                 side       = side.name,
