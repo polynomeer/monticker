@@ -75,9 +75,19 @@ async function kospiFrom(fromIso: string): Promise<{ date: string; close: number
   return data.map((d) => ({ date: d.date, close: +d.close, isMocked: d.isMocked }));
 }
 
+/** 이벤트 목록(점·이벤트 후 수익률용) — 서버가 종목당 최근 100건까지만 준다. 건수는 [eventCounts]로 따로 센다 */
+const EVENT_LIST_LIMIT = 100;
 async function eventsFrom(id: number, fromIso: string): Promise<Ev[]> {
-  const r = await fetch(`/api/stocks/${id}/events?from=${encodeURIComponent(fromIso)}&limit=100`);
+  const r = await fetch(`/api/stocks/${id}/events?from=${encodeURIComponent(fromIso)}&limit=${EVENT_LIST_LIMIT}`);
   return r.ok ? r.json() : [];
+}
+
+/** 종목별 기간 이벤트 수(ADR-087) — 한 요청으로. 기간은 KST (오늘 − days) 자정부터. 실패하면 null */
+async function eventCounts(ids: number[], days: number): Promise<Map<number, number> | null> {
+  const r = await fetch(`/api/events/counts?stockIds=${ids.join(",")}&days=${days}`);
+  if (!r.ok) return null;
+  const body: { counts: { stockId: number; count: number }[] } = await r.json();
+  return new Map(body.counts.map((c) => [c.stockId, c.count]));
 }
 
 /** 종목 비교 — 시안 Compare.dc.html. 정규화 수익률(시작일=100) · 지표 비교 · 일간 수익률 상관관계. */
@@ -109,6 +119,13 @@ export default function ComparePage() {
   });
   const eventQs = useQueries({
     queries: ids.map((id) => ({ queryKey: ["compare", "events", id, fromIso], queryFn: () => eventsFrom(id!, fromIso), enabled: id != null, staleTime: 60_000 })),
+  });
+  const resolvedIds = ids.filter((x): x is number => x != null);
+  const { data: counts } = useQuery({
+    queryKey: ["compare", "eventCounts", [...resolvedIds].sort((a, b) => a - b).join(","), days],
+    queryFn: () => eventCounts(resolvedIds, days),
+    enabled: resolvedIds.length > 0,
+    staleTime: 60_000,
   });
   const quotes = useQuotes(ids.filter((x): x is number => x != null), 60_000);
   const { data: kospi = [] } = useQuery({ queryKey: ["compare", "kospi", fromIso], queryFn: () => kospiFrom(fromIso), staleTime: 10 * 60_000 });
@@ -176,7 +193,7 @@ export default function ComparePage() {
       ret: closes.length > 1 ? closes[closes.length - 1] / closes[0] - 1 : null,
       vol: sd != null ? sd * Math.sqrt(252) : null,
       mdd: closes.length > 1 ? mdd : null,
-      events: eventQs[i]?.data ? evs.length : null,
+      events: s.info && counts ? (counts.get(s.info.id) ?? null) : null,
       afterAvg: after.length ? after.reduce((a, b) => a + b, 0) / after.length : null,
       per: q?.per != null && !q.isFundamentalsMocked ? q.per : null,
     };
@@ -194,7 +211,7 @@ export default function ComparePage() {
       label: kospiMocked ? "베타 (KOSPI · 모의 지수)" : "베타 (KOSPI)",
       cells: metrics.map((m) => ({ text: m.beta == null ? (m.betaNote ? `— (${m.betaNote})` : "—") : m.beta.toFixed(2), cls: m.beta == null ? "text-tm-muted" : kospiMocked ? "text-tm-soft" : "" })),
     },
-    { key: "ev", label: `이벤트 수 (${periodLabel})`, cells: metrics.map((m) => ({ text: m.events == null ? "—" : m.events >= 100 ? "100+" : String(m.events) })) },
+    { key: "ev", label: `이벤트 수 (${periodLabel})`, cells: metrics.map((m) => ({ text: m.events == null ? "—" : m.events.toLocaleString("ko-KR") })) },
     { key: "after", label: "이벤트 후 1일 평균", cells: metrics.map((m) => ({ text: pct(m.afterAvg, 2), cls: dirCls(m.afterAvg) })) },
     { key: "per", label: "PER", cells: metrics.map((m) => ({ text: m.per == null ? "—" : m.per.toFixed(1) })) },
     { key: "div", label: "배당수익률", cells: metrics.map(() => ({ text: "—", cls: "text-tm-muted" })) },
@@ -320,7 +337,7 @@ export default function ComparePage() {
 
         {chartTab === "events" && (
           <EventOverlap
-            stocks={stocks.map((s, i) => ({ name: nameOf(s), color: s.color, events: eventQs[i]?.data ?? [] }))}
+            stocks={stocks.map((s, i) => ({ name: nameOf(s), color: s.color, events: eventQs[i]?.data ?? [], total: metrics[i]?.events ?? null }))}
             fromIso={fromIso}
           />
         )}
@@ -375,11 +392,12 @@ export default function ComparePage() {
 
 
 /** 이벤트 겹침 — 종목별 이벤트 발생 시점을 같은 시간축에 점으로 */
-function EventOverlap({ stocks, fromIso }: { stocks: { name: string; color: string; events: Ev[] }[]; fromIso: string }) {
+function EventOverlap({ stocks, fromIso }: { stocks: { name: string; color: string; events: Ev[]; total: number | null }[]; fromIso: string }) {
   const start = new Date(fromIso).getTime();
   const end = Date.now();
   const x = (iso: string) => Math.max(0, Math.min(100, ((new Date(iso).getTime() - start) / (end - start)) * 100));
   const anyEvents = stocks.some((s) => s.events.length > 0);
+  const truncated = stocks.some((s) => s.total != null && s.total > s.events.length);
   return (
     <div className="flex flex-col gap-3">
       {stocks.map((s) => (
@@ -395,11 +413,12 @@ function EventOverlap({ stocks, fromIso }: { stocks: { name: string; color: stri
               />
             ))}
           </div>
-          <span className="num w-10 text-right text-2xs text-tm-muted">{s.events.length >= 100 ? "100+" : s.events.length}</span>
+          <span className="num w-12 text-right text-2xs text-tm-muted">{(s.total ?? s.events.length).toLocaleString("ko-KR")}</span>
         </div>
       ))}
       <span className="text-2xs text-tm-muted">
         {anyEvents ? "점은 각 종목의 이벤트 발생 시점입니다. 같은 세로 위치에 겹치면 동시에 일어난 이벤트입니다." : "기간 내 이벤트가 없습니다."}
+        {truncated && ` 점은 종목당 최근 ${EVENT_LIST_LIMIT}건까지만 표시합니다(오른쪽 숫자는 전체 건수).`}
       </span>
     </div>
   );
