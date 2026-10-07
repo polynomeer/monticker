@@ -12,7 +12,11 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.jdbc.core.JdbcTemplate
+import com.monticker.api.common.domain.CandleFreshness
+import com.monticker.api.common.domain.LatestClose
 import java.math.BigDecimal
+import java.time.Duration
+import java.time.Instant
 
 /**
  * MatchingService.submitOrder는 여기(OrderSagaOrchestrator.execute)로 위임만 한다 — ADR-011.
@@ -39,16 +43,16 @@ class OrderSagaOrchestratorTest {
     private val stockId = 100L
     private val currentPrice = BigDecimal("1000")
 
-    private fun stubStockExistsAndPrice() {
+    private fun stubStockExistsAndPrice(candleTime: Instant? = Instant.now()) {
         every { jdbc.queryForObject("SELECT COUNT(*) FROM stocks WHERE id = ?", Long::class.java, stockId) } returns 1L
-        // getCurrentPrice는 이제 queryForObject가 아니라 query+firstOrNull을 쓴다(0건일 때
+        // latestClose는 queryForObject가 아니라 query+firstOrNull을 쓴다(0건일 때
         // EmptyResultDataAccessException을 던지지 않고 그냥 빈 리스트를 받기 위함).
         every {
             jdbc.query(
-                "SELECT close FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1",
-                any<org.springframework.jdbc.core.RowMapper<BigDecimal>>(), stockId,
+                OrderSagaOrchestrator.LATEST_PRICE_SQL,
+                any<org.springframework.jdbc.core.RowMapper<LatestClose>>(), stockId,
             )
-        } returns listOf(currentPrice)
+        } returns listOfNotNull(candleTime?.let { LatestClose(currentPrice, it) })
     }
 
     /**
@@ -197,13 +201,7 @@ class OrderSagaOrchestratorTest {
         // EmptyResultDataAccessException을 던지지 않고 빈 리스트를 반환하는지 확인한다 —
         // 그래야 "?: throw IllegalStateException"이 실제로 실행되어 GlobalExceptionHandler가
         // 이걸 안내 메시지 없는 500이 아니라 409로 분류할 수 있다.
-        every { jdbc.queryForObject("SELECT COUNT(*) FROM stocks WHERE id = ?", Long::class.java, stockId) } returns 1L
-        every {
-            jdbc.query(
-                "SELECT close FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1",
-                any<org.springframework.jdbc.core.RowMapper<BigDecimal>>(), stockId,
-            )
-        } returns emptyList()
+        stubStockExistsAndPrice(candleTime = null)
 
         org.assertj.core.api.Assertions.assertThatThrownBy {
             orchestrator.execute(
@@ -212,5 +210,66 @@ class OrderSagaOrchestratorTest {
             )
         }.isInstanceOf(IllegalStateException::class.java)
             .hasMessageContaining("현재가")
+    }
+
+    // ── 시세 신선도(CandleFreshness) — 보안 리뷰 2026-10 ───────────────────────────────
+
+    private val staleTime get() = Instant.now().minus(CandleFreshness.MAX_AGE).minus(Duration.ofMinutes(1))
+
+    @Test
+    fun `a MARKET order is rejected on a stale candle before any cash is reserved or order created`() {
+        stubStockExistsAndPrice(candleTime = staleTime)
+        stubAccountCash()
+
+        org.assertj.core.api.Assertions.assertThatThrownBy {
+            orchestrator.execute(userId, SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10))
+        }.isInstanceOf(IllegalStateException::class.java).hasMessageContaining("시장가 주문을 체결할 수 없습니다")
+
+        // 예약 앞에서 거부 — 예약도 환불도 없다(현금은 정확히 0번 움직인다).
+        verify(exactly = 0) { jdbc.update(match<String> { it.startsWith("UPDATE paper_accounts") }, *anyVararg()) }
+        verify(exactly = 0) { orderRepo.save(any()) }
+        verify(exactly = 0) { fillRepo.save(any()) }
+    }
+
+    @Test
+    fun `a MARKET SELL is rejected on a stale candle without touching holdings or cash`() {
+        stubStockExistsAndPrice(candleTime = staleTime)
+
+        org.assertj.core.api.Assertions.assertThatThrownBy {
+            orchestrator.execute(userId, SubmitOrderRequest(stockId = stockId, side = "SELL", orderType = "MARKET", quantity = 1))
+        }.isInstanceOf(IllegalStateException::class.java)
+
+        verify(exactly = 0) { jdbc.query(match<String> { it.contains("FROM portfolio_positions") }, any<org.springframework.jdbc.core.RowMapper<Int>>(), *anyVararg()) }
+        verify(exactly = 0) { jdbc.update(match<String> { it.startsWith("UPDATE paper_accounts") }, *anyVararg()) }
+        verify(exactly = 0) { fillRepo.save(any()) }
+    }
+
+    @Test
+    fun `a MARKET order fills on a candle just inside the freshness bound`() {
+        stubStockExistsAndPrice(candleTime = Instant.now().minus(CandleFreshness.MAX_AGE).plusSeconds(30))
+        stubAccountCash()
+        stubOrderAndFillSaves()
+
+        val res = orchestrator.execute(userId, SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10))
+
+        assertThat(res.fills).hasSize(1)
+        assertThat(res.fills.single().fillPrice).isEqualByComparingTo(currentPrice)
+    }
+
+    // 지정가는 거부하지 않는다 — 오래된 값으로 즉시 체결하지 않고 미체결로 접수해 스위퍼(같은 신선도 규칙)에 맡긴다.
+    @Test
+    fun `a crossing LIMIT order on a stale candle rests unfilled instead of filling at the stale price`() {
+        stubStockExistsAndPrice(candleTime = staleTime)
+        stubAccountCash()
+        stubOrderAndFillSaves()
+
+        val res = orchestrator.execute(
+            userId, SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "LIMIT", quantity = 10, limitPrice = BigDecimal("1200")),
+        )
+
+        assertThat(res.fills).isEmpty()
+        assertThat(res.order.status).isEqualTo("PENDING")
+        verify(exactly = 0) { fillRepo.save(any()) }
+        verify { orderBookService.submit(any()) }
     }
 }

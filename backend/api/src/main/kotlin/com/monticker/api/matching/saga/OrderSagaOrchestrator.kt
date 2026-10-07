@@ -1,6 +1,8 @@
 package com.monticker.api.matching.saga
 
 import com.monticker.api.common.aop.Timed
+import com.monticker.api.common.domain.CandleFreshness
+import com.monticker.api.common.domain.LatestClose
 import com.monticker.api.common.domain.Money
 import com.monticker.api.common.domain.Price
 import com.monticker.api.matching.application.FillQueryService
@@ -55,6 +57,9 @@ class OrderSagaOrchestrator(
         const val PENDING_SELL_QTY_SQL =
             "SELECT COALESCE(SUM(quantity - filled_qty), 0) AS qty FROM orders " +
                 "WHERE user_id = ? AND stock_id = ? AND side = 'SELL' AND status IN ('PENDING', 'PARTIALLY_FILLED')"
+
+        /** 최신 1분봉 종가와 그 시각 — 시각으로 신선도(CandleFreshness)를 판정한다. */
+        const val LATEST_PRICE_SQL = "SELECT close, candle_time FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1"
     }
 
     @Timed("matching.saga.submit", tags = ["module=saga"])
@@ -96,8 +101,18 @@ class OrderSagaOrchestrator(
         val stockExists = jdbc.queryForObject("SELECT COUNT(*) FROM stocks WHERE id = ?", Long::class.java, req.stockId) ?: 0L
         require(stockExists > 0) { "존재하지 않는 종목: stockId=${req.stockId}" }
 
-        val currentPrice = getCurrentPrice(req.stockId)
-        val estimatedPrice = limitPrice ?: currentPrice
+        // 오래된 봉(시세 단절·장 마감 후)으로는 즉시 체결하지 않는다(CandleFreshness, ADR-074 Note).
+        //  - MARKET: 거부한다. 이 검사는 현금 예약(STEP 2) 앞이라 예약·환불이 생기지 않는다.
+        //  - LIMIT: 즉시 체결만 건너뛰고 미체결로 접수한다 — 시세가 다시 신선해지면 스위퍼가 체결한다.
+        val latest = latestClose(req.stockId)
+        val freshPrice: Price? = latest.takeIf { CandleFreshness.isFresh(it.candleTime) }?.let { Price.of(it.close) }
+        if (req.orderType == "MARKET" && freshPrice == null) {
+            throw IllegalStateException(
+                "시세가 ${CandleFreshness.MAX_AGE.toMinutes()}분 넘게 갱신되지 않아 시장가 주문을 체결할 수 없습니다" +
+                    "(마지막 시세 ${latest.candleTime}). 장중에 다시 시도하거나 지정가로 주문하세요: stockId=${req.stockId}",
+            )
+        }
+        val estimatedPrice = limitPrice ?: freshPrice!!
 
         // ADR-047: 매도는 보유 수량 안에서만. 이전엔 이 확인이 구 페이퍼 경로에만 있어 매칭 엔진으로는 공매도가 됐다.
         // portfolio_positions는 paper 모듈의 프로젝션이지만 paper_accounts와 같은 수준의 JDBC 읽기다.
@@ -146,9 +161,10 @@ class OrderSagaOrchestrator(
         // STEP 4: FILL_ORDER (조건 충족 시 즉시 체결)
         saga.currentStep = SagaStep.ORDER_FILLED
         val fillPrice: Price? = when {
-            req.orderType == "MARKET" -> currentPrice
-            req.side == "BUY"  && limitPrice!! >= currentPrice -> currentPrice
-            req.side == "SELL" && limitPrice!! <= currentPrice -> currentPrice
+            freshPrice == null -> null
+            req.orderType == "MARKET" -> freshPrice
+            req.side == "BUY"  && limitPrice!! >= freshPrice -> freshPrice
+            req.side == "SELL" && limitPrice!! <= freshPrice -> freshPrice
             else -> null
         }
 
@@ -284,12 +300,13 @@ class OrderSagaOrchestrator(
     // "?: throw IllegalStateException"이 무력화된다(부하 테스트로 실제 확인 — 최근 캔들이
     // 없는 종목 주문이 안내 메시지 없는 500으로 샜다. PaperTradingService에 있던 동일 버그
     // 참고). query+firstOrNull은 0건이어도 예외 없이 빈 리스트를 준다.
-    private fun getCurrentPrice(stockId: Long): Price =
+    // 봉이 아예 없으면 MARKET·LIMIT 모두 거부한다(예전과 같음). 있으면 신선도 판정은 호출자가 한다.
+    private fun latestClose(stockId: Long): LatestClose =
         jdbc.query(
-            "SELECT close FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1",
-            { rs, _ -> rs.getBigDecimal("close") },
+            LATEST_PRICE_SQL,
+            { rs, _ -> LatestClose(rs.getBigDecimal("close"), rs.getTimestamp("candle_time").toInstant()) },
             stockId,
-        ).firstOrNull()?.let { Price.of(it) } ?: throw IllegalStateException("현재가 조회 불가: stockId=$stockId")
+        ).firstOrNull()?.takeIf { it.close > BigDecimal.ZERO } ?: throw IllegalStateException("현재가 조회 불가: stockId=$stockId")
 
     private fun ensureAccountExists(userId: Long) {
         jdbc.update(

@@ -44,14 +44,16 @@ class WatchRuleExecutorTest {
     @BeforeEach
     fun setUp() {
         executor = WatchRuleExecutor(ruleRepo, execRepo, submitter, SimpleMeterRegistry(), guards, signalAccess)
-        every { guards.claimDailySlot(any(), any()) } returns true
+        every { guards.claimFiring(any()) } answers { claimed(firstArg()) }
         every { guards.missingRequiredEvents(any(), any(), any(), any()) } returns emptyList()
         every { execRepo.existsByWatchRuleIdAndStockEventId(any(), any()) } returns false
-        every { execRepo.existsSince(any(), any(), any()) } returns false
         // relaxed 목의 제네릭 save()는 Object를 돌려줘 캐스트가 터진다. 예전엔 onEvent가 그 예외까지 삼켜
         // 테스트가 통과했다 — 기록 뒤의 메트릭 증가는 한 번도 실행되지 않았다.
         every { execRepo.save(any<WatchRuleExecution>()) } answers { firstArg() }
     }
+
+    private val firedAt = Instant.parse("2026-10-07T01:00:00Z")
+    private fun claimed(ruleId: Long) = FiringClaim.Claimed(ruleId, firedAt, previousFiredAt = null, day = java.time.LocalDate.of(2026, 10, 7))
 
     private fun rule(
         id: Long = 1L,
@@ -135,22 +137,42 @@ class WatchRuleExecutorTest {
     @Test
     fun `a rule that fired inside its cooldown window is skipped`() {
         givenRules(rule(cooldownSec = 600))
-        every { execRepo.existsSince(1L, WatchRuleExecutionStatus.EXECUTED, any()) } returns true
+        every { guards.claimFiring(1L) } returns FiringClaim.InCooldown(600)
 
         executor.onEvent(event())
 
         verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any()) }
-        assertThat(savedExecution().status).isEqualTo(WatchRuleExecutionStatus.SKIPPED)
+        val e = savedExecution()
+        assertThat(e.status).isEqualTo(WatchRuleExecutionStatus.SKIPPED)
+        assertThat(e.reason).contains("쿨다운 600초")
+        // 발동권을 얻지 못했으니 돌려줄 것도 없다.
+        verify(exactly = 0) { guards.releaseFiring(any()) }
     }
 
+    // 보안 리뷰 2026-10 — 같은 규칙의 서로 다른 이벤트 두 개가 겹쳐 들어왔다. 판정은 DB(행 잠금)가 하고,
+    // 실행기는 그 결과만 따른다: 첫 번째만 주문, 두 번째는 쿨다운으로 기록. (실제 동시성은 WatchRuleCooldownRaceIntegrationTest)
     @Test
-    fun `a zero cooldown never queries the cooldown window`() {
-        givenRules(rule(cooldownSec = 0))
+    fun `of two events for one rule only the one that wins the firing claim submits an order`() {
+        givenRules(rule(cooldownSec = 600))
+        every { guards.claimFiring(1L) } returnsMany listOf(claimed(1L), FiringClaim.InCooldown(600))
         every { submitter.submitMarket(any(), any(), any(), any(), any()) } returns fill()
 
         executor.onEvent(event())
+        executor.onEvent(StockEventDetectedEvent(eventId = eventId + 1, stockId = stockId, eventType = "VOLUME_SURGE", importanceScore = 80, eventTimeMillis = 0))
 
-        verify(exactly = 0) { execRepo.existsSince(any(), any(), any()) }
+        verify(exactly = 1) { submitter.submitMarket(any(), any(), any(), any(), any()) }
+        verify(exactly = 1) { submitter.submitMarket(userId, stockId, "BUY", 10, "WR:1:$eventId") }
+    }
+
+    @Test
+    fun `a rule deactivated between lookup and claim is skipped silently`() {
+        givenRules(rule())
+        every { guards.claimFiring(1L) } returns FiringClaim.Inactive
+
+        executor.onEvent(event())
+
+        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { execRepo.save(any()) }
     }
 
     // 장애 시나리오 3 — 리스크 게이트가 막았다. 기록은 남고 예외는 새어나가지 않는다.
@@ -275,7 +297,7 @@ class WatchRuleExecutorTest {
     @Test
     fun `a rule at its daily limit is skipped without touching the order path`() {
         givenRules(rule().apply { dailyLimit = 2 })
-        every { guards.claimDailySlot(1L, 2) } returns false
+        every { guards.claimFiring(1L) } returns FiringClaim.DailyLimitReached(2)
 
         executor.onEvent(event())
 
@@ -286,13 +308,27 @@ class WatchRuleExecutorTest {
     }
 
     @Test
-    fun `a rejected order gives its daily slot back`() {
+    fun `a rejected order gives its firing claim back`() {
         givenRules(rule().apply { dailyLimit = 2 })
         every { submitter.submitMarket(any(), any(), any(), any(), any()) } throws RiskLimitException("DailyLossRule")
 
         executor.onEvent(event())
 
-        verify { guards.releaseDailySlot(1L) }
+        verify(exactly = 1) { guards.releaseFiring(claimed(1L)) }
+    }
+
+    // 사가가 오래된 시세로 시장가를 거부했다(IllegalStateException) — REJECTED로 남기고 발동권을 돌려준다.
+    @Test
+    fun `a stale-price rejection from the saga is recorded and gives the claim back`() {
+        givenRules(rule())
+        every { submitter.submitMarket(any(), any(), any(), any(), any()) } throws IllegalStateException("시세가 5분 넘게 갱신되지 않아")
+
+        executor.onEvent(event())
+
+        val e = savedExecution()
+        assertThat(e.status).isEqualTo(WatchRuleExecutionStatus.REJECTED)
+        assertThat(e.reason).contains("시세가 5분")
+        verify(exactly = 1) { guards.releaseFiring(claimed(1L)) }
     }
 
     @Test
@@ -302,8 +338,8 @@ class WatchRuleExecutorTest {
 
         executor.onEvent(event())
 
-        verify { guards.claimDailySlot(1L, null) }
-        verify(exactly = 0) { guards.releaseDailySlot(any()) }
+        verify { guards.claimFiring(1L) }
+        verify(exactly = 0) { guards.releaseFiring(any()) }
     }
 
     @Test
@@ -312,7 +348,7 @@ class WatchRuleExecutorTest {
         every { submitter.submitMarket(any(), any(), any(), any(), any()) } throws org.springframework.dao.QueryTimeoutException("db")
 
         assertThatThrownBy { executor.onEvent(event()) }.isInstanceOf(org.springframework.dao.QueryTimeoutException::class.java)
-        verify { guards.releaseDailySlot(1L) }
+        verify(exactly = 1) { guards.releaseFiring(claimed(1L)) }
     }
 
     @Test
