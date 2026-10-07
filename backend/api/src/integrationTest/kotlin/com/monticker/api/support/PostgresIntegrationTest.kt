@@ -3,7 +3,7 @@ package com.monticker.api.support
 import org.flywaydb.core.Flyway
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.DriverManagerDataSource
-import org.testcontainers.containers.PostgreSQLContainer
+import org.testcontainers.postgresql.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
 import javax.sql.DataSource
 
@@ -27,7 +27,7 @@ abstract class PostgresIntegrationTest {
 
     companion object {
         @JvmStatic
-        val postgres: PostgreSQLContainer<*> by lazy {
+        val postgres: PostgreSQLContainer by lazy {
             PostgreSQLContainer(DockerImageName.parse("timescale/timescaledb:latest-pg16").asCompatibleSubstituteFor("postgres"))
                 .withDatabaseName("monticker")
                 .withUsername("monticker")
