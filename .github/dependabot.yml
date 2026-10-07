@@ -38,10 +38,12 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "expo"                 # M1
         update-types: ["version-update:semver-major"]
+      # Expo SDK가 고정한 버전 밖으로 나가면 안 된다. expo-notifications(0.x)·react-native(0.x)는 minor가 SDK를
+      # 바꾸므로 minor도 막는다(#139: react-native 0.76 → 0.87). SDK 안의 패치만 받는다.
       - dependency-name: "expo-*"               # M1
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "react-native"         # M1
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       # 모바일 react 18 → 19는 Expo SDK 업그레이드(M1)에서 함께 — 웹은 이미 19다
       - dependency-name: "react"
         update-types: ["version-update:semver-major"]
@@ -58,12 +60,22 @@ updates:
     groups:
       # Kotlin 컴파일러 플러그인(plugin.spring·plugin.jpa)은 kotlin("jvm")과 같은 버전이어야 한다(#106 #108 #109)
       kotlin:
-        patterns: ["org.jetbrains.kotlin*"]
+        # dependabot은 Kotlin Gradle 플러그인을 짧은 id("jvm", "plugin.spring", "plugin.jpa")로 부른다 —
+        # "org.jetbrains.kotlin*"만으로는 걸리지 않았다(#140)
+        patterns: ["jvm", "plugin.spring", "plugin.jpa", "org.jetbrains.kotlin*"]
       # jjwt-api·impl·jackson은 같은 버전이어야 한다(#102)
       jjwt:
         patterns: ["io.jsonwebtoken:*"]
     ignore:
+      - dependency-name: "jvm"                            # B1 — Kotlin 플러그인(짧은 id)
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "plugin.spring"                  # B1
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "plugin.jpa"                     # B1
+        update-types: ["version-update:semver-major"]
       - dependency-name: "org.jetbrains.kotlin*"          # B1
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "gradle-wrapper"                 # B0 — Gradle 9
         update-types: ["version-update:semver-major"]
       - dependency-name: "org.testcontainers:*"           # B2
         update-types: ["version-update:semver-major"]
@@ -84,12 +96,22 @@ updates:
     groups:
       # Kotlin 컴파일러 플러그인(plugin.spring·plugin.jpa)은 kotlin("jvm")과 같은 버전이어야 한다(#106 #108 #109)
       kotlin:
-        patterns: ["org.jetbrains.kotlin*"]
+        # dependabot은 Kotlin Gradle 플러그인을 짧은 id("jvm", "plugin.spring", "plugin.jpa")로 부른다 —
+        # "org.jetbrains.kotlin*"만으로는 걸리지 않았다(#140)
+        patterns: ["jvm", "plugin.spring", "plugin.jpa", "org.jetbrains.kotlin*"]
       # jjwt-api·impl·jackson은 같은 버전이어야 한다(#102)
       jjwt:
         patterns: ["io.jsonwebtoken:*"]
     ignore:
+      - dependency-name: "jvm"                            # B1 — Kotlin 플러그인(짧은 id)
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "plugin.spring"                  # B1
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "plugin.jpa"                     # B1
+        update-types: ["version-update:semver-major"]
       - dependency-name: "org.jetbrains.kotlin*"          # B1
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "gradle-wrapper"                 # B0 — Gradle 9
         update-types: ["version-update:semver-major"]
       - dependency-name: "org.testcontainers:*"           # B2
         update-types: ["version-update:semver-major"]
