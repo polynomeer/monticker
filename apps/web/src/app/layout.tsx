@@ -27,7 +27,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ko" suppressHydrationWarning>
+    // data-scroll-behavior — globals.css가 html에 scroll-behavior: smooth를 건다. Next 16부터는 라우트 전환 때
+    // 이를 덮어쓰지 않아 페이지 이동이 부드러운 스크롤이 된다. 이 속성으로 15와 같이 전환은 즉시 스크롤한다.
+    <html lang="ko" data-scroll-behavior="smooth" suppressHydrationWarning>
       {/*
         suppressHydrationWarning on <html>/<body> only silences mismatches in
         that element's OWN attributes/text — it does not cover child-node
