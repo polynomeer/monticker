@@ -1,6 +1,7 @@
 package com.monticker.api.watchrule
 
 import com.monticker.api.matching.submit.MarketOrderResult
+import com.monticker.api.matching.submit.OrderOrigin
 import com.monticker.api.matching.submit.OrderSubmitter
 import com.monticker.api.quant.application.StrategySignalAccess
 import com.monticker.api.support.PostgresIntegrationTest
@@ -167,12 +168,12 @@ class WatchRuleCooldownRaceIntegrationTest : PostgresIntegrationTest() {
         }
         val orders = AtomicInteger()
         val submitter = object : OrderSubmitter {
-            override fun submitMarket(userId: Long, stockId: Long, side: String, quantity: Int, idempotencyKey: String?): MarketOrderResult {
+            override fun submitMarket(userId: Long, stockId: Long, side: String, quantity: Int, origin: OrderOrigin, idempotencyKey: String?): MarketOrderResult {
                 val id = orders.incrementAndGet().toLong()
                 Thread.sleep(50)
                 return MarketOrderResult(id, id, stockId, side, quantity, BigDecimal("1000"), BigDecimal("10000"), Instant.now())
             }
-            override fun submitLimit(userId: Long, stockId: Long, side: String, quantity: Int, limitPrice: BigDecimal) =
+            override fun submitLimit(userId: Long, stockId: Long, side: String, quantity: Int, limitPrice: BigDecimal, origin: OrderOrigin) =
                 throw UnsupportedOperationException()
         }
         val executor = WatchRuleExecutor(ruleRepo, execRepo, submitter, SimpleMeterRegistry(), guards, mockk<StrategySignalAccess>())

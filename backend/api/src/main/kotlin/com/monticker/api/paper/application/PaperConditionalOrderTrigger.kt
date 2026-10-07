@@ -2,6 +2,7 @@ package com.monticker.api.paper.application
 
 import com.monticker.api.common.domain.CandleFreshness
 import com.monticker.api.common.domain.LatestClose
+import com.monticker.api.matching.submit.OrderOrigin
 import com.monticker.api.matching.submit.OrderSubmitter
 import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
@@ -56,7 +57,11 @@ class PaperConditionalOrderFirer(
         if (!row.triggerType.isTriggered(price, row.triggerPrice)) return PaperConditionalOutcome.NOT_TRIGGERED
 
         // ADR-051 멱등 키 — 같은 조건부 주문으로 두 번 체결되지 않는다(행 락과 함께 이중 방어).
-        val result = orderSubmitter.submitMarket(row.userId, row.stockId, row.side, row.quantity, idempotencyKey = "PCO:${row.id}")
+        val result = orderSubmitter.submitMarket(
+            row.userId, row.stockId, row.side, row.quantity,
+            origin = OrderOrigin.conditional(row.id),   // ADR-085
+            idempotencyKey = "PCO:${row.id}",
+        )
 
         jdbc.update(
             "UPDATE paper_conditional_orders SET status = 'EXECUTED', executed_order_id = ?, triggered_at = now(), updated_at = now() WHERE id = ?",

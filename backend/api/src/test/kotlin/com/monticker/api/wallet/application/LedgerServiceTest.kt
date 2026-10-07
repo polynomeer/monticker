@@ -1,5 +1,7 @@
 package com.monticker.api.wallet.application
 
+import com.monticker.api.paper.application.PaperTradeQueryService
+import com.monticker.api.paper.application.PaperTradeSummary
 import com.monticker.api.wallet.domain.LedgerEvent
 import com.monticker.api.wallet.domain.LedgerEventType
 import com.monticker.api.wallet.infrastructure.LedgerEventRepository
@@ -16,7 +18,8 @@ import java.time.Instant
 class LedgerServiceTest {
 
     private val ledgerRepo = mockk<LedgerEventRepository>()
-    private val service = LedgerService(ledgerRepo)
+    private val tradeQueryService = mockk<PaperTradeQueryService>(relaxed = true)
+    private val service = LedgerService(ledgerRepo, tradeQueryService)
 
     @Test
     fun `recordBuy stores a negative amount FILL event`() {
@@ -229,5 +232,35 @@ class LedgerServiceTest {
         service.recordSettlementComplete(userId = 1L, settlementId = 77L, stockId = 100L,
             fee = BigDecimal("10"), tax = BigDecimal("5"), balanceAfter = BigDecimal("999985"))
         verify(exactly = 0) { ledgerRepo.save(any()) }
+    }
+
+    // ADR-085 — 원장 행의 주문 출처는 거래를 한 번에 읽어 붙인다
+    @Test
+    fun `getLedger attaches the trade origin to fill rows in one batch lookup`() {
+        every { ledgerRepo.findPage(1L, Long.MAX_VALUE, any()) } returns listOf(
+            event(1L),
+            LedgerEvent(id = 2L, userId = 1L, eventType = LedgerEventType.DEPOSIT, amount = BigDecimal("100")),
+        )
+        every { tradeQueryService.findOwnedByIds(1L, listOf(5L)) } returns listOf(
+            PaperTradeSummary(5L, 1L, 10L, "BUY", 1, BigDecimal("1000"), BigDecimal("1000"), origin = "WATCH_RULE", originRef = 3L),
+        )
+
+        val items = service.getLedger(1L).items
+
+        assertThat(items[0].origin).isEqualTo("WATCH_RULE")
+        assertThat(items[0].originRef).isEqualTo(3L)
+        assertThat(items[1].origin).isNull()
+        verify(exactly = 1) { tradeQueryService.findOwnedByIds(1L, any()) }
+    }
+
+    @Test
+    fun `getLedger does not attach an origin when the linked trade is for a different stock`() {
+        // V43 — ADR-047 이전 원장은 paper_trade_id에 fills.id를 담아 다른 거래와 id가 겹칠 수 있다
+        every { ledgerRepo.findPage(1L, Long.MAX_VALUE, any()) } returns listOf(event(1L))
+        every { tradeQueryService.findOwnedByIds(1L, listOf(5L)) } returns listOf(
+            PaperTradeSummary(5L, 1L, 999L, "BUY", 1, BigDecimal("1000"), BigDecimal("1000"), origin = "MANUAL"),
+        )
+
+        assertThat(service.getLedger(1L).items[0].origin).isNull()
     }
 }

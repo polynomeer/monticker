@@ -50,6 +50,7 @@ class PaperPortfolioQueryService(
         val stockIds = positions.map { it.first }
         val priceMap = currentPriceMap(stockIds)
         val infoMap  = stockInfoMap(stockIds)
+        val entryMap = latestEntryOrigins(userId, stockIds)
 
         return positions.mapNotNull { (stockId, qty, avgPrice) ->
             val cur = priceMap[stockId] ?: return@mapNotNull null
@@ -59,8 +60,26 @@ class PaperPortfolioQueryService(
             val pnl     = value - cost
             val pnlRate = if (cost > BigDecimal.ZERO)
                 pnl.divide(cost, 6, RoundingMode.HALF_UP).multiply(BigDecimal("100")).toDouble() else 0.0
-            HoldingResponse(stockId, symbol, name, qty, avgPrice, cur, value, pnl, pnlRate)
+            val entry = entryMap[stockId]
+            HoldingResponse(stockId, symbol, name, qty, avgPrice, cur, value, pnl, pnlRate,
+                entryOrigin = entry?.first, entryOriginRef = entry?.second)
         }
+    }
+
+    /**
+     * ADR-085 — 종목별 가장 최근 매수 체결의 진입 출처(한 번의 쿼리). 출처를 판정할 수 없던 거래(V82 백필 불가)는
+     * origin이 null이고 화면에 "—"로 보인다.
+     */
+    private fun latestEntryOrigins(userId: Long, stockIds: List<Long>): Map<Long, Pair<String?, Long?>> {
+        if (stockIds.isEmpty()) return emptyMap()
+        return jdbc.query(
+            """SELECT DISTINCT ON (stock_id) stock_id, origin, origin_ref
+               FROM paper_trades
+               WHERE user_id = ? AND side = 'BUY' AND stock_id IN (${stockIds.joinToString(",") { "?" }})
+               ORDER BY stock_id, traded_at DESC, id DESC""",
+            { rs, _ -> rs.getLong("stock_id") to (rs.getString("origin") to (rs.getObject("origin_ref") as Number?)?.toLong()) },
+            userId, *stockIds.toTypedArray(),
+        ).toMap()
     }
 
     fun getPortfolio(userId: Long): PortfolioResponse {
@@ -78,42 +97,54 @@ class PaperPortfolioQueryService(
     }
 
     /**
-     * 거래 내역 + "경로". 경로는 체결을 만든 매칭 주문의 멱등 키에서 읽는다(ADR-047 fill_id 링크 → fills → orders):
-     * `WR:{ruleId}:{eventId}` = Watch Rule(ADR-051), `PCO:{id}` = 조건부 주문(ADR-075), 그 외 = 직접 주문.
-     * 별도 컬럼을 두지 않은 이유: 키가 이미 단일 진실이고, 조인으로 과거 거래까지 한 번에 채워진다.
-     * fill_id가 없는 ADR-047 이전 거래는 직접 주문(구 페이퍼 경로)이었다.
+     * 거래 내역 + 진입 경로 + 감정 태그 — 한 번의 쿼리.
+     * 경로는 ADR-085의 paper_trades.origin(서버가 주문 제출 경로에서 정해 체결로 옮긴 값)이다. 예전엔 매칭 주문의
+     * 멱등 키 접두사에서 읽었는데, 그 키는 /api/matching/orders 요청 본문으로 위조할 수 있었다.
+     * 감정 태그는 wallet 모듈의 테이블이지만 화면 하나를 위해 거래마다 따로 부르던 N+1을 없애려고 여기서 조인한다
+     * (읽기 전용 — 태그 쓰기는 wallet EmotionTagService만). 태그 소유자도 거래 소유자와 같아야 한다(예전 IDOR 잔여 행 차단).
      */
     fun getHistory(userId: Long, page: Int = 0, size: Int = 20): List<TradeHistoryResponse> {
-        data class Row(val t: com.monticker.api.paper.domain.PaperTrade, val key: String?, val orderType: String?)
+        data class Row(
+            val id: Long, val side: String, val stockId: Long, val quantity: Int,
+            val price: BigDecimal, val amount: BigDecimal, val tradedAt: Instant,
+            val origin: String?, val originRef: Long?, val orderType: String?,
+            val emotion: String?, val emotionMemo: String?,
+        )
         val trades = jdbc.query(
             """SELECT pt.id, pt.side, pt.stock_id, pt.quantity, pt.price, pt.amount, pt.traded_at,
-                      o.idempotency_key, o.order_type
+                      pt.origin, pt.origin_ref, o.order_type, et.emotion, et.memo
                FROM paper_trades pt
                LEFT JOIN fills f  ON f.id = pt.fill_id
                LEFT JOIN orders o ON o.id = f.order_id
-               WHERE pt.user_id = ? ORDER BY pt.traded_at DESC LIMIT ? OFFSET ?""",
-            { rs, _ -> Row(com.monticker.api.paper.domain.PaperTrade(
-                id       = rs.getLong("id"),
-                userId   = userId,
-                stockId  = rs.getLong("stock_id"),
-                side     = rs.getString("side"),
-                quantity = rs.getInt("quantity"),
-                price    = rs.getBigDecimal("price"),
-                amount   = rs.getBigDecimal("amount"),
-                tradedAt = rs.getTimestamp("traded_at").toInstant(),
-            ), rs.getString("idempotency_key"), rs.getString("order_type")) },
+               LEFT JOIN order_emotion_tags et ON et.paper_trade_id = pt.id AND et.user_id = pt.user_id
+               WHERE pt.user_id = ? ORDER BY pt.traded_at DESC, pt.id DESC LIMIT ? OFFSET ?""",
+            { rs, _ -> Row(
+                id        = rs.getLong("id"),
+                side      = rs.getString("side"),
+                stockId   = rs.getLong("stock_id"),
+                quantity  = rs.getInt("quantity"),
+                price     = rs.getBigDecimal("price"),
+                amount    = rs.getBigDecimal("amount"),
+                tradedAt  = rs.getTimestamp("traded_at").toInstant(),
+                origin    = rs.getString("origin"),
+                originRef = (rs.getObject("origin_ref") as Number?)?.toLong(),
+                orderType = rs.getString("order_type"),
+                emotion   = rs.getString("emotion"),
+                emotionMemo = rs.getString("memo"),
+            ) },
             userId, size, page * size,
         )
         if (trades.isEmpty()) return emptyList()
-        val infoMap = stockInfoMap(trades.map { it.t.stockId }.distinct())
-        return trades.mapNotNull { r ->
-            val t = r.t
+        val infoMap = stockInfoMap(trades.map { it.stockId }.distinct())
+        return trades.mapNotNull { t ->
             val (symbol, name) = infoMap[t.stockId] ?: return@mapNotNull null
-            val route = TradeRoute.of(r.key)
             TradeHistoryResponse(
                 t.id, t.side, t.stockId, symbol, name, t.quantity, t.price, t.amount, t.tradedAt,
-                source = route.source, watchRuleId = route.watchRuleId, conditionalOrderId = route.conditionalOrderId,
-                orderType = r.orderType ?: "MARKET",
+                source = t.origin, originRef = t.originRef,
+                watchRuleId = t.originRef.takeIf { t.origin == "WATCH_RULE" },
+                conditionalOrderId = t.originRef.takeIf { t.origin == "CONDITIONAL" },
+                orderType = t.orderType ?: "MARKET",
+                emotion = t.emotion, emotionMemo = t.emotionMemo,
             )
         }
     }

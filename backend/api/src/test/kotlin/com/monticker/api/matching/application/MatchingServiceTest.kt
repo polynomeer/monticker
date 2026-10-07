@@ -1,5 +1,6 @@
 package com.monticker.api.matching.application
 
+import com.monticker.api.matching.submit.OrderOrigin
 import com.monticker.api.common.domain.Price
 import com.monticker.api.matching.domain.Order
 import com.monticker.api.matching.domain.OrderSide
@@ -41,7 +42,7 @@ class MatchingServiceTest {
 
     @Test
     fun `submitOrder delegates to the saga orchestrator and returns its response unchanged`() {
-        val req = SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10)
+        val req = SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10, origin = OrderOrigin.MANUAL)
         val expected = mockk<com.monticker.api.matching.application.SubmitOrderResponse>()
         every { sagaOrchestrator.execute(userId, req) } returns expected
 
@@ -76,7 +77,7 @@ class MatchingServiceTest {
             )
         )
 
-        val result = service.submitMarket(userId, stockId, "BUY", 10, key)
+        val result = service.submitMarket(userId, stockId, "BUY", 10, OrderOrigin.MANUAL, key)
 
         assertThat(result.orderId).isEqualTo(55L)
         assertThat(result.fillId).isEqualTo(77L)
@@ -95,7 +96,7 @@ class MatchingServiceTest {
         every { sagaOrchestrator.execute(userId, any()) } returns
             SubmitOrderResponse(order = orderDto(56L), fills = listOf(fill), message = "주문 체결 완료")
 
-        val result = service.submitMarket(userId, stockId, "BUY", 10, key)
+        val result = service.submitMarket(userId, stockId, "BUY", 10, OrderOrigin.MANUAL, key)
 
         assertThat(result.orderId).isEqualTo(56L)
         verify { sagaOrchestrator.execute(userId, match { it.idempotencyKey == key }) }
@@ -111,7 +112,7 @@ class MatchingServiceTest {
         every { sagaOrchestrator.execute(userId, any()) } returns
             SubmitOrderResponse(order = orderDto(57L), fills = listOf(fill), message = "주문 체결 완료")
 
-        service.submitMarket(userId, stockId, "BUY", 10)
+        service.submitMarket(userId, stockId, "BUY", 10, OrderOrigin.MANUAL)
 
         verify(exactly = 0) { orderRepo.findByIdempotencyKey(any()) }
     }

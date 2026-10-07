@@ -15,6 +15,9 @@ data class PaperTradeSummary(
     val price: BigDecimal,
     val amount: BigDecimal,
     val tradedAt: Instant = Instant.now(),
+    /** ADR-085 진입 출처. 판정할 수 없던 과거 거래는 null. */
+    val origin: String? = null,
+    val originRef: Long? = null,
 )
 
 /**
@@ -32,6 +35,12 @@ class PaperTradeQueryService(
     fun findById(id: Long): PaperTradeSummary? =
         tradeRepo.findById(id).map { it.toSummary() }.orElse(null)
 
+    /** 사용자 소유 거래만 한 번에(리플레이·원장 출처 표시의 N+1 제거). 남의 id·없는 id는 결과에 없다. */
+    fun findOwnedByIds(userId: Long, ids: Collection<Long>): List<PaperTradeSummary> {
+        if (ids.isEmpty()) return emptyList()
+        return tradeRepo.findAllById(ids.distinct()).filter { it.userId == userId }.map { it.toSummary() }
+    }
+
     private fun com.monticker.api.paper.domain.PaperTrade.toSummary() = PaperTradeSummary(
         id = id,
         userId = userId,
@@ -41,5 +50,7 @@ class PaperTradeQueryService(
         price = price,
         amount = amount,
         tradedAt = tradedAt,
+        origin = origin,
+        originRef = originRef,
     )
 }

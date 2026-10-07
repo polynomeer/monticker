@@ -1,5 +1,6 @@
 package com.monticker.api.watchrule.application
 
+import com.monticker.api.matching.submit.OrderOrigin
 import com.monticker.api.common.aop.RiskLimitException
 import com.monticker.api.matching.submit.MarketOrderResult
 import com.monticker.api.matching.submit.OrderSubmitter
@@ -89,11 +90,11 @@ class WatchRuleExecutorTest {
     @Test
     fun `a matching rule submits a market order carrying the idempotency key`() {
         givenRules(rule())
-        every { submitter.submitMarket(userId, stockId, "BUY", 10, "WR:1:$eventId") } returns fill()
+        every { submitter.submitMarket(userId, stockId, "BUY", 10, OrderOrigin.watchRule(1L), "WR:1:$eventId") } returns fill()
 
         executor.onEvent(event())
 
-        verify { submitter.submitMarket(userId, stockId, "BUY", 10, "WR:1:$eventId") }
+        verify { submitter.submitMarket(userId, stockId, "BUY", 10, OrderOrigin.watchRule(1L), "WR:1:$eventId") }
         val execution = savedExecution()
         assertThat(execution.status).isEqualTo(WatchRuleExecutionStatus.EXECUTED)
         assertThat(execution.orderId).isEqualTo(900L)
@@ -108,7 +109,7 @@ class WatchRuleExecutorTest {
 
         executor.onEvent(event())
 
-        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any(), any()) }
         verify(exactly = 0) { execRepo.save(any()) }
     }
 
@@ -116,7 +117,7 @@ class WatchRuleExecutorTest {
     @Test
     fun `a unique violation while recording is swallowed as normal concurrent behaviour`() {
         givenRules(rule())
-        every { submitter.submitMarket(any(), any(), any(), any(), any()) } returns fill()
+        every { submitter.submitMarket(any(), any(), any(), any(), any(), any()) } returns fill()
         every { execRepo.save(any()) } throws DataIntegrityViolationException("duplicate key")
 
         executor.onEvent(event())   // 예외가 새어나가면 컨슈머가 무한 재시도한다
@@ -128,7 +129,7 @@ class WatchRuleExecutorTest {
 
         executor.onEvent(event(importance = 80))
 
-        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any(), any()) }
         val execution = savedExecution()
         assertThat(execution.status).isEqualTo(WatchRuleExecutionStatus.SKIPPED)
         assertThat(execution.reason).contains("중요도")
@@ -141,7 +142,7 @@ class WatchRuleExecutorTest {
 
         executor.onEvent(event())
 
-        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any(), any()) }
         val e = savedExecution()
         assertThat(e.status).isEqualTo(WatchRuleExecutionStatus.SKIPPED)
         assertThat(e.reason).contains("쿨다운 600초")
@@ -155,13 +156,13 @@ class WatchRuleExecutorTest {
     fun `of two events for one rule only the one that wins the firing claim submits an order`() {
         givenRules(rule(cooldownSec = 600))
         every { guards.claimFiring(1L) } returnsMany listOf(claimed(1L), FiringClaim.InCooldown(600))
-        every { submitter.submitMarket(any(), any(), any(), any(), any()) } returns fill()
+        every { submitter.submitMarket(any(), any(), any(), any(), any(), any()) } returns fill()
 
         executor.onEvent(event())
         executor.onEvent(StockEventDetectedEvent(eventId = eventId + 1, stockId = stockId, eventType = "VOLUME_SURGE", importanceScore = 80, eventTimeMillis = 0))
 
-        verify(exactly = 1) { submitter.submitMarket(any(), any(), any(), any(), any()) }
-        verify(exactly = 1) { submitter.submitMarket(userId, stockId, "BUY", 10, "WR:1:$eventId") }
+        verify(exactly = 1) { submitter.submitMarket(any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 1) { submitter.submitMarket(userId, stockId, "BUY", 10, OrderOrigin.watchRule(1L), "WR:1:$eventId") }
     }
 
     @Test
@@ -171,7 +172,7 @@ class WatchRuleExecutorTest {
 
         executor.onEvent(event())
 
-        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any(), any()) }
         verify(exactly = 0) { execRepo.save(any()) }
     }
 
@@ -179,7 +180,7 @@ class WatchRuleExecutorTest {
     @Test
     fun `a risk limit rejection is recorded and not rethrown`() {
         givenRules(rule())
-        every { submitter.submitMarket(any(), any(), any(), any(), any()) } throws RiskLimitException("ConcentrationRule")
+        every { submitter.submitMarket(any(), any(), any(), any(), any(), any()) } throws RiskLimitException("ConcentrationRule")
 
         executor.onEvent(event())
 
@@ -192,7 +193,7 @@ class WatchRuleExecutorTest {
     @Test
     fun `an insufficient balance rejection is recorded`() {
         givenRules(rule())
-        every { submitter.submitMarket(any(), any(), any(), any(), any()) } throws
+        every { submitter.submitMarket(any(), any(), any(), any(), any(), any()) } throws
             IllegalArgumentException("잔고 부족: 필요 10000")
 
         executor.onEvent(event())
@@ -206,7 +207,7 @@ class WatchRuleExecutorTest {
     @Test
     fun `an unfilled market order is recorded as rejected`() {
         givenRules(rule())
-        every { submitter.submitMarket(any(), any(), any(), any(), any()) } throws
+        every { submitter.submitMarket(any(), any(), any(), any(), any(), any()) } throws
             IllegalStateException("시장가 주문이 체결되지 않았습니다: orderId=1")
 
         executor.onEvent(event())
@@ -220,7 +221,7 @@ class WatchRuleExecutorTest {
     fun `an infrastructure failure is not recorded so the consumer can retry`() {
         val executorRule = rule()
         givenRules(executorRule)
-        every { submitter.submitMarket(any(), any(), any(), any(), any()) } throws
+        every { submitter.submitMarket(any(), any(), any(), any(), any(), any()) } throws
             org.springframework.dao.QueryTimeoutException("connection pool exhausted")
 
         // 컨슈머까지 던져야 @RetryableTopic 재시도·DLT가 동작한다
@@ -236,14 +237,14 @@ class WatchRuleExecutorTest {
         val failing = rule(id = 1L)
         val healthy = rule(id = 2L)
         givenRules(failing, healthy)
-        every { submitter.submitMarket(userId, stockId, "BUY", 10, "WR:1:$eventId") } throws
+        every { submitter.submitMarket(userId, stockId, "BUY", 10, OrderOrigin.watchRule(1L), "WR:1:$eventId") } throws
             RuntimeException("boom")
-        every { submitter.submitMarket(userId, stockId, "BUY", 10, "WR:2:$eventId") } returns fill(orderId = 901L)
+        every { submitter.submitMarket(userId, stockId, "BUY", 10, OrderOrigin.watchRule(2L), "WR:2:$eventId") } returns fill(orderId = 901L)
 
         // 실패한 룰 때문에 재시도로 가더라도, 그 전에 같은 이벤트의 나머지 룰은 처리를 마친다
         assertThatThrownBy { executor.onEvent(event()) }.hasMessage("boom")
 
-        verify { submitter.submitMarket(userId, stockId, "BUY", 10, "WR:2:$eventId") }
+        verify { submitter.submitMarket(userId, stockId, "BUY", 10, OrderOrigin.watchRule(2L), "WR:2:$eventId") }
     }
 
     // 장애 시나리오 8 — 주문은 체결됐는데 기록 직전에 프로세스가 죽었다. 재전달되면 멱등 키 덕분에
@@ -253,7 +254,7 @@ class WatchRuleExecutorTest {
         givenRules(rule())
         // 재기동 후: 기록이 없으니 사전 조회는 통과하고, 주문 제출은 첫 체결을 그대로 돌려준다.
         every { execRepo.existsByWatchRuleIdAndStockEventId(1L, eventId) } returns false
-        every { submitter.submitMarket(userId, stockId, "BUY", 10, "WR:1:$eventId") } returns fill(orderId = 900L)
+        every { submitter.submitMarket(userId, stockId, "BUY", 10, OrderOrigin.watchRule(1L), "WR:1:$eventId") } returns fill(orderId = 900L)
 
         executor.onEvent(event())
 
@@ -262,7 +263,7 @@ class WatchRuleExecutorTest {
         assertThat(execution.orderId).isEqualTo(900L)
         // 주문 제출은 한 번만 호출된다 — 중복 체결 여부는 제출 쪽 멱등 키가 책임진다
         // (MatchingServiceTest 의 replay 테스트와 WatchRuleIdempotencyIntegrationTest 가 증명).
-        verify(exactly = 1) { submitter.submitMarket(any(), any(), any(), any(), any()) }
+        verify(exactly = 1) { submitter.submitMarket(any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -271,7 +272,7 @@ class WatchRuleExecutorTest {
 
         executor.onEvent(event())
 
-        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any(), any()) }
         verify(exactly = 0) { execRepo.save(any()) }
     }
 
@@ -285,11 +286,11 @@ class WatchRuleExecutorTest {
     @Test
     fun `a SELL rule submits the sell side`() {
         givenRules(rule(side = WatchRuleSide.SELL))
-        every { submitter.submitMarket(userId, stockId, "SELL", 10, any()) } returns fill()
+        every { submitter.submitMarket(userId, stockId, "SELL", 10, any(), any()) } returns fill()
 
         executor.onEvent(event())
 
-        verify { submitter.submitMarket(userId, stockId, "SELL", 10, "WR:1:$eventId") }
+        verify { submitter.submitMarket(userId, stockId, "SELL", 10, OrderOrigin.watchRule(1L), "WR:1:$eventId") }
     }
 
     // ── ADR-077 ───────────────────────────────────────────────────────────
@@ -301,7 +302,7 @@ class WatchRuleExecutorTest {
 
         executor.onEvent(event())
 
-        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any(), any()) }
         val e = savedExecution()
         assertThat(e.status).isEqualTo(WatchRuleExecutionStatus.SKIPPED)
         assertThat(e.reason).contains("하루 최대 발동 2회")
@@ -310,7 +311,7 @@ class WatchRuleExecutorTest {
     @Test
     fun `a rejected order gives its firing claim back`() {
         givenRules(rule().apply { dailyLimit = 2 })
-        every { submitter.submitMarket(any(), any(), any(), any(), any()) } throws RiskLimitException("DailyLossRule")
+        every { submitter.submitMarket(any(), any(), any(), any(), any(), any()) } throws RiskLimitException("DailyLossRule")
 
         executor.onEvent(event())
 
@@ -321,7 +322,7 @@ class WatchRuleExecutorTest {
     @Test
     fun `a stale-price rejection from the saga is recorded and gives the claim back`() {
         givenRules(rule())
-        every { submitter.submitMarket(any(), any(), any(), any(), any()) } throws IllegalStateException("시세가 5분 넘게 갱신되지 않아")
+        every { submitter.submitMarket(any(), any(), any(), any(), any(), any()) } throws IllegalStateException("시세가 5분 넘게 갱신되지 않아")
 
         executor.onEvent(event())
 
@@ -334,7 +335,7 @@ class WatchRuleExecutorTest {
     @Test
     fun `an executed order keeps its daily slot`() {
         givenRules(rule())
-        every { submitter.submitMarket(any(), any(), any(), any(), any()) } returns fill()
+        every { submitter.submitMarket(any(), any(), any(), any(), any(), any()) } returns fill()
 
         executor.onEvent(event())
 
@@ -345,7 +346,7 @@ class WatchRuleExecutorTest {
     @Test
     fun `an infrastructure failure also gives the slot back before rethrowing`() {
         givenRules(rule())
-        every { submitter.submitMarket(any(), any(), any(), any(), any()) } throws org.springframework.dao.QueryTimeoutException("db")
+        every { submitter.submitMarket(any(), any(), any(), any(), any(), any()) } throws org.springframework.dao.QueryTimeoutException("db")
 
         assertThatThrownBy { executor.onEvent(event()) }.isInstanceOf(org.springframework.dao.QueryTimeoutException::class.java)
         verify(exactly = 1) { guards.releaseFiring(claimed(1L)) }
@@ -362,7 +363,7 @@ class WatchRuleExecutorTest {
 
         executor.onEvent(event())
 
-        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any(), any()) }
         assertThat(savedExecution().reason).contains("복합 조건 미충족").contains("PRICE_SPIKE")
     }
 
@@ -380,7 +381,7 @@ class WatchRuleExecutorTest {
         every { ruleRepo.findAllByStockIdAndEventTypeAndRuleSetIdAndIsActiveTrue(stockId, WatchRule.QUANT_SIGNAL, "rs1") } returns listOf(signalRule())
         every { execRepo.existsByWatchRuleIdAndQuantSignalId(5L, 77L) } returns false
         every { signalAccess.canAccess(userId, "rs1") } returns true
-        every { submitter.submitMarket(userId, stockId, "BUY", 3, "WR:5:Q77") } returns fill()
+        every { submitter.submitMarket(userId, stockId, "BUY", 3, OrderOrigin.watchRule(5L), "WR:5:Q77") } returns fill()
 
         executor.onQuantSignal(signal())
 
@@ -396,7 +397,7 @@ class WatchRuleExecutorTest {
 
         executor.onQuantSignal(signal())
 
-        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any(), any()) }
         verify(exactly = 0) { execRepo.save(any()) }
     }
 
@@ -409,7 +410,7 @@ class WatchRuleExecutorTest {
 
         executor.onQuantSignal(signal())
 
-        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any(), any()) }
         assertThat(savedExecution().status).isEqualTo(WatchRuleExecutionStatus.SKIPPED)
     }
 }

@@ -36,6 +36,8 @@ class PaperExecutionListener(
             userId = event.userId, stockId = event.stockId, side = event.side,
             quantity = event.quantity, price = event.fillPrice, amount = event.amount,
             tradedAt = event.filledAt, fillId = event.fillId,
+            // ADR-085 — 출처는 매칭 주문에서 온다(사가·스위퍼가 이벤트에 싣는다). 클라이언트 값이 끼어들 경로가 없다.
+            origin = event.origin, originRef = event.originRef,
         ))
         if (event.side == "BUY") projection.onBuy(event.userId, event.stockId, event.quantity, event.amount)
         else projection.onSell(event.userId, event.stockId, event.quantity)

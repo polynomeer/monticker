@@ -15,6 +15,8 @@ interface OrderSubmitter {
         stockId: Long,
         side: String,
         quantity: Int,
+        /** ADR-085 — 진입 출처. 호출하는 서버 경로가 정한다(기본값 없음 — 새 경로가 출처를 빠뜨리지 않게). */
+        origin: OrderOrigin,
         idempotencyKey: String? = null,
     ): MarketOrderResult
 
@@ -29,6 +31,8 @@ interface OrderSubmitter {
         side: String,
         quantity: Int,
         limitPrice: BigDecimal,
+        /** ADR-085 — 진입 출처. 지정가가 나중에 스위퍼로 체결돼도 주문 행에 남은 이 값이 체결로 이어진다. */
+        origin: OrderOrigin,
     ): LimitOrderResult
 }
 

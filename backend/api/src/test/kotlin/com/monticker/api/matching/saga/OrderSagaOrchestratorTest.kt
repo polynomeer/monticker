@@ -1,5 +1,6 @@
 package com.monticker.api.matching.saga
 
+import com.monticker.api.matching.submit.OrderOrigin
 import com.monticker.api.matching.application.FillQueryService
 import com.monticker.api.matching.application.MatchingOrderBookService
 import com.monticker.api.matching.application.SubmitOrderRequest
@@ -97,7 +98,7 @@ class OrderSagaOrchestratorTest {
 
         val response = orchestrator.execute(
             userId,
-            SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10),
+            SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10, origin = OrderOrigin.MANUAL),
         )
 
         assertThat(response.order.status).isEqualTo("FILLED")
@@ -105,6 +106,28 @@ class OrderSagaOrchestratorTest {
         assertThat(response.fills[0].fillPrice).isEqualByComparingTo(currentPrice)
         verify { fillRepo.save(any()) }
         verify { eventPublisher.publishEvent(any<com.monticker.api.matching.events.OrderFilledEvent>()) }
+    }
+
+    // ADR-085 — 진입 출처는 주문 행과 체결 이벤트 양쪽에 남는다(체결 기록은 이벤트에서, 나중 스위퍼 체결은 주문 행에서 읽는다)
+    @Test
+    fun `execute stores the origin on the order row and carries it on the fill event`() {
+        stubStockExistsAndPrice()
+        stubAccountCash()
+        val savedOrders = mutableListOf<com.monticker.api.matching.domain.Order>()
+        every { orderRepo.save(capture(savedOrders)) } answers { savedOrders.last() }
+        every { fillRepo.save(any()) } answers { firstArg() }
+        val event = slot<com.monticker.api.matching.events.OrderFilledEvent>()
+        every { eventPublisher.publishEvent(capture(event)) } returns Unit
+
+        orchestrator.execute(
+            userId,
+            SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10, origin = OrderOrigin.watchRule(42L)),
+        )
+
+        assertThat(savedOrders.first().origin).isEqualTo(com.monticker.api.matching.submit.OrderOriginType.WATCH_RULE)
+        assertThat(savedOrders.first().originRef).isEqualTo(42L)
+        assertThat(event.captured.origin).isEqualTo("WATCH_RULE")
+        assertThat(event.captured.originRef).isEqualTo(42L)
     }
 
     @Test
@@ -116,7 +139,7 @@ class OrderSagaOrchestratorTest {
 
         val response = orchestrator.execute(
             userId,
-            SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "LIMIT", quantity = 10, limitPrice = limitPrice),
+            SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "LIMIT", quantity = 10, limitPrice = limitPrice, origin = OrderOrigin.MANUAL),
         )
 
         assertThat(response.order.status).isEqualTo("PENDING")
@@ -136,7 +159,7 @@ class OrderSagaOrchestratorTest {
 
         val response = orchestrator.execute(
             userId,
-            SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10),
+            SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10, origin = OrderOrigin.MANUAL),
         )
 
         assertThat(response.order.status).isEqualTo("FILLED")
@@ -151,7 +174,7 @@ class OrderSagaOrchestratorTest {
         org.assertj.core.api.Assertions.assertThatThrownBy {
             orchestrator.execute(
                 userId,
-                SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10),
+                SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10, origin = OrderOrigin.MANUAL),
             )
         }.isInstanceOf(IllegalArgumentException::class.java)
 
@@ -169,7 +192,7 @@ class OrderSagaOrchestratorTest {
         } returns listOf(2)
 
         org.assertj.core.api.Assertions.assertThatThrownBy {
-            orchestrator.execute(userId, SubmitOrderRequest(stockId = stockId, side = "SELL", orderType = "MARKET", quantity = 5))
+            orchestrator.execute(userId, SubmitOrderRequest(stockId = stockId, side = "SELL", orderType = "MARKET", quantity = 5, origin = OrderOrigin.MANUAL))
         }.isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("보유 수량 부족")
 
         verify(exactly = 0) { orderRepo.save(any()) }
@@ -189,7 +212,7 @@ class OrderSagaOrchestratorTest {
         } returns listOf(8)
 
         org.assertj.core.api.Assertions.assertThatThrownBy {
-            orchestrator.execute(userId, SubmitOrderRequest(stockId = stockId, side = "SELL", orderType = "LIMIT", quantity = 3, limitPrice = BigDecimal("1200")))
+            orchestrator.execute(userId, SubmitOrderRequest(stockId = stockId, side = "SELL", orderType = "LIMIT", quantity = 3, limitPrice = BigDecimal("1200"), origin = OrderOrigin.MANUAL))
         }.isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("미체결 매도 8")
 
         verify(exactly = 0) { orderRepo.save(any()) }
@@ -206,7 +229,7 @@ class OrderSagaOrchestratorTest {
         org.assertj.core.api.Assertions.assertThatThrownBy {
             orchestrator.execute(
                 userId,
-                SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10),
+                SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10, origin = OrderOrigin.MANUAL),
             )
         }.isInstanceOf(IllegalStateException::class.java)
             .hasMessageContaining("현재가")
@@ -222,7 +245,7 @@ class OrderSagaOrchestratorTest {
         stubAccountCash()
 
         org.assertj.core.api.Assertions.assertThatThrownBy {
-            orchestrator.execute(userId, SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10))
+            orchestrator.execute(userId, SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10, origin = OrderOrigin.MANUAL))
         }.isInstanceOf(IllegalStateException::class.java).hasMessageContaining("시장가 주문을 체결할 수 없습니다")
 
         // 예약 앞에서 거부 — 예약도 환불도 없다(현금은 정확히 0번 움직인다).
@@ -236,7 +259,7 @@ class OrderSagaOrchestratorTest {
         stubStockExistsAndPrice(candleTime = staleTime)
 
         org.assertj.core.api.Assertions.assertThatThrownBy {
-            orchestrator.execute(userId, SubmitOrderRequest(stockId = stockId, side = "SELL", orderType = "MARKET", quantity = 1))
+            orchestrator.execute(userId, SubmitOrderRequest(stockId = stockId, side = "SELL", orderType = "MARKET", quantity = 1, origin = OrderOrigin.MANUAL))
         }.isInstanceOf(IllegalStateException::class.java)
 
         verify(exactly = 0) { jdbc.query(match<String> { it.contains("FROM portfolio_positions") }, any<org.springframework.jdbc.core.RowMapper<Int>>(), *anyVararg()) }
@@ -250,7 +273,7 @@ class OrderSagaOrchestratorTest {
         stubAccountCash()
         stubOrderAndFillSaves()
 
-        val res = orchestrator.execute(userId, SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10))
+        val res = orchestrator.execute(userId, SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 10, origin = OrderOrigin.MANUAL))
 
         assertThat(res.fills).hasSize(1)
         assertThat(res.fills.single().fillPrice).isEqualByComparingTo(currentPrice)
@@ -264,7 +287,7 @@ class OrderSagaOrchestratorTest {
         stubOrderAndFillSaves()
 
         val res = orchestrator.execute(
-            userId, SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "LIMIT", quantity = 10, limitPrice = BigDecimal("1200")),
+            userId, SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "LIMIT", quantity = 10, limitPrice = BigDecimal("1200"), origin = OrderOrigin.MANUAL),
         )
 
         assertThat(res.fills).isEmpty()

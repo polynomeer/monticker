@@ -1,5 +1,6 @@
 package com.monticker.api.wallet.application
 
+import com.monticker.api.paper.application.PaperTradeQueryService
 import com.monticker.api.wallet.domain.LedgerEvent
 import com.monticker.api.wallet.domain.LedgerEventType
 import com.monticker.api.wallet.infrastructure.LedgerEventRepository
@@ -21,6 +22,9 @@ data class LedgerEventDto(
     val stockId: Long?,
     val description: String?,
     val createdAt: Instant,
+    /** ADR-085 — 체결 원장(FILL·SETTLEMENT)의 주문 출처. 거래 링크가 없거나 판정할 수 없으면 null(화면 "—"). */
+    val origin: String? = null,
+    val originRef: Long? = null,
 )
 
 /** ADR-043 — 커서 페이지. nextCursor가 null이면 마지막 페이지다. */
@@ -37,6 +41,7 @@ data class LedgerPage(
 @Transactional
 class LedgerService(
     private val ledgerRepo: LedgerEventRepository,
+    private val tradeQueryService: PaperTradeQueryService,
 ) {
     companion object {
         const val DEFAULT_PAGE = 20
@@ -194,7 +199,7 @@ class LedgerService(
         val rows = ledgerRepo.findPage(userId, cursor ?: Long.MAX_VALUE, PageRequest.of(0, size + 1))
         val page = rows.take(size)
         return LedgerPage(
-            items = page.map { it.toDto() },
+            items = withOrigins(userId, page.map { it.toDto() }),
             nextCursor = if (rows.size > size) page.last().id else null,
         )
     }
@@ -202,14 +207,28 @@ class LedgerService(
     /** 지갑 메인 화면용 최근 n건 — DB에서 n건만 읽는다. 이전엔 전체를 읽고 take(10)했다. */
     @Transactional(readOnly = true)
     fun getRecentLedger(userId: Long, n: Int = 10): List<LedgerEventDto> =
-        ledgerRepo.findPage(userId, Long.MAX_VALUE, PageRequest.of(0, n)).map { it.toDto() }
+        withOrigins(userId, ledgerRepo.findPage(userId, Long.MAX_VALUE, PageRequest.of(0, n)).map { it.toDto() })
 
     @Transactional(readOnly = true)
     fun getLedgerForDate(userId: Long, date: LocalDate): List<LedgerEventDto> {
         val zone = ZoneId.of("Asia/Seoul")
         val from = date.atStartOfDay(zone).toInstant()
         val to = date.plusDays(1).atStartOfDay(zone).toInstant()
-        return ledgerRepo.findAllByUserIdAndCreatedAtBetweenOrderByCreatedAtDesc(userId, from, to).map { it.toDto() }
+        return withOrigins(userId, ledgerRepo.findAllByUserIdAndCreatedAtBetweenOrderByCreatedAtDesc(userId, from, to).map { it.toDto() })
+    }
+
+    /**
+     * ADR-085 — 체결 원장 행에 주문 출처를 붙인다(거래 일괄 조회 1번). ADR-047 이전 매칭 경로의 원장은 paper_trade_id에
+     * fills.id를 담고 있어(V43) 엉뚱한 거래와 id가 겹칠 수 있다 — 같은 사용자·같은 종목일 때만 붙인다.
+     */
+    private fun withOrigins(userId: Long, items: List<LedgerEventDto>): List<LedgerEventDto> {
+        val ids = items.mapNotNull { it.paperTradeId }
+        if (ids.isEmpty()) return items
+        val trades = tradeQueryService.findOwnedByIds(userId, ids).associateBy { it.id }
+        return items.map { ev ->
+            val t = ev.paperTradeId?.let { trades[it] }?.takeIf { it.stockId == ev.stockId } ?: return@map ev
+            ev.copy(origin = t.origin, originRef = t.originRef)
+        }
     }
 
     private fun LedgerEvent.toDto() = LedgerEventDto(

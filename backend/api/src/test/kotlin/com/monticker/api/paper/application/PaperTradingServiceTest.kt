@@ -1,5 +1,6 @@
 package com.monticker.api.paper.application
 
+import com.monticker.api.matching.submit.OrderOrigin
 import com.monticker.api.matching.submit.MarketOrderResult
 import com.monticker.api.matching.submit.OrderSubmitter
 import com.monticker.api.paper.domain.PaperAccount
@@ -43,7 +44,7 @@ class PaperTradingServiceTest {
     fun `buy submits a MARKET order to the matching engine and returns the mirrored trade id`() {
         val account = PaperAccount(userId = 1L, cash = com.monticker.api.common.domain.Money.of("9000000"))
         every { accountRepo.findByUserId(1L) } returns Optional.of(account)
-        every { orderSubmitter.submitMarket(1L, 5L, "BUY", 3) } returns MarketOrderResult(
+        every { orderSubmitter.submitMarket(1L, 5L, "BUY", 3, OrderOrigin.MANUAL) } returns MarketOrderResult(
             orderId = 10L, fillId = 77L, stockId = 5L, side = "BUY", quantity = 3,
             fillPrice = java.math.BigDecimal("65000"), amount = java.math.BigDecimal("195000"), filledAt = java.time.Instant.now(),
         )
@@ -68,7 +69,7 @@ class PaperTradingServiceTest {
     @Test
     fun `buy on a fresh account submits the market order without a price and returns the fill`() {
         every { accountRepo.findByUserId(1L) } returns Optional.of(PaperAccount(userId = 1L))
-        every { orderSubmitter.submitMarket(1L, 2L, "BUY", 11) } returns MarketOrderResult(
+        every { orderSubmitter.submitMarket(1L, 2L, "BUY", 11, OrderOrigin.MANUAL) } returns MarketOrderResult(
             orderId = 20L, fillId = 88L, stockId = 2L, side = "BUY", quantity = 11,
             fillPrice = java.math.BigDecimal("70000"), amount = java.math.BigDecimal("770000"), filledAt = java.time.Instant.now(),
         )
@@ -81,13 +82,13 @@ class PaperTradingServiceTest {
         org.assertj.core.api.Assertions.assertThat(result.tradeId).isEqualTo(600L)
         org.assertj.core.api.Assertions.assertThat(result.quantity).isEqualTo(11)
         org.assertj.core.api.Assertions.assertThat(result.remainingCash).isEqualByComparingTo("9230000")
-        io.mockk.verify(exactly = 1) { orderSubmitter.submitMarket(1L, 2L, "BUY", 11) }
+        io.mockk.verify(exactly = 1) { orderSubmitter.submitMarket(1L, 2L, "BUY", 11, OrderOrigin.MANUAL) }
     }
 
     @Test
     fun `a risk rejection from the matching engine propagates unchanged`() {
         every { accountRepo.findByUserId(1L) } returns Optional.of(PaperAccount(userId = 1L))
-        every { orderSubmitter.submitMarket(1L, 5L, "SELL", 1) } throws com.monticker.api.common.aop.RiskLimitException("DailyLossRule")
+        every { orderSubmitter.submitMarket(1L, 5L, "SELL", 1, OrderOrigin.MANUAL) } throws com.monticker.api.common.aop.RiskLimitException("DailyLossRule")
 
         assertThatThrownBy { service.sell(userId = 1L, stockId = 5L, quantity = 1) }
             .isInstanceOf(com.monticker.api.common.aop.RiskLimitException::class.java)
@@ -128,7 +129,7 @@ class PaperTradingServiceTest {
     @Test
     fun `placeOrder LIMIT that does not cross returns a pending order without a trade`() {
         every { accountRepo.findByUserId(1L) } returns Optional.of(PaperAccount(userId = 1L))
-        every { orderSubmitter.submitLimit(1L, 5L, "BUY", 2, java.math.BigDecimal("60000")) } returns com.monticker.api.matching.submit.LimitOrderResult(
+        every { orderSubmitter.submitLimit(1L, 5L, "BUY", 2, java.math.BigDecimal("60000"), OrderOrigin.MANUAL) } returns com.monticker.api.matching.submit.LimitOrderResult(
             orderId = 31L, stockId = 5L, side = "BUY", quantity = 2, limitPrice = java.math.BigDecimal("60000"), status = "PENDING", fill = null,
         )
         every { jdbc.query(match<String> { it.contains("SELECT cash") }, any<org.springframework.jdbc.core.RowMapper<java.math.BigDecimal>>(), 1L) } returns listOf(java.math.BigDecimal("9880000"))
@@ -149,14 +150,14 @@ class PaperTradingServiceTest {
         assertThatThrownBy {
             service.placeOrder(1L, PaperOrderRequest(stockId = 5L, side = "BUY", orderType = "LIMIT", quantity = 2, limitPrice = java.math.BigDecimal("-1")))
         }.isInstanceOf(IllegalArgumentException::class.java)
-        io.mockk.verify(exactly = 0) { orderSubmitter.submitLimit(any(), any(), any(), any(), any()) }
+        io.mockk.verify(exactly = 0) { orderSubmitter.submitLimit(any(), any(), any(), any(), any(), any()) }
     }
 
     // ADR-075 — 미체결 지정가 매수에 익절/손절을 붙이면 WAITING_PARENT로 등록되고 부모 주문 id가 연결된다.
     @Test
     fun `placeOrder with a bracket attaches waiting conditional orders to a pending limit buy`() {
         every { accountRepo.findByUserId(1L) } returns Optional.of(PaperAccount(userId = 1L))
-        every { orderSubmitter.submitLimit(1L, 5L, "BUY", 2, java.math.BigDecimal("60000")) } returns com.monticker.api.matching.submit.LimitOrderResult(
+        every { orderSubmitter.submitLimit(1L, 5L, "BUY", 2, java.math.BigDecimal("60000"), OrderOrigin.MANUAL) } returns com.monticker.api.matching.submit.LimitOrderResult(
             orderId = 31L, stockId = 5L, side = "BUY", quantity = 2, limitPrice = java.math.BigDecimal("60000"), status = "PENDING", fill = null,
         )
         every { jdbc.query(match<String> { it.contains("SELECT cash") }, any<org.springframework.jdbc.core.RowMapper<java.math.BigDecimal>>(), 1L) } returns listOf(java.math.BigDecimal("9880000"))
@@ -176,6 +177,6 @@ class PaperTradingServiceTest {
             service.placeOrder(1L, PaperOrderRequest(stockId = 5L, side = "BUY", orderType = "LIMIT", quantity = 2,
                 limitPrice = java.math.BigDecimal("60000"), stopLossPrice = java.math.BigDecimal("61000")))
         }.isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("손절가")
-        io.mockk.verify(exactly = 0) { orderSubmitter.submitLimit(any(), any(), any(), any(), any()) }
+        io.mockk.verify(exactly = 0) { orderSubmitter.submitLimit(any(), any(), any(), any(), any(), any()) }
     }
 }
