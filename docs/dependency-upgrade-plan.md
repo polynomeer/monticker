@@ -139,8 +139,17 @@ Kotlin 컴파일러 플러그인(`plugin.spring`·`plugin.jpa`)은 `kotlin("jvm"
 3. 요청 API(`cookies()`·`headers()`·`params`)의 비동기 전용 전환, 미들웨어 관련 변경, 기본 번들러 변경을 따라간다.
 4. 루트 `package.json`의 `packageExtensions`(`next@15.5.25` 키)를 새 버전에 맞춘다. 고정 버전 키 때문에 react-query 5.104에서 타입 검사가 깨진 전례가 있다(#117). 범위 키로 바꿔 둔다.
 
-**확인할 것**: Node 최저 버전(CI web은 22, mobile은 20), `next.config.ts` 옵션 이름 변경, CSP(Pretendard self-host)에 영향을 주는 헤더·폰트 처리.
-**검증**: `scripts/check.sh web --full`, e2e-ci, 화면 캡처(`apps/web/scripts/capture-screenshots.mjs`)를 업그레이드 전후로 찍어 비교한다.
+**확인 결과**(2026-10-07, **16.4.0**으로 올림, [Next 16 업그레이드 가이드](https://nextjs.org/docs/app/guides/upgrading/version-16)):
+- 요구 사항: Node 20.9+(CI 22, Docker `node:20-alpine`), TypeScript 5.1+(5.9), React 19.2+(19.3) — 모두 충족.
+- 우리에게 해당한 변경:
+  - `next lint` 제거, `next.config`의 `eslint` 옵션 제거 → `eslint.config.mjs`(flat config) + `lint: "eslint ."`. eslint-config-next 16은 ESLint 9 이상을 요구해 **ESLint 9.39**로 올렸다(10은 별도 확인 후).
+  - eslint-config-next 16이 가져온 `eslint-plugin-react-hooks` 7의 **React Compiler 규칙**이 기존 코드 61곳(42개 파일, 50곳이 `set-state-in-effect`)을 잡는다. 동작 변경을 섞지 않으려고 warn으로 두었다 → **후속: 고치고 error로 되돌리기**.
+  - **Turbopack이 dev·build 기본값**이 됐다. 커스텀 webpack 설정이 없어 그대로 동작한다. standalone 출력(`.next/standalone/apps/web/server.js`)도 같다.
+  - `html`의 `scroll-behavior: smooth`를 Next가 라우트 전환 때 더 이상 덮어쓰지 않는다 → `<html data-scroll-behavior="smooth">`로 15와 같은 동작 유지.
+  - 빌드가 `tsconfig.json`을 자동 갱신한다(`jsx: react-jsx`, `.next/dev/types` 포함) — 그대로 커밋.
+  - `packageExtensions` 키를 `next@16` 범위로(정확한 버전 키는 패치에서도 깨진다, #142).
+- 해당 없음: middleware(없음), 병렬 라우트(없음), `cookies()`/`headers()`(안 씀), `next/image`(안 씀), 동적 라우트 `params`(이미 Promise), runtime config·AMP(안 씀).
+**검증**: `tsc`, `scripts/check.sh web --full`(Turbopack 빌드), dev 서버와 운영 빌드(`next start`)에서 홈·종목 상세·로그인 화면 렌더링과 콘솔(CSP 위반·하이드레이션 오류 없음) 확인, e2e-ci.
 
 ### W2. Tailwind 3 → 4
 
@@ -201,4 +210,5 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 | B1 Kotlin 2 | 완료 | #154 | 2.3.21 (Boot 4.1 BOM과 같은 버전) |
 | B0 Gradle 9 | 완료 | #156 | 9.8.0. wrapper만 변경 |
 | B3 jjwt 0.13 | 완료 | #158 | 0.13.0. 0.12.7 토큰 호환 테스트 추가 |
-| B4, W1~W3, M1 | 시작 전 | — | |
+| W1 Next 16 | PR | — | 16.4.0 + ESLint 9 flat config. React Compiler 린트 61곳은 warn(후속) |
+| B4, W2, W3, M1 | 시작 전 | — | |
