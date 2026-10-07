@@ -75,7 +75,7 @@ monticker의 모든 문서를 **독자별 · 주제별**로 정리한 색인입�
 | [data-model.md](data-model.md) | PostgreSQL/TimescaleDB 전체 스키마, Redis 키 규칙 |
 | [elasticsearch.md](elasticsearch.md) | ES 인덱스 6개·도메인 8개 적용 현황, 파이프라인, DB 폴백 |
 | [external-apis.md](external-apis.md) | 시세·뉴스·공시·AI 외부 API 후보와 설정 |
-| [decisions/](decisions/) | ADR 001~086. 형식과 작성 규칙은 [../CLAUDE.md](../CLAUDE.md#architecture-decision-records-adrs) |
+| [decisions/](decisions/) | ADR 001~087. 형식과 작성 규칙은 [../CLAUDE.md](../CLAUDE.md#architecture-decision-records-adrs) |
 
 **ADR 빠른 지도**
 
