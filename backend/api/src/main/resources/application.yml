@@ -194,6 +194,10 @@ management:
       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
 
 app:
+  http:
+    # ADR-084 — X-Forwarded-For를 믿을 직전 홉(프록시)의 CIDR 목록, 쉼표 구분. 비어 있으면 헤더를 전혀 믿지 않고
+    # TCP 피어(remoteAddr)를 클라이언트 IP로 쓴다(로컬·직접 연결). 운영은 ingress-nginx 컨트롤러 파드 CIDR을 ConfigMap으로 준다.
+    trusted-proxies: ${APP_HTTP_TRUSTED_PROXIES:}
   search:
     # ADR-042 — 기동 시 인덱스가 없으면 @Setting/@Field 매핑으로 만든다(nori). 있으면 매핑을 대조해
     # 어긋나면 search_index_mapping_mismatch 게이지를 올린다 — 자동으로 고치지 않는다(재색인은 관리자 몫).
