@@ -68,9 +68,10 @@ class BrokerageServiceTest {
     private val events = mockk<org.springframework.context.ApplicationEventPublisher>(relaxed = true)
     private val outcomeNotices = OrderOutcomeNotices(events)
     private val priceGuard = mockk<OrderPriceGuard>(relaxed = true)
+    private val calendar = com.monticker.api.common.calendar.KrxCalendar.empty()
     private val connectConsents = listOf("BROKERAGE_DELEGATION", "BROKERAGE_NO_CUSTODY", "BROKERAGE_LOSS_ATTRIBUTION")
 
-    private val service = BrokerageService(clientRegistry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService, outcomeNotices, priceGuard)
+    private val service = BrokerageService(clientRegistry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService, outcomeNotices, priceGuard, calendar)
 
     private val approvedRisk = RiskCheckResult(approved = true, blockedBy = null, severity = "APPROVED", checks = emptyList())
 
@@ -226,7 +227,7 @@ class BrokerageServiceTest {
         every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
         stubStockLookup(stockId = 7L)
         every { priceGuard.check(7L, any(), any(), any()) } throws IllegalArgumentException("호가 단위에 맞지 않는 가격입니다")
-        val svc = BrokerageService(BrokerageClientRegistry(BrokerageProvider.entries.associateWith { broker }), accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService, outcomeNotices, priceGuard)
+        val svc = BrokerageService(BrokerageClientRegistry(BrokerageProvider.entries.associateWith { broker }), accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService, outcomeNotices, priceGuard, calendar)
 
         assertThrows<IllegalArgumentException> {
             svc.submitOrder(1L, BrokerageOrderRequest("005930", "BUY", "LIMIT", 1, BigDecimal("70050")))
@@ -370,7 +371,7 @@ class BrokerageServiceTest {
 
     private fun serviceWithFakeClient(fakeClient: BrokerageClient): BrokerageService {
         val registry = BrokerageClientRegistry(BrokerageProvider.entries.associateWith { fakeClient })
-        return BrokerageService(registry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService, outcomeNotices, priceGuard)
+        return BrokerageService(registry, accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService, outcomeNotices, priceGuard, calendar)
     }
 
     @Test
@@ -1020,7 +1021,7 @@ class BrokerageServiceTest {
     @Test
     fun `connect is refused before calling the broker when the notice consents are missing (ADR-068)`() {
         val brokerClient = mockk<BrokerageClient>()
-        val svc = BrokerageService(BrokerageClientRegistry(BrokerageProvider.entries.associateWith { brokerClient }), accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService, outcomeNotices, priceGuard)
+        val svc = BrokerageService(BrokerageClientRegistry(BrokerageProvider.entries.associateWith { brokerClient }), accountRepo, orderRepo, settlementRepo, ledgerService, riskChecker, jdbc, txManager, meterRegistry, haltService, pendingBuyQuery, consentService, outcomeNotices, priceGuard, calendar)
         every { consentService.requireAndRecord(1L, ConsentGroup.BROKERAGE_CONNECT, emptyList(), ConsentSource.BROKERAGE_CONNECT) } throws IllegalArgumentException("필수 동의 항목이 빠졌습니다")
 
         assertThrows<IllegalArgumentException> {

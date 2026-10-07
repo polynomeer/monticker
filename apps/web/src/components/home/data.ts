@@ -8,6 +8,7 @@ import { authFetch } from "@/services/api";
 import { getAccessToken } from "@/services/auth";
 import { fetchCandles, stockKeys } from "@/hooks/useStockChart";
 import type { ScreenerItem } from "@/hooks/useScreener";
+import { sessionLabel, useMarketStatus, type SessionLabel } from "@/components/market/krxCalendar";
 
 export interface RecentEvent {
   id: number;
@@ -158,28 +159,19 @@ export function kstTime(iso: string, now: Date = new Date()) {
 }
 
 /**
- * 국내 정규장 상태(평일 09:00–15:30 KST). 공휴일 캘린더가 없어 휴장일은 구분하지 못한다.
+ * 국내 장 상태 — ADR-086. 오늘이 거래일인지·휴장일 이름·개장 시각은 서버(/api/market/status, KRX 휴장일 캘린더)에서 받고,
+ * 시각에 따른 단계(장 시작 전·정규장·장 마감)는 30초마다 지금 시각으로 다시 계산한다.
+ * 서버 요청이 실패하면 평일 09:00–15:30 KST 규칙으로 대신한다(이때는 휴장일을 구분하지 못한다).
  * 현재 시각에 의존하므로 마운트 후에만 계산한다.
  */
 export function useKrxSession() {
-  const [label, setLabel] = useState<{ text: string; open: boolean } | null>(null);
+  const { data: status } = useMarketStatus();
+  const [label, setLabel] = useState<SessionLabel | null>(null);
   useEffect(() => {
-    const tick = () => {
-      const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date());
-      const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
-      const wd = get("weekday");
-      const h = Number(get("hour")) % 24;
-      const m = Number(get("minute"));
-      const mins = h * 60 + m;
-      const hhmm = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-      const weekday = !["Sat", "Sun"].includes(wd);
-      if (weekday && mins >= 540 && mins < 930) setLabel({ text: `정규장 · ${hhmm}`, open: true });
-      else if (weekday && mins >= 480 && mins < 540) setLabel({ text: `장 시작 전 · ${hhmm}`, open: false });
-      else setLabel({ text: `장 마감 · ${hhmm}`, open: false });
-    };
+    const tick = () => setLabel(sessionLabel(status, new Date()));
     tick();
     const id = setInterval(tick, 30_000);
     return () => clearInterval(id);
-  }, []);
+  }, [status]);
   return label;
 }

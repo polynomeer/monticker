@@ -115,6 +115,7 @@ class BrokerageOrderUnknownOutcomeFlowIntegrationTest {
             mockk(relaxed = true), OrderOutcomeNotices(mockk(relaxed = true)),
             // 이 테스트는 결과 불명 흐름만 본다 — 호가 단위·가격제한 검증(ADR-081)은 통과시킨다
             mockk<OrderPriceGuard>(relaxed = true),
+            com.monticker.api.common.calendar.KrxCalendar.empty(),
         )
         // 운영처럼 @Transactional 프록시를 씌운다. 직접 생성한 인스턴스는 애노테이션이 무시돼, 예컨대 syncOrderStatus에
         // 바깥 트랜잭션이 생겨 캐시된(해소 전) 엔티티를 돌려주는 회귀를 이 테스트가 잡지 못했다.

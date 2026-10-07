@@ -3,7 +3,6 @@ package com.monticker.worker.marketindex
 import com.monticker.worker.marketdata.MarketSchedule
 import java.math.BigDecimal
 import java.math.RoundingMode
-import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import kotlin.random.Random
@@ -14,7 +13,9 @@ import kotlin.random.Random
  */
 class MockMarketIndexProvider(
     private val random: Random = Random.Default,
-    private val isKrSessionOpen: (Instant) -> Boolean = { MarketSchedule.getTickConfig("KOSPI", "KOSPI").status != MarketSchedule.MarketStatus.CLOSED },
+    private val isKrSessionOpen: (Instant) -> Boolean = { MarketSchedule.getTickConfig("KOSPI", "KOSPI", it).status != MarketSchedule.MarketStatus.CLOSED },
+    // ADR-086 — 이력도 KRX 거래일에만 만든다(휴장일 일봉이 생기면 베타·기간 수익률이 하루씩 어긋난다)
+    private val isKrBusinessDay: (LocalDate) -> Boolean = MarketSchedule::isKrBusinessDay,
 ) : MarketIndexProvider {
 
     override val source = "MOCK"
@@ -60,7 +61,7 @@ class MockMarketIndexProvider(
         var date = endExclusive.minusDays(1)
         var value = BASE.getValue(code)
         while (out.size < tradingDays) {
-            if (date.dayOfWeek != DayOfWeek.SATURDAY && date.dayOfWeek != DayOfWeek.SUNDAY) {
+            if (isKrBusinessDay(date)) {
                 out.add(date to value)
                 value = step(value, DAILY_VOL.getValue(code))
             }

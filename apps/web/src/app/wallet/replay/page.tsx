@@ -12,6 +12,7 @@ import {
 } from "@/components/terminal";
 import { cn } from "@/lib/utils";
 import CandleReplay from "@/components/wallet/CandleReplay";
+import { addDays, holidaySet, previousBusinessDays, shiftBusinessDays, useMarketCalendar } from "@/components/market/krxCalendar";
 
 /** 백엔드 ReplayEvent — 필드 이름이 qty, 종목명은 없고 심볼만 온다. 예전 응답 모양(quantity·stockName)도 받아 준다. */
 interface ReplayEvent {
@@ -53,25 +54,6 @@ function ymd(d: Date) {
 function parseYmd(s: string) {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, m - 1, d);
-}
-/** 기준일 이전 영업일(주말 제외) n개 + 기준일, 오래된 순 */
-function businessDays(anchor: string, n = 6) {
-  const out: Date[] = [];
-  const d = parseYmd(anchor);
-  while (out.length < n) {
-    if (d.getDay() !== 0 && d.getDay() !== 6) out.unshift(new Date(d));
-    d.setDate(d.getDate() - 1);
-  }
-  return out;
-}
-function shiftBusiness(anchor: string, delta: number) {
-  const d = parseYmd(anchor);
-  let left = Math.abs(delta);
-  while (left > 0) {
-    d.setDate(d.getDate() + Math.sign(delta));
-    if (d.getDay() !== 0 && d.getDay() !== 6) left--;
-  }
-  return ymd(d);
 }
 /** +44,900 → "+4.5만" */
 function compactWon(v: number) {
@@ -145,7 +127,10 @@ export default function ReplayPage() {
     enabled: isLoggedIn,
   });
 
-  const days = useMemo(() => businessDays(anchor), [anchor]);
+  // ADR-086 — 날짜 띠는 KRX 영업일만(휴장일 캘린더). 캘린더를 못 받으면 주말만 뺀다.
+  const { data: cal } = useMarketCalendar(addDays(anchor, -45), addDays(anchor, 15));
+  const holidays = useMemo(() => holidaySet(cal), [cal]);
+  const days = useMemo(() => previousBusinessDays(6, anchor, holidays).map(parseYmd), [anchor, holidays]);
   const dayQueries = useQueries({
     queries: days.map((d) => ({ queryKey: ["wallet", "replay", ymd(d)], queryFn: () => fetchReplay(ymd(d)), enabled: isLoggedIn, staleTime: 60_000 })),
   });
@@ -190,7 +175,7 @@ export default function ReplayPage() {
     >
       <Panel tabs={["날짜 선택"]} actions={[]} closable={false}>
         <div className="flex flex-wrap items-center gap-1.5">
-          <IconBtn name="chevl" label="이전 주" size={36} onClick={() => setAnchor((a) => shiftBusiness(a, -5))} />
+          <IconBtn name="chevl" label="이전 주" size={36} onClick={() => setAnchor((a) => shiftBusinessDays(a, -5, holidays))} />
           {days.map((d, i) => {
             const key = ymd(d);
             const on = key === date;
@@ -210,7 +195,7 @@ export default function ReplayPage() {
               </button>
             );
           })}
-          <IconBtn name="chevr" label="다음 주" size={36} onClick={() => setAnchor((a) => shiftBusiness(a, 5))} />
+          <IconBtn name="chevr" label="다음 주" size={36} onClick={() => setAnchor((a) => shiftBusinessDays(a, 5, holidays))} />
           <label className="ml-auto inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-tm-line2 px-3 text-sm font-semibold hover:bg-tm-raised">
             <Icon name="calendar" size={16} />
             <span>달력</span>

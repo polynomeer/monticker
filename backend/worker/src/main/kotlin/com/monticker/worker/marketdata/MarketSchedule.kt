@@ -1,6 +1,7 @@
 package com.monticker.worker.marketdata
 
 import java.time.DayOfWeek
+import java.time.Instant
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
@@ -10,12 +11,13 @@ import java.time.ZoneId
  *
  * 장 상태에 따라 틱 생성 여부와 변동성 배율(volatilityMultiplier)을 결정한다.
  *
- *   CLOSED       : 틱 생성 안 함 (주말, 장 마감 이후)
+ *   CLOSED       : 틱 생성 안 함 (주말, KRX 휴장일, 장 마감 이후)
  *   PRE_MARKET   : 변동성 0.3× (시간외 단일가 시뮬레이션)
  *   OPEN         : 변동성 1.0× (정규장)
  *   POST_MARKET  : 변동성 0.2× (시간외)
  *
- * 주의: 한국 공휴일은 현재 미반영. 실 서비스에서는 KRX 휴장일 API 연동 필요.
+ * ADR-086 — 국내 장은 KRX 휴장일 캘린더([krCalendar], market_holidays 테이블 스냅샷)를 따른다.
+ * 미국 장 휴장일은 아직 반영하지 않는다(주말만).
  */
 object MarketSchedule {
 
@@ -24,6 +26,13 @@ object MarketSchedule {
 
     enum class MarketStatus { PRE_MARKET, OPEN, POST_MARKET, CLOSED }
 
+    /** KrxHolidayCalendarLoader가 기동 시·1시간마다 갈아 끼운다. 로드 전에는 주말만 휴장. */
+    @Volatile
+    var krCalendar: KrxHolidayCalendar = KrxHolidayCalendar.weekendsOnly()
+
+    /** 그 날(KST)에 국내 장이 열리는가 */
+    fun isKrBusinessDay(date: java.time.LocalDate): Boolean = krCalendar.isBusinessDay(date)
+
     data class TickConfig(
         val symbol: String,
         val market: String,
@@ -31,16 +40,16 @@ object MarketSchedule {
         val volatilityMultiplier: Double,
     )
 
-    fun getTickConfig(symbol: String, market: String): TickConfig = when (market) {
-        "KOSPI", "KOSDAQ" -> krConfig(symbol, market)
-        "NASDAQ", "NYSE"  -> usConfig(symbol, market)
+    fun getTickConfig(symbol: String, market: String, now: Instant = Instant.now()): TickConfig = when (market) {
+        "KOSPI", "KOSDAQ" -> krConfig(symbol, market, now)
+        "NASDAQ", "NYSE"  -> usConfig(symbol, market, now)
         else              -> TickConfig(symbol, market, MarketStatus.OPEN, 1.0)  // 기본값: 항상 열림
     }
 
-    private fun krConfig(symbol: String, market: String): TickConfig {
-        val now = LocalDateTime.now(KST)
+    private fun krConfig(symbol: String, market: String, at: Instant): TickConfig {
+        val now = LocalDateTime.ofInstant(at, KST)
         val t   = now.toLocalTime()
-        if (now.dayOfWeek in setOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY))
+        if (!krCalendar.isBusinessDay(now.toLocalDate()))
             return TickConfig(symbol, market, MarketStatus.CLOSED, 0.0)
         return when {
             t.isBefore(LocalTime.of(7, 30))  -> TickConfig(symbol, market, MarketStatus.CLOSED,      0.0)
@@ -51,8 +60,8 @@ object MarketSchedule {
         }
     }
 
-    private fun usConfig(symbol: String, market: String): TickConfig {
-        val now = LocalDateTime.now(ET)
+    private fun usConfig(symbol: String, market: String, at: Instant): TickConfig {
+        val now = LocalDateTime.ofInstant(at, ET)
         val t   = now.toLocalTime()
         if (now.dayOfWeek in setOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY))
             return TickConfig(symbol, market, MarketStatus.CLOSED, 0.0)

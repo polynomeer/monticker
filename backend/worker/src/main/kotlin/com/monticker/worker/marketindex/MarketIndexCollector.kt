@@ -13,7 +13,7 @@ import org.springframework.transaction.support.TransactionTemplate
 import java.math.BigDecimal
 import java.sql.Date
 import java.sql.Timestamp
-import java.time.DayOfWeek
+import com.monticker.worker.marketdata.MarketSchedule
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -45,6 +45,9 @@ class MarketIndexCollector(
     private val jdbc: JdbcTemplate,
     txManager: PlatformTransactionManager,
 ) {
+    /** 테스트에서 바꾼다. 기본은 MarketSchedule의 KRX 캘린더 스냅샷. */
+    internal var isKrBusinessDay: (LocalDate) -> Boolean = MarketSchedule::isKrBusinessDay
+
     private val log = LoggerFactory.getLogger(javaClass)
     private val tx = TransactionTemplate(txManager)
     /** 백필 확인은 프로세스당 한 번이면 된다(성공한 뒤에만 true). */
@@ -98,8 +101,8 @@ class MarketIndexCollector(
             Timestamp.from(tick.asOf), provider.source, provider.isMock,
         )
 
-        // 주말 날짜로는 일봉을 만들지 않는다(최초 기동이 주말이면 시드 값만 최신 시세로 남는다).
-        if (isWeekend(tradeDate)) return
+        // 휴장일(주말·KRX 공휴일, ADR-086)로는 일봉을 만들지 않는다(최초 기동이 휴장일이면 시드 값만 최신 시세로 남는다).
+        if (!isKrBusinessDay(tradeDate)) return
         upsertDaily(tick.code, tradeDate, tick.value)
     }
 
@@ -129,5 +132,4 @@ class MarketIndexCollector(
         }
     }
 
-    private fun isWeekend(d: LocalDate) = d.dayOfWeek == DayOfWeek.SATURDAY || d.dayOfWeek == DayOfWeek.SUNDAY
 }

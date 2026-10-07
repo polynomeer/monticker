@@ -20,8 +20,8 @@ class MarketIndexCollectorTest {
     private val jdbc = mockk<JdbcTemplate>(relaxed = true)
     private val txManager = mockk<PlatformTransactionManager>(relaxed = true)
 
-    // 2026-10-05(월) 10:00 KST
-    private val mondayMorning = Instant.parse("2026-10-05T01:00:00Z")
+    // 2026-10-06(화) 10:00 KST — 10/5(월)는 개천절 대체공휴일이라 피한다(ADR-086)
+    private val mondayMorning = Instant.parse("2026-10-06T01:00:00Z")
 
     private fun stubStoredValues(values: List<Pair<MarketIndexCode?, BigDecimal>>) {
         every { jdbc.query(match<String> { it.startsWith("SELECT code, value") }, any<RowMapper<Any>>()) } returns values
@@ -33,7 +33,7 @@ class MarketIndexCollectorTest {
 
     @Test
     fun `mock provider moves only while the KR session is open and starts from base when empty`() {
-        val closed = MockMarketIndexProvider(Random(1)) { false }
+        val closed = MockMarketIndexProvider(Random(1), isKrSessionOpen = { false })
         val prev = mapOf(MarketIndexCode.KOSPI to BigDecimal("2500.00"))
 
         val ticks = closed.fetch(prev, mondayMorning)
@@ -42,7 +42,7 @@ class MarketIndexCollectorTest {
         assertThat(ticks.map { it.code }).containsExactlyInAnyOrder(MarketIndexCode.KOSDAQ, MarketIndexCode.USDKRW)
         assertThat(ticks.first { it.code == MarketIndexCode.KOSDAQ }.value).isEqualByComparingTo("850.00")
 
-        val open = MockMarketIndexProvider(Random(1)) { true }
+        val open = MockMarketIndexProvider(Random(1), isKrSessionOpen = { true })
         val moved = open.fetch(prev, mondayMorning).first { it.code == MarketIndexCode.KOSPI }
         assertThat(moved.value.toDouble()).isBetween(2500 * 0.9, 2500 * 1.1)
     }
@@ -79,8 +79,36 @@ class MarketIndexCollectorTest {
         }
         verify {
             jdbc.update(match<String> { it.contains("INSERT INTO market_index_daily") },
-                "KOSPI", java.sql.Date.valueOf(LocalDate.of(2026, 10, 5)), BigDecimal("2610.50"), true)
+                "KOSPI", java.sql.Date.valueOf(LocalDate.of(2026, 10, 6)), BigDecimal("2610.50"), true)
         }
+    }
+
+    @Test
+    fun `KRX holiday updates the quote but writes no daily row`() {
+        stubDailyCount(10)
+        stubStoredValues(listOf(MarketIndexCode.KOSPI to BigDecimal("2600.00")))
+        every { jdbc.query(match<String> { it.contains("trade_date < ?") }, any<RowMapper<BigDecimal>>(), *anyVararg()) } returns emptyList()
+        val holidayMorning = Instant.parse("2026-10-05T01:00:00Z")   // 개천절 대체공휴일(월)
+        val provider = mockk<MarketIndexProvider> {
+            every { source } returns "MOCK"
+            every { isMock } returns true
+            every { fetch(any(), any()) } returns listOf(MarketIndexTick(MarketIndexCode.KOSPI, BigDecimal("2610.50"), holidayMorning))
+        }
+        val collector = MarketIndexCollector(provider, jdbc, txManager).apply {
+            isKrBusinessDay = { it != LocalDate.of(2026, 10, 5) && it.dayOfWeek !in setOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY) }
+        }
+
+        collector.collectOnce(holidayMorning)
+
+        verify { jdbc.update(match<String> { it.contains("INSERT INTO market_index_quotes") }, *anyVararg()) }
+        verify(exactly = 0) { jdbc.update(match<String> { it.contains("INSERT INTO market_index_daily") }, *anyVararg()) }
+    }
+
+    @Test
+    fun `mock history skips KRX holidays`() {
+        val history = MockMarketIndexProvider(Random(2), { false }) { it != LocalDate.of(2026, 10, 2) && it.dayOfWeek !in setOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY) }
+            .history(MarketIndexCode.KOSPI, LocalDate.of(2026, 10, 5), 3)
+        assertThat(history.map { it.first }).containsExactly(LocalDate.of(2026, 9, 29), LocalDate.of(2026, 9, 30), LocalDate.of(2026, 10, 1))
     }
 
     @Test
@@ -113,7 +141,7 @@ class MarketIndexCollectorTest {
         collector.collectOnce(mondayMorning)
         collector.collectOnce(mondayMorning)
 
-        verify(exactly = MarketIndexCode.entries.size) { provider.history(any(), LocalDate.of(2026, 10, 5), MarketIndexCollector.BACKFILL_TRADING_DAYS) }
+        verify(exactly = MarketIndexCode.entries.size) { provider.history(any(), LocalDate.of(2026, 10, 6), MarketIndexCollector.BACKFILL_TRADING_DAYS) }
     }
 
     @Test
