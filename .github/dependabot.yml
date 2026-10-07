@@ -6,19 +6,103 @@ updates:
     schedule:
       interval: "weekly"
     groups:
+      # 의존성은 처음 맞는 그룹으로 간다 — 짝이 있는 그룹을 dev-dependencies보다 앞에 둔다.
+      # react-dom은 react와 정확히 같은 버전이어야 한다(#121 #122)
+      react:
+        patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
+      # Expo SDK는 RN·expo-* 버전을 한 세트로 고정한다(#113 #114 #120)
+      expo:
+        patterns: ["expo", "expo-*", "react-native"]
       dev-dependencies:
         dependency-type: "development"
+    # docs/dependency-upgrade-plan.md — 트랙(W1~W3, M1)을 시작하기 전까지 메이저는 받지 않는다.
+    # 트랙이 끝나면 해당 항목을 지운다.
+    ignore:
+      - dependency-name: "next"                 # W1
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint-config-next"   # W1
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint"               # W1
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "tailwindcss"          # W2
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"           # W3
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vitest"               # W3
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "jsdom"                # W3
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"          # W3 — 런타임 Node 메이저를 올릴 때 함께
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@babel/core"          # M1 — Expo 프리셋을 따른다
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "expo"                 # M1
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "expo-*"               # M1
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-native"         # M1
+        update-types: ["version-update:semver-major"]
+      # 모바일 react 18 → 19는 Expo SDK 업그레이드(M1)에서 함께 — 웹은 이미 19다
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react"
+        update-types: ["version-update:semver-major"]
     open-pull-requests-limit: 10
 
-  # 4개의 독립된 Gradle 루트 프로젝트 — 각자 별도 build.gradle.kts/gradlew를 가짐
+  # 2개의 독립된 Gradle 루트 프로젝트 — 각자 별도 build.gradle.kts/gradlew를 가짐
+  # docs/dependency-upgrade-plan.md — 트랙(B1~B4)을 시작하기 전까지 메이저는 받지 않는다. 끝나면 해당 항목을 지운다.
   - package-ecosystem: "gradle"
     directory: "/backend/api"
     schedule:
       interval: "weekly"
+    groups:
+      # Kotlin 컴파일러 플러그인(plugin.spring·plugin.jpa)은 kotlin("jvm")과 같은 버전이어야 한다(#106 #108 #109)
+      kotlin:
+        patterns: ["org.jetbrains.kotlin*"]
+      # jjwt-api·impl·jackson은 같은 버전이어야 한다(#102)
+      jjwt:
+        patterns: ["io.jsonwebtoken:*"]
+    ignore:
+      - dependency-name: "org.jetbrains.kotlin*"          # B1
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.testcontainers:*"           # B2
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "io.jsonwebtoken:*"              # B3 — 0.x라 minor가 breaking이다
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "org.springframework.boot"       # B4
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "io.spring.dependency-management" # B4
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.springframework.modulith:*" # B4 — Boot 4 짝 버전
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "net.logstash.logback:*"         # B4
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "gradle"
     directory: "/backend/worker"
     schedule:
       interval: "weekly"
+    groups:
+      # Kotlin 컴파일러 플러그인(plugin.spring·plugin.jpa)은 kotlin("jvm")과 같은 버전이어야 한다(#106 #108 #109)
+      kotlin:
+        patterns: ["org.jetbrains.kotlin*"]
+      # jjwt-api·impl·jackson은 같은 버전이어야 한다(#102)
+      jjwt:
+        patterns: ["io.jsonwebtoken:*"]
+    ignore:
+      - dependency-name: "org.jetbrains.kotlin*"          # B1
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.testcontainers:*"           # B2
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "io.jsonwebtoken:*"              # B3 — 0.x라 minor가 breaking이다
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "org.springframework.boot"       # B4
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "io.spring.dependency-management" # B4
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.springframework.modulith:*" # B4 — Boot 4 짝 버전
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "net.logstash.logback:*"         # B4
+        update-types: ["version-update:semver-major"]
 
   # 시세 수집 게이트웨이 (Go)
   - package-ecosystem: "gomod"

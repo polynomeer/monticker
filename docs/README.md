@@ -103,6 +103,7 @@ monticker의 모든 문서를 **독자별 · 주제별**로 정리한 색인입�
 | [design-review-2026-10.md](design-review-2026-10.md) | ADR 001~054 교차 사고실험 — ADR끼리 만나는 지점의 결함(Mock 시세→실주문, 결과 불명 주문 등), 남은 P0~P2 |
 | [validation-hardening-plan.md](validation-hardening-plan.md) | 입력값·논리 분기 검증 점검 (완료, PR #80) |
 | [design-rollout-plan.md](design-rollout-plan.md) | 터미널 디자인 시안(ADR-066) 적용 후 "준비 중" 요소의 기능 구현 계획 — P0(동의 기록·연동 해지·출금 정책) ~ P2, 화면별 |
+| [dependency-upgrade-plan.md](dependency-upgrade-plan.md) | 닫아 둔 메이저 의존성 업그레이드(Boot 4·Kotlin 2·Testcontainers 2·jjwt·Next 16·Tailwind 4·TS 7·Expo 58)의 트랙·순서·검증 |
 | [scale-out-plan.md](scale-out-plan.md) | 병목 인벤토리, 목표 아키텍처, Phase 0~4 전환 로드맵 |
 | [workflow.md](workflow.md) | Claude Code 개발 워크플로 — 서브에이전트, 훅, CI/CD |
 
