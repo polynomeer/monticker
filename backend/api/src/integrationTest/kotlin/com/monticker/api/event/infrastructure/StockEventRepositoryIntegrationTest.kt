@@ -154,6 +154,25 @@ class StockEventRepositoryIntegrationTest {
         assertThat(result.map { it.stockId }).containsExactly(stockC, stockB)
     }
 
+    // ADR-085 — 보유 종목 표의 "최근 이벤트": 종목별 1건씩, 요청한 종목만, 이벤트 없는 종목은 빠진다
+    @Test
+    fun `findLatestPerStock returns the newest event of each requested stock only`() {
+        val stockA = createStock("HHH008")
+        val stockB = createStock("III009")
+        val stockC = createStock("JJJ010")   // 이벤트 없음
+        val stockD = createStock("KKK011")   // 요청하지 않음
+        val now = Instant.now()
+        insertEvent(stockA, EventType.PRICE_SPIKE, now.minus(2, ChronoUnit.HOURS), "A-old")
+        insertEvent(stockA, EventType.VOLUME_SURGE, now.minus(10, ChronoUnit.MINUTES), "A-new")
+        insertEvent(stockB, EventType.PRICE_DROP, now.minus(3, ChronoUnit.DAYS), "B-only")
+        insertEvent(stockD, EventType.PRICE_SPIKE, now, "D")
+
+        val result = stockEventRepository.findLatestPerStock(listOf(stockA, stockB, stockC))
+
+        assertThat(result.associate { it.stockId to it.title })
+            .containsExactlyInAnyOrderEntriesOf(mapOf(stockA to "A-new", stockB to "B-only"))
+    }
+
     @Test
     fun `the DB-level unique index rejects a duplicate stock-type event within the same minute bucket`() {
         // Guards the idempotency contract from event-detector-reviewer.md: duplicate events
