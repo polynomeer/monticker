@@ -60,10 +60,10 @@ class AlertService(
 
     /** DELETE — 규칙 삭제(ADR-073: 꺼지고 다시 켤 수 없다). */
     fun deactivateRule(userId: Long, ruleId: Long) {
-        val rule = alertRuleRepository.findById(ruleId).orElseThrow {
-            NoSuchElementException("Alert rule not found: $ruleId")
-        }
-        require(rule.userId == userId) { "Access denied" }
+        // 남의 규칙은 없는 규칙과 같은 404 — 400/403으로 구분하면 규칙 id 존재 여부를 열거할 수 있다
+        val rule = alertRuleRepository.findById(ruleId).orElse(null)
+            ?.takeIf { it.userId == userId }
+            ?: throw NoSuchElementException("Alert rule not found: $ruleId")
         alertRuleRepository.markDeleted(ruleId, userId)
         publishChangedAfterCommit(rule.stockId)
     }

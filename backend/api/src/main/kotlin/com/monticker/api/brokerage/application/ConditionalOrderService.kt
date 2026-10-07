@@ -95,8 +95,9 @@ class ConditionalOrderService(
 
     @Transactional
     fun cancel(userId: Long, id: Long): ConditionalOrder {
-        val order = conditionalOrderRepo.findById(id).orElseThrow { NoSuchElementException("조건부 주문 없음: $id") }
-        require(order.userId == userId) { "접근 권한 없음" }
+        // 남의 주문은 없는 주문과 같은 404 — 400/403으로 구분하면 id 존재 여부를 열거할 수 있다
+        val order = conditionalOrderRepo.findById(id).orElse(null)?.takeIf { it.userId == userId }
+            ?: throw NoSuchElementException("조건부 주문 없음: $id")
         require(order.status == ConditionalOrderStatus.ACTIVE) { "취소 불가 상태: ${order.status}" }
         order.cancel()
         log.info("조건부 주문 취소: userId={} id={}", userId, id)

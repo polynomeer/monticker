@@ -136,6 +136,26 @@ class ConditionalOrderServiceTest {
         assertThatThrownBy { service.cancel(1L, 1L) }.isInstanceOf(IllegalArgumentException::class.java)
     }
 
+    @Test
+    fun `남의 조건부 주문 취소는 없는 주문과 똑같이 응답한다`() {
+        val order = ConditionalOrder(
+            id = 1L, userId = 2L, accountId = 9L, stockId = 1L, symbol = "005930",
+            side = OrderSide.SELL, triggerType = ConditionalTriggerType.STOP_LOSS, triggerPrice = BigDecimal("70000"),
+            orderType = OrderType.MARKET, quantity = 10, status = ConditionalOrderStatus.ACTIVE,
+        )
+        every { conditionalOrderRepo.findById(1L) } returns Optional.of(order)
+        val othersError = runCatching { service.cancel(1L, 1L) }.exceptionOrNull()
+
+        every { conditionalOrderRepo.findById(1L) } returns Optional.empty()
+        val missingError = runCatching { service.cancel(1L, 1L) }.exceptionOrNull()
+
+        // 같은 예외·같은 메시지(→ 같은 404)여야 id 존재 여부를 열거할 수 없다
+        assertThat(othersError).isInstanceOf(NoSuchElementException::class.java)
+        assertThat(othersError!!.message).isEqualTo(missingError!!.message)
+        assertThat(order.status).isEqualTo(ConditionalOrderStatus.ACTIVE)
+        verify(exactly = 0) { conditionalOrderRepo.save(any()) }
+    }
+
     // ── ADR-060 — 실시세 커버리지 ──────────────────────────────────────────────────────
 
     private val stopLoss = ConditionalOrderLeg(ConditionalTriggerType.STOP_LOSS, BigDecimal("70000"), OrderType.MARKET)

@@ -135,7 +135,7 @@ class MatchingServiceTest {
     }
 
     @Test
-    fun `cancelOrder throws for an order belonging to a different user`() {
+    fun `cancelOrder answers another user's order exactly like a missing one`() {
         val order = Order(
             id = 1L, userId = 999L, stockId = stockId,
             side = OrderSide.BUY, orderType = OrderType.LIMIT,
@@ -143,9 +143,16 @@ class MatchingServiceTest {
             status = OrderStatus.PENDING,
         )
         every { orderRepo.findWithLockById(1L) } returns order
+        val othersError = runCatching { service.cancelOrder(userId, 1L) }.exceptionOrNull()
 
-        assertThatThrownBy { service.cancelOrder(userId, 1L) }
-            .isInstanceOf(IllegalArgumentException::class.java)
+        every { orderRepo.findWithLockById(1L) } returns null
+        val missingError = runCatching { service.cancelOrder(userId, 1L) }.exceptionOrNull()
+
+        // 남의 주문과 없는 주문이 같은 예외·같은 메시지(→ 같은 404)여야 id를 열거할 수 없다
+        assertThat(othersError).isInstanceOf(NoSuchElementException::class.java)
+        assertThat(othersError!!.javaClass).isEqualTo(missingError!!.javaClass)
+        assertThat(othersError.message).isEqualTo(missingError.message)
+        assertThat(order.status).isEqualTo(OrderStatus.PENDING)
     }
 
     @Test

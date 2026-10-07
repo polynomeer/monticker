@@ -101,6 +101,7 @@ class PaperSettlementService(
         settlementRepo.findAllByUserIdAndStatus(userId, SettlementStatus.PENDING)
 
     @Transactional(readOnly = true)
-    fun getByTradeId(tradeId: Long): PaperSettlement? =
-        settlementRepo.findByTradeId(tradeId)
+    /** 내 거래의 정산만. 남의 거래는 없는 거래와 똑같이 null(→ 404)이다 — 내용도 존재 여부도 새지 않게. */
+    fun getByTradeId(userId: Long, tradeId: Long): PaperSettlement? =
+        settlementRepo.findByTradeId(tradeId)?.takeIf { it.userId == userId }
 }

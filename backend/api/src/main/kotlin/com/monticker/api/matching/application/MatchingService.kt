@@ -163,8 +163,9 @@ class MatchingService(
 
     fun cancelOrder(userId: Long, orderId: Long): OrderDto {
         // 행 락으로 읽는다 — 같은 주문의 동시 취소가 둘 다 PENDING을 보고 둘 다 환불하지 않도록.
-        val order = orderRepo.findWithLockById(orderId) ?: throw NoSuchElementException("주문 없음: $orderId")
-        require(order.userId == userId) { "본인의 주문만 취소할 수 있습니다" }
+        // 남의 주문은 없는 주문과 같은 404 — 다른 오류로 구분하면 주문 id 존재 여부를 열거할 수 있다.
+        val order = orderRepo.findWithLockById(orderId)?.takeIf { it.userId == userId }
+            ?: throw NoSuchElementException("주문 없음: $orderId")
 
         // 검증을 부수효과(호가창 제거·환불)보다 먼저 한다. 예전엔 환불 후 검증이 실패해 롤백에 기댔다.
         val previous = OrderStates.valueOf(order.status.name)

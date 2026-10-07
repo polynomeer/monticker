@@ -82,4 +82,32 @@ class WatchlistServiceTest {
         org.assertj.core.api.Assertions.assertThat(ev.op).isEqualTo(com.monticker.api.common.search.SearchIndexEvent.Op.DELETE)
         verify(exactly = 0) { esOps.delete(any<String>(), any<Class<*>>()) }
     }
+
+    // ── 소유권: 남의 그룹·항목은 없는 것과 구분되지 않는다(id 열거 방지) ─────────────────
+
+    @Test
+    fun `addItem to another user's group looks exactly like a missing group`() {
+        every { groupRepository.findById(1L) } returns Optional.of(WatchlistGroup(id = 1L, userId = 2L, name = "남의 목록"))
+        val others = runCatching { service.addItem(1L, 1L, 1L, null) }.exceptionOrNull()
+        every { groupRepository.findById(1L) } returns Optional.empty()
+        val missing = runCatching { service.addItem(1L, 1L, 1L, null) }.exceptionOrNull()
+
+        org.assertj.core.api.Assertions.assertThat(others).isInstanceOf(NoSuchElementException::class.java)
+        org.assertj.core.api.Assertions.assertThat(others!!.message).isEqualTo(missing!!.message)
+        verify(exactly = 0) { itemRepository.save(any()) }
+    }
+
+    @Test
+    fun `removeItem of another user's item looks exactly like a missing item`() {
+        val group = WatchlistGroup(id = 1L, userId = 2L, name = "남의 목록")
+        val item = WatchlistItem(id = 42L, group = group, stock = mockk(relaxed = true), memo = null)
+        every { itemRepository.findById(42L) } returns Optional.of(item)
+        val others = runCatching { service.removeItem(1L, 42L) }.exceptionOrNull()
+        every { itemRepository.findById(42L) } returns Optional.empty()
+        val missing = runCatching { service.removeItem(1L, 42L) }.exceptionOrNull()
+
+        org.assertj.core.api.Assertions.assertThat(others).isInstanceOf(NoSuchElementException::class.java)
+        org.assertj.core.api.Assertions.assertThat(others!!.message).isEqualTo(missing!!.message)
+        verify(exactly = 0) { itemRepository.delete(any()) }
+    }
 }

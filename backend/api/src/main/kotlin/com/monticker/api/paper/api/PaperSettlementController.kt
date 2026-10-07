@@ -60,7 +60,7 @@ class PaperSettlementController(
         @RequestHeader("Authorization") token: String,
         @PathVariable tradeId: Long,
     ): ResponseEntity<PaperSettlementResponse> {
-        val settlement = settlementService.getByTradeId(tradeId)
+        val settlement = settlementService.getByTradeId(userId(token), tradeId)
             ?: return ResponseEntity.notFound().build()
         return ResponseEntity.ok(settlement.toResponse())
     }

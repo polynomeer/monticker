@@ -52,16 +52,22 @@ class AlertServiceTest {
     }
 
     @Test
-    fun `deactivateRule throws on ownership mismatch`() {
+    fun `deactivateRule answers another user's rule exactly like a missing one`() {
         val rule = AlertRule(
             id = 1L, userId = 2L, stockId = null,
             ruleType = AlertRuleType.VOLUME_SURGE,
             conditionJson = "{}",
         )
         every { repo.findById(1L) } returns Optional.of(rule)
+        val othersError = runCatching { service.deactivateRule(1L, 1L) }.exceptionOrNull()
 
-        assertThatThrownBy { service.deactivateRule(1L, 1L) }
-            .isInstanceOf(IllegalArgumentException::class.java)
+        every { repo.findById(1L) } returns Optional.empty()
+        val missingError = runCatching { service.deactivateRule(1L, 1L) }.exceptionOrNull()
+
+        // 남의 규칙과 없는 규칙이 같은 예외·같은 메시지(→ 같은 404)여야 id를 열거할 수 없다
+        assertThat(othersError).isInstanceOf(NoSuchElementException::class.java)
+        assertThat(othersError!!.message).isEqualTo(missingError!!.message)
+        verify(exactly = 0) { repo.markDeleted(any(), any()) }
     }
 
     // ── ADR-073 켜기/끄기 ────────────────────────────────────────────────

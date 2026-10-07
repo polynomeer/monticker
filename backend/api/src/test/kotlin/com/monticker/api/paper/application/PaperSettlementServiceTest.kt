@@ -103,6 +103,17 @@ class PaperSettlementServiceTest {
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
+    @Test
+    fun `getByTradeId는 내 거래의 정산만 돌려주고 남의 거래는 없는 거래와 똑같이 null이다`() {
+        val settlement = makePendingSettlement()   // userId = 10
+        every { settlementRepo.findByTradeId(1L) } returns settlement
+        assertThat(service.getByTradeId(10L, 1L)).isSameAs(settlement)
+        assertThat(service.getByTradeId(99L, 1L)).isNull()
+
+        every { settlementRepo.findByTradeId(1L) } returns null
+        assertThat(service.getByTradeId(99L, 1L)).isNull()
+    }
+
     private fun makeTrade(side: String, price: BigDecimal, qty: Int) = PaperTrade(
         id = 1L, userId = 10L, stockId = 100L,
         side = side, quantity = qty, price = price,

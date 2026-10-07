@@ -142,10 +142,9 @@ class SubscriptionService(
      */
     @Transactional
     fun activateConfirmedSubscription(userId: Long, orderId: String, pgTransactionId: String): SubscribeResult {
-        val record = paymentRepo.findByPgOrderId(orderId).orElseThrow {
-            IllegalArgumentException("준비되지 않은 주문입니다: $orderId")
-        }
-        require(record.userId == userId) { "다른 사용자의 주문입니다." }
+        // 남의 orderId는 준비되지 않은 주문과 같은 응답 — 메시지가 다르면 orderId 존재 여부가 드러난다
+        val record = paymentRepo.findByPgOrderId(orderId).orElse(null)?.takeIf { it.userId == userId }
+            ?: throw IllegalArgumentException("준비되지 않은 주문입니다: $orderId")
 
         if (record.status == PaymentStatus.SUCCESS) {
             log.info("confirm 재수신 — 이미 확정된 결제다. 그대로 돌려준다: orderId={}", orderId)
