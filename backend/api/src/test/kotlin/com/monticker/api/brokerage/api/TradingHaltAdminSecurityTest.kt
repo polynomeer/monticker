@@ -1,5 +1,6 @@
 package com.monticker.api.brokerage.api
 
+import com.monticker.api.common.http.ClientIpResolver
 import com.monticker.api.auth.config.SecurityConfig
 import com.monticker.api.auth.infrastructure.CustomOAuth2UserService
 import com.monticker.api.auth.infrastructure.HttpCookieOAuth2AuthorizationRequestRepository
@@ -38,7 +39,7 @@ import java.time.Instant
  * 없었다 — 로그인한 일반 사용자가 사고 대응 중인 스위치를 끌 수 있었다(같은 구멍이 /api/admin/batch·search에도 있었다).
  */
 @WebMvcTest(TradingHaltAdminController::class)
-@Import(SecurityConfig::class, RedisGuard::class, SimpleMeterRegistry::class, RefreshTokenCookie::class)
+@Import(SecurityConfig::class, RedisGuard::class, SimpleMeterRegistry::class, RefreshTokenCookie::class, ClientIpResolver::class)
 class TradingHaltAdminSecurityTest {
 
     @Autowired lateinit var mvc: MockMvc

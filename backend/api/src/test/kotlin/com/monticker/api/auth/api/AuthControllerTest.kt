@@ -1,5 +1,6 @@
 package com.monticker.api.auth.api
 
+import com.monticker.api.common.http.ClientIpResolver
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.api.auth.application.AuthService
 import com.monticker.api.auth.infrastructure.CustomOAuth2UserService
@@ -34,7 +35,7 @@ import org.springframework.test.web.servlet.post
 // RedisGuard: RateLimitFilter/IdempotencyFilter(슬라이스에 포함되는 Filter 빈)가 요구한다.
 // 목으로 대체하면 failOpen()이 null을 돌려줘 Kotlin 언박싱 NPE가 나므로 실제 빈을 쓴다 —
 // 의존인 MeterRegistry는 슬라이스에 없어 SimpleMeterRegistry를 함께 올린다.
-@Import(SecurityConfig::class, RedisGuard::class, SimpleMeterRegistry::class, RefreshTokenCookie::class)
+@Import(SecurityConfig::class, RedisGuard::class, SimpleMeterRegistry::class, RefreshTokenCookie::class, ClientIpResolver::class)
 class AuthControllerTest {
 
     @Autowired lateinit var mvc: MockMvc
