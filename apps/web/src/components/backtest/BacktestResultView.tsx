@@ -1,5 +1,6 @@
 "use client";
 
+import BacktestCandleChart from "./BacktestCandleChart";
 import { AutoGrid, DataTable, LineChart, Panel, Pill, Stat, fmtNum, fmtPct, type Column } from "@/components/terminal";
 
 interface BacktestMetrics {
@@ -19,6 +20,8 @@ interface BacktestTrade {
   exitDate: string;
   entryPrice: number;
   exitPrice: number;
+  /** 서버 TradeRecord.quantity(주) */
+  quantity?: number;
   pnlPct: number;
   exitReason: string;
 }
@@ -38,6 +41,8 @@ interface AppliedCosts {
 }
 
 export interface BacktestResult {
+  /** 서버가 돌려준 대상 종목 — 캔들·마커 패널을 그릴 때 쓴다 */
+  stockId?: number;
   strategy: string;
   symbol: string;
   fromDate: string;
@@ -78,6 +83,7 @@ function xLabels(curve: EquityPoint[]): [number, string][] {
 
 /** 시안 backtest()의 오른쪽 열 — "결과 차트"(지표 + 자산 곡선)와 "거래 내역" 패널. */
 export default function BacktestResultView({ result }: Props) {
+  const stockId = result.stockId;
   const { metrics, trades, equityCurve, initialCapital, finalCapital } = result;
 
   const cols: Column<BacktestTrade>[] = [
@@ -119,6 +125,12 @@ export default function BacktestResultView({ result }: Props) {
           <p className="m-0 py-10 text-center text-13 text-tm-muted">자산 곡선 데이터가 없습니다.</p>
         )}
       </Panel>
+
+      {stockId != null && (
+        <Panel tabs={["캔들 · 매매"]} actions={[]} closable={false} right={<span className="text-2xs text-tm-muted">▲ 매수 · ▼ 매도 · 같은 날 여러 건은 숫자로 묶음</span>}>
+          <BacktestCandleChart stockId={stockId} fromDate={result.fromDate} toDate={result.toDate} trades={trades} />
+        </Panel>
+      )}
 
       <Panel tabs={["거래 내역"]} actions={[]} closable={false} bodyClassName="px-1.5 pb-1.5 pt-1">
         <DataTable columns={cols} rows={trades} rowKey={(_, i) => i} minWidth={600} empty="이 기간에 체결된 거래가 없습니다." />

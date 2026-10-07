@@ -3,19 +3,16 @@ import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import BacktestResultView, { type BacktestResult } from "@/components/backtest/BacktestResultView";
+import { StockPicker } from "@/components/quant/StockPicker";
+import { getScreenerQuotes } from "@/services/screener";
 import { Btn, Checkbox, Field, Notice, Panel, PanelCol, PanelRow, SelectBox, TerminalPage } from "@/components/terminal";
 
 // ADR-079 — 비용 가정값(%). 세율은 시기·시장별로 달라 서버가 단정하지 않고 이 값을 그대로 쓴다.
 // 국내(KOSPI·KOSDAQ) 종목 매도에만 세금을 적용한다.
 const COST = { commissionPct: 0.015, sellTaxPct: 0.18, slippagePct: 0.05 } as const;
 
-const STOCKS = [
-  { id: 2, symbol: "005930", name: "삼성전자" },
-  { id: 3, symbol: "000660", name: "SK하이닉스" },
-  { id: 4, symbol: "035420", name: "네이버" },
-  { id: 5, symbol: "AAPL",   name: "Apple Inc." },
-  { id: 6, symbol: "NVDA",   name: "NVIDIA Corp." },
-];
+/** 처음 열었을 때 고른 종목(삼성전자). 이후로는 종목 검색으로 바꾼다. */
+const DEFAULT_STOCK_ID = 2;
 
 const STRATEGIES = [
   { key: "MA_CROSSOVER", label: "이동평균 크로스오버", desc: "단기MA가 장기MA를 상향돌파할 때 매수" },
@@ -24,7 +21,7 @@ const STRATEGIES = [
 ];
 
 export default function BacktestPage() {
-  const [stockId,    setStockId]    = useState(2);
+  const [stockId,    setStockId]    = useState(DEFAULT_STOCK_ID);
   const [strategy,   setStrategy]   = useState("MA_CROSSOVER");
   const [fromDate,   setFromDate]   = useState("2026-05-24");
   const [toDate,     setToDate]     = useState("2026-06-22");
@@ -62,7 +59,12 @@ export default function BacktestPage() {
     setRanAt(new Date());
   };
 
-  const stock = STOCKS.find(s => s.id === stockId);
+  // 상단 "종목" 칸 표시용 이름 — StockPicker와 같은 시세 API(이미 캐시되면 재사용)
+  const { data: stock } = useQuery({
+    queryKey: ["screener", "quote", stockId],
+    queryFn: async () => (await getScreenerQuotes([stockId]))[0] ?? null,
+    staleTime: 60_000,
+  });
   const strat = STRATEGIES.find(s => s.key === strategy);
   const years = (new Date(toDate).getTime() - new Date(fromDate).getTime()) / (365.25 * 86400_000);
 
@@ -79,9 +81,7 @@ export default function BacktestPage() {
     >
       <PanelRow>
         <Panel tabs={["설정"]} actions={[]} closable={false} className="flex-[0_1_320px] self-start">
-          <SelectBox label="종목" value={stockId} onChange={e => setStockId(Number(e.target.value))}>
-            {STOCKS.map(s => <option key={s.id} value={s.id}>{s.name} {s.symbol}</option>)}
-          </SelectBox>
+          <StockPicker label="종목" market="all" marketCapTier="all" value={stockId} onChange={setStockId} />
           <SelectBox label="전략" value={strategy} onChange={e => setStrategy(e.target.value)}>
             {STRATEGIES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
           </SelectBox>
