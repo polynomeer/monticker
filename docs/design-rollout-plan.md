@@ -124,7 +124,7 @@
 | /risk | 차단·경고 기록, 상단 "이번 달 차단" | 빈 상태, `—` | 리스크 게이트 판정 이력 저장·조회(`/api/risk/decisions`) | P1 | ✅ 차단 기록(경고 모드는 P2) |
 | /portfolio | 상단 "벤치마크 대비 KOSPI" | `—` | 지수 기간 수익률 API | P2 | |
 | /portfolio | 거래 내역 감정 칸 | 실데이터. 단, 거래마다 개별 조회(N+1) | history 응답에 emotion 포함 | P2 | ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — 내역 응답에 emotion·memo·출처 포함 |
-| /portfolio | 평균단가 차트 매수 마커 | 평균단가선만 | StockChart에 거래 마커 prop | P2 | |
+| /portfolio | 평균단가 차트 매수 마커 | 평균단가선만 | StockChart에 거래 마커 prop | P2 | ✅ [2f336bf1](https://github.com/polynomeer/monticker/commit/2f336bf1) `trades`/`interval` prop(KST 봉 버킷, 같은 봉 체결은 건수로 묶음), [d44d1a6a](https://github.com/polynomeer/monticker/commit/d44d1a6a) 모의 체결 매수·매도 마커(history 100건 단위 일괄 조회, 최근 500건까지) |
 | /matching | 가격별 주문 대기열 조각, "내 주문 · 대기 N번째" | 잔량 막대 하나, "내 주문 · N주 대기" | 호가 API에 가격별 주문 큐와 내 순번 노출 | P2 | |
 | /matching | 상단 평균 슬리피지·지연 | `—` | 주문 시점 최우선호가 저장 → 체결가 비교 집계, 엔진 처리시간 메트릭 | P2 | |
 | /wallet | 원장 행의 돈 흐름(예약금 → 정산 대기)과 출처 | 확실한 유형만 흐름 표시 | 원장 이벤트에 from/to 버킷과 주문 출처 | P2 | 부분 ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — 체결 행에 주문 출처 표시. from/to 버킷은 남음 |
@@ -162,7 +162,7 @@
 | /quant-lab/builder | 유니버스 칩(KOSPI 200·거래대금·관리종목 제외), 일치 종목 수 | 시장·시총만 동작 | `universeJson` 확장, 일치 수 카운트 API | P2 | |
 | /quant-lab/builder | 버전 탭 | 제목에 vN만 | 프론트만(`GET /rulesets/{id}/versions`가 이미 있음) | P2 | |
 | /quant-lab/[id] | KOSPI 비교선, 포워드 일치율·구독자, 검증 배지 신청 | 수치만, `—`, 비활성 | 벤치마크 시계열, 구독자 조회, 배지 심사 정책 | P2 | |
-| /backtest | 캔들 + 매수·매도 마커, 종목 검색 | 자산 곡선, 하드코딩 5종목 | StockChart 거래 마커, StockPicker 교체 | P2 | |
+| /backtest | 캔들 + 매수·매도 마커, 종목 검색 | 자산 곡선, 하드코딩 5종목 | StockChart 거래 마커, StockPicker 교체 | P2 | ✅ [125e1c48](https://github.com/polynomeer/monticker/commit/125e1c48) 기간 일봉 + 진입·청산 마커(`TradeRecord.quantity`), StockPicker 검색 |
 | /analytics | 무작위 포트폴리오 산점도·최대 샤프 점, 분석 기간 | 실제 프론티어만, "보유 일봉 전체" | 표본 응답, max-Sharpe 최적화, 기간 파라미터 | P2 | |
 | /quant-lab/market | 검증 배지·필터·정렬, 공유 전략 총수 | "검증 전", 비활성, "N+개" | 배지 부여 로직, total count | P2 | |
 | /quant-lab/earnings | 평균 별점, 다음 정산일 | `—` | 리뷰·별점, 정산 일정 | P2 | |
