@@ -181,5 +181,5 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 | (선행) web React 19.3 | 완료 | #129 | #121·#122를 대체. 모바일은 18 유지 |
 | (선행) react-query packageExtensions 범위화 | 완료 | #117 | 고정 버전 키 때문에 타입 검사가 깨졌던 것 |
 | (선행) dependabot ignore·groups | 완료 | #130 | §5 |
-| B2 Testcontainers 2 | PR | — | 2.0.5. 위 확인 결과 참고 |
-| B1, B3, B4, W1~W3, M1 | 시작 전 | — | |
+| B2 Testcontainers 2 | 머지 대기 | #143 | 2.0.5. 위 확인 결과 참고 |
+| B0, B1, B3, B4, W1~W3, M1 | 시작 전 | — | |
