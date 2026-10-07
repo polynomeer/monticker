@@ -131,7 +131,7 @@ monticker는 자체 증권사 라이선스가 없습니다. 사용자가 본인 
 
 ```
                     외부 데이터                          사용자
-   KIS/Toss 실시간체결가 · 네이버 뉴스 · DART 공시         Next.js 15 (web)  ·  Expo (mobile)
+   KIS/Toss 실시간체결가 · 네이버 뉴스 · DART 공시         Next.js 16 (web)  ·  Expo (mobile)
                 │                                              ▲  REST / STOMP WebSocket
                 ▼                                              │
    ┌──────────────────────────┐    market.ticks    ┌───────────┴──────────────────────────┐
@@ -182,7 +182,7 @@ POST /api/matching/orders
 | **Backend** | Kotlin 2.0 · Spring Boot 3.5 · Spring Modulith(모듈 경계 + Outbox) · Spring Data JPA · Flyway(V1~V47) · Spring Security + JWT(JJWT) · OAuth2(Google/Kakao/Naver) · Resilience4j(Circuit Breaker) · Spring Kafka(`@RetryableTopic` DLT) · Micrometer + OpenTelemetry |
 | **Realtime** | Apache Kafka(KRaft) · STOMP over SockJS · Go 1.22 market-gateway(goroutine-per-stock) |
 | **Data** | PostgreSQL 16 + TimescaleDB(hypertable, continuous aggregate) · Redis 7 · MongoDB 7(룰셋·알림 이력) · Elasticsearch(검색, DB 폴백) |
-| **Frontend** | Next.js 15(App Router) · React 19 · TypeScript · TanStack Query · Zustand · Tailwind CSS(Dracula 팔레트, 라이트/다크/고대비) · Apache ECharts(어댑터 패턴으로 차트 라이브러리 격리) · TanStack Virtual · Toss Payments SDK |
+| **Frontend** | Next.js 16(App Router) · React 19 · TypeScript · TanStack Query · Zustand · Tailwind CSS(Dracula 팔레트, 라이트/다크/고대비) · Apache ECharts(어댑터 패턴으로 차트 라이브러리 격리) · TanStack Virtual · Toss Payments SDK |
 | **Mobile** | Expo 52 · React Native 0.76 · expo-router · Expo Push Notifications |
 | **External API** | 한국투자증권 Open API · 토스증권 Open API · 네이버 뉴스 · DART · Yahoo Finance · Anthropic Claude · 토스페이먼츠 · SMTP |
 | **Infra / Ops** | Docker Compose(프로파일 `full`/`kafka`/`msa`/`pinpoint`) · Kubernetes(kustomize, dev/prod overlay) · Nginx · Prometheus · Grafana · Alertmanager → Slack · Jaeger · Pinpoint APM · pg_dump 백업 CronJob + 복구 리허설 |
@@ -324,7 +324,7 @@ pnpm --filter @monticker/web test:e2e            # Playwright (API·Web 기동 �
 ```
 monticker/
 ├── apps/
-│   ├── web/                 Next.js 15 웹 클라이언트 (src/app 라우트, src/components, src/hooks)
+│   ├── web/                 Next.js 16 웹 클라이언트 (src/app 라우트, src/components, src/hooks)
 │   └── mobile/              Expo 앱 — 관심종목 + 푸시 알림 수신
 ├── backend/
 │   ├── api/                 Spring Boot API — 모듈러 모놀리스

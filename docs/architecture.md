@@ -54,7 +54,7 @@ Start as **Modular Monolith + async workers + Redis + TimescaleDB**. `docker com
 
 ```
 ┌─────────────┐   WebSocket/REST   ┌─────────────────┐
-│  Next.js 15 │ ◄────────────────► │  Spring Boot API │
+│  Next.js 16 │ ◄────────────────► │  Spring Boot API │
 │  (apps/web) │                    │  (backend/api)   │
 └─────────────┘                    └────────┬─────────┘
                                             │ JPA / JDBC
@@ -110,12 +110,12 @@ Start as **Modular Monolith + async workers + Redis + TimescaleDB**. `docker com
 
 ## Tech Stack
 
-> 각 기술을 왜 골랐는지, 근거가 어디에 있는지는 [tech-stack-decisions.md](tech-stack-decisions.md)에 있습니다. 아래 버전 표기 중 Kotlin(실제 1.9.25)·Batch(실제 Spring Batch)·MongoDB 용도(실제 `rule_sets`만)는 코드와 다릅니다 — 같은 문서 §10 참고.
+> 각 기술을 왜 골랐는지, 근거가 어디에 있는지는 [tech-stack-decisions.md](tech-stack-decisions.md)에 있습니다. 아래 버전 표기 중 Batch(실제 Spring Batch)·MongoDB 용도(실제 `rule_sets`만)는 코드와 다릅니다 — 같은 문서 §10 참고.
 
 ### Backend
 
 ```
-Language:    Kotlin 2.0
+Language:    Kotlin 2.3
 Framework:   Spring Boot 3.5
 Pattern:     Modular Monolith
 API:         REST + WebSocket (STOMP over SockJS)
@@ -129,7 +129,7 @@ Observability: OpenTelemetry + Jaeger, Micrometer
 ### Frontend
 
 ```
-Framework:   Next.js 15 (App Router)
+Framework:   Next.js 16 (App Router)
 Language:    TypeScript
 Server state: TanStack Query
 Client state: Zustand
