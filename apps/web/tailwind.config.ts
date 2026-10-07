@@ -28,6 +28,20 @@ const config: Config = {
           up: "#0ecb81",
           down: "#f6465d",
         },
+        // 터미널 디자인 시안(ADR-066) 표면 토큰 — 페이지 < 패널 < 인셋/강조 순서로 밝아진다
+        tm: {
+          page: "#1b1c24",
+          panel: "#282a36",
+          inner: "#21222c",
+          raised: "#343746",
+          line: "#34364a",
+          line2: "#44475a",
+          soft: "#c3c8e2",
+          muted: "#a4abcf",
+        },
+        // 상승/하락 색 — 사용자 차트 테마(themeStore)를 따라 CSS 변수로 바뀐다
+        up: "rgb(var(--mt-up) / <alpha-value>)",
+        down: "rgb(var(--mt-down) / <alpha-value>)",
       },
       fontFamily: {
         sans: [
@@ -38,6 +52,12 @@ const config: Config = {
           "system-ui",
           "sans-serif",
         ],
+      },
+      fontSize: {
+        // 시안의 px 크기를 rem으로 — 접근성 글자 크기(html font-size)에 비례 확대된다
+        "2xs": ["0.6875rem", { lineHeight: "1rem" }],
+        "13": ["0.8125rem", { lineHeight: "1.25rem" }],
+        "15": ["0.9375rem", { lineHeight: "1.4rem" }],
       },
       boxShadow: {
         "glow-purple": "0 8px 30px -8px rgba(189, 147, 249, 0.35)",

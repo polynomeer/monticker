@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { WatchRuleEventType, WatchRuleSide } from "@monticker/types";
+import { Btn, BuySell, Checkbox, Chip, Field, Icon, PreviewTag, SelectBox } from "@/components/terminal";
 
 interface StockHit { id: number; symbol: string; name: string; }
 
@@ -36,6 +37,16 @@ interface Props {
   submitting: boolean;
 }
 
+function Step({ n, title, children }: { n: number; title: ReactNode; children: ReactNode }) {
+  return (
+    <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
+      <legend className="mb-2 p-0 text-2xs text-tm-muted">{n}. {title}</legend>
+      {children}
+    </fieldset>
+  );
+}
+
+/** 시안 WatchRules "새 규칙" 에디터 — 감지 → 종목 → 주문 → 안전장치 4단계. */
 export function WatchRuleForm({ onSubmit, submitting }: Props) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockHit[]>([]);
@@ -76,40 +87,56 @@ export function WatchRuleForm({ onSubmit, submitting }: Props) {
   };
 
   const reset = () => { setStock(null); setQuery(""); setResults([]); };
+  const hint = EVENT_OPTIONS.find((o) => o.value === eventType)?.hint;
 
   return (
-    <div className="space-y-4 p-4">
-      {/* 종목 */}
-      <div>
-        <label htmlFor="wr-stock" className="text-sm font-medium text-gray-700 dark:text-dracula-fg">종목</label>
-        {stock ? (
-          <div className="mt-1.5 flex items-center justify-between rounded-lg border border-gray-300 px-3 py-2 dark:border-dracula-line">
-            <span className="text-sm text-gray-900 dark:text-dracula-fg">
-              {stock.name} <span className="text-xs text-gray-500 dark:text-dracula-comment">{stock.symbol}</span>
-            </span>
-            <button type="button" onClick={reset} className="text-xs text-gray-500 hover:underline dark:text-dracula-comment">
-              변경
-            </button>
-          </div>
-        ) : (
-          <div className="relative mt-1.5">
-            <input
-              id="wr-stock"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="종목명 또는 코드 검색"
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-dracula-purple focus:outline-none focus:ring-2 focus:ring-dracula-purple/50 dark:border-dracula-line dark:bg-dracula-surface dark:text-dracula-fg dark:placeholder-dracula-comment"
-            />
+    <>
+      <Step n={1} title="무엇을 감지할까요">
+        <SelectBox aria-label="감지할 이벤트" value={eventType} onChange={(e) => setEventType(e.target.value as WatchRuleEventType)}>
+          {EVENT_OPTIONS.map((o) => <option key={o.value} value={o.value}>이벤트 · {o.label}</option>)}
+        </SelectBox>
+        <div className="flex gap-2">
+          <Field label="중요도 하한" aria-label="중요도 하한" unit="점 이상" type="number" min={0} max={100} value={minImportance} onChange={(e) => setMinImportance(e.target.value)} />
+        </div>
+        <span className="text-2xs text-tm-muted">{hint} · 이벤트 강도가 하한 미만이면 발동하지 않습니다 (0이면 모든 이벤트)</span>
+      </Step>
+
+      <Step n={2} title="어떤 종목에서">
+        <div className="flex flex-wrap gap-1.5">
+          {stock && (
+            <Chip active>
+              {stock.name} <span className="num text-tm-muted">{stock.symbol}</span>
+              <button type="button" onClick={reset} aria-label={`${stock.name} 선택 해제`} className="-mr-1 grid h-4 w-4 place-items-center text-tm-muted hover:text-dracula-fg">
+                <Icon name="x" size={12} strokeWidth={2.4} />
+              </button>
+            </Chip>
+          )}
+          {/* 관심종목 그룹 단위 규칙 — 백엔드 규칙은 아직 종목 하나에만 걸린다 */}
+          <span className="inline-flex items-center gap-1.5"><Chip className="opacity-60">+ 종목 그룹</Chip><PreviewTag /></span>
+        </div>
+        {!stock && (
+          <div className="relative">
+            <label className="flex h-10 items-center gap-2.5 rounded-lg border border-tm-line bg-tm-inner px-3">
+              <Icon name="search" size={16} className="text-tm-muted" />
+              <input
+                id="wr-stock"
+                aria-label="종목"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="종목명 또는 코드 검색"
+                className="min-w-0 flex-1 bg-transparent text-sm text-dracula-fg outline-none placeholder:text-[#8b92b8]"
+              />
+            </label>
             {results.length > 0 && (
-              <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-dracula-line dark:bg-dracula-surface">
+              <ul className="absolute z-10 m-0 mt-1 w-full list-none overflow-hidden rounded-[10px] border border-tm-line2 bg-tm-panel p-0 shadow-glow-line">
                 {results.map((hit) => (
                   <li key={hit.id}>
                     <button
                       type="button"
                       onClick={() => { setStock(hit); setQuery(""); setResults([]); }}
-                      className="w-full px-3 py-2 text-left text-sm text-gray-900 hover:bg-gray-50 dark:text-dracula-fg dark:hover:bg-dracula-line/30"
+                      className="w-full px-3 py-2 text-left text-13 text-dracula-fg hover:bg-tm-raised"
                     >
-                      {hit.name} <span className="text-xs text-gray-500 dark:text-dracula-comment">{hit.symbol}</span>
+                      {hit.name} <span className="num text-2xs text-tm-muted">{hit.symbol}</span>
                     </button>
                   </li>
                 ))}
@@ -117,114 +144,36 @@ export function WatchRuleForm({ onSubmit, submitting }: Props) {
             )}
           </div>
         )}
-      </div>
+      </Step>
 
-      {/* 이벤트 */}
-      <fieldset>
-        <legend className="text-sm font-medium text-gray-700 dark:text-dracula-fg">이 이벤트가 감지되면</legend>
-        <div className="mt-1.5 grid gap-1.5 sm:grid-cols-3">
-          {EVENT_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => setEventType(opt.value)}
-              aria-pressed={eventType === opt.value}
-              className={`rounded-lg border px-3 py-2 text-left transition-colors ${
-                eventType === opt.value
-                  ? "border-dracula-purple bg-dracula-purple/10"
-                  : "border-gray-300 hover:border-gray-400 dark:border-dracula-line dark:hover:border-dracula-comment"
-              }`}
-            >
-              <span className="block text-sm font-semibold text-gray-900 dark:text-dracula-fg">{opt.label}</span>
-              <span className="block text-xs text-gray-500 dark:text-dracula-comment">{opt.hint}</span>
-            </button>
-          ))}
+      <Step n={3} title="어떻게 주문할까요">
+        <BuySell value={side} onChange={setSide} />
+        <div className="flex gap-2">
+          {/* 자동 주문은 서버에서 항상 시장가로 낸다 */}
+          <SelectBox label="주문 유형" value="MARKET" disabled className="flex-1 opacity-70" aria-label="주문 유형">
+            <option value="MARKET">시장가</option>
+          </SelectBox>
+          <Field label="수량" aria-label="수량 (주)" unit="주" type="number" min={1} max={MAX_QUANTITY} value={quantity} onChange={(e) => setQuantity(e.target.value)} />
         </div>
-      </fieldset>
+      </Step>
 
-      {/* 동작 */}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <fieldset>
-          <legend className="text-sm font-medium text-gray-700 dark:text-dracula-fg">동작</legend>
-          <div className="mt-1.5 flex overflow-hidden rounded-lg border border-gray-300 dark:border-dracula-line">
-            {(["BUY", "SELL"] as const).map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setSide(s)}
-                aria-pressed={side === s}
-                className={`flex-1 py-2 text-sm font-semibold transition-colors ${
-                  side === s
-                    ? s === "BUY" ? "bg-market-up/20 text-market-up" : "bg-market-down/20 text-market-down"
-                    : "text-gray-600 dark:text-dracula-comment"
-                }`}
-              >
-                {s === "BUY" ? "매수" : "매도"}
-              </button>
-            ))}
-          </div>
-        </fieldset>
-        <div>
-          <label htmlFor="wr-qty" className="text-sm font-medium text-gray-700 dark:text-dracula-fg">수량 (주)</label>
-          <input
-            id="wr-qty"
-            type="number"
-            min={1}
-            max={MAX_QUANTITY}
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            className="mt-1.5 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-dracula-purple focus:outline-none focus:ring-2 focus:ring-dracula-purple/50 dark:border-dracula-line dark:bg-dracula-surface dark:text-dracula-fg"
-          />
+      <Step n={4} title="안전장치">
+        <div className="flex gap-2">
+          <Field label="하루 최대 발동" unit="회" placeholder="—" disabled className="opacity-60" aria-label="하루 최대 발동 (준비 중)" />
+          <SelectBox label="쿨다운" aria-label="쿨다운" value={cooldownSec} onChange={(e) => setCooldownSec(Number(e.target.value))} className="flex-1">
+            {COOLDOWN_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </SelectBox>
         </div>
-      </div>
+        <span className="text-2xs text-tm-muted">한 번 체결되면 쿨다운 동안 다시 발동하지 않습니다. 하루 최대 발동 횟수 설정은 준비 중입니다.</span>
+        {/* 자동 주문도 항상 리스크 게이트를 통과해야 한다(ADR-051) — 끌 수 없으므로 고정 표시 */}
+        <Checkbox checked disabled label="리스크 한도 체크를 통과한 경우에만 주문" sub="자동 주문은 항상 리스크 한도를 통과해야 합니다 (끌 수 없음)" />
+      </Step>
 
-      {/* 조건 */}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <label htmlFor="wr-importance" className="text-sm font-medium text-gray-700 dark:text-dracula-fg">
-            중요도 하한
-          </label>
-          <input
-            id="wr-importance"
-            type="number"
-            min={0}
-            max={100}
-            value={minImportance}
-            onChange={(e) => setMinImportance(e.target.value)}
-            className="mt-1.5 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-dracula-purple focus:outline-none focus:ring-2 focus:ring-dracula-purple/50 dark:border-dracula-line dark:bg-dracula-surface dark:text-dracula-fg"
-          />
-          <p className="mt-1 text-xs text-gray-500 dark:text-dracula-comment">
-            이벤트 강도가 이 값 미만이면 발동하지 않습니다 (0이면 모든 이벤트)
-          </p>
-        </div>
-        <div>
-          <label htmlFor="wr-cooldown" className="text-sm font-medium text-gray-700 dark:text-dracula-fg">쿨다운</label>
-          <select
-            id="wr-cooldown"
-            value={cooldownSec}
-            onChange={(e) => setCooldownSec(Number(e.target.value))}
-            className="mt-1.5 w-full cursor-pointer rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-dracula-purple focus:outline-none focus:ring-2 focus:ring-dracula-purple/50 dark:border-dracula-line dark:bg-dracula-surface dark:text-dracula-fg"
-          >
-            {COOLDOWN_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-          <p className="mt-1 text-xs text-gray-500 dark:text-dracula-comment">
-            한 번 체결되면 이 시간 동안 다시 발동하지 않습니다
-          </p>
-        </div>
-      </div>
+      {error && <p role="alert" className="m-0 text-13 text-[#ff8a8a]">{error}</p>}
 
-      {error && <p role="alert" className="text-sm text-market-down">{error}</p>}
-
-      <button
-        type="button"
-        onClick={submit}
-        disabled={submitting}
-        className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-[0.99] disabled:opacity-50 dark:bg-dracula-purple dark:text-dracula-bg"
-      >
-        {submitting ? "저장 중..." : "규칙 만들기"}
-      </button>
-    </div>
+      <Btn kind="primary" size="lg" full onClick={submit} disabled={submitting}>
+        {submitting ? "저장 중..." : "규칙 저장"}
+      </Btn>
+    </>
   );
 }

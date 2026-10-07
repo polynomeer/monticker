@@ -11,12 +11,19 @@ class MockOrderBookProvider : OrderBookProvider {
 
     override fun getOrderBook(symbol: String, market: String, refPrice: BigDecimal): OrderBookSnapshot {
         val unit = priceUnit(refPrice)
+        // 0.1% 간격이 호가 단위보다 좁으면 반올림 결과가 겹친다 — 한 단계는 최소 한 호가 단위 떨어뜨린다
+        var lastAsk: BigDecimal? = null
         val asks = (1..10).map { i ->
-            val p = roundToUnit(refPrice * (BigDecimal.ONE + BigDecimal(i) * BigDecimal("0.001")), unit)
+            val target = roundToUnit(refPrice * (BigDecimal.ONE + BigDecimal(i) * BigDecimal("0.001")), unit)
+            val p = lastAsk?.let { maxOf(target, it + unit) } ?: target
+            lastAsk = p
             OrderLevel(p, (11 - i) * Random.nextLong(100, 2001))
         }
+        var lastBid: BigDecimal? = null
         val bids = (1..10).map { i ->
-            val p = roundToUnit(refPrice * (BigDecimal.ONE - BigDecimal(i) * BigDecimal("0.001")), unit)
+            val target = roundToUnit(refPrice * (BigDecimal.ONE - BigDecimal(i) * BigDecimal("0.001")), unit)
+            val p = lastBid?.let { minOf(target, it - unit) } ?: target
+            lastBid = p
             OrderLevel(p, (11 - i) * Random.nextLong(100, 2001))
         }
         return OrderBookSnapshot(asks, bids, Instant.now(), DataSource.MOCK)

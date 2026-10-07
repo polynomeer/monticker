@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import ThemeProvider from "@/components/ThemeProvider";
 import QueryProvider from "@/components/QueryProvider";
-import NavBar from "@/components/ui/NavBar";
 import { ToastContainer } from "@/components/ui/Toast";
 import ScrollToTop from "@/components/ui/ScrollToTop";
 import CookieBanner from "@/components/ui/CookieBanner";
@@ -49,12 +48,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       */}
       <body
         suppressHydrationWarning
-        className="min-h-screen font-sans antialiased bg-dracula-fg dark:bg-dracula-bg text-gray-900 dark:text-dracula-fg bg-mesh-light dark:bg-mesh-dark bg-no-repeat bg-fixed"
+        className="min-h-screen bg-tm-page font-sans text-dracula-fg antialiased"
       >
         <QueryProvider>
           <ThemeProvider>
-            <NavBar />
-            <main className="pt-2">{children}</main>
+            {/* 화면 골격(상단 바·레일)은 각 페이지가 TerminalPage로 그린다 — 로그인·약관은 골격 없이 */}
+            {children}
             <ToastContainer />
             <ScrollToTop />
             <CookieBanner />

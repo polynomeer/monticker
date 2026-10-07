@@ -1,9 +1,10 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import { Card } from "@/components/ui/Card";
+
+import { AutoGrid, DataTable, LineChart, Panel, Pill, Stat, fmtNum, fmtPct, type Column } from "@/components/terminal";
 
 interface BacktestMetrics {
   totalReturn: number;
+  annualizedReturn?: number;
   sharpeRatio: number;
   maxDrawdown: number;
   winRate: number;
@@ -27,7 +28,7 @@ interface EquityPoint {
   equity: number;
 }
 
-interface BacktestResult {
+export interface BacktestResult {
   strategy: string;
   symbol: string;
   fromDate: string;
@@ -41,145 +42,65 @@ interface BacktestResult {
 
 interface Props { result: BacktestResult; }
 
-function MetricCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
-  return (
-    <div className="bg-gray-50 dark:bg-dracula-line/20 rounded-lg p-3">
-      <p className="text-xs text-gray-500 dark:text-dracula-comment">{label}</p>
-      <p className={`text-xl font-bold tabular-nums ${color ?? "text-gray-900 dark:text-dracula-fg"}`}>{value}</p>
-      {sub && <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">{sub}</p>}
-    </div>
-  );
+const REASON: Record<string, { label: string; tone: "green" | "red" | "muted" }> = {
+  TAKE_PROFIT: { label: "익절", tone: "green" },
+  STOP_LOSS: { label: "손절", tone: "red" },
+  SIGNAL: { label: "신호", tone: "muted" },
+};
+
+const tone = (n: number) => (n > 0 ? "text-up" : n < 0 ? "text-down" : "text-dracula-fg");
+
+function xLabels(curve: EquityPoint[]): [number, string][] {
+  if (curve.length < 2) return [];
+  return [0, 0.33, 0.66, 0.95].map((f) => [f, curve[Math.round(f * (curve.length - 1))].date.slice(0, 7).replace("-", ".")]);
 }
 
-function fmt(n: number) { return n.toLocaleString("ko-KR", { maximumFractionDigits: 0 }); }
-function pct(n: number) { return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`; }
-function color(n: number) { return n > 0 ? "text-[#ff5050]" : n < 0 ? "text-[#4a8fd4]" : "text-gray-500 dark:text-dracula-comment"; }
-
+/** 시안 backtest()의 오른쪽 열 — "결과 차트"(지표 + 자산 곡선)와 "거래 내역" 패널. */
 export default function BacktestResultView({ result }: Props) {
-  const { metrics, trades, equityCurve, initialCapital, finalCapital, symbol } = result;
-  const chartRef = useRef<HTMLDivElement>(null);
-  const [resolvedTheme, setResolvedTheme] = useState<string>("light");
+  const { metrics, trades, equityCurve, initialCapital, finalCapital } = result;
 
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    setResolvedTheme(mq.matches ? "dark" : "light");
-    const handler = (e: MediaQueryListEvent) => setResolvedTheme(e.matches ? "dark" : "light");
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
-
-  // Equity curve 차트
-  useEffect(() => {
-    if (!chartRef.current || !equityCurve?.length) return;
-    let disposed = false;
-    import("echarts").then(echarts => {
-      if (disposed || !chartRef.current) return;
-      const existing = echarts.getInstanceByDom(chartRef.current);
-      if (existing) existing.dispose();
-
-      const isDark = resolvedTheme === "dark";
-      const chart = echarts.init(chartRef.current, undefined, { renderer: "canvas", height: 200 });
-
-      chart.setOption({
-        backgroundColor: isDark ? "#21222c" : "#fff",
-        animation: false,
-        tooltip: { trigger: "axis", backgroundColor: isDark ? "#282a36" : "#fff",
-          borderColor: "#44475a", textStyle: { color: isDark ? "#f8f8f2" : "#374151", fontSize: 11 } },
-        grid: { left: 60, right: 16, top: 16, bottom: 28 },
-        xAxis: { type: "category", data: equityCurve.map(p => p.date),
-          axisLabel: { color: isDark ? "#6272a4" : "#6b7280", fontSize: 10 },
-          axisLine: { lineStyle: { color: isDark ? "#44475a" : "#e5e7eb" } } },
-        yAxis: { type: "value", position: "left",
-          axisLabel: { color: isDark ? "#6272a4" : "#6b7280", fontSize: 10,
-            formatter: (v: number) => `${(v / 10000).toFixed(0)}만` },
-          splitLine: { lineStyle: { color: isDark ? "#44475a" : "#e5e7eb", type: "dashed" } } },
-        series: [
-          { type: "line", data: equityCurve.map(p => p.equity),
-            smooth: true, symbol: "none",
-            lineStyle: { color: finalCapital >= initialCapital ? "#0ecb81" : "#f6465d", width: 2 },
-            areaStyle: { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1,
-              colorStops: [
-                { offset: 0, color: finalCapital >= initialCapital ? "#0ecb8133" : "#f6465d33" },
-                { offset: 1, color: "transparent" }] } } },
-        ],
-      });
-      const onResize = () => chart.resize();
-      window.addEventListener("resize", onResize);
-      return () => { window.removeEventListener("resize", onResize); disposed = true; chart.dispose(); };
-    });
-    return () => { disposed = true; };
-  }, [equityCurve, resolvedTheme, finalCapital, initialCapital]);
+  const cols: Column<BacktestTrade>[] = [
+    { key: "in", header: "매수", cell: (t) => <span className="num">{t.entryDate}</span> },
+    { key: "out", header: "매도", cell: (t) => <span className="num">{t.exitDate}</span> },
+    { key: "ip", header: "매수가", align: "right", cell: (t) => <span className="num">{fmtNum(t.entryPrice)}</span> },
+    { key: "op", header: "매도가", align: "right", cell: (t) => <span className="num">{fmtNum(t.exitPrice)}</span> },
+    { key: "pct", header: "수익", align: "right", cell: (t) => <span className={`num ${tone(t.pnlPct)}`}>{fmtPct(t.pnlPct, 1)}</span> },
+    {
+      key: "why", header: "사유", cell: (t) => {
+        const r = REASON[t.exitReason] ?? { label: "종료", tone: "muted" as const };
+        return <Pill tone={r.tone}>{r.label}</Pill>;
+      },
+    },
+  ];
 
   return (
-    <div className="space-y-4 animate-fade-up">
-      {/* 요약 헤더 */}
-      <Card className="p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <span className="text-sm text-gray-500 dark:text-dracula-comment">{symbol} — {result.strategy}</span>
-            <p className="text-xs text-gray-400 dark:text-dracula-line">{result.fromDate} ~ {result.toDate}</p>
-          </div>
-          <div className="text-right">
-            <p className={`text-2xl font-bold tabular-nums ${color(metrics.totalReturn)}`}>{pct(metrics.totalReturn)}</p>
-            <p className="text-xs text-gray-500 dark:text-dracula-comment">총 수익률</p>
-          </div>
-        </div>
+    <>
+      <Panel tabs={["결과 차트"]} actions={[]} closable={false} right={<span className="num text-2xs text-tm-muted">{result.symbol} · {result.fromDate} ~ {result.toDate}</span>}>
+        <AutoGrid min={110}>
+          <Stat big label="총 수익" value={fmtPct(metrics.totalReturn, 1)} valueClassName={tone(metrics.totalReturn)} sub={`최종 ${fmtNum(finalCapital)}원`} />
+          <Stat big label="CAGR" value={metrics.annualizedReturn == null ? "—" : fmtPct(metrics.annualizedReturn, 1)} valueClassName={metrics.annualizedReturn == null ? "text-tm-muted" : tone(metrics.annualizedReturn)} />
+          <Stat big label="MDD" value={metrics.maxDrawdown > 0.05 ? `-${metrics.maxDrawdown.toFixed(1)}%` : "0.0%"} valueClassName={metrics.maxDrawdown > 0.05 ? "text-down" : undefined} />
+          <Stat big label="승률" value={`${metrics.winRate.toFixed(0)}%`} sub={`${metrics.profitTrades}/${metrics.totalTrades}건`} />
+          <Stat big label="거래" value={`${metrics.totalTrades}회`} sub={`평균 보유 ${metrics.avgHoldingDays.toFixed(1)}일`} />
+          <Stat big label="샤프" value={metrics.sharpeRatio.toFixed(2)} sub={`손익비 ${metrics.profitFactor.toFixed(2)}`} />
+        </AutoGrid>
+        {equityCurve.length > 1 ? (
+          <LineChart
+            series={[{ values: equityCurve.map((p) => p.equity), color: finalCapital >= initialCapital ? "#bd93f9" : "#ff79c6", fill: true }]}
+            width={860}
+            height={300}
+            baseline={initialCapital}
+            xLabels={xLabels(equityCurve)}
+            label="백테스트 기간 자산 곡선"
+          />
+        ) : (
+          <p className="m-0 py-10 text-center text-13 text-tm-muted">자산 곡선 데이터가 없습니다.</p>
+        )}
+      </Panel>
 
-        {/* 지표 그리드 */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-          <MetricCard label="최종 자산" value={`₩${fmt(finalCapital)}`}
-            sub={`초기 ₩${fmt(initialCapital)}`} color={color(finalCapital - initialCapital)} />
-          <MetricCard label="Sharpe Ratio" value={metrics.sharpeRatio.toFixed(2)}
-            color={metrics.sharpeRatio >= 1 ? "text-market-up" : metrics.sharpeRatio >= 0 ? "text-gray-900 dark:text-dracula-fg" : "text-market-down"} />
-          <MetricCard label="최대 낙폭" value={`-${metrics.maxDrawdown.toFixed(1)}%`} color="text-market-down" />
-          <MetricCard label="승률" value={`${metrics.winRate.toFixed(1)}%`}
-            sub={`${metrics.profitTrades}/${metrics.totalTrades}건`} />
-          <MetricCard label="Profit Factor" value={metrics.profitFactor.toFixed(2)}
-            color={metrics.profitFactor >= 1 ? "text-market-up" : "text-market-down"} />
-        </div>
-      </Card>
-
-      {/* 자산 곡선 */}
-      <Card className="overflow-hidden">
-        <div className="px-4 pt-3 text-xs text-gray-500 dark:text-dracula-comment font-medium">자산 곡선</div>
-        <div ref={chartRef} className="w-full" />
-      </Card>
-
-      {/* 거래 내역 */}
-      {trades.length > 0 && (
-        <Card className="overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-200 dark:border-dracula-line bg-gray-50 dark:bg-transparent">
-            <span className="text-sm font-semibold text-gray-900 dark:text-dracula-fg">거래 내역</span>
-            <span className="ml-2 text-xs text-gray-500 dark:text-dracula-comment">평균 보유 {metrics.avgHoldingDays.toFixed(1)}일</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead><tr className="border-b border-gray-200 dark:border-dracula-line text-gray-500 dark:text-dracula-comment">
-                {["매수일","매도일","매수가","매도가","수익률","사유"].map(h =>
-                  <th key={h} className="px-3 py-2 text-left">{h}</th>)}
-              </tr></thead>
-              <tbody>
-                {trades.map((t, i) => (
-                  <tr key={i} className="border-b border-gray-100 dark:border-dracula-line/40 hover:bg-gray-50 dark:hover:bg-dracula-line/10 transition-colors">
-                    <td className="px-3 py-2 text-gray-500 dark:text-dracula-comment tabular-nums">{t.entryDate}</td>
-                    <td className="px-3 py-2 text-gray-500 dark:text-dracula-comment tabular-nums">{t.exitDate}</td>
-                    <td className="px-3 py-2 font-mono tabular-nums text-gray-900 dark:text-dracula-fg">{fmt(t.entryPrice)}</td>
-                    <td className="px-3 py-2 font-mono tabular-nums text-gray-900 dark:text-dracula-fg">{fmt(t.exitPrice)}</td>
-                    <td className={`px-3 py-2 font-mono tabular-nums font-bold ${color(t.pnlPct)}`}>{pct(t.pnlPct)}</td>
-                    <td className="px-3 py-2">
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                        t.exitReason === "TAKE_PROFIT" ? "bg-market-up/20 text-market-up" :
-                        t.exitReason === "STOP_LOSS"   ? "bg-market-down/20 text-market-down" :
-                        "bg-gray-100 text-gray-500 dark:bg-dracula-line dark:text-dracula-comment"
-                      }`}>{t.exitReason === "TAKE_PROFIT" ? "익절" : t.exitReason === "STOP_LOSS" ? "손절" : t.exitReason === "SIGNAL" ? "신호" : "종료"}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-    </div>
+      <Panel tabs={["거래 내역"]} actions={[]} closable={false} bodyClassName="px-1.5 pb-1.5 pt-1">
+        <DataTable columns={cols} rows={trades} rowKey={(_, i) => i} minWidth={600} empty="이 기간에 체결된 거래가 없습니다." />
+      </Panel>
+    </>
   );
 }

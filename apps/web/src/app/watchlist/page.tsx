@@ -1,25 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { Bell, X } from "@phosphor-icons/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
-import { getAccessToken } from "@/services/auth";
 import { useToast } from "@/hooks/useToast";
-import { Card } from "@/components/ui/Card";
+import {
+  Btn, BtnLink, DataTable, EventBadge, Icon, IconBtn, Panel, PanelRow, Seg, SelectBox, TerminalPage, TitleBlock,
+  dirClass, fmtNum, fmtPct, fmtSigned, type Column,
+} from "@/components/terminal";
+import {
+  eventLabel, useIsLoggedIn, useQuotes, useRecentEvents, useWatchlistGroups,
+  type RecentEvent, type WatchlistGroup, type WatchlistItem,
+} from "@/components/home/data";
+import SelectedStockPanel from "@/components/watchlist/SelectedStockPanel";
+import RowMenu from "@/components/watchlist/RowMenu";
 
-interface WatchlistItem { id: number; stockId: number; symbol: string; name: string; memo: string | null; }
-interface WatchlistGroup { id: number; name: string; sortOrder: number; items: WatchlistItem[]; }
-interface QuoteItem { stockId: number; symbol: string; market: string; price: number; changeRate: number; volume: number; }
 interface AlertRule { id: number; stockId: number | null; ruleType: string; }
 
-const SESSION_TABS = [
-  { key: "all",      label: "전체" },
-  { key: "domestic", label: "국내" },
-  { key: "overseas", label: "해외" },
+const MARKET_TABS = [
+  { value: "all",      label: "전체" },
+  { value: "domestic", label: "국내" },
+  { value: "overseas", label: "해외" },
 ] as const;
-type Session = (typeof SESSION_TABS)[number]["key"];
+type MarketTab = (typeof MARKET_TABS)[number]["value"];
 
 const SORT_OPTIONS = [
   { key: "name",   label: "이름순" },
@@ -28,63 +32,31 @@ const SORT_OPTIONS = [
 ] as const;
 type Sort = (typeof SORT_OPTIONS)[number]["key"];
 
-const COLUMN_SETS = [
-  { key: "basic",    label: "기본" },
-  { key: "detailed", label: "시세" },
-] as const;
-type ColumnSet = (typeof COLUMN_SETS)[number]["key"];
-
 function isDomestic(market: string) { return market === "KOSPI" || market === "KOSDAQ"; }
-function fmt(n: number) { return n.toLocaleString("ko-KR", { maximumFractionDigits: 0 }); }
 
-function Pill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200
-        ${active
-          ? "bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg"
-          : "bg-gray-100 dark:bg-dracula-line/50 text-gray-500 dark:text-dracula-comment hover:bg-gray-200 dark:hover:bg-dracula-line"
-        }`}
-    >
-      {children}
-    </button>
-  );
+function isTodayKst(iso: string) {
+  const f = (d: Date) => d.toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" });
+  return f(new Date(iso)) === f(new Date());
 }
 
 export default function WatchlistPage() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
+  const isLoggedIn = useIsLoggedIn();
 
   const [newGroupName, setNewGroupName] = useState("");
-  const [session, setSession] = useState<Session>("all");
+  const [showNewGroup, setShowNewGroup] = useState(false);
+  const [activeGroupId, setActiveGroupId] = useState<number | null>(null);
+  const [market, setMarket] = useState<MarketTab>("all");
   const [sort, setSort] = useState<Sort>("name");
-  const [columnSet, setColumnSet] = useState<ColumnSet>("basic");
+  const [selectedStockId, setSelectedStockId] = useState<number | null>(null);
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const { data: groups = [], isLoading } = useQuery<WatchlistGroup[]>({
-    queryKey: ["watchlist", "groups", "page"],
-    queryFn: async () => {
-      const r = await authFetch("/api/watchlists");
-      return r.ok ? r.json() : [];
-    },
-    enabled: isLoggedIn,
-  });
+  const { data: groups = [], isLoading } = useWatchlistGroups(isLoggedIn);
+  const activeGroup: WatchlistGroup | undefined = groups.find((g) => g.id === activeGroupId) ?? groups[0];
 
   const stockIds = Array.from(new Set(groups.flatMap(g => g.items.map(i => i.stockId))));
-
-  const { data: quotesData } = useQuery<{ items: QuoteItem[] }>({
-    queryKey: ["screener", "quotes", "watchlist-page", stockIds],
-    queryFn: async () => {
-      const r = await fetch(`/api/screener/quotes?ids=${stockIds.join(",")}`);
-      return r.ok ? r.json() : { items: [] };
-    },
-    enabled: stockIds.length > 0,
-    refetchInterval: 15_000,
-    staleTime: 15_000,
-  });
-  const quoteByStockId = Object.fromEntries((quotesData?.items ?? []).map(q => [q.stockId, q]));
+  const quoteByStockId = useQuotes(stockIds, "watchlist-page", 15_000);
+  const { data: events = [] } = useRecentEvents();
 
   const { data: alertRules = [] } = useQuery<AlertRule[]>({
     queryKey: ["alerts", "rules"],
@@ -94,6 +66,7 @@ export default function WatchlistPage() {
     },
     enabled: isLoggedIn,
   });
+  const stocksWithAlert = new Set(alertRules.filter(r => r.stockId != null).map(r => r.stockId));
   const stocksWithVolumeAlert = new Set(
     alertRules.filter(r => r.ruleType === "VOLUME_SURGE" && r.stockId != null).map(r => r.stockId)
   );
@@ -109,6 +82,7 @@ export default function WatchlistPage() {
     },
     onSuccess: () => {
       setNewGroupName("");
+      setShowNewGroup(false);
       qc.invalidateQueries({ queryKey: ["watchlist"] });
     },
     onError: (e: Error) => toast({ type: "error", title: "그룹 생성 실패", message: e.message }),
@@ -157,155 +131,178 @@ export default function WatchlistPage() {
 
   const processItems = (items: WatchlistItem[]) => {
     let filtered = items;
-    if (session !== "all") {
+    if (market !== "all") {
       filtered = filtered.filter(i => {
-        const q = quoteByStockId[i.stockId];
+        const q = quoteByStockId.get(i.stockId);
         if (!q) return true; // 시세를 아직 못 가져왔으면 필터로 숨기지 않는다
-        return session === "domestic" ? isDomestic(q.market) : !isDomestic(q.market);
+        return market === "domestic" ? isDomestic(q.market) : !isDomestic(q.market);
       });
     }
     return [...filtered].sort((a, b) => {
       if (sort === "name") return a.name.localeCompare(b.name, "ko");
-      const qa = quoteByStockId[a.stockId];
-      const qb = quoteByStockId[b.stockId];
+      const qa = quoteByStockId.get(a.stockId);
+      const qb = quoteByStockId.get(b.stockId);
       if (sort === "change") return (qb?.changeRate ?? -Infinity) - (qa?.changeRate ?? -Infinity);
       return (qb?.price ?? -Infinity) - (qa?.price ?? -Infinity);
     });
   };
 
-  if (!isLoggedIn) return (
-    <div className="max-w-2xl mx-auto p-6 text-center py-20">
-      <p className="text-gray-500 dark:text-dracula-comment mb-4">관심종목을 이용하려면 로그인이 필요합니다.</p>
-      <Link href="/login" className="inline-block bg-blue-600 dark:bg-dracula-purple dark:text-dracula-bg text-white px-6 py-2 rounded-lg font-medium hover:opacity-90 active:scale-[0.98] transition-all duration-150">로그인</Link>
-    </div>
+  // 종목별 오늘의 최신 이벤트(최근 이벤트 50건 안에서)
+  const latestEventByStock = new Map<number, RecentEvent>();
+  for (const e of events) {
+    if (!isTodayKst(e.eventTime)) continue;
+    const prev = latestEventByStock.get(e.stockId);
+    if (!prev || prev.eventTime < e.eventTime) latestEventByStock.set(e.stockId, e);
+  }
+
+  const groupItems = activeGroup?.items ?? [];
+  const rows = processItems(groupItems);
+  const selected = rows.find((r) => r.stockId === selectedStockId) ?? rows[0] ?? null;
+  const selectedIndex = selected ? rows.indexOf(selected) : -1;
+
+  const quotesOfGroup = groupItems.map((i) => quoteByStockId.get(i.stockId)).filter(Boolean);
+  const upCount = quotesOfGroup.filter((q) => q!.changeRate > 0).length;
+  const downCount = quotesOfGroup.filter((q) => q!.changeRate < 0).length;
+  const todayEvents = events.filter((e) => isTodayKst(e.eventTime) && groupItems.some((i) => i.stockId === e.stockId)).length;
+  const alertOn = groupItems.filter((i) => stocksWithAlert.has(i.stockId)).length;
+  const alertableCount = groupItems.filter(i => !stocksWithVolumeAlert.has(i.stockId)).length;
+
+  const shell = (children: React.ReactNode, ready = false) => (
+    <TerminalPage
+      left={<TitleBlock title="관심종목" crumb="마켓" />}
+      stats={ready ? [
+        { label: "종목", value: String(groupItems.length) },
+        { label: "상승 / 하락", value: `${upCount} / ${downCount}` },
+        { label: "오늘 이벤트", value: `${todayEvents}건`, tone: "text-dracula-purple" },
+        { label: "알림 켜짐", value: `${alertOn}종목` },
+      ] : []}
+    >
+      {children}
+    </TerminalPage>
   );
 
-  if (isLoading) return <div className="p-6 text-gray-500 dark:text-dracula-comment">불러오는 중...</div>;
+  if (!isLoggedIn) return shell(
+    <Panel tabs={["관심종목"]} actions={[]} closable={false}>
+      <div className="flex flex-col items-center gap-4 py-16 text-center">
+        <p className="text-13 text-tm-muted">관심종목을 이용하려면 로그인이 필요합니다.</p>
+        <BtnLink href="/login">로그인</BtnLink>
+      </div>
+    </Panel>
+  );
 
-  return (
-    <div className="max-w-2xl mx-auto p-4 sm:p-6 animate-fade-up">
-      <h1 className="text-2xl font-bold tracking-tight mb-6 text-gray-900 dark:text-dracula-fg">관심종목</h1>
+  if (isLoading) return shell(<div className="p-6 text-tm-muted">불러오는 중...</div>);
 
-      <form
-        onSubmit={e => { e.preventDefault(); if (newGroupName.trim()) createGroup.mutate(newGroupName.trim()); }}
-        className="flex gap-2 mb-6"
-      >
-        <input
-          type="text"
-          value={newGroupName}
-          onChange={(e) => setNewGroupName(e.target.value)}
-          aria-label="새 관심종목 그룹 이름"
-          placeholder="새 그룹 이름"
-          className="flex-1 border border-gray-300 rounded-lg px-4 py-2 transition-colors hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:bg-dracula-bg dark:border-dracula-line dark:text-dracula-fg dark:placeholder-dracula-comment dark:hover:border-dracula-comment dark:focus:ring-dracula-purple/50"
-        />
-        <button
-          type="submit"
-          disabled={createGroup.isPending}
-          className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 active:scale-[0.98] transition-all duration-150 dark:bg-dracula-purple dark:text-dracula-bg dark:hover:opacity-90 disabled:opacity-50"
+  const columns: Column<WatchlistItem>[] = [
+    {
+      key: "name",
+      header: "종목",
+      cell: (it) => (
+        <Link href={`/stocks/${it.symbol}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-2.5 text-dracula-fg hover:text-dracula-fg">
+          <span className="grid h-7 w-7 flex-none place-items-center rounded-lg bg-tm-raised text-xs font-bold text-tm-soft">{it.name.slice(0, 1)}</span>
+          <span className="flex flex-col gap-px">
+            <span className="font-semibold">{it.name}</span>
+            <span className="num text-2xs text-tm-muted">{it.symbol}{it.memo ? ` · ${it.memo}` : ""}</span>
+          </span>
+        </Link>
+      ),
+    },
+    { key: "price", header: "현재가", align: "right", cell: (it) => { const q = quoteByStockId.get(it.stockId); return <span className="num">{q ? `${isDomestic(q.market) ? "" : "$"}${fmtNum(q.price, isDomestic(q.market) ? 0 : 2)}` : "—"}</span>; } },
+    { key: "rate", header: "등락률", align: "right", cell: (it) => { const r = quoteByStockId.get(it.stockId)?.changeRate ?? null; return <span className={`num ${dirClass(r)}`}>{fmtPct(r)}</span>; } },
+    { key: "diff", header: "전일 대비", align: "right", cell: (it) => { const q = quoteByStockId.get(it.stockId); return <span className={`num ${dirClass(q?.changeAmount)}`}>{fmtSigned(q?.changeAmount)}</span>; } },
+    { key: "today", header: "오늘", cell: () => <span className="text-tm-muted">—</span> },
+    { key: "vol", header: "거래량 배수", align: "right", cell: () => <span className="text-tm-muted">—</span> },
+    { key: "event", header: "이벤트", cell: (it) => { const e = latestEventByStock.get(it.stockId); return e ? <span title={e.title}><EventBadge type={eventLabel(e.eventType)} /></span> : <EventBadge type={null} />; } },
+    {
+      key: "alert",
+      header: "알림",
+      align: "center",
+      cell: (it) => (
+        <Link
+          href={`/stocks/${it.symbol}?openAlert=1`}
+          onClick={(e) => e.stopPropagation()}
+          aria-label={`${it.name} 알림 설정${stocksWithAlert.has(it.stockId) ? " (켜짐)" : ""}`}
+          className={`inline-grid place-items-center ${stocksWithAlert.has(it.stockId) ? "text-dracula-purple" : "text-tm-muted hover:text-dracula-fg"}`}
         >
-          그룹 추가
-        </button>
-      </form>
+          <Icon name="bell" size={16} />
+        </Link>
+      ),
+    },
+    { key: "menu", header: <span className="sr-only">더 보기</span>, align: "center", cell: (it) => <RowMenu name={it.name} onRemove={() => removeItem.mutate(it.id)} disabled={removeItem.isPending} /> },
+  ];
 
-      {groups.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
-          <div className="flex items-center gap-1">
-            {SESSION_TABS.map(t => (
-              <Pill key={t.key} active={session === t.key} onClick={() => setSession(t.key)}>{t.label}</Pill>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <select
-              value={sort}
-              onChange={e => setSort(e.target.value as Sort)}
-              aria-label="정렬 기준"
-              className="text-xs rounded-lg border border-gray-300 dark:border-dracula-line bg-white dark:bg-dracula-surface px-2 py-1 text-gray-700 dark:text-dracula-fg focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
-            >
+  return shell(
+    <PanelRow>
+      <Panel
+        tabs={["관심종목"]}
+        actions={["sliders", "download", "expand"]}
+        className="flex-[999_1_640px]"
+        bodyClassName="px-1.5 pb-1.5 pt-2.5"
+        right={activeGroup && activeGroup.items.length > 0 ? (
+          <Btn
+            kind="ghost"
+            size="sm"
+            icon="bell"
+            onClick={() => bulkVolumeAlert.mutate(activeGroup)}
+            disabled={bulkVolumeAlert.isPending || alertableCount === 0}
+            title="그룹 전체 종목에 거래량 급증 알림을 설정합니다"
+          >
+            {alertableCount === 0 ? "전체 알림 설정됨" : `그룹 알림 설정 (${alertableCount})`}
+          </Btn>
+        ) : undefined}
+      >
+        <div className="flex flex-wrap items-center gap-1.5 px-2">
+          {groups.length > 0 && (
+            <Seg
+              options={groups.map((g) => ({ value: String(g.id), label: `${g.name} ${g.items.length}` }))}
+              value={String(activeGroup?.id ?? "")}
+              onChange={(v) => { setActiveGroupId(Number(v)); setSelectedStockId(null); }}
+            />
+          )}
+          <IconBtn name="plus" label="그룹 추가" size={34} aria-expanded={showNewGroup || groups.length === 0} onClick={() => setShowNewGroup((v) => !v)} />
+          <div className="ml-auto flex flex-wrap items-center gap-1.5">
+            <Seg options={MARKET_TABS} value={market} onChange={setMarket} />
+            <SelectBox aria-label="정렬 기준" value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="min-h-[34px] w-[120px] py-1">
               {SORT_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
-            </select>
-            <div className="inline-flex gap-1 p-0.5 rounded-lg bg-gray-100 dark:bg-dracula-line/30">
-              {COLUMN_SETS.map(c => (
-                <button key={c.key} onClick={() => setColumnSet(c.key)}
-                  className={`px-2 py-1 rounded-md text-[11px] font-medium transition-all duration-200
-                    ${columnSet === c.key ? "bg-white dark:bg-dracula-bg text-gray-900 dark:text-dracula-fg shadow-sm" : "text-gray-500 dark:text-dracula-comment"}`}>
-                  {c.label}
-                </button>
-              ))}
-            </div>
+            </SelectBox>
           </div>
         </div>
-      )}
 
-      {groups.length === 0 ? (
-        <p className="text-gray-500 dark:text-dracula-comment text-center py-8">관심종목 그룹이 없습니다.</p>
-      ) : (
-        <div className="space-y-6">
-          {groups.map((group) => {
-            const items = processItems(group.items);
-            const alertableCount = group.items.filter(i => !stocksWithVolumeAlert.has(i.stockId)).length;
-            return (
-              <Card key={group.id} className="p-4" hover>
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="font-semibold text-lg text-gray-900 dark:text-dracula-fg">{group.name}</h2>
-                  {group.items.length > 0 && (
-                    <button
-                      onClick={() => bulkVolumeAlert.mutate(group)}
-                      disabled={bulkVolumeAlert.isPending || alertableCount === 0}
-                      title="그룹 전체 종목에 거래량 급증 알림을 설정합니다"
-                      className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg border border-gray-300 dark:border-dracula-line text-gray-600 dark:text-dracula-comment hover:bg-gray-50 dark:hover:bg-dracula-line/30 transition-colors disabled:opacity-40"
-                    >
-                      <Bell size={12} weight="bold" aria-hidden />
-                      {alertableCount === 0 ? "전체 알림 설정됨" : `그룹 알림 설정 (${alertableCount})`}
-                    </button>
-                  )}
-                </div>
-                {group.items.length === 0 ? (
-                  <p className="text-gray-400 dark:text-dracula-comment text-sm">종목이 없습니다.</p>
-                ) : items.length === 0 ? (
-                  <p className="text-gray-400 dark:text-dracula-comment text-sm">선택한 거래세션에 해당하는 종목이 없습니다.</p>
-                ) : (
-                  <ul className="space-y-1">
-                    {items.map((item) => {
-                      const q = quoteByStockId[item.stockId];
-                      const up = q ? q.changeRate >= 0 : false;
-                      return (
-                        <li key={item.id} className="group flex items-center justify-between py-2 border-b border-gray-100 dark:border-dracula-line last:border-0">
-                          <Link href={`/stocks/${item.symbol}`} className="min-w-0 flex-1 hover:opacity-80 transition-opacity">
-                            <div className="flex items-baseline gap-2">
-                              <span className="font-medium dark:text-dracula-fg truncate">{item.name}</span>
-                              <span className="text-sm text-gray-500 dark:text-dracula-comment shrink-0">{item.symbol}</span>
-                            </div>
-                            {item.memo && <p className="text-xs text-gray-400 dark:text-dracula-comment mt-0.5">{item.memo}</p>}
-                          </Link>
-                          <div className="flex items-center gap-3 shrink-0">
-                            {columnSet === "detailed" && q && (
-                              <div className="text-right">
-                                <p className="text-sm font-mono font-semibold dark:text-dracula-fg">
-                                  {isDomestic(q.market) ? "₩" : "$"}{fmt(q.price)}
-                                </p>
-                                <p className={`text-xs font-mono ${up ? "text-market-up" : "text-market-down"}`}>
-                                  {up ? "+" : ""}{q.changeRate.toFixed(2)}%
-                                </p>
-                              </div>
-                            )}
-                            <button
-                              onClick={() => removeItem.mutate(item.id)}
-                              aria-label={`${item.name} 관심종목에서 제거`}
-                              className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 rounded text-gray-400 dark:text-dracula-comment hover:text-dracula-red hover:bg-dracula-red/10 transition-all duration-150"
-                            >
-                              <X size={14} weight="bold" aria-hidden />
-                            </button>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </Card>
-            );
-          })}
-        </div>
-      )}
-    </div>
+        {(showNewGroup || groups.length === 0) && (
+          <form
+            onSubmit={e => { e.preventDefault(); if (newGroupName.trim()) createGroup.mutate(newGroupName.trim()); }}
+            className="flex gap-2 px-2"
+          >
+            <input
+              type="text"
+              value={newGroupName}
+              onChange={(e) => setNewGroupName(e.target.value)}
+              aria-label="새 관심종목 그룹 이름"
+              placeholder="새 그룹 이름"
+              className="h-10 min-w-0 flex-1 rounded-lg border border-tm-line bg-tm-inner px-3 text-sm text-dracula-fg outline-none placeholder:text-[#8b92b8] focus:border-dracula-purple"
+            />
+            <Btn type="submit" disabled={createGroup.isPending}>그룹 추가</Btn>
+          </form>
+        )}
+
+        {groups.length === 0 ? (
+          <p className="py-8 text-center text-tm-muted">관심종목 그룹이 없습니다.</p>
+        ) : groupItems.length === 0 ? (
+          <p className="py-8 text-center text-13 text-tm-muted">종목이 없습니다.</p>
+        ) : rows.length === 0 ? (
+          <p className="py-8 text-center text-13 text-tm-muted">선택한 시장에 해당하는 종목이 없습니다.</p>
+        ) : (
+          <DataTable
+            columns={columns}
+            rows={rows}
+            rowKey={(it) => it.id}
+            minWidth={860}
+            selectedIndex={selectedIndex}
+            onRowClick={(it) => setSelectedStockId(it.stockId)}
+          />
+        )}
+      </Panel>
+      <SelectedStockPanel item={selected} quote={selected ? quoteByStockId.get(selected.stockId) : undefined} />
+    </PanelRow>,
+    true,
   );
 }

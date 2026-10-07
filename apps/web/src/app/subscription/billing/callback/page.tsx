@@ -2,8 +2,8 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CheckCircle, XCircle, HourglassMedium } from "@phosphor-icons/react";
-import { Card } from "@/components/ui/Card";
+import { Btn } from "@/components/terminal";
+import { CenteredPage, StatusCard } from "@/components/auth/StatusCard";
 import { registerBillingKey } from "@/services/billing";
 
 type Status = "processing" | "success" | "error";
@@ -48,52 +48,32 @@ function BillingCallbackContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const back = (
+    <Btn kind={status === "success" ? "primary" : "ghost"} size="lg" full onClick={() => router.push("/subscription")}>
+      구독 페이지로 돌아가기
+    </Btn>
+  );
+
   return (
-    <div className="min-h-[60vh] flex items-center justify-center px-4">
-      <Card className="p-8 text-center" outerClassName="w-full max-w-sm animate-fade-up">
-        {status === "processing" && (
-          <>
-            <div className="flex justify-center mb-4 text-dracula-comment">
-              <HourglassMedium size={40} weight="duotone" aria-hidden />
-            </div>
-            <h1 className="text-lg font-bold text-gray-900 dark:text-dracula-fg mb-1">카드 등록 처리 중...</h1>
-            <p className="text-sm text-gray-500 dark:text-dracula-comment">잠시만 기다려주세요.</p>
-          </>
-        )}
-        {status === "success" && (
-          <>
-            <div className="flex justify-center mb-4 text-dracula-green">
-              <CheckCircle size={40} weight="duotone" aria-hidden />
-            </div>
-            <h1 className="text-lg font-bold text-gray-900 dark:text-dracula-fg mb-1">자동결제 카드 등록 완료</h1>
-            <p className="text-sm text-gray-500 dark:text-dracula-comment mb-6">
-              {card.cardCompany ?? "카드"} {card.cardLast4 ? `끝자리 ${card.cardLast4}` : ""}가 등록되었습니다.
-            </p>
-            <button
-              onClick={() => router.push("/subscription")}
-              className="w-full bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg py-2 rounded-lg font-semibold hover:opacity-90 active:scale-[0.98] transition-all duration-150"
-            >
-              구독 페이지로 돌아가기
-            </button>
-          </>
-        )}
-        {status === "error" && (
-          <>
-            <div className="flex justify-center mb-4 text-dracula-red">
-              <XCircle size={40} weight="duotone" aria-hidden />
-            </div>
-            <h1 className="text-lg font-bold text-gray-900 dark:text-dracula-fg mb-1">카드 등록 실패</h1>
-            <p className="text-sm text-gray-500 dark:text-dracula-comment mb-6">{message}</p>
-            <button
-              onClick={() => router.push("/subscription")}
-              className="w-full border border-gray-300 dark:border-dracula-line text-gray-700 dark:text-dracula-fg py-2 rounded-lg font-semibold hover:border-gray-400 dark:hover:border-dracula-comment active:scale-[0.98] transition-all duration-150"
-            >
-              구독 페이지로 돌아가기
-            </button>
-          </>
-        )}
-      </Card>
-    </div>
+    <CenteredPage>
+      {status === "processing" && (
+        <StatusCard tone="pending" title="카드 등록 처리 중...">
+          <p className="m-0">잠시만 기다려주세요.</p>
+        </StatusCard>
+      )}
+      {status === "success" && (
+        <StatusCard tone="ok" title="자동결제 카드 등록 완료" actions={back}>
+          <p className="m-0">
+            {card.cardCompany ?? "카드"} {card.cardLast4 ? `끝자리 ${card.cardLast4}` : ""}가 등록되었습니다.
+          </p>
+        </StatusCard>
+      )}
+      {status === "error" && (
+        <StatusCard tone="error" title="카드 등록 실패" actions={back}>
+          <p className="m-0">{message}</p>
+        </StatusCard>
+      )}
+    </CenteredPage>
   );
 }
 

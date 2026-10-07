@@ -25,8 +25,15 @@ html.dark[data-contrast="high"] .border-dracula-line { border-color: #7a83ad !im
 html[data-contrast="high"] :focus-visible { outline: 2px solid currentColor !important; outline-offset: 2px !important; }
 
 @layer base {
+  :root {
+    /* 상승/하락 색(RGB 채널) — MarketColorSync가 사용자 차트 테마로 덮어쓴다 */
+    --mt-up: 14 203 129;
+    --mt-down: 246 70 93;
+  }
+
   html {
     scroll-behavior: smooth;
+    color-scheme: dark;
   }
 
   body {
@@ -73,6 +80,12 @@ html[data-contrast="high"] :focus-visible { outline: 2px solid currentColor !imp
 }
 
 @layer utilities {
+  /* 숫자 — 시안의 고정폭 숫자(가격·수량 정렬). CSP(font-src 'self') 때문에 웹폰트 대신 시스템 모노 스택 */
+  .num {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
   .animate-slide-in {
     animation: slideIn 0.2s ease-out both;
   }

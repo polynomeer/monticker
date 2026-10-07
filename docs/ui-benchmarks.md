@@ -421,8 +421,8 @@ Bybit 하단 탭 패널 패턴을 그대로 채용:
 | 차트 | Bybit Standard/Advanced 전환 | 초보/고급 차트 모드 토글 | 🟡 P2 |
 | [체결엔진](/matching) | qfex/Hyperliquid | 오더북 heatmap 바, 미체결/체결 내역 탭 통합, 매수/매도 스플릿 버튼 | ✅ 완료 |
 | [Stock Detail](/stocks/[symbol]) | Robinhood | AI 요약에 가격 동향(당일 등락률·거래범위) 반영, NewsPanel 실데이터 연결 | ✅ 완료 |
-| [SearchAutocomplete](../apps/web/src/components/stock/SearchAutocomplete.tsx) | qfex | 카테고리 탭 + 1D 변동률 | ✅ 완료 (스파크라인만 보류) |
-| [스크리너 (홈)](../apps/web/src/app/page.tsx) | Finviz | 필터/표시컬럼 분리, 관심종목·알림 바로가기 동선 | ✅ 완료 ([ADR-018](decisions/018-stock-fundamentals-kis-reuse.md)) |
+| [종목 검색](../apps/web/src/components/stock/StockSearch.tsx) (구 SearchAutocomplete, ADR-066 전환) | qfex | 카테고리 탭 + 1D 변동률 | ✅ 완료 (스파크라인만 보류) |
+| [스크리너](../apps/web/src/app/screener/page.tsx) (ADR-066 이후 `/screener`) | Finviz | 필터/표시컬럼 분리, 관심종목·알림 바로가기 동선 | ✅ 완료 ([ADR-018](decisions/018-stock-fundamentals-kis-reuse.md)) |
 | [TradeModal](../apps/web/src/components/paper/TradeModal.tsx) | 토스증권 | 수량 퀵버튼(25%/50%/75%/100%) | ✅ 완료 |
 | 종목 상세 (전반) | TradingView | 차트 위 현재가 기준 매수/매도 퀵 버튼 | ✅ 완료 |
 | [Stock Detail](../apps/web/src/components/stock/InvestorFlowPanel.tsx) | 토스증권 | 개인·외국인·기관 순매수 시각화 | ✅ 완료 ([ADR-017](decisions/017-investor-flow-kis-integration.md)) |

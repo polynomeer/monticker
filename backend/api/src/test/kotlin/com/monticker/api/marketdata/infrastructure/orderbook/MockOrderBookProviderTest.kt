@@ -42,6 +42,17 @@ class MockOrderBookProviderTest {
     }
 
     @Test
+    fun `each side has distinct price levels when the spacing is finer than the tick`() {
+        // 71,008원의 0.1%(71원)는 호가 단위(100원)보다 작아 반올림하면 같은 가격이 두 번 나왔다 — 화면 key 중복 버그
+        val result = provider.getOrderBook("005930", "KOSPI", BigDecimal("71008"))
+
+        assertThat(result.asks.map { it.price }).doesNotHaveDuplicates()
+        assertThat(result.bids.map { it.price }).doesNotHaveDuplicates()
+        assertThat(result.asks.map { it.price }).isSorted()
+        assertThat(result.bids.map { it.price }).isSortedAccordingTo(Comparator.reverseOrder())
+    }
+
+    @Test
     fun `all quantities are positive`() {
         val result = provider.getOrderBook("005930", "KOSPI", BigDecimal("70000"))
 

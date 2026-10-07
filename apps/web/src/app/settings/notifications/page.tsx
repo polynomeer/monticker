@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
-import { Card } from "@/components/ui/Card";
-import SettingsTabs from "@/components/settings/SettingsTabs";
+import { Btn, Checkbox, Chip, Divider, Field, H2, Panel, PanelRow, PreviewTag, TerminalPage, Toggle } from "@/components/terminal";
+import { SettingsNav } from "@/components/settings/SettingsNav";
 
 interface NotifPref {
   pushEnabled: boolean;
@@ -26,22 +26,28 @@ const DEFAULT: NotifPref = {
   weeklyReportEmail: true,
 };
 
-function Toggle({ checked, onChange, label, description }: { checked: boolean; onChange: (v: boolean) => void; label: string; description?: string }) {
+function Row({ title, sub, preview, children, extra }: { title: string; sub: ReactNode; preview?: boolean; children: ReactNode; extra?: ReactNode }) {
   return (
-    <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-dracula-line last:border-0">
-      <div>
-        <p className="text-sm font-medium text-gray-900 dark:text-dracula-fg">{label}</p>
-        {description && <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">{description}</p>}
+    <div className="flex items-center justify-between gap-4 border-b border-tm-line py-3">
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="flex items-center gap-2 font-semibold">
+          {title}
+          {preview && <PreviewTag />}
+        </span>
+        <span className="text-xs text-tm-muted">{sub}</span>
+        {extra}
       </div>
-      <button
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${checked ? "bg-blue-600 dark:bg-dracula-purple" : "bg-gray-300 dark:bg-dracula-line"}`}
-      >
-        <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${checked ? "translate-x-5" : ""}`} />
-      </button>
+      {children}
     </div>
+  );
+}
+
+/** 시안 요소 — 서버 설정 항목이 아직 없는 알림 종류 */
+function PreviewRow({ title, sub, on = true }: { title: string; sub: string; on?: boolean }) {
+  return (
+    <Row title={title} sub={sub} preview>
+      <Toggle checked={on} label={title} disabled />
+    </Row>
   );
 }
 
@@ -53,8 +59,8 @@ export default function NotificationSettingsPage() {
 
   useEffect(() => {
     authFetch("/api/users/me/notification-preferences")
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data) setPref({ ...DEFAULT, ...data }); })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setPref({ ...DEFAULT, ...data }); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -76,45 +82,107 @@ export default function NotificationSettingsPage() {
     }
   };
 
-  const set = (key: keyof NotifPref) => (v: boolean) => setPref(p => ({ ...p, [key]: v }));
+  const set = (key: keyof NotifPref) => (v: boolean) => setPref((p) => ({ ...p, [key]: v }));
 
-  if (loading) return <div className="p-8 text-gray-500 dark:text-dracula-comment text-sm">로딩 중...</div>;
+  /** 종류별 켜기/끄기 — 서버는 푸시/이메일을 따로 저장하므로, 켜면 푸시부터 켜고 끄면 둘 다 끈다 */
+  const pair = (push: keyof NotifPref, email: keyof NotifPref) => ({
+    on: pref[push] || pref[email],
+    toggle: (v: boolean) => setPref((p) => ({ ...p, [push]: v ? true : false, [email]: v ? p[email] : false })),
+    channels: (
+      <span className="mt-1 flex flex-wrap gap-1.5">
+        <Chip active={pref[push]} onClick={() => set(push)(!pref[push])}>푸시</Chip>
+        <Chip active={pref[email]} onClick={() => set(email)(!pref[email])}>이메일</Chip>
+      </span>
+    ),
+  });
+
+  const price = pair("priceAlertPush", "priceAlertEmail");
+  const news = pair("newsAlertPush", "newsAlertEmail");
+  const onCount = [price.on, news.on, pref.weeklyReportEmail].filter(Boolean).length;
+  const channels = [pref.pushEnabled && "푸시", pref.emailEnabled && "이메일"].filter(Boolean).join(" · ") || "없음";
 
   return (
-    <div className="max-w-lg mx-auto px-4 py-6 sm:py-8 animate-fade-up">
-      <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-dracula-fg mb-6">알림 설정</h1>
-      <SettingsTabs />
+    <TerminalPage
+      title="알림 설정"
+      crumb="설정"
+      stats={[
+        { label: "켜진 알림", value: loading ? "—" : `${onCount} / 3` },
+        { label: "채널", value: loading ? "—" : channels },
+        { label: "방해 금지", value: "—" },
+      ]}
+    >
+      <PanelRow>
+        <SettingsNav />
+        <Panel
+          tabs={["알림 설정"]}
+          actions={[]}
+          closable={false}
+          className="flex-[999_1_520px]"
+          bodyClassName="p-5"
+          right={
+            <Btn size="sm" onClick={save} disabled={saving || loading}>
+              {saving ? "저장 중..." : "저장"}
+            </Btn>
+          }
+        >
+          {loading ? (
+            <p className="m-0 py-8 text-center text-tm-muted">로딩 중...</p>
+          ) : (
+            <>
+              <H2>전체</H2>
+              <div>
+                <PreviewRow title="전체 알림" sub="끄면 모든 알림이 중지됩니다" />
+              </div>
 
-      <Card className="p-5" outerClassName="mb-6">
-        <h2 className="text-sm font-semibold text-blue-600 dark:text-dracula-purple mb-3">전체 알림</h2>
-        <Toggle checked={pref.pushEnabled}  onChange={set("pushEnabled")}  label="푸시 알림" description="모바일 앱 푸시 알림" />
-        <Toggle checked={pref.emailEnabled} onChange={set("emailEnabled")} label="이메일 알림" description="이메일 수신 동의" />
-      </Card>
+              <H2>가격·이벤트</H2>
+              <div>
+                <Row title="가격 알림" sub="설정한 목표가 도달" extra={price.channels}>
+                  <Toggle checked={price.on} onChange={price.toggle} label="가격 알림" />
+                </Row>
+                <PreviewRow title="거래량 급증" sub="관심종목 5분 평균 대비 3× 이상" />
+                <Row title="뉴스·공시" sub="관심종목 관련 뉴스와 DART 공시" extra={news.channels}>
+                  <Toggle checked={news.on} onChange={news.toggle} label="뉴스·공시" />
+                </Row>
+                <PreviewRow title="퀀트 시그널" sub="내 전략 · 구독 전략 신호" />
+              </div>
 
-      <Card className="p-5" outerClassName="mb-6">
-        <h2 className="text-sm font-semibold text-green-600 dark:text-dracula-green mb-3">가격 알림</h2>
-        <Toggle checked={pref.priceAlertPush}  onChange={set("priceAlertPush")}  label="푸시" />
-        <Toggle checked={pref.priceAlertEmail} onChange={set("priceAlertEmail")} label="이메일" />
-      </Card>
+              <H2>계좌</H2>
+              <div>
+                <PreviewRow title="체결·정산" sub="모의/실전 체결, T+2 정산 완료" />
+                <PreviewRow title="리스크 경고" sub="한도 80% 도달 · 주문 차단" />
+                <PreviewRow title="‘결과 확인 중’ 주문" sub="증권사 응답 지연 시 즉시 알림" />
+              </div>
 
-      <Card className="p-5" outerClassName="mb-6">
-        <h2 className="text-sm font-semibold text-orange-600 dark:text-dracula-orange mb-3">뉴스·공시 알림</h2>
-        <Toggle checked={pref.newsAlertPush}  onChange={set("newsAlertPush")}  label="푸시" />
-        <Toggle checked={pref.newsAlertEmail} onChange={set("newsAlertEmail")} label="이메일" />
-      </Card>
+              <H2>리포트</H2>
+              <div>
+                <Row title="주간 투자 행동 리포트" sub="매주 월요일 · 이메일">
+                  <Toggle checked={pref.weeklyReportEmail} onChange={set("weeklyReportEmail")} label="주간 투자 행동 리포트" />
+                </Row>
+                <PreviewRow title="전략 마켓 소식" sub="새 검증 전략 · 프로모션" on={false} />
+              </div>
+            </>
+          )}
+        </Panel>
 
-      <Card className="p-5" outerClassName="mb-8">
-        <h2 className="text-sm font-semibold text-cyan-600 dark:text-dracula-cyan mb-3">리포트</h2>
-        <Toggle checked={pref.weeklyReportEmail} onChange={set("weeklyReportEmail")} label="주간 리포트 이메일" description="매주 월요일 발송" />
-      </Card>
-
-      <button
-        onClick={save}
-        disabled={saving}
-        className="w-full py-3 rounded-xl bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg font-bold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40 disabled:active:scale-100"
-      >
-        {saving ? "저장 중..." : "저장"}
-      </button>
-    </div>
+        <Panel tabs={["전달 채널"]} actions={[]} closable={false} className="flex-[1_1_300px] self-start">
+          <div className="flex flex-col gap-2.5">
+            <Checkbox checked={pref.pushEnabled} onChange={set("pushEnabled")} label="앱 푸시" disabled={loading} />
+            <Checkbox checked={pref.emailEnabled} onChange={set("emailEnabled")} label="이메일" disabled={loading} />
+            <Checkbox checked={false} disabled label="카카오 알림톡" sub="[연동 예정]" />
+          </div>
+          <Divider />
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-2 font-semibold">방해 금지 시간 <PreviewTag /></span>
+            <Toggle checked={false} label="방해 금지 시간" disabled />
+          </div>
+          <div className="flex gap-2">
+            <Field label="시작" placeholder="22:00" disabled />
+            <Field label="종료" placeholder="07:30" disabled />
+          </div>
+          <span className="text-xs text-tm-muted">리스크 경고와 ‘결과 확인 중’ 주문 알림은 방해 금지 시간에도 전달됩니다.</span>
+          <span className="text-xs text-tm-muted">채널 변경도 ‘저장’을 눌러야 반영됩니다.</span>
+        </Panel>
+      </PanelRow>
+    </TerminalPage>
   );
 }

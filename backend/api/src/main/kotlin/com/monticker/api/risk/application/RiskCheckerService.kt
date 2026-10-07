@@ -68,6 +68,10 @@ class RiskCheckerService(
     private val jdbc: JdbcTemplate,
 ) {
 
+    /** 모의계좌 오늘(KST) 실현 손익 — 일간 손실 규칙이 판정에 쓰는 바로 그 값. 리스크 화면 표시용. */
+    @Transactional(readOnly = true)
+    fun paperRealizedPnlToday(userId: Long): java.math.BigDecimal = riskRuleQueryService.paperRealizedPnlToday(userId)
+
     /**
      * 존재하지 않는 종목의 주문은 리스크 판정 이전에 404로 막는다. 이 검사가 없으면 risk_check_logs 의
      * stock_id FK 위반이 500으로 새어 나갔다(L-05 §4.2 발견). 종목 존재는 risk 도메인의 관심사가 아니지만,

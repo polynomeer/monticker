@@ -1,11 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CalendarBlank } from "@phosphor-icons/react";
-import { Badge } from "@/components/ui/Badge";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { Skeleton } from "@/components/ui/Skeleton";
-import { Card } from "@/components/ui/Card";
+import { cn } from "@/lib/utils";
+import { EventDot, Muted, SkeletonRows, eventMeta, fmtWhen } from "./parts";
 
 interface StockEvent {
   id: number;
@@ -17,22 +14,11 @@ interface StockEvent {
   importanceScore: number;
 }
 
-type BadgeVariant = "up" | "down" | "neutral" | "info" | "purple";
-
-const EVENT_BADGE: Record<string, BadgeVariant> = {
-  PRICE_SPIKE:          "up",
-  PRICE_DROP:           "down",
-  VOLUME_SURGE:         "info",
-  NEWS_PUBLISHED:       "neutral",
-  DISCLOSURE_PUBLISHED: "purple",
-  SECTOR_MOVE:          "neutral",
-};
-
 const NEWS_LIKE_TYPES = new Set(["NEWS_PUBLISHED", "DISCLOSURE_PUBLISHED"]);
 
 interface Props {
   stockId: number;
-  /** 카드 테두리/제목 없이 내용만 렌더링 (탭 전환형 컨테이너에 임베드할 때) */
+  /** 제목 없이 목록만 렌더링 (패널 탭 안에 임베드할 때) */
   bare?: boolean;
   /** 차트 마커 클릭 등으로 특정 이벤트로 점프할 때 — 해당 이벤트로 스크롤하고 잠깐 강조 */
   highlightEventId?: number | null;
@@ -40,6 +26,7 @@ interface Props {
   onViewNews?: () => void;
 }
 
+/** 시안의 이벤트 패널 목록 — 시각 · 원형 마커 · 제목/설명 · 중요도. 5초마다 갱신. */
 export default function EventTimeline({ stockId, bare = false, highlightEventId, onViewNews }: Props) {
   const [events, setEvents] = useState<StockEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,8 +34,12 @@ export default function EventTimeline({ stockId, bare = false, highlightEventId,
   const itemRefs = useRef<Record<number, HTMLLIElement | null>>({});
 
   const fetchEvents = async () => {
-    const res = await fetch(`/api/stocks/${stockId}/events`);
-    if (res.ok) setEvents(await res.json());
+    try {
+      const res = await fetch(`/api/stocks/${stockId}/events`);
+      if (res.ok) setEvents(await res.json());
+    } catch {
+      /* 다음 폴링에서 다시 시도 */
+    }
     setLoading(false);
   };
 
@@ -62,81 +53,51 @@ export default function EventTimeline({ stockId, bare = false, highlightEventId,
   // 차트 마커 클릭으로 점프해온 경우 — 목록이 로드된 뒤에 해당 항목으로 스크롤+강조
   useEffect(() => {
     if (highlightEventId == null || loading) return;
-    if (!events.some(e => e.id === highlightEventId)) return;
+    if (!events.some((e) => e.id === highlightEventId)) return;
     setFlashId(highlightEventId);
     itemRefs.current[highlightEventId]?.scrollIntoView({ behavior: "smooth", block: "center" });
     const t = setTimeout(() => setFlashId(null), 1800);
     return () => clearTimeout(t);
   }, [highlightEventId, events, loading]);
 
-  const content = (
-    <>
-      {!bare && <h3 className="font-semibold text-gray-900 dark:text-dracula-fg mb-3">이벤트 타임라인</h3>}
+  return (
+    <div>
+      {!bare && <h3 className="m-0 mb-2 text-15 font-bold text-dracula-fg">이벤트 타임라인</h3>}
 
-      {loading && (
-        <div className="space-y-2">
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-14 w-full rounded-lg" />
-          ))}
-        </div>
-      )}
+      {loading && <SkeletonRows n={3} />}
 
-      {!loading && events.length === 0 && (
-        <EmptyState
-          icon={CalendarBlank}
-          title="이벤트 없음"
-          description="최근 24시간 내 이벤트가 없습니다."
-        />
-      )}
+      {!loading && events.length === 0 && <Muted>최근 24시간 내 이벤트가 없습니다.</Muted>}
 
       {!loading && events.length > 0 && (
-        <ul className="space-y-2">
+        <ol className="m-0 list-none p-0">
           {events.map((event) => (
             <li
               key={event.id}
-              ref={el => { itemRefs.current[event.id] = el; }}
-              className={`flex items-start gap-3 p-3 rounded-lg border text-sm transition-all duration-300 ${
-                flashId === event.id
-                  ? "border-dracula-purple ring-2 ring-dracula-purple bg-dracula-purple/5"
-                  : "border-gray-200 dark:border-dracula-line/60 bg-gray-50 dark:bg-dracula-bg hover:border-gray-300 dark:hover:border-dracula-comment/60"
-              }`}
+              ref={(el) => {
+                itemRefs.current[event.id] = el;
+              }}
+              className={cn(
+                "flex gap-2.5 border-b border-tm-line px-1 py-[9px] transition-colors duration-300",
+                flashId === event.id && "rounded-md bg-[#3a2f52] ring-1 ring-dracula-purple",
+              )}
             >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-gray-900 dark:text-dracula-fg truncate">
-                    {event.title}
-                  </span>
-                  <span className="text-xs text-gray-500 dark:text-dracula-comment shrink-0">
-                    {new Date(event.eventTime).toLocaleTimeString("ko-KR")}
-                  </span>
-                </div>
-                {event.description && (
-                  <p className="text-xs mt-1 text-gray-500 dark:text-dracula-comment">{event.description}</p>
+              <span className="num w-[34px] flex-none pt-0.5 text-2xs text-tm-muted">{fmtWhen(event.eventTime)}</span>
+              <EventDot type={event.eventType} />
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-13 font-semibold">{event.title}</span>
+                <span className="text-xs text-tm-muted">
+                  {[eventMeta(event.eventType).label, event.description, `중요도 ${event.importanceScore}`].filter(Boolean).join(" · ")}
+                </span>
+                {onViewNews && NEWS_LIKE_TYPES.has(event.eventType) && (
+                  <button type="button" onClick={onViewNews} className="self-start text-2xs text-dracula-purple hover:underline">
+                    관련 뉴스 보기 →
+                  </button>
                 )}
-                <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-                  <Badge variant={EVENT_BADGE[event.eventType] ?? "neutral"}>
-                    {event.eventType.replace(/_/g, " ")}
-                  </Badge>
-                  {onViewNews && NEWS_LIKE_TYPES.has(event.eventType) && (
-                    <button
-                      onClick={onViewNews}
-                      className="text-[11px] text-blue-600 dark:text-dracula-purple hover:underline"
-                    >
-                      관련 뉴스 보기 →
-                    </button>
-                  )}
-                </div>
               </div>
-              <span className="text-xs font-semibold text-gray-500 dark:text-dracula-comment shrink-0 tabular-nums">
-                {event.importanceScore}
-              </span>
             </li>
           ))}
-        </ul>
+        </ol>
       )}
-    </>
+    </div>
   );
-
-  if (bare) return <div>{content}</div>;
-  return <Card className="p-4">{content}</Card>;
 }

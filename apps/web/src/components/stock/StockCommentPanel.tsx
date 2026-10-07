@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChatCircle, Flag, Trash } from "@phosphor-icons/react";
-import { Card } from "@/components/ui/Card";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { Btn, IconBtn, SelectBox } from "@/components/terminal";
+import { Muted, SkeletonRows } from "./parts";
 import { authFetch } from "@/services/api";
 import { getAccessToken } from "@/services/auth";
 import { useAuth } from "@/hooks/useAuth";
@@ -15,7 +13,7 @@ interface EventOption { id: number; title: string; }
 
 interface Props {
   stockId: number;
-  /** 카드 테두리/제목 없이 내용만 렌더링 (탭 전환형 컨테이너에 임베드할 때) */
+  /** 테두리/제목 없이 내용만 렌더링 (탭 전환형 컨테이너에 임베드할 때) */
   bare?: boolean;
 }
 
@@ -110,76 +108,64 @@ export default function StockCommentPanel({ stockId, bare = false }: Props) {
 
   const content_ = (
     <>
-      {!bare && <h3 className="font-semibold text-gray-900 dark:text-dracula-fg mb-3">커뮤니티</h3>}
+      {!bare && <h3 className="m-0 mb-2 text-15 font-bold text-dracula-fg">토론</h3>}
 
       {isLoggedIn ? (
-        <div className="mb-4 space-y-2">
+        <div className="mb-3 flex flex-col gap-2">
           <textarea
             value={content}
             onChange={e => setContent(e.target.value)}
+            aria-label="댓글 내용"
             placeholder="이 종목에 대한 의견을 남겨주세요 (매수·매도 권유는 게시할 수 없습니다)"
             rows={2}
             maxLength={500}
-            className="w-full rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-900 dark:text-dracula-fg text-sm px-3 py-2 resize-none transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
+            className="w-full resize-none rounded-lg border border-tm-line bg-tm-inner px-3 py-2 text-13 text-dracula-fg outline-none placeholder:text-[#8b92b8] focus:border-dracula-purple"
           />
           <div className="flex items-center gap-2">
             {eventOptions.length > 0 && (
-              <select
+              <SelectBox
+                aria-label="이벤트 태그"
                 value={selectedEventId}
                 onChange={e => setSelectedEventId(e.target.value)}
-                className="flex-1 rounded-lg bg-white dark:bg-dracula-bg border border-gray-300 dark:border-dracula-line text-gray-700 dark:text-dracula-fg text-xs px-2 py-1.5 transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50"
+                className="min-h-9 flex-1 py-1"
               >
                 <option value="">이벤트 태그 없음</option>
                 {eventOptions.map(ev => (
                   <option key={ev.id} value={ev.id}>{ev.title}</option>
                 ))}
-              </select>
+              </SelectBox>
             )}
-            <button
-              onClick={submit}
-              disabled={submitting || !content.trim()}
-              className="shrink-0 px-4 py-1.5 rounded-lg bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg text-xs font-semibold hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-40"
-            >
+            <Btn kind="primary" size="sm" onClick={submit} disabled={submitting || !content.trim()} className="h-9 px-4">
               {submitting ? "게시 중..." : "게시"}
-            </button>
+            </Btn>
           </div>
-          {error && <p className="text-xs text-dracula-red">{error}</p>}
+          {error && <p role="alert" className="m-0 text-xs text-[#ff8a8a]">{error}</p>}
         </div>
       ) : (
-        <p className="mb-4 text-xs text-gray-400 dark:text-dracula-comment">로그인 후 댓글을 작성할 수 있습니다.</p>
+        <p className="m-0 mb-3 text-xs text-tm-muted">로그인 후 댓글을 작성할 수 있습니다.</p>
       )}
 
-      {loading && (
-        <div className="space-y-2">
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}
-        </div>
-      )}
+      {loading && <SkeletonRows n={3} h="h-14" />}
 
-      {!loading && comments.length === 0 && (
-        <EmptyState icon={ChatCircle} title="아직 댓글이 없습니다" description="이 종목에 대한 첫 의견을 남겨보세요." />
-      )}
+      {!loading && comments.length === 0 && <Muted>아직 댓글이 없습니다. 이 종목에 대한 첫 의견을 남겨보세요.</Muted>}
 
       {!loading && comments.length > 0 && (
-        <ul className="space-y-2">
+        <ul className="m-0 list-none p-0">
           {comments.map(c => (
-            <li key={c.id} className="p-3 rounded-lg border border-gray-200 dark:border-dracula-line/60 bg-gray-50 dark:bg-dracula-bg">
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <span className="text-xs font-semibold text-gray-700 dark:text-dracula-fg">{c.authorNickname}</span>
-                <div className="flex items-center gap-2 text-[11px] text-gray-400 dark:text-dracula-comment">
-                  <span>{new Date(c.createdAt).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+            <li key={c.id} className="border-b border-tm-line px-1 py-2.5">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold">{c.authorNickname}</span>
+                <div className="flex items-center gap-1 text-2xs text-tm-muted">
+                  <span className="num">{new Date(c.createdAt).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
                   {isLoggedIn && myUserId !== c.userId && (
-                    <button onClick={() => report(c.id)} title="신고" className="hover:text-dracula-red transition-colors">
-                      <Flag size={12} weight="bold" aria-hidden />
-                    </button>
+                    <IconBtn name="flag" label="신고" size={24} iconSize={12} onClick={() => report(c.id)} />
                   )}
                   {myUserId === c.userId && (
-                    <button onClick={() => remove(c.id)} title="삭제" className="hover:text-dracula-red transition-colors">
-                      <Trash size={12} weight="bold" aria-hidden />
-                    </button>
+                    <IconBtn name="trash" label="삭제" size={24} iconSize={12} onClick={() => remove(c.id)} />
                   )}
                 </div>
               </div>
-              <p className="text-sm text-gray-900 dark:text-dracula-fg whitespace-pre-wrap break-words">{c.content}</p>
+              <p className="m-0 whitespace-pre-wrap break-words text-13">{c.content}</p>
             </li>
           ))}
         </ul>
@@ -188,5 +174,5 @@ export default function StockCommentPanel({ stockId, bare = false }: Props) {
   );
 
   if (bare) return <div>{content_}</div>;
-  return <Card className="p-4">{content_}</Card>;
+  return <div className="rounded-[10px] bg-tm-panel p-3.5">{content_}</div>;
 }

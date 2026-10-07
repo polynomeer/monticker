@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Robot } from "@phosphor-icons/react";
 import type { WatchRuleResponse } from "@monticker/types";
-import EmptyState from "@/components/common/EmptyState";
-import { Card } from "@/components/ui/Card";
+import { Notice, Panel, PanelRow, TerminalPage, type TopStat } from "@/components/terminal";
+import { EmptyNote, LoginRequired, Skeleton } from "@/components/portfolio/PaperStates";
+import { fmtDateTime } from "@/components/portfolio/format";
 import { WatchRuleExecutionList } from "@/components/watchrule/WatchRuleExecutionList";
 import { WatchRuleForm, type WatchRuleFormValue } from "@/components/watchrule/WatchRuleForm";
 import { WatchRuleRow } from "@/components/watchrule/WatchRuleRow";
@@ -100,97 +100,98 @@ export default function WatchRulesPage() {
       onError: fail("삭제 실패"),
     });
 
+  // 규칙별 마지막 발동·오늘 발동 횟수 — 발동 이력(최근 50건)에서 센다
+  const fired = useMemo(() => {
+    const today = new Date().toDateString();
+    const m = new Map<number, { last: string; today: number }>();
+    (executions ?? []).forEach((e) => {
+      const cur = m.get(e.watchRuleId) ?? { last: e.createdAt, today: 0 };
+      if (e.createdAt > cur.last) cur.last = e.createdAt;
+      if (new Date(e.createdAt).toDateString() === today) cur.today += 1;
+      m.set(e.watchRuleId, cur);
+    });
+    return m;
+  }, [executions]);
+
+  const title = { title: "자동 주문 규칙 (Watch Rule)", crumb: "모의투자" };
+
   if (!isLoggedIn) {
     return (
-      <div className="mx-auto max-w-3xl p-4 sm:p-6">
-        <EmptyState
-          icon={Robot}
-          title="로그인이 필요합니다"
-          description="자동 주문 규칙을 만들려면 로그인해주세요."
-        />
-      </div>
+      <TerminalPage {...title}>
+        <LoginRequired message={<><b className="block text-dracula-fg">로그인이 필요합니다</b>자동 주문 규칙을 만들려면 로그인해주세요.</>} icon="zap" />
+      </TerminalPage>
     );
   }
 
   const pending = create.isPending || update.isPending || remove.isPending;
+  const today = new Date().toDateString();
+  const todayExec = (executions ?? []).filter((e) => new Date(e.createdAt).toDateString() === today);
+  const stats: TopStat[] = [
+    { label: "활성 규칙", value: rules ? `${rules.filter((r) => r.isActive).length} / ${rules.length}` : "—" },
+    { label: "오늘 발동", value: `${todayExec.length}회`, tone: "text-dracula-purple" },
+    { label: "차단됨", value: `${todayExec.filter((e) => e.status === "REJECTED").length}회` },
+    // 규칙 경유 체결의 손익 집계 API가 아직 없다
+    { label: "규칙 경유 손익", value: "—", tone: "text-tm-muted" },
+  ];
 
   return (
-    <div className="animate-fade-up mx-auto max-w-3xl space-y-6 p-4 sm:p-6">
-      <header>
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-dracula-fg">자동 주문 규칙</h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-dracula-comment">
-          이벤트가 감지되면 모의투자 계좌로 자동 주문합니다 — 화면을 보고 있지 않아도 동작합니다.
-        </p>
-      </header>
-
+    <TerminalPage {...title} stats={stats}>
       {/* 경계를 화면에서 분명히 한다 — 실계좌는 자동 주문하지 않는다(ADR-025/036). */}
-      <div className="rounded-lg border border-dracula-orange/30 bg-dracula-orange/10 px-4 py-3">
-        <p className="text-sm text-gray-800 dark:text-dracula-fg">
-          <strong>모의투자 계좌에만 적용됩니다.</strong>{" "}
-          <Link href="/brokerage" className="underline">실전투자</Link> 계좌는 자동으로 주문하지 않으며, 실계좌 주문은 항상 직접 확인하고 실행해야 합니다.
-        </p>
-        <p className="mt-1 text-xs text-gray-600 dark:text-dracula-comment">
-          자동 주문도 <Link href="/risk" className="underline">리스크 한도</Link>를 똑같이 통과해야 합니다 — 한도를 넘으면 규칙이 있어도 체결되지 않고 거부 이유가 이력에 남습니다.
-        </p>
-      </div>
+      <Notice tone="info">
+        Watch Rule은 <b className="text-dracula-fg">모의투자 계좌에만</b> 적용됩니다. <Link href="/brokerage" className="underline">실전투자</Link> 계좌는 자동으로
+        주문하지 않으며, 실계좌 주문은 항상 직접 확인하고 실행해야 합니다. 자동 주문도{" "}
+        <Link href="/risk" className="underline">리스크 한도</Link>를 똑같이 통과해야 합니다 — 한도를 넘으면 규칙이 있어도 체결되지 않고 거부 이유가 이력에 남습니다.
+      </Notice>
 
-      <Card className="overflow-hidden">
-        <div className="border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-dracula-line dark:bg-transparent">
-          <span className="text-sm font-semibold text-gray-900 dark:text-dracula-fg">새 규칙</span>
-        </div>
-        <WatchRuleForm onSubmit={handleCreate} submitting={create.isPending} />
-      </Card>
-
-      <div className="flex gap-1 border-b border-gray-200 dark:border-dracula-line">
-        {([["rules", `내 규칙${rules?.length ? ` (${rules.length})` : ""}`], ["history", "발동 이력"]] as const).map(
-          ([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setTab(key)}
-              aria-current={tab === key ? "page" : undefined}
-              className={`px-4 py-2 text-sm font-semibold transition-colors ${
-                tab === key
-                  ? "border-b-2 border-dracula-purple text-gray-900 dark:text-dracula-fg"
-                  : "text-gray-500 dark:text-dracula-comment"
-              }`}
-            >
-              {label}
-            </button>
-          ),
-        )}
-      </div>
-
-      <Card className="overflow-hidden">
-        {tab === "rules" ? (
-          rulesLoading ? (
-            <div className="h-32 animate-shimmer bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 bg-[length:200%_100%] dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15" />
-          ) : !rules?.length ? (
-            <EmptyState
-              icon={Robot}
-              title="아직 규칙이 없습니다"
-              description="위에서 종목과 이벤트를 골라 첫 규칙을 만들어보세요."
-            />
+      <PanelRow>
+        <Panel
+          tabs={[
+            { key: "rules", label: `내 규칙${rules?.length ? ` ${rules.length}` : ""}` },
+            { key: "history", label: "발동 기록" },
+          ]}
+          active={tab}
+          onTabChange={(k) => setTab(k as "rules" | "history")}
+          actions={[]}
+          className="flex-[999_1_620px]"
+        >
+          {tab === "rules" ? (
+            rulesLoading ? (
+              <Skeleton className="h-32" />
+            ) : !rules?.length ? (
+              <EmptyNote>
+                <b className="block text-dracula-fg">아직 규칙이 없습니다</b>
+                오른쪽에서 종목과 이벤트를 골라 첫 규칙을 만들어보세요.
+              </EmptyNote>
+            ) : (
+              <ul className="m-0 flex list-none flex-col gap-2 p-0">
+                {rules.map((rule) => {
+                  const f = fired.get(rule.id);
+                  return (
+                    <WatchRuleRow
+                      key={rule.id}
+                      rule={rule}
+                      stockLabel={stockLabel(rule.stockId)}
+                      onToggle={handleToggle}
+                      onDelete={handleDelete}
+                      pending={pending}
+                      lastFired={f ? fmtDateTime(f.last) : null}
+                      todayCount={f?.today ?? 0}
+                    />
+                  );
+                })}
+              </ul>
+            )
+          ) : executionsLoading ? (
+            <Skeleton className="h-32" />
           ) : (
-            <ul className="divide-y divide-gray-100 dark:divide-dracula-line/40">
-              {rules.map((rule) => (
-                <WatchRuleRow
-                  key={rule.id}
-                  rule={rule}
-                  stockLabel={stockLabel(rule.stockId)}
-                  onToggle={handleToggle}
-                  onDelete={handleDelete}
-                  pending={pending}
-                />
-              ))}
-            </ul>
-          )
-        ) : executionsLoading ? (
-          <div className="h-32 animate-shimmer bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 bg-[length:200%_100%] dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15" />
-        ) : (
-          <WatchRuleExecutionList executions={executions ?? []} ruleLabels={ruleLabels} />
-        )}
-      </Card>
-    </div>
+            <WatchRuleExecutionList executions={executions ?? []} ruleLabels={ruleLabels} />
+          )}
+        </Panel>
+
+        <Panel tabs={["새 규칙"]} actions={[]} className="flex-[1_1_340px]">
+          <WatchRuleForm onSubmit={handleCreate} submitting={create.isPending} />
+        </Panel>
+      </PanelRow>
+    </TerminalPage>
   );
 }

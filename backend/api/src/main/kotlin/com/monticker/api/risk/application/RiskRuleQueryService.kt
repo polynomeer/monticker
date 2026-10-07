@@ -249,6 +249,19 @@ class RiskRuleQueryService(
             HAVING SUM(CASE WHEN side = 'BUY' THEN quantity ELSE -quantity END) > 0"""
     }
 
+    /**
+     * 모의계좌의 오늘(KST) 실현 손익. 일간 손실 게이트와 화면 표시(/api/risk/exposure)가 같은 값을 쓰도록 한 곳에 둔다.
+     * "오늘"은 KST 기준 — current_date는 DB 세션 타임존(UTC)이라 새벽 거래가 전날로 붙었다.
+     */
+    fun paperRealizedPnlToday(userId: Long): BigDecimal {
+        val todayStartKst = Instant.now().atZone(ZoneId.of("Asia/Seoul")).toLocalDate().atStartOfDay(ZoneId.of("Asia/Seoul")).toInstant()
+        return jdbc.query(
+            REALIZED_PNL_TODAY_SQL.trimIndent(),
+            { rs, _ -> rs.getBigDecimal(1) },
+            userId, java.sql.Timestamp.from(todayStartKst),
+        ).firstOrNull() ?: BigDecimal.ZERO
+    }
+
     private fun paperSnapshot(userId: Long): PortfolioSnapshot {
         val accountCash = jdbc.query(
             "SELECT COALESCE(cash, 0) FROM paper_accounts WHERE user_id = ?",
@@ -256,13 +269,7 @@ class RiskRuleQueryService(
             userId,
         ).firstOrNull() ?: BigDecimal("10000000")
 
-        // "오늘"은 KST 기준 — 이전의 current_date는 DB 세션 타임존(UTC)이라 새벽 거래가 전날로 붙었다
-        val todayStartKst = Instant.now().atZone(ZoneId.of("Asia/Seoul")).toLocalDate().atStartOfDay(ZoneId.of("Asia/Seoul")).toInstant()
-        val dailyPnl = jdbc.query(
-            REALIZED_PNL_TODAY_SQL.trimIndent(),
-            { rs, _ -> rs.getBigDecimal(1) },
-            userId, java.sql.Timestamp.from(todayStartKst),
-        ).firstOrNull() ?: BigDecimal.ZERO
+        val dailyPnl = paperRealizedPnlToday(userId)
 
         val holdings = jdbc.queryForList(HOLDINGS_SQL.trimIndent(), userId).map { row ->
             HoldingPosition(

@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * 스크리너 홈의 탭/시장/정렬 전환이 실제 브라우저 + 서버 조합에서 정상
+ * 스크리너(/screener)의 탭/시장/정렬 전환이 실제 브라우저 + 서버 조합에서 정상
  * 동작하는지 검증하는 e2e 스모크 테스트.
  *
  * screener.spec.ts가 최초 로드(및 그 회귀들)를 커버한다면, 이 스펙은 사용자가
@@ -12,7 +12,10 @@ import { test, expect } from "@playwright/test";
  * 탭 전환 시 sort 초기화 로직 누락)는 여기서만 잡힌다.
  *
  * 시드 데이터에 의존하지 않는다: 종목 목록이 비어 있어도(빈 DB) 탭/필터
- * 버튼 자체와 헤더, "총 N개 종목" 카운터는 항상 렌더링되므로 그것만 검증한다.
+ * 컨트롤과 헤더, "조건 일치 N개 종목" 카운터는 항상 렌더링되므로 그것만 검증한다.
+ *
+ * 마크업(터미널 리디자인): 결과 패널의 탭은 role="tab", 시장 필터는 세그먼트
+ * 버튼(aria-pressed), 정렬은 "정렬" 라벨의 네이티브 <select>다.
  */
 test.describe("스크리너 필터 전환", () => {
   test("탭을 전환해도 에러 없이 헤더가 유지되고 실제 API를 다시 호출한다", async ({ page }) => {
@@ -21,19 +24,19 @@ test.describe("스크리너 필터 전환", () => {
       if (msg.type() === "error") consoleErrors.push(msg.text());
     });
 
-    await page.goto("/");
-    await expect(page.getByRole("heading", { name: "스크리너" })).toBeVisible();
+    await page.goto("/screener");
+    await expect(page.getByRole("heading", { name: "실시간 스크리너" })).toBeVisible();
 
     const screenerRequest = page.waitForResponse((res) =>
       /\/api\/screener\?/.test(res.url()) && /tab=movers/.test(res.url())
     );
-    await page.getByRole("button", { name: "급등·급락" }).click();
+    await page.getByRole("tab", { name: "급등·급락" }).click();
     const res = await screenerRequest;
     expect(res.status()).toBe(200);
 
     // 탭 전환 시 헤더는 그대로 남아 있어야 한다(페이지 전체가 깨지지 않았다는 증거).
-    await expect(page.getByRole("heading", { name: "스크리너" })).toBeVisible();
-    await expect(page.getByText(/총 [\d,]*\s*개 종목/)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "실시간 스크리너" })).toBeVisible();
+    await expect(page.getByText(/조건 일치\s*[\d,]*\s*개 종목/)).toBeVisible();
 
     const cspOrConnectErrors = consoleErrors.filter(
       (e) => /content security policy/i.test(e) || /blocked/i.test(e)
@@ -43,8 +46,8 @@ test.describe("스크리너 필터 전환", () => {
   });
 
   test("시장(해외) 및 정렬(거래량순) 필터가 올바른 쿼리 파라미터로 API를 호출한다", async ({ page }) => {
-    await page.goto("/");
-    await expect(page.getByRole("heading", { name: "스크리너" })).toBeVisible();
+    await page.goto("/screener");
+    await expect(page.getByRole("heading", { name: "실시간 스크리너" })).toBeVisible();
 
     const marketRequest = page.waitForResponse((res) =>
       /\/api\/screener\?/.test(res.url()) && /market=overseas/.test(res.url())
@@ -55,7 +58,7 @@ test.describe("스크리너 필터 전환", () => {
     const sortRequest = page.waitForResponse((res) =>
       /\/api\/screener\?/.test(res.url()) && /sort=volume/.test(res.url())
     );
-    await page.getByRole("button", { name: "거래량순" }).click();
+    await page.getByLabel("정렬", { exact: true }).selectOption("volume");
     expect((await sortRequest).status()).toBe(200);
   });
 });

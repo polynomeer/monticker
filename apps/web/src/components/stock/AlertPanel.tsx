@@ -1,14 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Input } from "@/components/ui/Input";
-import { Card } from "@/components/ui/Card";
+import { Btn, Field, SelectBox } from "@/components/terminal";
 import { useToast } from "@/hooks/useToast";
 
 interface Props {
   stockId: number;
   symbol: string;
-  /** 카드 테두리/제목 없이 폼만 렌더링 (다른 카드 안에 임베드할 때) */
+  /** 테두리/제목 없이 폼만 렌더링 (다른 카드 안에 임베드할 때) */
   bare?: boolean;
 }
 
@@ -94,65 +93,55 @@ export default function AlertPanel({ stockId, symbol, bare = false }: Props) {
   };
 
   const form = (
-      <form onSubmit={handleSave} className="flex flex-col gap-3">
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-gray-700 dark:text-dracula-fg">알림 유형</label>
-          <select
-            value={ruleType}
-            onChange={(e) => changeRuleType(e.target.value as RuleType)}
-            className="w-full rounded-lg border border-gray-300 dark:border-dracula-line bg-white dark:bg-dracula-surface px-4 py-2.5 text-sm text-gray-900 dark:text-dracula-fg transition-colors hover:border-gray-400 dark:hover:border-dracula-comment focus:outline-none focus:ring-2 focus:ring-dracula-purple/50 focus:border-dracula-purple"
-          >
-            {RULE_TYPES.map(rt => <option key={rt.value} value={rt.value}>{rt.label}</option>)}
-          </select>
-        </div>
+      <form onSubmit={handleSave} className="flex flex-col gap-2.5">
+        <SelectBox label="알림 유형" value={ruleType} onChange={(e) => changeRuleType(e.target.value as RuleType)}>
+          {RULE_TYPES.map(rt => <option key={rt.value} value={rt.value}>{rt.label}</option>)}
+        </SelectBox>
 
         {(ruleType === "PRICE_ABOVE" || ruleType === "PRICE_BELOW") && (
-          <Input
+          <Field
+            label="기준 가격"
+            aria-label="기준 가격"
             type="number"
+            inputMode="decimal"
             value={threshold}
             onChange={(e) => setThreshold(e.target.value)}
             placeholder="기준 가격 입력"
-            label="기준 가격"
           />
         )}
 
         {(ruleType === "RSI_BELOW" || ruleType === "RSI_ABOVE") && (
-          <div className="grid grid-cols-2 gap-2">
-            <Input type="number" value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="14" label="RSI 기간(일)" />
-            <Input type="number" value={threshold} onChange={(e) => setThreshold(e.target.value)} placeholder={ruleType === "RSI_BELOW" ? "30" : "70"} label="RSI 기준값" />
+          <div className="flex gap-2">
+            <Field label="RSI 기간(일)" aria-label="RSI 기간(일)" type="number" value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="14" />
+            <Field label="RSI 기준값" aria-label="RSI 기준값" type="number" value={threshold} onChange={(e) => setThreshold(e.target.value)} placeholder={ruleType === "RSI_BELOW" ? "30" : "70"} />
           </div>
         )}
 
         {(ruleType === "PRICE_BELOW_MA" || ruleType === "PRICE_ABOVE_MA") && (
-          <Input type="number" value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="20" label="이동평균 기간(일)" />
+          <Field label="이동평균 기간(일)" aria-label="이동평균 기간(일)" type="number" value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="20" />
         )}
 
         {ruleType === "HOLDING_DROP" && (
           <div className="flex flex-col gap-1.5">
-            <Input type="number" value={dropPct} onChange={(e) => setDropPct(e.target.value)} placeholder="10" label="하락률 기준(%)" />
-            <p className="text-xs text-gray-500 dark:text-dracula-comment">모의투자로 이 종목을 보유 중일 때만 평가됩니다. 실전투자 보유종목은 대상이 아닙니다.</p>
+            <Field label="하락률 기준(%)" aria-label="하락률 기준(%)" type="number" value={dropPct} onChange={(e) => setDropPct(e.target.value)} placeholder="10" />
+            <p className="m-0 text-xs text-tm-muted">모의투자로 이 종목을 보유 중일 때만 평가됩니다. 실전투자 보유종목은 대상이 아닙니다.</p>
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-lg bg-blue-600 dark:bg-dracula-purple text-white dark:text-dracula-bg font-semibold text-sm py-2.5 hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:active:scale-100"
-        >
+        <Btn type="submit" kind="primary" full disabled={loading}>
           {loading ? "저장 중..." : "알림 저장"}
-        </button>
+        </Btn>
       </form>
   );
 
   if (bare) return form;
 
   return (
-    <Card className="p-4">
-      <h3 className="font-semibold text-gray-900 dark:text-dracula-fg mb-3">
-        알림 설정{" "}
-        <span className="text-gray-500 dark:text-dracula-comment text-sm font-normal">({symbol})</span>
+    <div className="flex flex-col gap-3 rounded-[10px] bg-tm-panel p-3.5">
+      <h3 className="m-0 text-15 font-bold">
+        알림 설정 <span className="text-13 font-normal text-tm-muted">({symbol})</span>
       </h3>
       {form}
-    </Card>
+    </div>
   );
 }

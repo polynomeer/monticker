@@ -37,10 +37,10 @@ export default function VolumeChart({ candles, height = 140 }: Props) {
       if (disposed || !containerRef.current) return;
       if (chartRef.current) chartRef.current.dispose();
 
-      const isDark  = resolvedTheme === "dark";
-      const bg      = isDark ? "#1e1f29" : "#ffffff";
-      const grid    = isDark ? "#44475a" : "#e5e7eb";
-      const text    = isDark ? "#6272a4" : "#6b7280";
+      const isDark  = true; // 터미널 디자인은 다크 전용
+      const bg      = isDark ? "#282a36" : "#ffffff";
+      const grid    = isDark ? "#34364a" : "#e5e7eb";
+      const text    = isDark ? "#a4abcf" : "#6b7280";
       const upColor = `${ct.upColor}cc`;
       const dnColor = `${ct.downColor}cc`;
 
@@ -58,7 +58,7 @@ export default function VolumeChart({ candles, height = 140 }: Props) {
         animation: false,
         tooltip: {
           trigger: "axis",
-          backgroundColor: isDark ? "#282a36" : "#fff",
+          backgroundColor: isDark ? "#21222c" : "#fff",
           borderColor: grid,
           textStyle: { color: text },
           formatter: (params: unknown[]) => {
@@ -134,10 +134,10 @@ export default function VolumeChart({ candles, height = 140 }: Props) {
   if (candles.length === 0) return null;
 
   return (
-    <div className="border border-gray-200 dark:border-dracula-line rounded-lg overflow-hidden">
+    <div className="border border-tm-line rounded-lg overflow-hidden">
       <div className="px-4 pt-3 pb-1 flex items-center justify-between">
-        <span className="text-xs font-medium text-gray-500 dark:text-dracula-comment">거래량</span>
-        <span className="text-xs text-gray-400 dark:text-dracula-line">
+        <span className="text-xs font-medium text-tm-muted">거래량</span>
+        <span className="text-xs text-tm-muted">
           최대 {fmtVol(Math.max(...candles.map(c => c.volume ?? 0)))}
         </span>
       </div>

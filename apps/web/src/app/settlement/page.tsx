@@ -1,26 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { type Icon, HourglassMedium, CheckCircle, XCircle } from "@phosphor-icons/react";
 import { authFetch } from "@/services/api";
-import { Card } from "@/components/ui/Card";
-
-interface PaperSettlement {
-  id: number;
-  tradeId: number;
-  side: "BUY" | "SELL";
-  quantity: number;
-  fillPrice: number;
-  grossAmount: number;
-  fee: number;
-  tax: number;
-  netAmount: number;
-  status: "PENDING" | "SETTLED" | "FAILED";
-  settleDate: string;
-  settledAt: string | null;
-  createdAt: string;
-}
+import { getAccessToken } from "@/services/auth";
+import { SettlementCalendar, nextBusinessDays, signedNet, ymd, type PaperSettlement } from "@/components/settlement/SettlementCalendar";
+import { useStockMeta } from "@/components/portfolio/useStockMeta";
+import { LoginRequired, Skeleton } from "@/components/portfolio/PaperStates";
+import { downloadCsv } from "@/components/portfolio/csv";
+import { fmtMonthDay } from "@/components/portfolio/format";
+import { Btn, DataTable, Num, Panel, Pill, Seg, TerminalPage, fmtNum, fmtSigned, type Column, type Tone } from "@/components/terminal";
 
 interface Page<T> {
   content: T[];
@@ -29,173 +18,139 @@ interface Page<T> {
   number: number;
 }
 
-const STATUS_META: Record<string, { label: string; color: string; icon: Icon }> = {
-  PENDING:  { label: "대기 중",   color: "text-dracula-orange", icon: HourglassMedium },
-  SETTLED:  { label: "정산 완료", color: "text-dracula-green", icon: CheckCircle },
-  FAILED:   { label: "실패",      color: "text-dracula-red", icon: XCircle },
-};
+type Filter = "all" | "waiting" | "processing" | "done";
 
-const SIDE_META: Record<string, { label: string; color: string }> = {
-  BUY:  { label: "매수", color: "text-dracula-green" },
-  SELL: { label: "매도", color: "text-dracula-red" },
-};
+const FILTERS = [
+  { value: "all", label: "전체" },
+  { value: "waiting", label: "정산 대기" },
+  { value: "processing", label: "처리 중" },
+  { value: "done", label: "완료" },
+] as const;
 
-function won(n: number) {
-  return n.toLocaleString("ko-KR") + "원";
-}
-
-function SettlementRow({ s }: { s: PaperSettlement }) {
-  const [open, setOpen] = useState(false);
-  const status = STATUS_META[s.status];
-  const side   = SIDE_META[s.side];
-
-  return (
-    <Card className="overflow-hidden">
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center gap-3 p-4 text-left hover:bg-gray-50 dark:hover:bg-dracula-line/20 transition-colors"
-      >
-        <status.icon size={18} weight="bold" className={status.color} aria-hidden />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={`text-xs font-medium ${side.color}`}>{side.label}</span>
-            <span className="text-sm font-semibold text-gray-900 dark:text-dracula-fg">
-              {s.quantity.toLocaleString()}주 @ {won(s.fillPrice)}
-            </span>
-            <span className={`text-xs ${status.color}`}>{status.label}</span>
-          </div>
-          <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">
-            정산 예정일: {new Date(s.settleDate).toLocaleDateString("ko-KR")}
-            {s.settledAt && ` · 완료: ${new Date(s.settledAt).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}`}
-          </p>
-        </div>
-        <div className="text-right shrink-0">
-          <p className={`text-sm font-semibold ${s.side === "BUY" ? "text-dracula-red" : "text-dracula-green"}`}>
-            {s.side === "BUY" ? "-" : "+"}{won(s.netAmount)}
-          </p>
-          <p className="text-xs text-gray-500 dark:text-dracula-comment">순액</p>
-        </div>
-        <span className={`text-gray-500 dark:text-dracula-comment transition-transform ${open ? "rotate-180" : ""}`}>▾</span>
-      </button>
-
-      {open && (
-        <div className="px-4 pb-4 border-t border-gray-100 dark:border-dracula-line/50">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
-            {[
-              { label: "거래 금액",   value: won(s.grossAmount) },
-              { label: "수수료 (0.015%)", value: won(s.fee) },
-              { label: "세금",        value: s.tax > 0 ? won(s.tax) : "—" },
-              { label: "순 정산액",   value: won(s.netAmount) },
-            ].map(row => (
-              <div key={row.label} className="p-3 rounded-lg bg-gray-50 dark:bg-dracula-bg">
-                <p className="text-xs text-gray-500 dark:text-dracula-comment">{row.label}</p>
-                <p className="text-sm font-semibold text-gray-900 dark:text-dracula-fg mt-0.5">{row.value}</p>
-              </div>
-            ))}
-          </div>
-          {s.side === "SELL" && s.tax > 0 && (
-            <p className="text-xs text-gray-500 dark:text-dracula-comment mt-2">
-              * 매도세 = 증권거래세 0.15% + 농특세 0.03%
-            </p>
-          )}
-        </div>
-      )}
-    </Card>
-  );
+/**
+ * 표시 상태 — 백엔드는 PENDING/SETTLED/FAILED 셋뿐이다.
+ * 정산일이 오늘 이전인데 아직 PENDING이면 오늘 16:30 배치를 기다리는 중이므로 "처리 중"으로 보여 준다.
+ */
+function displayStatus(s: PaperSettlement, today: string): { label: string; tone: Tone; key: Filter | "failed" } {
+  if (s.status === "SETTLED") return { label: "정산 완료", tone: "green", key: "done" };
+  if (s.status === "FAILED") return { label: "실패", tone: "red", key: "failed" };
+  return s.settleDate.slice(0, 10) <= today ? { label: "처리 중", tone: "yellow", key: "processing" } : { label: "정산 대기", tone: "cyan", key: "waiting" };
 }
 
 export default function SettlementPage() {
-  const [tab, setTab] = useState<"all" | "pending">("all");
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [filter, setFilter] = useState<Filter>("all");
   const [page, setPage] = useState(0);
 
+  useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
+
   const { data, isLoading } = useQuery<Page<PaperSettlement>>({
-    queryKey: ["settlement", "paper", tab, page],
+    queryKey: ["settlement", "paper", "all", page],
     queryFn: async () => {
-      const url = tab === "pending"
-        ? "/api/settlement/paper/pending"
-        : `/api/settlement/paper?page=${page}&size=20`;
-      const res = await authFetch(url);
+      const res = await authFetch(`/api/settlement/paper?page=${page}&size=20`);
       if (!res.ok) throw new Error("조회 실패");
-      const json = await res.json();
-      // pending endpoint returns a plain list
-      if (Array.isArray(json)) return { content: json, totalElements: json.length, totalPages: 1, number: 0 };
-      return json;
+      return res.json();
     },
+    enabled: isLoggedIn,
   });
 
-  const settlements: PaperSettlement[] = data?.content ?? [];
+  // 대기 목록은 일반 배열로 온다
+  const { data: pending = [], isLoading: pendingLoading } = useQuery<PaperSettlement[]>({
+    queryKey: ["settlement", "paper", "pending"],
+    queryFn: async () => {
+      const res = await authFetch("/api/settlement/paper/pending");
+      if (!res.ok) throw new Error("조회 실패");
+      const json = await res.json();
+      return Array.isArray(json) ? json : json.content ?? [];
+    },
+    enabled: isLoggedIn,
+  });
+
+  const today = ymd(new Date());
+  const [, d1, d2] = nextBusinessDays(3).map(ymd);
+  const meta = useStockMeta([...(data?.content ?? []), ...pending].map((s) => s.stockId));
+
+  const rows = useMemo(() => {
+    if (filter === "waiting" || filter === "processing") return pending.filter((s) => displayStatus(s, today).key === filter);
+    const all = data?.content ?? [];
+    return filter === "done" ? all.filter((s) => s.status === "SETTLED") : all;
+  }, [filter, pending, data, today]);
+
+  const sumOn = (day: string) => pending.filter((s) => s.settleDate.slice(0, 10) === day).reduce((a, s) => a + signedNet(s), 0);
+  const weekEnd = (() => { const d = new Date(); d.setDate(d.getDate() + (7 - d.getDay()) % 7); return ymd(d); })();
+  const pendingNet = pending.reduce((a, s) => a + signedNet(s), 0);
+  const weekNet = pending.filter((s) => s.settleDate.slice(0, 10) <= weekEnd).reduce((a, s) => a + signedNet(s), 0);
+  const tone = (v: number) => (v < 0 ? "text-down" : v > 0 ? "text-up" : undefined);
+  const name = (s: PaperSettlement) => (s.stockId && meta.get(s.stockId)?.name) || `거래 #${s.tradeId}`;
+
+  const cols: Column<PaperSettlement>[] = [
+    { key: "trade", header: "체결일", cell: (s) => <Num className="text-tm-muted">{fmtMonthDay(s.createdAt)}</Num> },
+    { key: "settle", header: "정산일", cell: (s) => <Num className="text-tm-muted">{fmtMonthDay(s.settleDate)}</Num> },
+    { key: "name", header: "종목", cell: (s) => <span>{name(s)} <span className="num text-2xs text-tm-muted">{fmtNum(s.quantity)}주</span></span> },
+    { key: "side", header: "구분", cell: (s) => <span className={s.side === "BUY" ? "text-up" : "text-down"}>{s.side === "BUY" ? "매수" : "매도"}</span> },
+    { key: "gross", header: "체결금", align: "right", cell: (s) => <Num>{fmtNum(s.grossAmount)}</Num> },
+    { key: "fee", header: "수수료", align: "right", cell: (s) => <Num>{fmtNum(s.fee)}</Num> },
+    { key: "tax", header: "세금", align: "right", cell: (s) => <Num>{fmtNum(s.tax)}</Num> },
+    { key: "net", header: "순액", align: "right", cell: (s) => <Num className={tone(signedNet(s))}>{fmtSigned(signedNet(s))}</Num> },
+    { key: "status", header: "상태", cell: (s) => { const st = displayStatus(s, today); return <Pill tone={st.tone}>{st.label}</Pill>; } },
+  ];
+
+  const title = { title: "모의투자 정산", crumb: "지갑" };
+  if (!isLoggedIn) {
+    return (
+      <TerminalPage {...title}>
+        <LoginRequired message="정산 내역을 보려면 로그인이 필요합니다." icon="calendar" />
+      </TerminalPage>
+    );
+  }
+
+  const exportCsv = () =>
+    downloadCsv("paper-settlements.csv", ["체결일", "정산일", "종목", "구분", "수량", "체결금", "수수료", "세금", "순액", "상태"],
+      rows.map((s) => [s.createdAt.slice(0, 10), s.settleDate.slice(0, 10), name(s), s.side === "BUY" ? "매수" : "매도", s.quantity, s.grossAmount, s.fee, s.tax, signedNet(s), displayStatus(s, today).label]));
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 sm:py-8 animate-fade-up">
-      <div className="mb-8">
-        <h1 className="text-xl font-bold text-gray-900 dark:text-dracula-fg">모의투자 정산 내역</h1>
-        <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">체결 후 T+2 영업일에 자동으로 정산됩니다</p>
-      </div>
+    <TerminalPage
+      {...title}
+      stats={[
+        { label: "정산 대기", value: `${fmtSigned(pendingNet)}원`, tone: "text-dracula-cyan" },
+        { label: "내일 정산", value: fmtSigned(sumOn(d1)), tone: tone(sumOn(d1)) },
+        { label: "모레 정산", value: fmtSigned(sumOn(d2)), tone: tone(sumOn(d2)) },
+        { label: "이번 주 정산 예정", value: fmtSigned(weekNet), tone: tone(weekNet) },
+        // 원장 대사(LedgerReconciliationService) 결과는 아직 API가 없다
+        { label: "불일치", value: "—", tone: "text-tm-muted" },
+      ]}
+    >
+      <Panel tabs={["정산 캘린더"]} actions={["expand"]}>
+        {pendingLoading ? <Skeleton className="h-36" /> : <SettlementCalendar pending={pending} meta={meta} />}
+        <span className="text-xs text-tm-muted">체결 후 T+2 영업일에 자동으로 정산됩니다(매일 16:30 KST). 주말은 건너뛰며, 공휴일 달력은 아직 반영하지 않습니다.</span>
+      </Panel>
 
-      {/* 요약 카드 */}
-      {data && (
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          {[
-            { label: "전체",   count: data.totalElements,                                      color: "text-gray-900 dark:text-dracula-fg" },
-            { label: "대기 중", count: settlements.filter((s: PaperSettlement) => s.status === "PENDING").length,  color: "text-dracula-orange" },
-            { label: "정산 완료", count: settlements.filter((s: PaperSettlement) => s.status === "SETTLED").length, color: "text-dracula-green" },
-          ].map(row => (
-            <Card key={row.label} className="p-3 text-center">
-              <p className={`text-xl font-bold ${row.color}`}>{row.count}</p>
-              <p className="text-xs text-gray-500 dark:text-dracula-comment mt-0.5">{row.label}</p>
-            </Card>
-          ))}
+      <Panel tabs={["정산 내역"]} actions={["download", "expand"]} onAction={(a) => a === "download" && exportCsv()} bodyClassName="px-1.5 pb-1.5 pt-2">
+        <div className="flex flex-wrap gap-2 px-1.5 py-1">
+          <Seg options={FILTERS} value={filter} onChange={(v) => { setFilter(v); setPage(0); }} />
         </div>
-      )}
-
-      {/* 탭 */}
-      <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-dracula-line">
-        {(["all", "pending"] as const).map(t => (
-          <button key={t} onClick={() => { setTab(t); setPage(0); }}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px inline-flex items-center gap-1.5
-              ${tab === t ? "border-blue-600 dark:border-dracula-purple text-blue-600 dark:text-dracula-purple" : "border-transparent text-gray-500 dark:text-dracula-comment hover:text-gray-900 dark:hover:text-dracula-fg"}`}>
-            {t === "pending" && <HourglassMedium size={14} weight="bold" aria-hidden />}
-            {t === "all" ? "전체 내역" : "대기 중"}
-          </button>
-        ))}
-      </div>
-
-      {/* 목록 */}
-      {isLoading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map(i => <div key={i} className="h-20 rounded-xl bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-dracula-line/15 dark:via-dracula-line/35 dark:to-dracula-line/15 bg-[length:200%_100%] animate-shimmer" />)}
-        </div>
-      ) : settlements.length === 0 ? (
-        <div className="text-center py-16 border border-dashed border-gray-300 dark:border-dracula-line rounded-xl text-gray-500 dark:text-dracula-comment text-sm">
-          {tab === "pending" ? "대기 중인 정산이 없습니다." : "아직 정산 내역이 없습니다. 모의투자를 시작해보세요."}
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {settlements.map(s => <SettlementRow key={s.id} s={s} />)}
-        </div>
-      )}
-
-      {/* 페이지네이션 */}
-      {tab === "all" && (data?.totalPages ?? 0) > 1 && (
-        <div className="flex justify-center gap-3 mt-8">
-          {page > 0 && (
-            <button onClick={() => setPage(p => p - 1)}
-              className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg text-sm font-medium hover:bg-gray-200 dark:hover:bg-dracula-comment active:scale-[0.98] transition-all duration-150">
-              이전
-            </button>
-          )}
-          {page < (data?.totalPages ?? 1) - 1 && (
-            <button onClick={() => setPage(p => p + 1)}
-              className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-dracula-line text-gray-700 dark:text-dracula-fg text-sm font-medium hover:bg-gray-200 dark:hover:bg-dracula-comment active:scale-[0.98] transition-all duration-150">
-              다음
-            </button>
-          )}
-        </div>
-      )}
-
-      <p className="text-xs text-gray-500 dark:text-dracula-comment text-center mt-8">
-        정산은 매일 16:30 KST 자동 처리됩니다 (영업일 기준)
-      </p>
-    </div>
+        {isLoading && filter !== "waiting" && filter !== "processing" ? (
+          <Skeleton className="m-1.5 h-40" />
+        ) : (
+          <DataTable
+            columns={cols}
+            rows={rows}
+            rowKey={(s) => s.id}
+            minWidth={860}
+            empty={filter === "waiting" || filter === "processing" ? "대기 중인 정산이 없습니다." : "아직 정산 내역이 없습니다. 모의투자를 시작해보세요."}
+          />
+        )}
+        {(filter === "all" || filter === "done") && (data?.totalPages ?? 0) > 1 && (
+          <div className="flex items-center justify-center gap-3 py-2">
+            <Btn kind="soft" size="sm" disabled={page <= 0} onClick={() => setPage((p) => p - 1)}>이전</Btn>
+            <span className="num text-xs text-tm-muted">{page + 1} / {data?.totalPages}</span>
+            <Btn kind="soft" size="sm" disabled={page >= (data?.totalPages ?? 1) - 1} onClick={() => setPage((p) => p + 1)}>다음</Btn>
+          </div>
+        )}
+        {rows.some((s) => s.side === "SELL" && s.tax > 0) && (
+          <span className="px-1.5 text-2xs text-tm-muted">* 매도세 = 증권거래세 0.15% + 농특세 0.03% · 수수료 0.015%</span>
+        )}
+      </Panel>
+    </TerminalPage>
   );
 }

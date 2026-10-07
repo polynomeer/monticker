@@ -1,4 +1,5 @@
 import StockDetailClient from "@/components/stock/StockDetailClient";
+import { BtnLink, Notice, Panel, TerminalPage } from "@/components/terminal";
 
 interface Props {
   params: Promise<{ symbol: string }>;
@@ -25,9 +26,12 @@ export default async function StockDetailPage({ params }: Props) {
 
   if (!stock) {
     return (
-      <div className="p-6">
-        <p className="text-gray-400 dark:text-dracula-comment">종목을 찾을 수 없습니다: {symbol}</p>
-      </div>
+      <TerminalPage title="종목 상세" crumb="트레이딩">
+        <Panel tabs={["종목 상세"]} actions={[]} closable={false} className="max-w-xl">
+          <Notice tone="warn">종목을 찾을 수 없습니다: {symbol}</Notice>
+          <BtnLink href="/stocks/search" kind="ghost" icon="search" className="self-start">종목 검색으로</BtnLink>
+        </Panel>
+      </TerminalPage>
     );
   }
 

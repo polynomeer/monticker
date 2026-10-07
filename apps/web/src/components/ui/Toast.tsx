@@ -1,36 +1,15 @@
 "use client";
 
-import { type Icon, CheckCircle, XCircle, Warning, Info, X } from "@phosphor-icons/react";
+import { Icon, type IconName } from "@/components/terminal/Icon";
 import { useToastStore, Toast, ToastType } from "@/hooks/useToast";
 
-const STYLES: Record<
-  ToastType,
-  { bar: string; icon: Icon; title: string; msg: string }
-> = {
-  success: {
-    bar: "border-l-4 border-market-up bg-[#1a2e26]",
-    icon: CheckCircle,
-    title: "text-market-up",
-    msg: "text-[#a0c4b0]",
-  },
-  error: {
-    bar: "border-l-4 border-market-down bg-[#2e1a1e]",
-    icon: XCircle,
-    title: "text-market-down",
-    msg: "text-[#c4a0a6]",
-  },
-  warning: {
-    bar: "border-l-4 border-dracula-yellow bg-[#2a2a1a]",
-    icon: Warning,
-    title: "text-dracula-yellow",
-    msg: "text-[#c4c4a0]",
-  },
-  info: {
-    bar: "border-l-4 border-dracula-cyan bg-[#1a2a2e]",
-    icon: Info,
-    title: "text-dracula-cyan",
-    msg: "text-[#a0b4c4]",
-  },
+// 터미널 Notice 톤과 같은 색 — 성공/실패는 상승·하락색이 아니라 의미색(초록/빨강)을 쓴다.
+// (사용자가 한국식 시세 색을 고르면 상승색이 빨강이 되어 "성공=빨강"이 되는 걸 막는다)
+const STYLES: Record<ToastType, { box: string; icon: IconName; tone: string }> = {
+  success: { box: "border-[#2f4d39]", icon: "check", tone: "text-dracula-green" },
+  error: { box: "border-[#64363f]", icon: "x", tone: "text-[#ff8a8a]" },
+  warning: { box: "border-[#5a4430]", icon: "alert", tone: "text-dracula-orange" },
+  info: { box: "border-[#33415e]", icon: "info", tone: "text-dracula-cyan" },
 };
 
 function ToastItem({ toast }: { toast: Toast }) {
@@ -39,21 +18,20 @@ function ToastItem({ toast }: { toast: Toast }) {
 
   return (
     <div
-      className={`flex items-start gap-3 px-4 py-3 rounded-lg shadow-lg backdrop-blur-sm min-w-[280px] max-w-sm ${s.bar} animate-slide-in`}
+      className={`flex min-w-[280px] max-w-sm items-start gap-2.5 rounded-[10px] border bg-tm-panel px-3.5 py-3 shadow-[0_8px_32px_rgba(0,0,0,0.45)] animate-pop-in ${s.box}`}
     >
-      <s.icon size={20} weight="bold" className={`shrink-0 mt-0.5 ${s.title}`} aria-hidden />
-      <div className="flex-1 min-w-0">
-        <p className={`font-semibold text-sm ${s.title}`}>{toast.title}</p>
-        {toast.message && (
-          <p className={`text-xs mt-0.5 ${s.msg}`}>{toast.message}</p>
-        )}
+      <Icon name={s.icon} size={16} strokeWidth={2.2} className={`mt-0.5 flex-none ${s.tone}`} />
+      <div className="min-w-0 flex-1">
+        <p className="m-0 text-13 font-semibold text-dracula-fg">{toast.title}</p>
+        {toast.message && <p className="m-0 mt-0.5 text-xs leading-relaxed text-tm-soft">{toast.message}</p>}
       </div>
       <button
+        type="button"
         onClick={() => removeToast(toast.id)}
-        className="inline-flex items-center justify-center w-6 h-6 -mr-1 -mt-1 text-dracula-comment hover:text-dracula-fg ml-1 transition-colors active:scale-90"
+        className="-mr-1 -mt-0.5 ml-1 grid h-6 w-6 flex-none place-items-center rounded-md text-tm-muted hover:bg-tm-raised hover:text-dracula-fg"
         aria-label="닫기"
       >
-        <X size={14} weight="bold" aria-hidden />
+        <Icon name="x" size={14} />
       </button>
     </div>
   );
@@ -65,7 +43,7 @@ export function ToastContainer() {
   const nonErrors = toasts.filter(t => t.type !== "error");
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none">
+    <div className="pointer-events-none fixed bottom-6 left-4 right-4 z-50 flex flex-col items-end gap-2 sm:left-auto sm:right-6">
       {/* 에러 토스트 — assertive (즉시 읽기) */}
       <div aria-live="assertive" aria-atomic="true" className="contents">
         {errors.map(t => (

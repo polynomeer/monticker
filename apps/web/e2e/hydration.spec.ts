@@ -42,7 +42,7 @@ async function collectHydrationErrors(page: Page): Promise<string[]> {
 }
 
 test.describe("SSR/CSR 하이드레이션 일치성", () => {
-  for (const path of ["/", "/watchlist", "/stocks/__hydration-smoke-test-nonexistent__"]) {
+  for (const path of ["/", "/screener", "/watchlist", "/stocks/__hydration-smoke-test-nonexistent__"]) {
     test(`${path} 최초 로드 시 하이드레이션 불일치가 없다`, async ({ page }) => {
       const hydrationErrors = await collectHydrationErrors(page);
 

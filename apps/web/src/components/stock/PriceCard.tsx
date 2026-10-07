@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Skeleton } from "@/components/ui/Skeleton";
-import { Card } from "@/components/ui/Card";
 
 interface PriceData {
   stockId: number;
@@ -42,41 +40,29 @@ export default function PriceCard({ symbol }: Props) {
       .catch(() => setLoading(false));
   }, [symbol]);
 
+  const box = "flex flex-col gap-1 rounded-[10px] bg-tm-inner p-3.5";
+
   if (loading) {
     return (
-      <Card className="p-4">
-        <Skeleton className="h-9 w-36 mb-2" />
-        <Skeleton className="h-4 w-24" />
-      </Card>
+      <div className={box} aria-busy="true" aria-label="시세 불러오는 중">
+        <div className="h-8 w-36 animate-pulse rounded bg-tm-raised" />
+        <div className="h-4 w-24 animate-pulse rounded bg-tm-raised" />
+      </div>
     );
   }
 
   if (!data || !data.hasData) {
-    return (
-      <Card className="p-4 text-dracula-comment text-sm">
-        시세 데이터 없음 (워커가 실행 중이어야 합니다)
-      </Card>
-    );
+    return <div className={`${box} text-13 text-tm-muted`}>시세 데이터 없음 (워커가 실행 중이어야 합니다)</div>;
   }
 
   return (
-    <Card className="p-4" hover>
+    <div className={box}>
       <div className="flex items-baseline gap-3">
-        <span className="text-3xl font-bold tabular-nums text-gray-900 dark:text-dracula-fg">
-          {data.price?.toLocaleString()}
-        </span>
-        <span className="text-sm text-gray-500 dark:text-dracula-comment">{symbol}</span>
+        <span className="num text-[1.75rem] font-semibold text-dracula-fg">{data.price?.toLocaleString()}</span>
+        <span className="num text-13 text-tm-muted">{symbol}</span>
       </div>
-      {data.volume && (
-        <p className="text-sm text-gray-500 dark:text-dracula-comment mt-1 tabular-nums">
-          거래량 {data.volume.toLocaleString()}
-        </p>
-      )}
-      {data.tradeTime && (
-        <p className="text-xs text-gray-400 dark:text-dracula-line mt-1">
-          {new Date(data.tradeTime).toLocaleTimeString("ko-KR")}
-        </p>
-      )}
-    </Card>
+      {data.volume && <p className="num m-0 text-13 text-tm-muted">거래량 {data.volume.toLocaleString()}</p>}
+      {data.tradeTime && <p className="num m-0 text-2xs text-tm-muted">{new Date(data.tradeTime).toLocaleTimeString("ko-KR")}</p>}
+    </div>
   );
 }

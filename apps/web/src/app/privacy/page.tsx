@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
-import { PageLayout } from "@/components/ui/PageLayout";
-import { Card } from "@/components/ui/Card";
-import { Warning } from "@phosphor-icons/react/dist/ssr";
+import { LegalDoc, type LegalSection } from "@/components/auth/LegalDoc";
 
 export const metadata: Metadata = {
   title: "개인정보처리방침",
 };
 
-const sections: { heading: string; body: React.ReactNode }[] = [
+const sections: LegalSection[] = [
   {
     heading: "1. 수집하는 개인정보 항목",
     body: (
@@ -103,33 +101,17 @@ const sections: { heading: string; body: React.ReactNode }[] = [
 
 export default function PrivacyPolicyPage() {
   return (
-    <PageLayout
+    <LegalDoc
+      doc="privacy"
       title="개인정보처리방침"
-      subtitle="최종 수정일: 2026-09-05"
-      className="max-w-3xl"
-    >
-      <Card className="p-4 mb-6 flex gap-3 items-start bg-amber-50 dark:bg-dracula-orange/10 border-amber-200 dark:border-dracula-orange/30">
-        <Warning size={20} weight="fill" className="text-amber-500 dark:text-dracula-orange shrink-0 mt-0.5" aria-hidden />
-        <p className="text-sm text-amber-800 dark:text-dracula-orange">
-          이 페이지는 초안(draft)입니다. 실제 서비스 오픈 전 법률 자문을 거쳐 확정됩니다. 주황색으로
-          표시된 항목은 아직 확정되지 않은 부분입니다.
+      meta="최종 수정일: 2026-09-05"
+      intro={
+        <p className="m-0">
+          monticker(이하 &ldquo;회사&rdquo;)는 이용자의 개인정보를 중요시하며, 「개인정보 보호법」 등
+          관련 법령을 준수합니다. 본 방침은 회사가 제공하는 서비스에 적용됩니다.
         </p>
-      </Card>
-
-      <Card className="p-6 sm:p-8">
-        <div className="space-y-6 text-sm leading-relaxed text-gray-700 dark:text-dracula-fg">
-          <p>
-            monticker(이하 &ldquo;회사&rdquo;)는 이용자의 개인정보를 중요시하며, 「개인정보 보호법」 등
-            관련 법령을 준수합니다. 본 방침은 회사가 제공하는 서비스에 적용됩니다.
-          </p>
-          {sections.map((section) => (
-            <section key={section.heading}>
-              <h2 className="font-semibold text-gray-900 dark:text-dracula-fg mb-2">{section.heading}</h2>
-              <div className="text-gray-600 dark:text-dracula-comment">{section.body}</div>
-            </section>
-          ))}
-        </div>
-      </Card>
-    </PageLayout>
+      }
+      sections={sections}
+    />
   );
 }

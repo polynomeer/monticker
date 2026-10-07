@@ -30,7 +30,7 @@ describe("WatchRuleForm", () => {
     const onSubmit = vi.fn();
     render(<WatchRuleForm onSubmit={onSubmit} submitting={false} />);
 
-    await user.click(screen.getByRole("button", { name: "규칙 만들기" }));
+    await user.click(screen.getByRole("button", { name: "규칙 저장" }));
 
     expect(onSubmit).not.toHaveBeenCalled();
     expect(await screen.findByRole("alert")).toHaveTextContent("종목을 선택해주세요");
@@ -42,14 +42,14 @@ describe("WatchRuleForm", () => {
     render(<WatchRuleForm onSubmit={onSubmit} submitting={false} />);
 
     await pickStock(user);
-    await user.click(screen.getByRole("button", { name: /가격 급등/ }));
+    await user.selectOptions(screen.getByLabelText("감지할 이벤트"), "PRICE_SPIKE");
     await user.click(screen.getByRole("button", { name: "매도" }));
     await user.clear(screen.getByLabelText("수량 (주)"));
     await user.type(screen.getByLabelText("수량 (주)"), "7");
     await user.clear(screen.getByLabelText("중요도 하한"));
     await user.type(screen.getByLabelText("중요도 하한"), "80");
     await user.selectOptions(screen.getByLabelText("쿨다운"), "3600");
-    await user.click(screen.getByRole("button", { name: "규칙 만들기" }));
+    await user.click(screen.getByRole("button", { name: "규칙 저장" }));
 
     expect(onSubmit).toHaveBeenCalledWith({
       stockId: 19,
@@ -70,7 +70,7 @@ describe("WatchRuleForm", () => {
     await pickStock(user);
     await user.clear(screen.getByLabelText("수량 (주)"));
     await user.type(screen.getByLabelText("수량 (주)"), "0");
-    await user.click(screen.getByRole("button", { name: "규칙 만들기" }));
+    await user.click(screen.getByRole("button", { name: "규칙 저장" }));
 
     expect(onSubmit).not.toHaveBeenCalled();
     expect(await screen.findByRole("alert")).toHaveTextContent("1 이상");
@@ -84,7 +84,7 @@ describe("WatchRuleForm", () => {
     await pickStock(user);
     await user.clear(screen.getByLabelText("중요도 하한"));
     await user.type(screen.getByLabelText("중요도 하한"), "150");
-    await user.click(screen.getByRole("button", { name: "규칙 만들기" }));
+    await user.click(screen.getByRole("button", { name: "규칙 저장" }));
 
     expect(onSubmit).not.toHaveBeenCalled();
     expect(await screen.findByRole("alert")).toHaveTextContent("0~100");
