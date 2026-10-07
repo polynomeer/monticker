@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { WatchRuleResponse } from "@monticker/types";
-import { Notice, Panel, PanelRow, TerminalPage, type TopStat } from "@/components/terminal";
+import { Notice, Panel, PanelRow, TerminalPage, dirClass, fmtSigned, type TopStat } from "@/components/terminal";
 import { EmptyNote, LoginRequired, Skeleton } from "@/components/portfolio/PaperStates";
 import { fmtDateTime } from "@/components/portfolio/format";
 import { WatchRuleExecutionList } from "@/components/watchrule/WatchRuleExecutionList";
 import { WatchRuleForm, type WatchRuleFormValue } from "@/components/watchrule/WatchRuleForm";
-import { WatchRuleRow } from "@/components/watchrule/WatchRuleRow";
+import { RULE_PNL_HINT, WatchRuleRow } from "@/components/watchrule/WatchRuleRow";
+import { usePaperPnlByOrigin } from "@/hooks/usePaperTrade";
 import {
   useCreateWatchRule,
   useDeleteWatchRule,
@@ -37,6 +38,13 @@ export default function WatchRulesPage() {
 
   const { data: rules, isLoading: rulesLoading } = useWatchRules(isLoggedIn);
   const { data: executions, isLoading: executionsLoading } = useWatchRuleExecutions(isLoggedIn);
+  // ADR-085 — 규칙 경유 체결의 실현 손익(서버가 체결에 남긴 출처로 집계)
+  const { data: rulePnl } = usePaperPnlByOrigin("WATCH_RULE", isLoggedIn);
+  const pnlByRule = useMemo(() => {
+    const m = new Map<number, number>();
+    rulePnl?.byRef.forEach((r) => { if (r.originRef != null && r.sellCount > 0) m.set(r.originRef, r.realizedPnl); });
+    return m;
+  }, [rulePnl]);
   const create = useCreateWatchRule();
   const update = useUpdateWatchRule();
   const remove = useDeleteWatchRule();
@@ -130,8 +138,12 @@ export default function WatchRulesPage() {
     { label: "활성 규칙", value: rules ? `${rules.filter((r) => r.isActive).length} / ${rules.length}` : "—" },
     { label: "오늘 발동", value: `${todayExec.length}회`, tone: "text-dracula-purple" },
     { label: "차단됨", value: `${todayExec.filter((e) => e.status === "REJECTED").length}회` },
-    // 규칙 경유 체결의 손익 집계 API가 아직 없다
-    { label: "규칙 경유 손익", value: "—", tone: "text-tm-muted" },
+    {
+      label: "규칙 경유 손익",
+      value: !rulePnl || rulePnl.sellCount === 0 ? "—" : fmtSigned(rulePnl.totalRealizedPnl),
+      tone: !rulePnl || rulePnl.sellCount === 0 ? "text-tm-muted" : dirClass(rulePnl.totalRealizedPnl),
+      hint: RULE_PNL_HINT,
+    },
   ];
 
   return (
@@ -176,6 +188,7 @@ export default function WatchRulesPage() {
                       pending={pending}
                       lastFired={f ? fmtDateTime(f.last) : null}
                       todayCount={f?.today ?? 0}
+                      realizedPnl={pnlByRule.get(rule.id) ?? null}
                     />
                   );
                 })}

@@ -2,7 +2,12 @@
 
 import { useState } from "react";
 import type { WatchRuleEventType, WatchRuleResponse } from "@monticker/types";
-import { Btn, IconBtn, Pill, Stat, Toggle } from "@/components/terminal";
+import { Btn, IconBtn, Pill, Stat, Toggle, dirClass, fmtSigned } from "@/components/terminal";
+
+/** ADR-085 — "규칙 경유 손익"의 정의(툴팁). 화면 상단 합계와 규칙 카드가 같은 문장을 쓴다. */
+export const RULE_PNL_HINT =
+  "Watch Rule이 낸 매도 체결의 실현 손익입니다: (매도가 − 그 시점 평균 매수단가) × 수량. " +
+  "규칙이 산 종목을 직접 팔았다면 그 손익은 직접 주문에 잡힙니다. 수수료·세금 전 금액이며 과거 기록입니다.";
 import { cn } from "@/lib/utils";
 
 export const EVENT_LABEL: Record<WatchRuleEventType, string> = {
@@ -46,10 +51,12 @@ interface Props {
   /** 오늘 발동 횟수 — 서버 카운터(rule.todayExecutions)가 우선이다 */
   todayCount?: number;
   highlight?: boolean;
+  /** ADR-085 — 이 규칙이 낸 매도 체결의 실현 손익(원). 아직 매도 체결이 없으면 null → "—" */
+  realizedPnl?: number | null;
 }
 
 /** 시안 WatchRules 규칙 카드 — 감지 → 모의 주문 흐름, 마지막 발동, 켜기 토글. */
-export function WatchRuleRow({ rule, stockLabel, onToggle, onDelete, pending, lastFired, todayCount = 0, highlight }: Props) {
+export function WatchRuleRow({ rule, stockLabel, onToggle, onDelete, pending, lastFired, todayCount = 0, highlight, realizedPnl }: Props) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const title = rule.name ? `${rule.name} · ${stockLabel}` : `${stockLabel} · ${EVENT_LABEL[rule.eventType]}`;
   const today = rule.todayExecutions ?? todayCount;
@@ -77,6 +84,13 @@ export function WatchRuleRow({ rule, stockLabel, onToggle, onDelete, pending, la
       <div className="flex gap-[22px]">
         <Stat label="마지막 발동" value={lastFired ?? "—"} />
         <Stat label="오늘 발동 / 한도" value={`${today} / ${rule.dailyLimit ?? "∞"}`} />
+        <span title={RULE_PNL_HINT}>
+          <Stat
+            label="규칙 경유 손익"
+            value={realizedPnl == null ? "—" : fmtSigned(realizedPnl)}
+            valueClassName={realizedPnl == null ? "text-tm-muted" : dirClass(realizedPnl)}
+          />
+        </span>
       </div>
       <div className="flex items-center gap-1.5">
         <Toggle checked={rule.isActive} label={`${title} 켜기`} disabled={pending} onChange={() => onToggle(rule)} />

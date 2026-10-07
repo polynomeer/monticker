@@ -8,6 +8,9 @@ import { ChgNum, DataTable, Panel, Pill, StockCell, dirClass, fmtNum, fmtSigned,
 import { usePaperConditionalMutations, usePaperConditionalOrders, usePaperHistory, usePaperPortfolio, type Holding, type PaperConditionalOrder, type PaperOpenOrder, type TradeHistory } from "@/hooks/usePaperTrade";
 import { PAPER_COND_STATUS, PAPER_TRIGGER_LABEL } from "./PaperConditionalPanel";
 import { useConditionalOrders } from "@/hooks/useBrokerage";
+import { useLatestEvents } from "@/hooks/useLatestEvents";
+import { eventLabel } from "@/components/home/data";
+import { OriginBadge } from "@/components/wallet/origin";
 import { useAuth } from "@/hooks/useAuth";
 import { authFetch } from "@/services/api";
 import { cn } from "@/lib/utils";
@@ -96,6 +99,8 @@ export default function PositionsPanel({ symbol, stockId, brokerageConnected, ac
 
 function Holdings() {
   const { data, isLoading, isError } = usePaperPortfolio();
+  const holdings = data?.holdings ?? [];
+  const { data: latest } = useLatestEvents(holdings.map((h) => h.stockId));
   const cols: Column<Holding>[] = [
     { key: "name", header: "종목", cell: (h) => <StockCell name={h.name} code={h.symbol} href={`/stocks/${h.symbol}`} /> },
     { key: "qty", header: "수량", align: "right", cell: (h) => <span className="num">{fmtNum(h.quantity)}</span> },
@@ -104,13 +109,28 @@ function Holdings() {
     { key: "val", header: "평가금액", align: "right", cell: (h) => <span className="num">{fmtNum(h.value)}</span> },
     { key: "pnl", header: "평가손익", align: "right", cell: (h) => <span className={cn("num", dirClass(h.pnl))}>{fmtSigned(h.pnl)}</span> },
     { key: "rate", header: "수익률", align: "right", cell: (h) => <ChgNum value={h.pnlRate} /> },
-    // 시안의 "최근 이벤트"·"진입 경로" — 보유 종목별 이벤트·진입 출처 데이터가 아직 없다
-    { key: "ev", header: "최근 이벤트", cell: () => <span className="text-tm-muted">—</span> },
-    { key: "route", header: "진입 경로", cell: () => <span className="text-tm-muted">—</span> },
+    {
+      key: "ev", header: "최근 이벤트",
+      cell: (h) => {
+        const e = latest?.get(h.stockId);
+        if (!e) return <span className="text-tm-muted">—</span>;
+        return (
+          <span className="inline-flex max-w-[220px] items-center gap-1.5" title={`${e.title} · ${new Date(e.eventTime).toLocaleString("ko-KR")}`}>
+            <Pill tone="muted">{eventLabel(e.eventType)}</Pill>
+            <span className="num text-2xs text-tm-muted">{when(e.eventTime)}</span>
+          </span>
+        );
+      },
+    },
+    {
+      // ADR-085 — 가장 최근 매수 체결의 진입 출처(서버가 주문 경로로 기록). 알 수 없으면 "—"
+      key: "route", header: "진입 경로",
+      cell: (h) => <span title="가장 최근 매수 체결의 진입 경로"><OriginBadge origin={h.entryOrigin} originRef={h.entryOriginRef} /></span>,
+    },
   ];
   if (isLoading) return <div className="m-1.5 h-24 animate-pulse rounded-lg bg-tm-inner" />;
   if (isError) return <p className="m-0 py-8 text-center text-13 text-tm-muted">모의투자 포트폴리오를 불러오지 못했습니다.</p>;
-  return <DataTable columns={cols} rows={data?.holdings ?? []} rowKey={(h) => h.stockId} minWidth={900} empty="모의투자 보유 종목이 없습니다." />;
+  return <DataTable columns={cols} rows={holdings} rowKey={(h) => h.stockId} minWidth={900} empty="모의투자 보유 종목이 없습니다." />;
 }
 
 function PaperOpenOrders({ symbol, orders, onCancel, cancelPending }: { symbol: string; orders: PaperOpenOrder[]; onCancel: (id: number) => void; cancelPending: boolean }) {

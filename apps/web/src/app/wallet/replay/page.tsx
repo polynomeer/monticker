@@ -5,10 +5,11 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
 import { getAccessToken } from "@/services/auth";
 import { emotionLabel } from "@/components/wallet/emotions";
+import { OriginBadge, PLANNED_DEFINITION } from "@/components/wallet/origin";
 import { EmptyNote, LoginRequired, Skeleton } from "@/components/portfolio/PaperStates";
 import { fmtTime } from "@/components/portfolio/format";
 import {
-  AutoGrid, Icon, IconBtn, Panel, PanelCol, PanelRow, PreviewTag, Stat, TerminalPage, dirClass, fmtNum, fmtSigned,
+  AutoGrid, Chip, Icon, IconBtn, Panel, PanelCol, PanelRow, Pill, Stat, TerminalPage, dirClass, fmtNum, fmtSigned,
 } from "@/components/terminal";
 import { cn } from "@/lib/utils";
 import CandleReplay from "@/components/wallet/CandleReplay";
@@ -27,6 +28,16 @@ interface ReplayEvent {
   amount?: number | null;
   pnlPct: number | null;
   description?: string | null;
+  /** 체결 거래 id — 입출금 행은 null */
+  tradeId?: number | null;
+  /** 감정 태그(EmotionType)와 메모 */
+  emotion?: string | null;
+  memo?: string | null;
+  /** ADR-085 진입 출처 */
+  origin?: string | null;
+  originRef?: number | null;
+  /** ADR-085 계획된 주문 여부. null = 거래가 아니거나 판정 불가 */
+  planned?: boolean | null;
 }
 
 interface DailyReplay {
@@ -38,6 +49,10 @@ interface DailyReplay {
     /** 백엔드는 ReplayEvent 객체를 준다 */
     bestTrade: ReplayEvent | string | null;
     worstTrade: ReplayEvent | string | null;
+    /** ADR-085 — 계획된 주문 ÷ 판정 가능한 주문 × 100. 판정 가능한 주문이 없으면 null */
+    planAdherencePct?: number | null;
+    unplannedCount?: number;
+    planEvaluatedCount?: number;
   };
 }
 
@@ -162,6 +177,8 @@ export default function ReplayPage() {
   const bestPnl = data && typeof data.summary.bestTrade === "object" && data.summary.bestTrade ? data.summary.bestTrade.pnlPct : null;
   const emoStats = (emotions?.stats ?? []).filter((s) => s.count > 0).sort((a, b) => b.count - a.count);
   const emoTotal = emoStats.reduce((a, s) => a + s.count, 0);
+  const adherence = data?.summary.planAdherencePct ?? null;
+  const evaluated = data?.summary.planEvaluatedCount ?? 0;
 
   return (
     <TerminalPage
@@ -170,7 +187,12 @@ export default function ReplayPage() {
         { label: "선택일", value: selLabel },
         { label: "총 손익", value: pnl == null ? "—" : fmtSigned(pnl), tone: dirClass(pnl) },
         { label: "거래", value: data ? `${data.summary.tradeCount}회` : "—" },
-        { label: "계획 준수율", value: "—", tone: "text-tm-muted" },
+        {
+          label: "계획 준수율",
+          value: adherence == null ? "—" : `${adherence.toFixed(0)}%`,
+          tone: adherence == null ? "text-tm-muted" : undefined,
+          hint: PLANNED_DEFINITION,
+        },
       ]}
     >
       <Panel tabs={["날짜 선택"]} actions={[]} closable={false}>
@@ -233,7 +255,14 @@ export default function ReplayPage() {
                 <Stat big label="총 손익" value={pnl == null ? "—" : fmtSigned(pnl)} valueClassName={dirClass(pnl)} />
                 <Stat big label="거래 횟수" value={data ? `${data.summary.tradeCount}회` : "—"} />
                 <Stat label="최고 거래" value={best ?? "—"} sub={bestPnl != null ? `${bestPnl > 0 ? "+" : ""}${bestPnl.toFixed(2)}%` : undefined} />
-                <Stat label={<span className="inline-flex items-center gap-1">계획 외 주문 <PreviewTag /></span>} value="—" valueClassName="text-tm-muted" />
+                <span title={PLANNED_DEFINITION}>
+                  <Stat
+                    label="계획 외 주문"
+                    value={data && evaluated > 0 ? `${data.summary.unplannedCount ?? 0}건` : "—"}
+                    sub={data && evaluated > 0 ? `판정 ${evaluated}건 중` : undefined}
+                    valueClassName={data && evaluated > 0 ? undefined : "text-tm-muted"}
+                  />
+                </span>
               </AutoGrid>
             )}
           </Panel>
@@ -281,7 +310,13 @@ export default function ReplayPage() {
                       {(ev.stockName || ev.stockSymbol) && <b>{ev.stockName ?? ev.stockSymbol}</b>}
                       <span className={buy ? "text-up" : sell ? "text-down" : "text-tm-soft"}>{TYPE_LABEL[ev.type] ?? ev.type}</span>
                       {q != null && <span className="num text-tm-soft">{fmtNum(q)}주{ev.price != null && ` ${fmtNum(ev.price)}`}</span>}
+                      {ev.tradeId != null && <OriginBadge origin={ev.origin} originRef={ev.originRef} />}
+                      {ev.planned === false && <span title={PLANNED_DEFINITION}><Pill tone="orange">계획 외</Pill></span>}
+                      {ev.emotion && (
+                        <span title={ev.memo ?? undefined}><Chip className="h-[22px]">{emotionLabel(ev.emotion)}</Chip></span>
+                      )}
                     </div>
+                    {ev.memo && <span className="text-xs leading-normal text-tm-muted">“{ev.memo}”</span>}
                     {ev.description && <span className="text-xs leading-normal text-tm-muted">{ev.description}</span>}
                   </div>
                   {ev.pnlPct != null ? (
