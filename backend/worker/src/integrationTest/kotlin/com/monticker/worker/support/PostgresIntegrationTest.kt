@@ -47,7 +47,14 @@ abstract class PostgresIntegrationTest {
             }
             DriverManagerDataSource(postgres.jdbcUrl, postgres.username, postgres.password)
                 .apply { setDriverClassName(postgres.driverClassName) }
-                .also { ds -> Flyway.configure().dataSource(ds).locations("filesystem:$migrationsDir").load().migrate() }
+                .also { ds ->
+                    Flyway.configure()
+                        .dataSource(ds)
+                        .locations("filesystem:$migrationsDir")
+                        .configuration(mapOf("flyway.postgresql.transactional.lock" to "false"))   // V84 CONCURRENTLY — api application.yml과 같은 세션 lock
+                        .load()
+                        .migrate()
+                }
         }
     }
 
