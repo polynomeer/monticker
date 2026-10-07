@@ -356,6 +356,43 @@ log.info("[MockKIS] 토큰 발급: appKey={}", appKey)
 **남은 것**: `ReceiptService.getReceipt`는 소유권을 확인하지만 `require(...)`라서 남의 거래는 400, 없는
 거래는 404로 갈린다 — 내용은 새지 않지만 id 존재 여부가 드러난다. 같은 404 패턴으로 맞출 것.
 
+### H6 — 사용자 소유 리소스 API가 "남의 것"과 "없는 것"을 다르게 응답했다(id 열거) — ✅ 수정(2026-10-07)
+
+**근거**: H5(PR #95, 감정 태그 IDOR)·영수증(PR #96)과 같은 계열. 다음 서비스는 `findById`로 찾은 뒤
+`require(x.userId == userId) { "접근 권한 없음" }` 류로 소유권을 확인해, **남의 리소스는 400(`IllegalArgumentException`),
+없는 리소스는 404**로 갈렸다. 내용은 새지 않지만 응답 차이만으로 다른 사용자의 주문·규칙 id가 실재하는지 순회해 확인할 수 있었다.
+
+| 엔드포인트 | 서비스 | 전(남의 것 / 없는 것) | 후 |
+|---|---|---|---|
+| `DELETE /api/alerts/rules/{id}` | `AlertService.deactivateRule` | 400 "Access denied" / 404 | 둘 다 404 |
+| `DELETE /api/matching/orders/{id}` (모의 지정가 취소) | `MatchingService.cancelOrder` | 400 "본인의 주문만 취소할 수 있습니다" / 404 | 둘 다 404 "주문 없음" |
+| `DELETE /api/brokerage/orders/{id}` | `BrokerageService.cancelOrder` | 400 "접근 권한 없음" / 404 | 둘 다 404 "주문 없음" |
+| `GET /api/brokerage/orders/{id}/sync` | `BrokerageService.syncOrderStatus` | 400 "접근 권한 없음" / 404 | 둘 다 404 "주문 없음" |
+| `DELETE /api/brokerage/conditional-orders/{id}` | `ConditionalOrderService.cancel` | 400 "접근 권한 없음" / 404 | 둘 다 404 "조건부 주문 없음" |
+| `PATCH`·`DELETE /api/watch-rules/{id}` | `WatchRuleService.owned` | 400 "본인의 룰만 수정할 수 있습니다" / 404 | 둘 다 404 |
+| `POST /api/watchlists/groups/{id}/items`, `DELETE /api/watchlists/items/{id}` | `WatchlistService.addItem/removeItem` | 400 "Access denied" / 404 | 둘 다 404 |
+| `GET /api/settlement/paper/trade/{tradeId}` | `PaperSettlementService.getByTradeId` | **소유권 검사 없음 — 남의 정산 내역 200(IDOR)** / 404 | 남의 것도 404 |
+| (방어 심층) 결제 confirm | `SubscriptionService.activateConfirmedSubscription` | 400 "다른 사용자의 주문입니다." / 400 "준비되지 않은 주문입니다" | 같은 400·같은 메시지 |
+
+`PaperSettlementController`의 거래별 정산 조회는 단순 열거가 아니라 **로그인한 누구나 다른 사용자의 체결가·수량·수수료·세금을
+읽을 수 있던 IDOR**였다. 결제 confirm은 컨트롤러가 `findPreparedPayment(userId, ...)`로 먼저 걸러 실제로는 도달하지 않지만
+서비스 단독으로도 같은 응답이 되게 맞췄다.
+
+**조치**: 조회와 소유권 확인을 한 번에 — `findById(...).orElse(null)?.takeIf { it.userId == userId } ?: throw
+NoSuchElementException(<없는 경우와 같은 메시지>)`. 행 락 조회(`findWithLockById`)도 같은 형태다. "이미 취소됨"·"취소 불가 상태"
+같은 진짜 비즈니스 규칙 오류는 소유권이 확인된 **뒤에만** 던진다. 각 서비스 테스트가 남의 id와 없는 id의 예외 타입·메시지 동일성,
+그리고 부수효과(증권사 취소 호출·삭제·저장) 미발생을 고정한다. 이미 사용자 범위 조회를 쓰던 곳(룰셋·포워드 테스트
+`findByIdAndUserId`, 저장 스크린·모의 조건부 주문·AI 주문 제안·알림 읽음 처리의 `WHERE id = ? AND user_id = ?`)은 문제없었다.
+
+**남은 것 / 의도적으로 두는 것**:
+- `StockCommentService.delete` — 남의 댓글 삭제는 400 "본인 댓글만 삭제할 수 있습니다". 댓글은 종목 화면에 공개되는 리소스라
+  존재 여부가 비밀이 아니다. 그대로 둔다.
+- `MarketSignalQueryService.strategyHistory` — 구독하지 않은 마켓 전략의 신호 이력은 403. 마켓 등록 전략은 목록 API로 공개돼
+  있어 존재 여부가 비밀이 아니고, 403은 "구독 필요"라는 권한 안내다. 그대로 둔다.
+- `EmotionTagService`는 위 H5(PR #95)에서 고쳤다. `ReceiptService`(H5 "남은 것")는 PR #96에서 고친다.
+- 위 패턴(`require(x.userId == userId)`)을 새로 쓰지 않도록 막는 정적 검사는 아직 없다. 새 소유 리소스 엔드포인트는
+  `findByIdAndUserId`/`WHERE ... AND user_id = ?` 또는 위 `takeIf` 형태로 쓴다.
+
 ---
 
 ## 4. Medium
@@ -393,6 +430,7 @@ log.info("[MockKIS] 토큰 발급: appKey={}", appKey)
   다루는 서비스 메서드는 예외 없이 `require(order.userId == userId)` 류의 소유권 체크를 한다
   (`BrokerageService`, `WatchlistService`, `ConditionalOrderService` 등).
   _(2026-10-05 정정: "예외 없이"는 틀렸다 — `EmotionTagService`가 빠져 있었다. §3 H5 참고.)_
+  _(2026-10-07 보충: 체크는 있었지만 남의 리소스를 400으로 응답해 id 존재 여부가 드러났다 — §3 H6 참고.)_
 - **JWT 서명 검증 자체는 안전**: `Jwts.parser().verifyWith(key).build().parseSignedClaims(...)`
   구조상 `alg: none`이나 서명 없는 토큰을 원천적으로 거부한다. 문제는 키 값이지 검증 로직이 아니다.
 - **Refresh token은 서버 사이드에서 해시 저장 + 회전 + 폐기**: SHA-256 해시로만 DB에 저장,
@@ -461,6 +499,7 @@ log.info("[MockKIS] 토큰 발급: appKey={}", appKey)
 | P1-3 | H4: `resend-verification` 응답을 `forgot-password`와 동일한 제네릭 패턴으로 |
 | P1-4 | M1: LLM 프롬프트에 삽입되는 외부 텍스트에 구분자/이스케이프 적용 |
 | P1-5 | M3: Redis `requirepass` 설정, ES 인증 활성화(또는 실제 운영 토폴로지가 이미 managed/인증된 서비스인지 확인) |
+| P1-6 | H6: 소유 리소스의 "남의 것" 응답을 "없는 것"과 같은 404로 통일 — ✅ 수정(2026-10-07) |
 
 ### P2 — 여유 있을 때
 
