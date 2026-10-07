@@ -46,10 +46,10 @@ function ruleValue(r: RuleResult) {
   }
 }
 
-/** 시안의 감정 태그 4개 → 백엔드 EmotionType. "계획대로"는 대응 값이 없어 OTHER + 메모로 남긴다. */
+/** 시안의 감정 태그 4개 → 백엔드 EmotionType(ADR-085에서 PLANNED 추가 — 예전엔 OTHER + 메모 "계획대로"였다). */
 const EMOTION_TAGS = [
   { key: "확신", emotion: "CONFIDENT", memo: null },
-  { key: "계획대로", emotion: "OTHER", memo: "계획대로" },
+  { key: "계획대로", emotion: "PLANNED", memo: null },
   { key: "FOMO", emotion: "FOMO", memo: null },
   { key: "불안", emotion: "ANXIOUS", memo: null },
 ] as const;

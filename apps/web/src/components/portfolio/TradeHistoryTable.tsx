@@ -1,31 +1,20 @@
 "use client";
 
-import Link from "next/link";
 import type { TradeHistory } from "@/hooks/usePaperTrade";
-import { Chip, DataTable, Num, Pill, fmtNum, type Column } from "@/components/terminal";
+import { Chip, DataTable, Num, fmtNum, type Column } from "@/components/terminal";
 import { emotionLabel } from "@/components/wallet/emotions";
-import { useTradeEmotions } from "@/components/wallet/useTradeEmotions";
+import { OriginBadge } from "@/components/wallet/origin";
 import { fmtDateTime } from "./format";
 
-/** 거래 경로 — 서버가 체결을 만든 주문의 멱등 키로 판정한다(직접·Watch Rule·조건부). */
+/** 거래 경로 — 서버가 주문 제출 경로로 정해 체결에 남긴 진입 출처(ADR-085). */
 function RouteCell({ h }: { h: TradeHistory }) {
-  const limit = h.orderType === "LIMIT" ? " · 지정가" : "";
-  if (h.source === "WATCH_RULE") {
-    return (
-      <Link href="/watch-rules" title={h.watchRuleId ? `Watch Rule #${h.watchRuleId}` : undefined} className="no-underline">
-        <Pill tone="purple">Watch Rule{h.watchRuleId ? ` #${h.watchRuleId}` : ""}</Pill>
-      </Link>
-    );
-  }
-  if (h.source === "CONDITIONAL") return <Pill tone="cyan">조건부{limit}</Pill>;
-  if (h.source === "MANUAL") return <span className="text-tm-soft">직접{limit}</span>;
-  return <span className="text-tm-muted">—</span>;
+  const limit = h.orderType === "LIMIT" && (h.source === "MANUAL" || h.source === "CONDITIONAL") ? " · 지정가" : "";
+  return <OriginBadge origin={h.source} originRef={h.originRef ?? h.watchRuleId ?? h.conditionalOrderId} suffix={limit} />;
 }
 
-/** 시안 Portfolio "거래 내역" 표. 감정은 거래별 태그 API로 채운다. */
+/** 시안 Portfolio "거래 내역" 표. 감정 태그는 내역 응답에 함께 온다(예전엔 거래마다 따로 조회했다). */
 export function TradeHistoryTable({ history, limit = 20 }: { history: TradeHistory[]; limit?: number }) {
   const rows = history.slice(0, limit);
-  const emotions = useTradeEmotions(rows.map((r) => r.id));
   const cols: Column<TradeHistory>[] = [
     { key: "time", header: "시각", cell: (h) => <Num className="text-tm-muted">{fmtDateTime(h.tradedAt)}</Num> },
     { key: "name", header: "종목", cell: (h) => h.name ?? h.symbol },
@@ -37,8 +26,8 @@ export function TradeHistoryTable({ history, limit = 20 }: { history: TradeHisto
       key: "emotion",
       header: "감정",
       cell: (h) => {
-        const l = emotionLabel(emotions.get(h.id));
-        return l ? <Chip className="h-[22px]">{l}</Chip> : <span className="text-tm-muted">—</span>;
+        const l = emotionLabel(h.emotion);
+        return l ? <span title={h.emotionMemo ?? undefined}><Chip className="h-[22px]">{l}</Chip></span> : <span className="text-tm-muted">—</span>;
       },
     },
     { key: "route", header: "경로", cell: (h) => <RouteCell h={h} /> },

@@ -47,6 +47,16 @@ class EmotionTagServiceTest {
         assertThat(result.memo).isEqualTo("급등 놓칠까봐")
     }
 
+    // ADR-085 — "계획대로"·"조급함"이 OTHER + 메모가 아니라 고유 값으로 저장된다
+    @Test
+    fun `saveTag accepts the PLANNED and IMPATIENT emotions`() {
+        every { emotionTagRepo.findByPaperTradeId(1L) } returns null
+        every { emotionTagRepo.save(any()) } answers { firstArg() }
+
+        assertThat(service.saveTag(userId = 1L, tradeId = 1L, emotion = "PLANNED", memo = null).emotion).isEqualTo("PLANNED")
+        assertThat(service.saveTag(userId = 1L, tradeId = 1L, emotion = "impatient", memo = null).emotion).isEqualTo("IMPATIENT")
+    }
+
     @Test
     fun `saveTag is case-insensitive for the emotion value`() {
         every { emotionTagRepo.findByPaperTradeId(1L) } returns null

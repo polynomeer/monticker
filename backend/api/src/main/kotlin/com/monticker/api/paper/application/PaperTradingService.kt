@@ -2,6 +2,7 @@ package com.monticker.api.paper.application
 
 import com.monticker.api.paper.domain.PaperAccount
 import com.monticker.api.paper.domain.PaperTrade
+import com.monticker.api.matching.submit.OrderOrigin
 import com.monticker.api.matching.submit.OrderSubmitter
 import com.monticker.api.paper.events.PaperAccountResetEvent
 import com.monticker.api.paper.events.PaperTradeExecutedEvent
@@ -45,7 +46,7 @@ class PaperTradingService(
     private fun executeMarket(userId: Long, stockId: Long, side: String, quantity: Int): Pair<TradeResultResponse, Long> {
         require(quantity > 0) { "수량은 1 이상이어야 합니다" }
         getOrCreateAccount(userId)
-        val result = orderSubmitter.submitMarket(userId, stockId, side, quantity)
+        val result = orderSubmitter.submitMarket(userId, stockId, side, quantity, OrderOrigin.MANUAL)   // ADR-085 — 화면 주문
         val trade = tradeRepo.findByFillId(result.fillId)
             ?: throw IllegalStateException("체결 기록이 없습니다: fillId=${result.fillId}")   // 리스너가 같은 트랜잭션에 만든다
         // 사가가 cash를 JDBC로 바꿨다 — 같은 트랜잭션의 JPA 1차 캐시 엔티티는 갱신 전 값이라 JDBC로 읽는다
@@ -100,7 +101,7 @@ class PaperTradingService(
                 require(limitPrice != null && limitPrice > BigDecimal.ZERO) { "지정가 주문에는 0보다 큰 지정가가 필요합니다" }
                 require(limitPrice.stripTrailingZeros().scale() <= 4) { "지정가는 소수점 4자리까지입니다" }
                 getOrCreateAccount(userId)
-                val r = orderSubmitter.submitLimit(userId, req.stockId, req.side, req.quantity, limitPrice)
+                val r = orderSubmitter.submitLimit(userId, req.stockId, req.side, req.quantity, limitPrice, OrderOrigin.MANUAL)
                 val tradeId = r.fill?.let { f ->
                     tradeRepo.findByFillId(f.fillId)?.id ?: throw IllegalStateException("체결 기록이 없습니다: fillId=${f.fillId}")
                 }
@@ -170,28 +171,26 @@ data class PaperOrderResponse(
 )
 
 data class PortfolioResponse(val cash: BigDecimal, val totalValue: BigDecimal, val totalPnl: BigDecimal, val totalPnlRate: Double, val holdings: List<HoldingResponse>)
-data class HoldingResponse(val stockId: Long, val symbol: String, val name: String, val quantity: Int, val avgPrice: BigDecimal, val currentPrice: BigDecimal, val value: BigDecimal, val pnl: BigDecimal, val pnlRate: Double)
+data class HoldingResponse(
+    val stockId: Long, val symbol: String, val name: String, val quantity: Int, val avgPrice: BigDecimal,
+    val currentPrice: BigDecimal, val value: BigDecimal, val pnl: BigDecimal, val pnlRate: Double,
+    /** ADR-085 — 가장 최근 매수 체결의 진입 출처(MANUAL · WATCH_RULE · CONDITIONAL · STRATEGY). 판정 불가면 null. */
+    val entryOrigin: String? = null,
+    /** ADR-085 — 위 출처의 ref(규칙 id 등). MANUAL이면 null. */
+    val entryOriginRef: Long? = null,
+)
 data class TradeResultResponse(val side: String, val stockId: Long, val quantity: Int, val price: BigDecimal, val amount: BigDecimal, val remainingCash: BigDecimal, val tradeId: Long = 0)
 data class TradeHistoryResponse(
     val id: Long, val side: String, val stockId: Long, val symbol: String, val name: String,
     val quantity: Int, val price: BigDecimal, val amount: BigDecimal, val tradedAt: java.time.Instant,
-    /** 경로: MANUAL(직접) · WATCH_RULE · CONDITIONAL */
-    val source: String = "MANUAL",
+    /** ADR-085 진입 출처: MANUAL(직접) · WATCH_RULE · CONDITIONAL · STRATEGY. 판정할 수 없던 과거 거래는 null. */
+    val source: String? = null,
+    /** 출처 ref — WATCH_RULE이면 규칙 id, CONDITIONAL이면 조건부 주문 id, STRATEGY면 룰셋 id. */
+    val originRef: Long? = null,
     val watchRuleId: Long? = null,
     val conditionalOrderId: Long? = null,
     val orderType: String = "MARKET",
+    /** 감정 태그(EmotionType 이름)와 메모 — 거래마다 따로 조회하지 않도록 내역에 싣는다. 없으면 null. */
+    val emotion: String? = null,
+    val emotionMemo: String? = null,
 )
-
-/** 매칭 주문 멱등 키 → 거래 경로. 키 형식은 WatchRuleExecutor.idempotencyKey·PaperConditionalOrderFirer와 같다. */
-data class TradeRoute(val source: String, val watchRuleId: Long? = null, val conditionalOrderId: Long? = null) {
-    companion object {
-        fun of(idempotencyKey: String?): TradeRoute {
-            val parts = idempotencyKey?.split(':') ?: return TradeRoute("MANUAL")
-            return when (parts.firstOrNull()) {
-                "WR" -> TradeRoute("WATCH_RULE", watchRuleId = parts.getOrNull(1)?.toLongOrNull())
-                "PCO" -> TradeRoute("CONDITIONAL", conditionalOrderId = parts.getOrNull(1)?.toLongOrNull())
-                else -> TradeRoute("MANUAL")
-            }
-        }
-    }
-}

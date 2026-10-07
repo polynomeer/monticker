@@ -124,6 +124,8 @@ class LimitOrderFiller(
             orderId = order.id, userId = order.userId, stockId = order.stockId, fillId = fill.id,
             side = order.side.name, quantity = qty, fillPrice = current.amount, amount = fillAmount.amount,
             filledAt = fill.filledAt,
+            // ADR-085 — 제출 때 주문 행에 남긴 출처. V81 이전에 접수된 미체결 지정가는 V82가 백필했다.
+            origin = order.origin?.name, originRef = order.originRef,
         ))
         log.info("[LimitSweep] filled orderId={} {} {}x{} (limit {})", order.id, order.side, qty, current, limit)
         return LimitFillOutcome.FILLED

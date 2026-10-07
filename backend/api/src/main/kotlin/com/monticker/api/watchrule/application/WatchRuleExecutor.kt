@@ -1,6 +1,7 @@
 package com.monticker.api.watchrule.application
 
 import com.monticker.api.common.aop.RiskLimitException
+import com.monticker.api.matching.submit.OrderOrigin
 import com.monticker.api.matching.submit.OrderSubmitter
 import com.monticker.api.quant.application.StrategySignalAccess
 import com.monticker.api.quant.events.QuantSignalEmittedEvent
@@ -147,6 +148,7 @@ class WatchRuleExecutor(
                 stockId = rule.stockId,
                 side = rule.side.name,
                 quantity = rule.quantity,
+                origin = OrderOrigin.watchRule(rule.id),   // ADR-085
                 idempotencyKey = trigger.key(rule.id),
             )
             filled = true

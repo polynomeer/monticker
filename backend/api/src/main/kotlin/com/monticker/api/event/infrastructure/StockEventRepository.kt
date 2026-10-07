@@ -36,4 +36,23 @@ interface StockEventRepository : JpaRepository<StockEvent, Long> {
     // the requested `limit`). Plain findByOrderByEventTimeDesc lets Pageable fully
     // control both size and offset.
     fun findByOrderByEventTimeDesc(pageable: Pageable): List<StockEvent>
+
+    /**
+     * 종목별 가장 최근 이벤트 1건씩 — 종목마다 idx_stock_events_stock_time을 한 번 타는 LATERAL(종목 수만큼 인덱스 탐색 1번).
+     * 이벤트가 없는 종목은 결과에 없다.
+     */
+    @Query(
+        value = """
+            SELECT e.* FROM stocks s
+            CROSS JOIN LATERAL (
+                SELECT se.* FROM stock_events se
+                WHERE se.stock_id = s.id
+                ORDER BY se.event_time DESC
+                LIMIT 1
+            ) e
+            WHERE s.id IN (:stockIds)
+        """,
+        nativeQuery = true,
+    )
+    fun findLatestPerStock(stockIds: Collection<Long>): List<StockEvent>
 }

@@ -2,6 +2,7 @@
 
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
+import type { EntryOrigin } from "@/components/wallet/origin";
 
 /**
  * ADR-043 — 원장 커서 페이징.
@@ -17,6 +18,9 @@ export interface LedgerEvent {
   stockId: number | null;
   description: string | null;
   createdAt: string;
+  /** ADR-085 — 체결 원장의 주문 진입 출처. 거래가 아니거나 판정할 수 없으면 null */
+  origin?: EntryOrigin | null;
+  originRef?: number | null;
 }
 
 export interface LedgerPage {

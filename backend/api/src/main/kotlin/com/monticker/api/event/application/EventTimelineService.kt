@@ -46,6 +46,10 @@ class EventTimelineService(
             org.springframework.data.domain.PageRequest.of(0, limit)
         )
 
+    /** 종목별 최신 이벤트(보유 종목 표의 "최근 이벤트") — 종목 수와 관계없이 쿼리 1번. */
+    fun getLatestPerStock(stockIds: Collection<Long>): List<StockEvent> =
+        if (stockIds.isEmpty()) emptyList() else eventRepository.findLatestPerStock(stockIds.distinct())
+
     fun getById(id: Long): StockEvent =
         eventRepository.findById(id).orElseThrow { NoSuchElementException("이벤트를 찾을 수 없습니다: $id") }
 }

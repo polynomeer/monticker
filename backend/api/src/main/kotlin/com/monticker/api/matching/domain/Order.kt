@@ -2,6 +2,7 @@ package com.monticker.api.matching.domain
 
 import com.monticker.api.common.domain.Price
 import com.monticker.api.common.domain.PriceConverter
+import com.monticker.api.matching.submit.OrderOriginType
 import jakarta.persistence.*
 import java.time.Instant
 
@@ -57,6 +58,15 @@ class Order(
      */
     @Column(name = "idempotency_key", length = 100)
     val idempotencyKey: String? = null,
+
+    /** ADR-085 — 진입 출처. 사가가 제출 경로에서 받은 값을 그대로 저장한다. V81 이전 주문은 V82 백필, 판정 불가면 null. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "origin", length = 20)
+    val origin: OrderOriginType? = null,
+
+    /** ADR-085 — 출처 ref(watch_rules.id · paper_conditional_orders.id · 룰셋 id). MANUAL이면 null. */
+    @Column(name = "origin_ref")
+    val originRef: Long? = null,
 
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant = Instant.now(),

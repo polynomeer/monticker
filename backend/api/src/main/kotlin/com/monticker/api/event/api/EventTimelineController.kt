@@ -85,6 +85,25 @@ class EventTimelineController(
         return ResponseEntity.ok(summary)
     }
 
+    /**
+     * 종목별 가장 최근 이벤트 1건씩(보유 종목 표 "최근 이벤트"). 종목마다 타임라인을 부르던 N+1 대신 한 번에.
+     * 공개 시장 데이터라 비로그인도 읽을 수 있다(SecurityConfig의 GET /api/events 하위 permitAll). 한 번에 최대 [LATEST_MAX_STOCKS]종목.
+     *
+     * GET /api/events/latest?stockIds=1,2,3
+     */
+    @GetMapping("/api/events/latest")
+    fun getLatestPerStock(
+        @RequestParam stockIds: List<Long>,
+    ): ResponseEntity<List<StockEventResponse>> {
+        require(stockIds.size <= LATEST_MAX_STOCKS) { "stockIds는 최대 ${LATEST_MAX_STOCKS}개입니다" }
+        val events = eventTimelineService.getLatestPerStock(stockIds)
+        return ResponseEntity.ok(events.map { StockEventResponse.from(it) })
+    }
+
+    companion object {
+        const val LATEST_MAX_STOCKS = 100
+    }
+
     @GetMapping("/api/events/recent")
     fun getRecentEvents(
         @RequestParam(defaultValue = "10") limit: Int,

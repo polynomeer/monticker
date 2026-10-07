@@ -99,7 +99,8 @@ export function ReceiptCard({ receipt, onSaved, onSkip }: { receipt: Receipt; on
       });
       if (!r.ok) throw new Error("감정 태그 저장 실패");
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["wallet"] }); onSaved?.(); },
+    // 거래 내역(["paper","history"])도 감정 태그를 함께 싣는다 — 같이 갱신한다
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["wallet"] }); qc.invalidateQueries({ queryKey: ["paper", "history"] }); onSaved?.(); },
     // 기존 동작 유지 — 저장 실패여도 영수증 흐름은 닫는다
     onError: () => onSaved?.(),
   });

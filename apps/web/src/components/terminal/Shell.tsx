@@ -91,6 +91,8 @@ export interface TopStat {
   value: ReactNode;
   /** text-* 클래스(예: "text-up") */
   tone?: string;
+  /** 지표 정의 — 마우스를 올리면 보인다(title) */
+  hint?: string;
 }
 
 export function TitleBlock({ title, crumb }: { title: ReactNode; crumb?: ReactNode }) {
@@ -187,7 +189,7 @@ function TopBar({ left, stats, account }: { left: ReactNode; stats: TopStat[]; a
       {left}
       <div className="flex min-w-0 flex-[1_1_300px] flex-wrap gap-x-[26px] gap-y-2">
         {stats.map((s) => (
-          <div key={s.label} className="flex min-w-0 flex-col gap-0.5">
+          <div key={s.label} className="flex min-w-0 flex-col gap-0.5" title={s.hint}>
             <span className="whitespace-nowrap text-[0.65625rem] tracking-[0.04em] text-tm-muted">{s.label}</span>
             <span className={cn("num whitespace-nowrap text-13", s.tone ?? "text-dracula-fg")}>{s.value}</span>
           </div>

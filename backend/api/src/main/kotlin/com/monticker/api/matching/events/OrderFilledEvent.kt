@@ -24,4 +24,8 @@ data class OrderFilledEvent(
     val fillPrice: BigDecimal,
     val amount:    BigDecimal,
     val filledAt:  Instant = Instant.now(),
+    /** ADR-085 — 주문의 진입 출처(OrderOriginType 이름). 이 필드 추가 전에 직렬화된 아웃박스 이벤트는 null. */
+    val origin:    String? = null,
+    /** ADR-085 — 출처 ref(watch rule id·조건부 주문 id·룰셋 id). MANUAL이면 null. */
+    val originRef: Long? = null,
 )

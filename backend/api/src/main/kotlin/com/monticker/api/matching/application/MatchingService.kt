@@ -17,6 +17,7 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.jdbc.core.JdbcTemplate
 import com.monticker.api.matching.submit.LimitOrderResult
 import com.monticker.api.matching.submit.MarketOrderResult
+import com.monticker.api.matching.submit.OrderOrigin
 import com.monticker.api.matching.submit.OrderSubmitter
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -31,6 +32,11 @@ data class SubmitOrderRequest(
     val limitPrice: BigDecimal? = null,
     /** ADR-051 — 서버 내부 발행 주문의 멱등 키. 컨트롤러 경로는 항상 null이다(사용자 입력으로 받지 않는다). */
     val idempotencyKey: String? = null,
+    /**
+     * ADR-085 — 진입 출처. 제출 경로가 정한다. 기본값을 두지 않는다 — 새 서버 경로가 출처를 빠뜨리면 컴파일이 깨지게.
+     * 사용자 요청 본문으로 이 타입을 직접 바인딩하지 않는다([com.monticker.api.matching.api.MatchingOrderRequest]).
+     */
+    val origin: OrderOrigin,
 )
 
 data class FillDto(
@@ -87,6 +93,7 @@ class MatchingService(
         stockId: Long,
         side: String,
         quantity: Int,
+        origin: OrderOrigin,
         idempotencyKey: String?,
     ): MarketOrderResult {
         // ADR-051 — 멱등 재제출. 아웃박스 재전달·컨슈머 리밸런싱으로 같은 이벤트가 두 번 와도 체결은 한 번이다.
@@ -97,6 +104,7 @@ class MatchingService(
         }
         val res = submitOrder(userId, SubmitOrderRequest(
             stockId = stockId, side = side, orderType = "MARKET", quantity = quantity, idempotencyKey = idempotencyKey,
+            origin = origin,
         ))
         val fill = res.fills.singleOrNull() ?: throw IllegalStateException("시장가 주문이 체결되지 않았습니다: orderId=${res.order.id}")
         return MarketOrderResult(
@@ -116,10 +124,12 @@ class MatchingService(
         side: String,
         quantity: Int,
         limitPrice: BigDecimal,
+        origin: OrderOrigin,
     ): LimitOrderResult {
         require(limitPrice > BigDecimal.ZERO) { "지정가는 0보다 커야 합니다" }
         val res = submitOrder(userId, SubmitOrderRequest(
             stockId = stockId, side = side, orderType = "LIMIT", quantity = quantity, limitPrice = limitPrice,
+            origin = origin,
         ))
         val fill = res.fills.singleOrNull()?.let {
             MarketOrderResult(

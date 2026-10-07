@@ -5,6 +5,7 @@ import { useWalletLedger, type LedgerEvent } from "@/hooks/useWalletLedger";
 import { fmtNum } from "@/components/terminal";
 import { Skeleton } from "@/components/portfolio/PaperStates";
 import { fmtMonthDay, fmtTime } from "@/components/portfolio/format";
+import { originLabel } from "@/components/wallet/origin";
 
 export type LedgerFilter = "all" | "fill" | "settle" | "cash";
 
@@ -45,6 +46,8 @@ function LedgerRow({ ev }: { ev: LedgerEvent }) {
         </span>
         <span className="text-xs text-tm-muted">
           {meta.flow ? <span className={meta.color}>{meta.flow}</span> : <span>{ev.paperTradeId ? `거래 #${ev.paperTradeId}` : "원장 기록"}</span>}
+          {/* ADR-085 — 체결을 만든 주문의 출처. 체결 행인데 출처를 모르면 "—" */}
+          {ev.paperTradeId != null && <span> · 출처 {originLabel(ev.origin, ev.originRef) ?? "—"}</span>}
           {ev.balanceAfter != null && <span className="num"> · 잔고 {fmtNum(ev.balanceAfter)}</span>}
         </span>
       </div>

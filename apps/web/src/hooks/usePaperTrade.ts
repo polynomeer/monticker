@@ -2,11 +2,15 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
+import type { EntryOrigin } from "@/components/wallet/origin";
 
 export interface Holding {
   stockId: number; symbol: string; name: string;
   quantity: number; avgPrice: number; currentPrice: number;
   value: number; pnl: number; pnlRate: number;
+  /** ADR-085 — 가장 최근 매수 체결의 진입 출처. 판정할 수 없으면 null */
+  entryOrigin?: EntryOrigin | null;
+  entryOriginRef?: number | null;
 }
 
 export interface Portfolio {
@@ -17,11 +21,15 @@ export interface Portfolio {
 export interface TradeHistory {
   id: number; side: string; stockId: number; symbol: string; name: string;
   quantity: number; price: number; amount: number; tradedAt: string;
-  /** 경로 — 직접 주문·Watch Rule(ADR-051)·조건부 주문(ADR-075) */
-  source?: "MANUAL" | "WATCH_RULE" | "CONDITIONAL";
+  /** 진입 출처(ADR-085) — 직접·Watch Rule·조건부·전략. 판정할 수 없던 과거 거래는 null */
+  source?: EntryOrigin | null;
+  originRef?: number | null;
   watchRuleId?: number | null;
   conditionalOrderId?: number | null;
   orderType?: "MARKET" | "LIMIT";
+  /** 감정 태그(EmotionType)와 메모 — 내역 응답에 함께 온다(거래별 조회 없음) */
+  emotion?: string | null;
+  emotionMemo?: string | null;
 }
 
 async function fetchPortfolio(): Promise<Portfolio> {
@@ -233,4 +241,27 @@ export function sellableQuantity(owned: number, openOrders: PaperOpenOrder[], st
     .filter((o) => o.stockId === stockId && o.side === "SELL")
     .reduce((s, o) => s + (o.quantity - o.filledQty), 0);
   return Math.max(0, owned - pendingSell);
+}
+
+/** ADR-085 — 출처별 실현 손익(`GET /api/paper/pnl/by-origin`). 매도 체결의 출처로 귀속, 이동평균 단가 기준. */
+export interface OriginRefPnl { originRef: number | null; realizedPnl: number; sellCount: number; tradeCount: number; }
+export interface OriginPnl {
+  origin: EntryOrigin;
+  totalRealizedPnl: number;
+  sellCount: number;
+  tradeCount: number;
+  byRef: OriginRefPnl[];
+}
+
+export function usePaperPnlByOrigin(origin: EntryOrigin, enabled = true) {
+  return useQuery<OriginPnl>({
+    queryKey: ["paper", "pnl-by-origin", origin],
+    queryFn: async () => {
+      const r = await authFetch(`/api/paper/pnl/by-origin?origin=${origin}`);
+      if (!r.ok) throw new Error("출처별 손익 조회 실패");
+      return r.json();
+    },
+    enabled,
+    staleTime: 30_000,
+  });
 }

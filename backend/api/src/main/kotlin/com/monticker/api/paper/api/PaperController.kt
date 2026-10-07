@@ -4,6 +4,8 @@ import com.monticker.api.common.aop.RateLimited
 import com.monticker.api.paper.application.PaperOrderRequest
 import com.monticker.api.paper.application.PaperOrderResponse
 import com.monticker.api.paper.application.PaperPortfolioQueryService
+import com.monticker.api.paper.application.PaperRealizedPnlService
+import com.monticker.api.matching.submit.OrderOriginType
 import com.monticker.api.paper.application.PaperTradingService
 import com.monticker.api.paper.application.TradeResultResponse
 import org.springframework.http.ResponseEntity
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.*
 class PaperController(
     private val tradingService: PaperTradingService,
     private val portfolioQueryService: PaperPortfolioQueryService,
+    private val realizedPnlService: PaperRealizedPnlService,
 ) {
     private fun userId(): Long =
         SecurityContextHolder.getContext().authentication.principal as Long
@@ -52,6 +55,19 @@ class PaperController(
         tradingService.reset(userId())
         return ResponseEntity.noContent().build()
     }
+
+    /**
+     * ADR-085 — 출처별 실현 손익(예: `?origin=WATCH_RULE` → 규칙 경유 손익, 규칙별 내역 포함).
+     * 매도 체결의 출처로 귀속하고 평균단가는 이동평균법이다([PaperRealizedPnlService]).
+     */
+    @GetMapping("/pnl/by-origin")
+    fun getPnlByOrigin(@RequestParam origin: String) = ResponseEntity.ok(
+        realizedPnlService.byOrigin(
+            userId(),
+            runCatching { OrderOriginType.valueOf(origin.uppercase()) }
+                .getOrElse { throw IllegalArgumentException("origin은 ${OrderOriginType.entries.joinToString()} 중 하나여야 합니다") },
+        )
+    )
 
     @GetMapping("/risk")
     fun getRiskMetrics() = ResponseEntity.ok(portfolioQueryService.getRiskMetrics(userId()))

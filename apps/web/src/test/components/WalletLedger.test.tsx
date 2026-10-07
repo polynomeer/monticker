@@ -62,6 +62,18 @@ describe("WalletLedger", () => {
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
   });
 
+  // ADR-085 — 체결 행은 서버가 붙인 주문 출처를 보여 주고, 모르면 지어내지 않고 "—"
+  it("체결 행에 주문 출처를 표시하고, 출처를 모르면 —로 둔다", async () => {
+    mockFetch.mockImplementationOnce(() => page([
+      { ...ev(2), paperTradeId: 12, stockId: 1, origin: "WATCH_RULE", originRef: 3 },
+      { ...ev(1), paperTradeId: 11, stockId: 1, origin: null, originRef: null },
+    ], null));
+
+    renderLedger();
+    expect(await screen.findByText(/출처 Watch Rule #3/)).toBeInTheDocument();
+    expect(screen.getByText(/출처 —/)).toBeInTheDocument();
+  });
+
   it("원장이 비어 있으면 안내 문구를 보여 준다", async () => {
     mockFetch.mockImplementationOnce(() => page([], null));
 

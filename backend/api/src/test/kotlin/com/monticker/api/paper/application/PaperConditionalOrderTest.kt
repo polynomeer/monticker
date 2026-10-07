@@ -1,5 +1,6 @@
 package com.monticker.api.paper.application
 
+import com.monticker.api.matching.submit.OrderOrigin
 import com.monticker.api.common.aop.RiskLimitException
 import com.monticker.api.matching.submit.MarketOrderResult
 import com.monticker.api.matching.submit.OrderSubmitter
@@ -105,7 +106,7 @@ class PaperConditionalOrderTest {
     fun `does not fire on a stale candle`() {
         stubRow(); stubPrice("800", at = Instant.now().minus(com.monticker.api.common.domain.CandleFreshness.MAX_AGE).minusSeconds(60))
         assertThat(firer.fire(9L)).isEqualTo(PaperConditionalOutcome.NOT_TRIGGERED)
-        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -118,7 +119,7 @@ class PaperConditionalOrderTest {
     fun `fires a triggered stop-loss once with an idempotency key and cancels the OCO sibling`() {
         val group = UUID.randomUUID()
         stubRow(oco = group); stubPrice("880")
-        every { submitter.submitMarket(1L, 5L, "SELL", 4, "PCO:9") } returns MarketOrderResult(
+        every { submitter.submitMarket(1L, 5L, "SELL", 4, OrderOrigin.conditional(9L), "PCO:9") } returns MarketOrderResult(
             orderId = 70L, fillId = 71L, stockId = 5L, side = "SELL", quantity = 4,
             fillPrice = BigDecimal("880"), amount = BigDecimal("3520"), filledAt = Instant.now(),
         )
@@ -133,14 +134,14 @@ class PaperConditionalOrderTest {
     fun `does not fire when the price is no longer past the trigger`() {
         stubRow(); stubPrice("901")
         assertThat(firer.fire(9L)).isEqualTo(PaperConditionalOutcome.NOT_TRIGGERED)
-        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any(), any()) }
     }
 
     @Test
     fun `skips a row another pod holds or that was cancelled`() {
         stubRow(locked = false)
         assertThat(firer.fire(9L)).isEqualTo(PaperConditionalOutcome.SKIPPED)
-        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any(), any()) }
     }
 
     @Test

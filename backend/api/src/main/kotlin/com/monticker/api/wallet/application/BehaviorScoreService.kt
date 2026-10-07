@@ -85,16 +85,16 @@ class BehaviorScoreService(
         )
         val todayTradeCount = todayTrades.size
 
-        // Today's emotion tags with FOMO/ANXIOUS
-        val todayTagIds = todayTrades.map { (it["id"] as Number).toLong() }
-        val fomoCount = if (todayTagIds.isNotEmpty()) {
-            emotionTagRepo.findAllByUserIdOrderByCreatedAtDesc(userId)
-                .count { it.paperTradeId in todayTagIds && it.emotion == EmotionType.FOMO }
-        } else 0
-        val anxiousCount = if (todayTagIds.isNotEmpty()) {
-            emotionTagRepo.findAllByUserIdOrderByCreatedAtDesc(userId)
-                .count { it.paperTradeId in todayTagIds && it.emotion == EmotionType.ANXIOUS }
-        } else 0
+        // Today's emotion tags — 한 번만 읽는다(이전엔 FOMO·ANXIOUS 각각 사용자 전체 태그를 다시 읽었다)
+        val todayTagIds = todayTrades.map { (it["id"] as Number).toLong() }.toSet()
+        val todayTags = if (todayTagIds.isNotEmpty()) {
+            emotionTagRepo.findAllByUserIdOrderByCreatedAtDesc(userId).filter { it.paperTradeId in todayTagIds }
+        } else emptyList()
+        val fomoCount = todayTags.count { it.emotion == EmotionType.FOMO }
+        // ADR-085 — 조급함(IMPATIENT)은 불안과 같은 "감정적 충동"으로 본다: 보너스만 빠지고 별도 감점은 없다
+        val anxiousCount = todayTags.count { it.emotion == EmotionType.ANXIOUS }
+        val impatientCount = todayTags.count { it.emotion == EmotionType.IMPATIENT }
+        val impulsiveCount = todayTags.count { it.emotion in EmotionType.IMPULSIVE }
 
         // Chasing trades: stock was up >3% in prior hour
         var chasingCount = 0
@@ -124,7 +124,7 @@ class BehaviorScoreService(
         val behaviorFeedback = mutableListOf<String>()
         behaviorScore += 15 // not impulsive (always true in mock)
 
-        if (fomoCount == 0 && anxiousCount == 0) {
+        if (impulsiveCount == 0) {
             behaviorScore += 10
             behaviorFeedback.add("감정적 충동 거래 없음 (+10점)")
         }
@@ -217,6 +217,7 @@ class BehaviorScoreService(
             "todayTradeCount" to todayTradeCount,
             "fomoCount" to fomoCount,
             "anxiousCount" to anxiousCount,
+            "impatientCount" to impatientCount,
             "chasingCount" to chasingCount,
             "recentHourTradeCount" to recentTrades,
             "totalHoldingsValue" to totalHoldingsValue,

@@ -155,6 +155,9 @@ class OrderSagaOrchestrator(
             // ADR-051 — 부분 유니크 인덱스(V48)가 백스톱이다. MatchingService의 사전 조회와 경합해
             // 두 스레드가 동시에 들어와도 두 번째 INSERT는 DB가 거부한다.
             idempotencyKey = req.idempotencyKey,
+            // ADR-085 — 진입 출처. 미체결 지정가가 나중에 스위퍼로 체결될 때도 이 행에서 읽는다.
+            origin    = req.origin.type,
+            originRef = req.origin.ref,
         ))
         saga.orderId = order.id
 
@@ -209,6 +212,8 @@ class OrderSagaOrchestrator(
                 quantity  = req.quantity,
                 fillPrice = fillPrice.amount,
                 amount    = fillAmount.amount,
+                origin    = req.origin.type.name,
+                originRef = req.origin.ref,
             ))
         } else {
             // ADR-048: 호가창은 pod 힙에 있고 api는 HPA로 여러 pod다. submit()의 매칭 결과를 버리므로 호가창은 미체결

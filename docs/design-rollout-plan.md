@@ -83,11 +83,11 @@
 | 상단 시가총액·거래대금 | screener quotes. 펀더멘털이 모의 데이터면 `—` | KIS 펀더멘털 실데이터 연동 | P1 | 보류 — 코드 경로는 있음, 실제 KIS 키와 단위 검증 필요 |
 | 계좌 세그 "실전 · 연동 필요" | 항상 비활성. 이 폼은 실주문을 보내지 않는다 | 종목 화면 실주문은 [ADR-055](decisions/055-price-provenance-gate-for-real-orders.md)/[056](decisions/056-brokerage-order-unknown-outcome.md) 경로 정리 후 별도 설계 | P2 | |
 | 주문 전 리스크 체크 | "점검하기" 버튼으로 `POST /api/risk/check` 호출(감사 로그가 남아 자동 호출하지 않음) | 감사 로그 없는 미리보기 전용 엔드포인트가 있으면 입력할 때마다 점검 | P2 | |
-| 감정 태그 "계획대로" | `OTHER` + 메모 "계획대로"로 저장 | `EmotionType`에 `PLANNED` 추가 | P2 | |
+| 감정 태그 "계획대로" | `OTHER` + 메모 "계획대로"로 저장 | `EmotionType`에 `PLANNED` 추가 | P2 | ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — `PLANNED`로 저장, 기존 `OTHER`+"계획대로" 행은 V82가 이관 |
 | 호가 "체결강도"·"내 주문" 표시 | 생략 | 체결강도 데이터, 모의 지정가 도입 후 | P2 | |
 | 이벤트 패널 "호가 깊이" 탭 | 준비 중 | 프론트만: 기존 호가로 누적 깊이 차트 | P2 | |
 | 차트 유형 버튼, 그리기 도구(펜·텍스트·측정·확대·자석·잠금) | 비활성. 십자선·추세선·수평선·숨기기·지우기는 동작 | `EChartsAdapter` 드로잉 확장 | P2 | |
-| 하단 보유 종목 "최근 이벤트"·"진입 경로" | `—` | 종목별 최근 이벤트 조회, 체결에 진입 출처(Watch Rule/전략/직접) 기록 | P2 | |
+| 하단 보유 종목 "최근 이벤트"·"진입 경로" | `—` | 종목별 최근 이벤트 조회, 체결에 진입 출처(Watch Rule/전략/직접) 기록 | P2 | ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — `GET /api/events/latest` 일괄 조회, 가장 최근 매수 체결의 출처. 판정 불가 과거 거래는 `—` |
 
 ### /stocks/search · /compare · /watchlist · /alerts
 | 화면 | 항목 | 지금 | 필요한 것 | 우선순위 | 상태 |
@@ -123,20 +123,20 @@
 | /risk | 한도 완화 쿨링오프("24시간 뒤 적용") | 문구 자체를 뺐다(사실이 아님) | 완화 지연 적용. 실거래 전에 필요할 수 있다 | P1 | ✅ [ADR-069](decisions/069-risk-limit-changes-cooling-off.md) |
 | /risk | 차단·경고 기록, 상단 "이번 달 차단" | 빈 상태, `—` | 리스크 게이트 판정 이력 저장·조회(`/api/risk/decisions`) | P1 | ✅ 차단 기록(경고 모드는 P2) |
 | /portfolio | 상단 "벤치마크 대비 KOSPI" | `—` | 지수 기간 수익률 API | P2 | |
-| /portfolio | 거래 내역 감정 칸 | 실데이터. 단, 거래마다 개별 조회(N+1) | history 응답에 emotion 포함 | P2 | |
+| /portfolio | 거래 내역 감정 칸 | 실데이터. 단, 거래마다 개별 조회(N+1) | history 응답에 emotion 포함 | P2 | ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — 내역 응답에 emotion·memo·출처 포함 |
 | /portfolio | 평균단가 차트 매수 마커 | 평균단가선만 | StockChart에 거래 마커 prop | P2 | |
 | /matching | 가격별 주문 대기열 조각, "내 주문 · 대기 N번째" | 잔량 막대 하나, "내 주문 · N주 대기" | 호가 API에 가격별 주문 큐와 내 순번 노출 | P2 | |
 | /matching | 상단 평균 슬리피지·지연 | `—` | 주문 시점 최우선호가 저장 → 체결가 비교 집계, 엔진 처리시간 메트릭 | P2 | |
-| /wallet | 원장 행의 돈 흐름(예약금 → 정산 대기)과 출처 | 확실한 유형만 흐름 표시 | 원장 이벤트에 from/to 버킷과 주문 출처 | P2 | |
+| /wallet | 원장 행의 돈 흐름(예약금 → 정산 대기)과 출처 | 확실한 유형만 흐름 표시 | 원장 이벤트에 from/to 버킷과 주문 출처 | P2 | 부분 ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — 체결 행에 주문 출처 표시. from/to 버킷은 남음 |
 | /wallet | 영수증 "예약금 잠금" 단계 | 접수 → 체결 → 정산 3단계(모의 즉시체결) | 지정가 영수증 API가 생기면 연결 | P2 | |
-| /wallet | 감정 태그 "조급함"·"계획대로" | 백엔드 `EmotionType` 10종으로 표시 | enum 확장과 마이그레이션 | P2 | |
+| /wallet | 감정 태그 "조급함"·"계획대로" | 백엔드 `EmotionType` 10종으로 표시 | enum 확장과 마이그레이션 | P2 | ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — `PLANNED`·`IMPATIENT`(12종), V82 데이터 이관 |
 | /wallet | 점수 카드 세부 지표(계획 준수율, 손절 준수율, 지난주 대비) | 등급 + 피드백 목록 | `/api/wallet/score` 세부 지표 | P2 | |
-| /wallet/replay | 계획 준수율, 계획 외 주문 | `—` | 주문별 계획 여부 집계 | P2 | |
-| /wallet/replay | 주문 복기 행의 감정 칩·코멘트 | 종목·방향·수량·수익률만 | ReplayEvent에 tradeId·emotion·memo. 코멘트는 AI 생성 | P2 | |
+| /wallet/replay | 계획 준수율, 계획 외 주문 | `—` | 주문별 계획 여부 집계 | P2 | ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — 계획 = 출처 Watch Rule·조건부·전략 또는 `PLANNED` 태그. 정의는 툴팁 |
+| /wallet/replay | 주문 복기 행의 감정 칩·코멘트 | 종목·방향·수량·수익률만 | ReplayEvent에 tradeId·emotion·memo. 코멘트는 AI 생성 | P2 | 부분 ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — tradeId·감정 칩·메모·출처(일괄 조회). AI 코멘트는 남음 |
 | /wallet/replay | "감정 분포 · 이번 주"·날짜별 % | 전체 기간 분포, 일별 손익 금액 | emotion-analysis 기간 파라미터, 일별 수익률 API | P2 | |
 | /settlement | 이번 주 순액, 공휴일, "완료" 서버 필터 | 정산 예정만 표시, 주말만 건너뜀, 현재 페이지 필터 | 기간별 정산 집계, 영업일 캘린더, `?status=` | P2 | ✅ [ADR-086](decisions/086-krx-trading-calendar.md) — `/api/settlement/paper/summary`(이번 주 순액), KRX 휴장일 반영(T+2·정산 캘린더·다가오는 휴장일), `?status=SETTLED`. 기존 PENDING 정산일은 기동 시 재정렬 |
 | /watch-rules | 관심종목 그룹 단위, 주문 유형·금액(계좌 %) | 비활성, 시장가 고정, 수량(주) | 규칙 대상 그룹, 지정가·비율 수량 | P2 | |
-| /watch-rules | 상단 "규칙 경유 손익" | `—` | 규칙 체결 손익 집계 | P2 | |
+| /watch-rules | 상단 "규칙 경유 손익" | `—` | 규칙 체결 손익 집계 | P2 | ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — 규칙이 낸 매도 체결의 실현 손익(이동평균), 합계·규칙별 |
 | /risk | 한도 초과 시 "경고 후 진행" 모드, VaR 단위(원/%) | "주문 차단" 고정, % 입력 + 원화 환산 병기 | 정책 결정과 severity 처리 | P2 | |
 
 ## 4. 퀀트랩 · 전략 마켓
