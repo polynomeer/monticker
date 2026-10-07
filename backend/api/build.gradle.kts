@@ -38,7 +38,7 @@ dependencies {
 	implementation("org.springframework.retry:spring-retry")
 	testImplementation("org.springframework.modulith:spring-modulith-starter-test")
 	// Spring State Machine
-	implementation("org.springframework.statemachine:spring-statemachine-starter:4.0.0")
+	implementation("org.springframework.statemachine:spring-statemachine-starter:4.0.2")
 	implementation("io.micrometer:micrometer-tracing-bridge-otel")
 	implementation("io.opentelemetry:opentelemetry-api")
 	implementation("io.micrometer:micrometer-registry-prometheus")
