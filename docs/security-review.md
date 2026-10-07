@@ -405,7 +405,9 @@ log.info("[MockKIS] 토큰 발급: appKey={}", appKey)
 - **CORS는 명시적 화이트리스트**: `allowedOriginPatterns` + 환경변수 기반, 와일드카드 없음.
 - **Rate limiting이 2중 방어**: IP 기반(`RateLimitFilter`, 로그인/가입/refresh별 세분화) +
   이메일 기반 실패 카운터(`AuthService`, 5회/15분) — IP를 분산한 크리덴셜 스터핑도 이메일
-  카운터가 잡는다.
+  카운터가 잡는다. (단, IP 기반 쪽은 2026-10까지 `X-Forwarded-For` 첫 값을 믿어 헤더 위조로 우회·타인 버킷
+  소진이 가능했다 — [ADR-084](decisions/084-client-ip-from-trusted-proxies.md)에서 신뢰 프록시 목록 기반
+  `ClientIpResolver`로 수정. 운영 배포에는 `APP_HTTP_TRUSTED_PROXIES`가 필요하다.)
 - **Idempotency 키가 사용자별로 스코프됨**: `idempotency:{userId}:{key}` — 한 사용자가 다른
   사용자의 idempotency key를 재생/관찰할 수 없다. Redis 장애 시 fail-closed(503)로 주문 중복을
   막는 쪽을 택한 것도 결제/주문 시스템에 맞는 선택.

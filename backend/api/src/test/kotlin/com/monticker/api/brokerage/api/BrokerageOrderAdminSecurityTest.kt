@@ -1,5 +1,6 @@
 package com.monticker.api.brokerage.api
 
+import com.monticker.api.common.http.ClientIpResolver
 import com.monticker.api.auth.config.SecurityConfig
 import com.monticker.api.auth.infrastructure.CustomOAuth2UserService
 import com.monticker.api.auth.infrastructure.HttpCookieOAuth2AuthorizationRequestRepository
@@ -30,7 +31,7 @@ import org.springframework.test.web.servlet.post
 
 /** ADR-056 Note — 결과 불명 주문 수동 확정은 관리자만. 일반 사용자가 남의 주문을 "체결됨"으로 바꿀 수 있으면 안 된다. */
 @WebMvcTest(BrokerageOrderAdminController::class)
-@Import(SecurityConfig::class, RedisGuard::class, SimpleMeterRegistry::class, RefreshTokenCookie::class)
+@Import(SecurityConfig::class, RedisGuard::class, SimpleMeterRegistry::class, RefreshTokenCookie::class, ClientIpResolver::class)
 class BrokerageOrderAdminSecurityTest {
 
     @Autowired lateinit var mvc: MockMvc

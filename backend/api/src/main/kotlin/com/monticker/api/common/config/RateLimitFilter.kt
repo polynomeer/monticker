@@ -1,5 +1,6 @@
 package com.monticker.api.common.config
 
+import com.monticker.api.common.http.ClientIpResolver
 import com.monticker.api.common.redis.RedisGuard
 import com.monticker.api.common.redis.WindowCounter
 import jakarta.servlet.FilterChain
@@ -15,6 +16,7 @@ import java.time.Duration
 class RateLimitFilter(
     private val redis: StringRedisTemplate,
     private val guard: RedisGuard,
+    private val clientIp: ClientIpResolver,
     // X-Bench 헤더 우회는 부하 테스트 편의 기능이다. 기본값 false — 운영에서 켜져 있으면
     // 헤더 한 줄로 레이트리밋 전체를 무력화할 수 있다 (resilience-plan §F5, P0-4).
     // local/dev 프로파일만 true로 둔다.
@@ -31,10 +33,9 @@ class RateLimitFilter(
             return
         }
 
-        // NGINX 프록시 환경: X-Forwarded-For 헤더의 첫 번째 IP를 실제 클라이언트 IP로 사용한다.
-        // 헤더가 없으면 직접 연결 IP를 사용한다.
-        val ip   = req.getHeader("X-Forwarded-For")?.split(",")?.firstOrNull()?.trim()
-                   ?: req.remoteAddr
+        // ADR-084: X-Forwarded-For는 신뢰 프록시(app.http.trusted-proxies)를 거친 경우에만, 오른쪽부터 읽는다.
+        // 첫 값을 믿으면 클라이언트가 헤더 한 줄로 IP 제한을 우회하거나 남의 버킷을 소진시킬 수 있다.
+        val ip   = clientIp.resolve(req)
         val path = req.requestURI
 
         // 엔드포인트별 IP 기반 제한. 인증 엔드포인트는 브루트포스 방어를 위해 더 엄격히 적용한다.

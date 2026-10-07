@@ -1248,7 +1248,7 @@ MatchingService.submitOrder()  [트랜잭션 시작]
 |------|------|
 | **Rate Limiting** | K8s: `limit-rps=60`, `limit-connections=20` (IP 기반, burst×5 허용) |
 | **Request ID** | `X-Request-Id` 헤더 주입 — 클라이언트 값 우선, 없으면 UUID 생성 |
-| **Real IP 전달** | `X-Forwarded-For`, `X-Real-IP` → 앱 레벨 `RateLimitFilter`가 사용 |
+| **Real IP 전달** | `X-Forwarded-For` → 앱 `ClientIpResolver`가 신뢰 프록시(`app.http.trusted-proxies`)를 거친 경우에만 오른쪽부터 해석 ([ADR-084](decisions/084-client-ip-from-trusted-proxies.md)). `RateLimitFilter`·`AuditAspect`가 사용 |
 | **WebSocket** | `/ws` 경로에 Upgrade/Connection 헤더 처리, 타임아웃 3600s |
 | **Security Headers** | `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` |
 | **CORS** | Ingress 수준에서 허용 origin/method/header 제어 |

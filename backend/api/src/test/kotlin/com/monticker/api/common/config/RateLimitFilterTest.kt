@@ -1,5 +1,6 @@
 package com.monticker.api.common.config
 
+import com.monticker.api.common.http.ClientIpResolver
 import com.monticker.api.common.redis.RedisGuard
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every
@@ -28,8 +29,8 @@ class RateLimitFilterTest {
     }
     private val registry = SimpleMeterRegistry()
 
-    private fun filter(benchBypass: Boolean = false) =
-        RateLimitFilter(redis, RedisGuard(registry), benchBypass)
+    private fun filter(benchBypass: Boolean = false, trustedProxies: String = "") =
+        RateLimitFilter(redis, RedisGuard(registry), ClientIpResolver(trustedProxies), benchBypass)
 
     private fun request(path: String, vararg headers: Pair<String, String>) =
         MockHttpServletRequest("GET", path).apply { headers.forEach { (k, v) -> addHeader(k, v) } }
@@ -77,5 +78,28 @@ class RateLimitFilterTest {
 
         assertThat(res.status).isEqualTo(200)
         verify(exactly = 0) { redis.execute(any<RedisScript<Long>>(), any<List<String>>(), any<String>()) }
+    }
+
+    @Test
+    fun `신뢰 프록시가 없으면 스푸핑된 X-Forwarded-For는 버킷 키에 쓰이지 않는다 (ADR-084)`() {
+        val keys = mutableListOf<List<String>>()
+        every { redis.execute(any<RedisScript<Long>>(), capture(keys), any<String>()) } returns 1L
+
+        val req = request("/api/auth/login", "X-Forwarded-For" to "6.6.6.6").apply { remoteAddr = "203.0.113.7" }
+        filter().doFilter(req, MockHttpServletResponse(), MockFilterChain())
+
+        assertThat(keys.single().single()).isEqualTo("rate:auth.login:203.0.113.7")
+    }
+
+    @Test
+    fun `신뢰 프록시 뒤에서는 프록시가 덧붙인 클라이언트 IP로 버킷을 나눈다 (ADR-084)`() {
+        val keys = mutableListOf<List<String>>()
+        every { redis.execute(any<RedisScript<Long>>(), capture(keys), any<String>()) } returns 1L
+
+        val req = request("/api/auth/login", "X-Forwarded-For" to "6.6.6.6, 198.51.100.20")
+            .apply { remoteAddr = "10.244.1.5" }
+        filter(trustedProxies = "10.0.0.0/8").doFilter(req, MockHttpServletResponse(), MockFilterChain())
+
+        assertThat(keys.single().single()).isEqualTo("rate:auth.login:198.51.100.20")
     }
 }

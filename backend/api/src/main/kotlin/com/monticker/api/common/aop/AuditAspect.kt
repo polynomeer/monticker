@@ -1,5 +1,6 @@
 package com.monticker.api.common.aop
 
+import com.monticker.api.common.http.ClientIpResolver
 import org.aspectj.lang.ProceedingJoinPoint
 import org.aspectj.lang.annotation.Around
 import org.aspectj.lang.annotation.Aspect
@@ -15,7 +16,7 @@ import org.springframework.web.context.request.ServletRequestAttributes
  */
 @Aspect
 @Component
-class AuditAspect {
+class AuditAspect(private val clientIp: ClientIpResolver) {
 
     private val log = LoggerFactory.getLogger("AUDIT")
 
@@ -27,7 +28,7 @@ class AuditAspect {
 
         val ip = runCatching {
             (RequestContextHolder.getRequestAttributes() as? ServletRequestAttributes)
-                ?.request?.remoteAddr ?: "unknown"
+                ?.request?.let(clientIp::resolve) ?: "unknown"
         }.getOrDefault("unknown")
 
         val start = System.currentTimeMillis()
