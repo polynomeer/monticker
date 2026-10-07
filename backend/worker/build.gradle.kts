@@ -9,7 +9,7 @@ plugins {
 dependencyManagement {
 	imports {
 		mavenBom("org.springframework.modulith:spring-modulith-bom:1.4.13")
-		mavenBom("org.testcontainers:testcontainers-bom:1.20.4")
+		mavenBom("org.testcontainers:testcontainers-bom:2.0.5")
 	}
 }
 
@@ -79,8 +79,8 @@ configurations["integrationTestImplementation"].extendsFrom(configurations.testI
 configurations["integrationTestRuntimeOnly"].extendsFrom(configurations.testRuntimeOnly.get())
 
 dependencies {
-	"integrationTestImplementation"("org.testcontainers:junit-jupiter")
-	"integrationTestImplementation"("org.testcontainers:postgresql")
+	"integrationTestImplementation"("org.testcontainers:testcontainers-junit-jupiter")
+	"integrationTestImplementation"("org.testcontainers:testcontainers-postgresql")
 }
 
 val integrationTest = tasks.register<Test>("integrationTest") {
