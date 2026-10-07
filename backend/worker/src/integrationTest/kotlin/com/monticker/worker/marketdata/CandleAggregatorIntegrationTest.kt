@@ -51,6 +51,7 @@ class CandleAggregatorIntegrationTest {
             Flyway.configure()
                 .dataSource(ds)
                 .locations("filesystem:../api/src/main/resources/db/migration")
+                .configuration(mapOf("flyway.postgresql.transactional.lock" to "false"))   // V84 CONCURRENTLY — api application.yml과 같은 세션 lock
                 .load()
                 .migrate()
             jdbc = JdbcTemplate(ds)
