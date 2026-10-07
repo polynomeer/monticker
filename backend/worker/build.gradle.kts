@@ -9,7 +9,7 @@ plugins {
 dependencyManagement {
 	imports {
 		mavenBom("org.springframework.modulith:spring-modulith-bom:1.3.4")
-		mavenBom("org.testcontainers:testcontainers-bom:1.20.4")
+		mavenBom("org.testcontainers:testcontainers-bom:1.21.4")
 	}
 }
 
