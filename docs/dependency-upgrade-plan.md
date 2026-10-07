@@ -94,8 +94,13 @@ Kotlin 컴파일러 플러그인(`plugin.spring`·`plugin.jpa`)은 `kotlin("jvm"
 2. 서명·검증 API의 deprecated·제거 항목을 따라간다.
 3. **이전 버전이 발급한 토큰을 새 버전이 검증하는지** 테스트로 고정한다. 배포 직후 로그인된 사용자가 전부 로그아웃되면 안 된다. 리프레시 토큰도 같다.
 
-**확인할 것**: 0.13의 breaking change(키 길이 검사 강화 여부 등). `InsecureSecretGuard`가 쓰는 개발용 키가 새 검사를 통과하는지.
-**검증**: 인증 단위·통합 테스트, e2e 로그인 흐름. 0.12로 만든 토큰을 픽스처로 남겨 검증하는 테스트를 추가한다.
+**확인 결과**(2026-10-07, **0.13.0**으로 올림, [CHANGELOG](https://github.com/jwtk/jjwt/blob/master/CHANGELOG.md)):
+- 0.13.0의 문서화된 변경은 둘뿐이다: Java 7을 지원하는 마지막 minor라는 공지(0.14부터 Java 8+), `JacksonDeserializer(ObjectMapper, Map)` 생성자 공개. 파싱·검증·키 길이 검사 변경은 없다.
+- 그 사이 dependabot #132로 세 아티팩트가 0.12.7이 됐고, 이번에 셋을 함께 0.13.0으로 올렸다.
+- 개발용 기본 키(`application.yml`)는 55바이트라 HMAC 최소 길이(32바이트)를 넘는다. `Keys.hmacShaKeyFor` 사용은 그대로다.
+- `JwtTokenCompatibilityTest`: 0.12.7이 발급한 access·refresh 토큰(만료 2100년)을 고정해 두고 검증한다 — 0.12.7과 0.13.0 모두 통과. 서명을 바꾼 토큰은 계속 거부한다. 다음 jjwt 업그레이드나 키·iss·aud 변경 때도 이 테스트가 기준이다.
+
+**검증**: 인증 단위·통합 테스트, e2e 로그인 흐름(CI).
 
 ### B4. Spring Boot 3.5 → 4.x
 
@@ -193,6 +198,7 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 | (선행) react-query packageExtensions 범위화 | 완료 | #117 | 고정 버전 키 때문에 타입 검사가 깨졌던 것 |
 | (선행) dependabot ignore·groups | 완료 | #130 | §5 |
 | B2 Testcontainers 2 | 완료 | #143 | 2.0.5. 위 확인 결과 참고 |
-| B1 Kotlin 2 | PR | — | 2.3.21 (Boot 4.1 BOM과 같은 버전) |
-| B0 Gradle 9 | PR (B1 위) | — | 9.8.0. wrapper만 변경 |
-| B3, B4, W1~W3, M1 | 시작 전 | — | |
+| B1 Kotlin 2 | 완료 | #154 | 2.3.21 (Boot 4.1 BOM과 같은 버전) |
+| B0 Gradle 9 | 완료 | #156 | 9.8.0. wrapper만 변경 |
+| B3 jjwt 0.13 | 완료 | #158 | 0.13.0. 0.12.7 토큰 호환 테스트 추가 |
+| B4, W1~W3, M1 | 시작 전 | — | |
