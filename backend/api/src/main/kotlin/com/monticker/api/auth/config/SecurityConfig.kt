@@ -64,6 +64,7 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.GET, "/api/market/summary").permitAll()   // ADR-039 — 홈 위젯 초기값, 비로그인 공개
                     .requestMatchers(HttpMethod.GET, "/api/market/indices", "/api/market/indices/**").permitAll()   // ADR-071 — 지수·환율, 비로그인 공개
                     .requestMatchers(HttpMethod.GET, "/api/market/intraday").permitAll()   // ADR-072 — 장중 미니 시계열, 비로그인 공개
+                    .requestMatchers(HttpMethod.GET, "/api/market/status", "/api/market/calendar").permitAll()   // ADR-086 — 장 상태·휴장일, 비로그인 공개
                     .requestMatchers("/api/backtest/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/latency/**").permitAll()
                     .requestMatchers("/actuator/health", "/actuator/info").permitAll()
