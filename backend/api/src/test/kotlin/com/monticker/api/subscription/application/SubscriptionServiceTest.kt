@@ -174,9 +174,18 @@ class SubscriptionServiceTest {
         val other   = makePaymentRecord(proPlan).also { it.status = PaymentStatus.PENDING }
         every { paymentRepo.findByPgOrderId("sub_1_abc") } returns Optional.of(other)   // userId = 1
 
-        assertThrows<IllegalArgumentException> {
+        val others = runCatching {
             service.activateConfirmedSubscription(userId = 999L, orderId = "sub_1_abc", pgTransactionId = "tx")
-        }
+        }.exceptionOrNull()
+        every { paymentRepo.findByPgOrderId("sub_1_abc") } returns Optional.empty()
+        val missing = runCatching {
+            service.activateConfirmedSubscription(userId = 999L, orderId = "sub_1_abc", pgTransactionId = "tx")
+        }.exceptionOrNull()
+
+        // 남의 orderId와 없는 orderId가 같은 예외·같은 메시지여야 orderId 존재 여부가 드러나지 않는다
+        assertThat(others).isInstanceOf(IllegalArgumentException::class.java)
+        assertThat(others!!.message).isEqualTo(missing!!.message)
+        verify(exactly = 0) { subscriptionRepo.save(any()) }
     }
 
     @Test
