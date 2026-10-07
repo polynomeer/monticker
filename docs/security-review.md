@@ -353,8 +353,11 @@ log.info("[MockKIS] 토큰 발급: appKey={}", appKey)
 `GlobalExceptionHandler`를 거쳐 소유자 읽기/쓰기 200, 타 사용자 읽기/쓰기 404(삭제·저장 미발생), 남의 거래와
 없는 거래의 응답 동일성을 고정한다.
 
-**남은 것**: `ReceiptService.getReceipt`는 소유권을 확인하지만 `require(...)`라서 남의 거래는 400, 없는
-거래는 404로 갈린다 — 내용은 새지 않지만 id 존재 여부가 드러난다. 같은 404 패턴으로 맞출 것.
+**남은 것**: ~~`ReceiptService.getReceipt`는 소유권을 확인하지만 `require(...)`라서 남의 거래는 400, 없는
+거래는 404로 갈린다 — 내용은 새지 않지만 id 존재 여부가 드러난다. 같은 404 패턴으로 맞출 것.~~
+— ✅ 수정(2026-10-05): `getReceipt`도 `findById`로 소유자를 확인하고 남의 거래를 없는 거래와 같은
+`NoSuchElementException("Paper trade not found: $id")` → 404로 응답한다. `TradeReceiptControllerTest`가
+소유자 200, 타 사용자 404(종목·원장 조회 미발생), 남의 거래와 없는 거래의 응답 동일성을 고정한다.
 
 ---
 
