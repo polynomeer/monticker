@@ -10,11 +10,11 @@
   "dependencies": {
     "expo": "~52.0.0",
     "expo-router": "~4.0.0",
-    "expo-notifications": "~0.29.0",
-    "expo-device": "~7.0.0",
-    "expo-constants": "~17.0.0",
+    "expo-notifications": "~0.32.17",
+    "expo-device": "~7.1.4",
+    "expo-constants": "~17.1.8",
     "react": "~18.3.0",
-    "react-native": "~0.76.0",
+    "react-native": "~0.87.1",
     "@react-navigation/native": "^7.5.0"
   },
   "devDependencies": {
