@@ -143,13 +143,13 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 
 ## 5. 그 전까지: dependabot 설정
 
-트랙을 시작하기 전까지 같은 메이저 PR이 매주 다시 열리지 않게 하고, 짝이 있는 의존성은 묶어 둔다. `.github/dependabot.yml`에 추가할 내용:
+트랙을 시작하기 전까지 같은 메이저 PR이 매주 다시 열리지 않게 하고, 짝이 있는 의존성은 묶어 둔다. **적용됨**(2026-10-07) — `.github/dependabot.yml`의 각 항목 옆 주석에 트랙 번호가 있다:
 
-- `ignore` (`update-types: ["version-update:semver-major"]`): `org.springframework.boot`, `org.testcontainers:*`, `net.logstash.logback:*`, `org.jetbrains.kotlin*`, `next`, `eslint-config-next`, `eslint`, `tailwindcss`, `typescript`, `vitest`, `jsdom`, `@babel/core`, `expo*`, `react-native`, `@types/node`
+- `ignore` (메이저): gradle — `org.springframework.boot`, `io.spring.dependency-management`, `org.springframework.modulith:*`, `org.testcontainers:*`, `net.logstash.logback:*`, `org.jetbrains.kotlin*`, `io.jsonwebtoken:*`(0.x라 minor도). npm — `next`, `eslint-config-next`, `eslint`, `tailwindcss`, `typescript`, `vitest`, `jsdom`, `@types/node`, `@babel/core`, `expo`, `expo-*`, `react-native`, `react`, `@types/react`
 - `groups`:
   - `kotlin` — `org.jetbrains.kotlin*` (jvm·spring·jpa 플러그인을 한 PR로)
   - `jjwt` — `io.jsonwebtoken:*`
-  - `react` — `react`, `react-dom`, `@types/react`, `@types/react-dom`. 모바일 react는 Expo가 정하므로 웹 디렉터리에만 적용되게 한다. 워크스페이스가 lockfile 하나라 dependabot 그룹만으로 분리되지 않으면, 모바일 react는 ignore에 둔다.
+  - `react` — `react`, `react-dom`, `@types/react`, `@types/react-dom`. 워크스페이스가 lockfile 하나라 웹·모바일을 그룹으로 나눌 수 없다. 그래서 react 메이저는 ignore에 두었다(모바일 18 → 19는 M1에서, 웹은 이미 19).
   - `expo` — `expo*`, `react-native`
 
 트랙 하나가 끝나면 그 트랙의 ignore를 지운다.
@@ -162,4 +162,5 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 |---|---|---|---|
 | (선행) web React 19.3 | PR 열림 | #129 | #121·#122를 대체. 모바일은 18 유지 |
 | (선행) react-query packageExtensions 범위화 | #117에 포함 | #117 | 고정 버전 키 때문에 타입 검사가 깨졌던 것 |
+| (선행) dependabot ignore·groups | PR 열림 | 이 문서와 같은 PR | §5 |
 | B1~B4, W1~W3, M1 | 시작 전 | — | |
