@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
 import { getAccessToken } from "@/services/auth";
-import { SettlementCalendar, nextBusinessDays, signedNet, ymd, type PaperSettlement } from "@/components/settlement/SettlementCalendar";
+import { SettlementCalendar, signedNet, type PaperSettlement } from "@/components/settlement/SettlementCalendar";
+import { addDays, holidaySet, kstYmd, nextBusinessDays, useMarketCalendar } from "@/components/market/krxCalendar";
 import { useStockMeta } from "@/components/portfolio/useStockMeta";
 import { LoginRequired, Skeleton } from "@/components/portfolio/PaperStates";
 import { downloadCsv } from "@/components/portfolio/csv";
@@ -20,6 +21,18 @@ interface Page<T> {
 }
 
 type Filter = "all" | "waiting" | "processing" | "done";
+
+/** GET /api/settlement/paper/summary — 기간(정산일 기준) 순액, 매수 -, 매도 + (ADR-086) */
+interface SettlementSummary {
+  from: string;
+  to: string;
+  pendingNet: number;
+  settledNet: number;
+  totalNet: number;
+  count: number;
+  byDate: { date: string; net: number; count: number; holidayName: string | null }[];
+  holidays: { date: string; name: string }[];
+}
 
 const FILTERS = [
   { value: "all", label: "전체" },
@@ -45,10 +58,12 @@ export default function SettlementPage() {
 
   useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
 
+  // "완료"는 서버에서 거른다(?status=SETTLED) — 현재 페이지만 거르면 20건 중 완료 건만 남아 페이지가 들쭉날쭉해진다
+  const statusParam = filter === "done" ? "&status=SETTLED" : "";
   const { data, isLoading } = useQuery<Page<PaperSettlement>>({
-    queryKey: ["settlement", "paper", "all", page],
+    queryKey: ["settlement", "paper", filter === "done" ? "settled" : "all", page],
     queryFn: async () => {
-      const res = await authFetch(`/api/settlement/paper?page=${page}&size=20`);
+      const res = await authFetch(`/api/settlement/paper?page=${page}&size=20${statusParam}`);
       if (!res.ok) throw new Error("조회 실패");
       return res.json();
     },
@@ -66,23 +81,38 @@ export default function SettlementPage() {
     },
     enabled: isLoggedIn,
   });
+  // 이번 주(KST 월~일) 정산 순액 — 서버 집계(정산 완료 + 대기)
+  const { data: week } = useQuery<SettlementSummary>({
+    queryKey: ["settlement", "paper", "summary", "week"],
+    queryFn: async () => {
+      const res = await authFetch("/api/settlement/paper/summary");
+      if (!res.ok) throw new Error("조회 실패");
+      return res.json();
+    },
+    enabled: isLoggedIn,
+  });
   const { data: recon } = useReconciliation(isLoggedIn);
   const reconLabel = reconciliationLabel(recon);
 
-  const today = ymd(new Date());
-  const [, d1, d2] = nextBusinessDays(3).map(ymd);
+  // KRX 휴장일 캘린더(ADR-086). 받지 못하면 주말만 건너뛴다(아래 안내 문구가 그 사실을 알린다).
+  const today = kstYmd();
+  const { data: cal, isError: calError } = useMarketCalendar(today, addDays(today, 30));
+  const holidays = holidaySet(cal);
+  const days = nextBusinessDays(3, today, holidays);
+  const [, d1, d2] = days;
+  const upcomingHolidays = cal?.holidays ?? [];
+  const calendarGap = calError || !cal || cal.uncoveredYears.length > 0;
   const meta = useStockMeta([...(data?.content ?? []), ...pending].map((s) => s.stockId));
 
   const rows = useMemo(() => {
     if (filter === "waiting" || filter === "processing") return pending.filter((s) => displayStatus(s, today).key === filter);
     const all = data?.content ?? [];
-    return filter === "done" ? all.filter((s) => s.status === "SETTLED") : all;
+    return all;
   }, [filter, pending, data, today]);
 
   const sumOn = (day: string) => pending.filter((s) => s.settleDate.slice(0, 10) === day).reduce((a, s) => a + signedNet(s), 0);
-  const weekEnd = (() => { const d = new Date(); d.setDate(d.getDate() + (7 - d.getDay()) % 7); return ymd(d); })();
   const pendingNet = pending.reduce((a, s) => a + signedNet(s), 0);
-  const weekNet = pending.filter((s) => s.settleDate.slice(0, 10) <= weekEnd).reduce((a, s) => a + signedNet(s), 0);
+  const weekNet = week?.totalNet ?? null;
   const tone = (v: number) => (v < 0 ? "text-down" : v > 0 ? "text-up" : undefined);
   const name = (s: PaperSettlement) => (s.stockId && meta.get(s.stockId)?.name) || `거래 #${s.tradeId}`;
 
@@ -116,16 +146,27 @@ export default function SettlementPage() {
       {...title}
       stats={[
         { label: "정산 대기", value: `${fmtSigned(pendingNet)}원`, tone: "text-dracula-cyan" },
-        { label: "내일 정산", value: fmtSigned(sumOn(d1)), tone: tone(sumOn(d1)) },
-        { label: "모레 정산", value: fmtSigned(sumOn(d2)), tone: tone(sumOn(d2)) },
-        { label: "이번 주 정산 예정", value: fmtSigned(weekNet), tone: tone(weekNet) },
+        { label: "다음 영업일 정산", value: d1 ? fmtSigned(sumOn(d1)) : "—", tone: d1 ? tone(sumOn(d1)) : undefined },
+        { label: "그다음 영업일", value: d2 ? fmtSigned(sumOn(d2)) : "—", tone: d2 ? tone(sumOn(d2)) : undefined },
+        { label: "이번 주 순액", value: weekNet == null ? "—" : fmtSigned(weekNet), tone: weekNet == null ? undefined : tone(weekNet) },
         // ADR-043 일일 원장 대사(스냅샷) 결과
         { label: "잔액 불일치", value: reconLabel.value, tone: reconLabel.tone },
       ]}
     >
       <Panel tabs={["정산 캘린더"]} actions={["expand"]}>
-        {pendingLoading ? <Skeleton className="h-36" /> : <SettlementCalendar pending={pending} meta={meta} />}
-        <span className="text-xs text-tm-muted">체결 후 T+2 영업일에 자동으로 정산됩니다(매일 16:30 KST). 주말은 건너뛰며, 공휴일 달력은 아직 반영하지 않습니다.</span>
+        {pendingLoading ? <Skeleton className="h-36" /> : <SettlementCalendar pending={pending} meta={meta} days={days} />}
+        {upcomingHolidays.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="text-tm-muted">다가오는 휴장일</span>
+            {upcomingHolidays.map((h) => (
+              <Pill key={h.date} tone="yellow">{fmtMonthDay(h.date)} {h.name}</Pill>
+            ))}
+          </div>
+        )}
+        <span className="text-xs text-tm-muted">
+          체결 후 T+2 영업일에 자동으로 정산됩니다(매일 16:30 KST). 주말과 KRX 휴장일(공휴일·대체공휴일·선거일·연말 휴장일)은 건너뜁니다.
+          {calendarGap && " 지금은 휴장일 정보를 확인하지 못해 주말만 건너뛴 날짜로 표시합니다."}
+        </span>
       </Panel>
 
       <Panel tabs={["정산 내역"]} actions={["download", "expand"]} onAction={(a) => a === "download" && exportCsv()} bodyClassName="px-1.5 pb-1.5 pt-2">

@@ -23,37 +23,26 @@ export interface PaperSettlement {
 
 const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
 
-export function ymd(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-/** 오늘부터 영업일(주말 제외) n개 — 공휴일 달력은 아직 없어 주말만 건너뛴다 */
-export function nextBusinessDays(n = 3, from = new Date()) {
-  const out: Date[] = [];
-  const d = new Date(from.getFullYear(), from.getMonth(), from.getDate());
-  while (out.length < n) {
-    if (d.getDay() !== 0 && d.getDay() !== 6) out.push(new Date(d));
-    d.setDate(d.getDate() + 1);
-  }
-  return out;
-}
 
 /** 매수는 현금이 나가고(-) 매도는 들어온다(+) */
 export const signedNet = (s: PaperSettlement) => (s.side === "BUY" ? -s.netAmount : s.netAmount);
 
 const COLS = [
-  { tag: "D", sub: "오늘 현금 반영", dot: "bg-dracula-purple" },
-  { tag: "D+1", sub: "내일 현금 반영 예정", dot: "bg-dracula-yellow" },
-  { tag: "D+2", sub: "모레 현금 반영 예정", dot: "bg-dracula-cyan" },
+  { tag: "D", sub: "가장 가까운 영업일 현금 반영", dot: "bg-dracula-purple" },
+  { tag: "D+1", sub: "다음 영업일 현금 반영 예정", dot: "bg-dracula-yellow" },
+  { tag: "D+2", sub: "그다음 영업일 현금 반영 예정", dot: "bg-dracula-cyan" },
 ];
 
-/** 시안 Settlement "정산 캘린더" — 정산 대기 건을 정산일(오늘·내일·모레 영업일)별로 묶는다. */
-export function SettlementCalendar({ pending, meta }: { pending: PaperSettlement[]; meta: Map<number, StockMeta> }) {
-  const days = nextBusinessDays(3);
+/**
+ * 시안 Settlement "정산 캘린더" — 정산 대기 건을 정산일(오늘부터 KRX 영업일 3개)별로 묶는다.
+ * days는 KST "YYYY-MM-DD" — 휴장일 캘린더(ADR-086)로 고른 영업일이다.
+ */
+export function SettlementCalendar({ pending, meta, days }: { pending: PaperSettlement[]; meta: Map<number, StockMeta>; days: string[] }) {
   return (
     <div className="flex flex-wrap gap-2.5">
-      {days.map((d, i) => {
-        const key = ymd(d);
+      {days.slice(0, 3).map((key, i) => {
+        const [y, mo, da] = key.split("-").map(Number);
+        const d = new Date(y, mo - 1, da);
         const items = pending.filter((s) => s.settleDate.slice(0, 10) === key);
         const c = COLS[i];
         return (
