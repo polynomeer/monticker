@@ -38,10 +38,9 @@ class WatchlistService(
     }
 
     fun addItem(userId: Long, groupId: Long, stockId: Long, memo: String?): WatchlistItem {
-        val group = groupRepository.findById(groupId).orElseThrow {
-            NoSuchElementException("Watchlist group not found: $groupId")
-        }
-        require(group.userId == userId) { "Access denied" }
+        // 남의 그룹·항목은 없는 것과 같은 404 — 400/403으로 구분하면 id 존재 여부를 열거할 수 있다
+        val group = groupRepository.findById(groupId).orElse(null)?.takeIf { it.userId == userId }
+            ?: throw NoSuchElementException("Watchlist group not found: $groupId")
 
         val stock = stockService.getById(stockId)
 
@@ -57,10 +56,8 @@ class WatchlistService(
     }
 
     fun removeItem(userId: Long, itemId: Long) {
-        val item = itemRepository.findById(itemId).orElseThrow {
-            NoSuchElementException("Watchlist item not found: $itemId")
-        }
-        require(item.group.userId == userId) { "Access denied" }
+        val item = itemRepository.findById(itemId).orElse(null)?.takeIf { it.group.userId == userId }
+            ?: throw NoSuchElementException("Watchlist item not found: $itemId")
         itemRepository.delete(item)
         // ADR-042: 삭제도 이벤트 — 트랜잭션이 롤백되면 이벤트도 함께 사라진다
         events.publishEvent(SearchIndexEvent.delete(WatchlistIndexer.INDEX, itemId.toString()))

@@ -132,9 +132,9 @@ class WatchRuleService(
         execRepo.findAllByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(0, limit.coerceIn(1, 200)))
 
     private fun owned(userId: Long, ruleId: Long): WatchRule {
-        val rule = ruleRepo.findById(ruleId).orElseThrow { NoSuchElementException("룰을 찾을 수 없습니다: $ruleId") }
-        require(rule.userId == userId) { "본인의 룰만 수정할 수 있습니다" }
-        return rule
+        // 남의 룰은 없는 룰과 같은 404 — 400/403으로 구분하면 룰 id 존재 여부를 열거할 수 있다
+        return ruleRepo.findById(ruleId).orElse(null)?.takeIf { it.userId == userId }
+            ?: throw NoSuchElementException("룰을 찾을 수 없습니다: $ruleId")
     }
 
     companion object {
