@@ -12,6 +12,7 @@ dependabot은 의존성마다 PR을 하나씩 연다. 메이저는 대개 **짝�
 
 | 트랙 | 대상 | 닫은 PR | 선행 조건 | 크기 | 위험 |
 |---|---|---|---|---|---|
+| **B0** Gradle 9 | Gradle wrapper 8.14 → 9.x (api·worker) | #135 #138 | 없음 | 소~중 | 중 — 빌드 스크립트·플러그인 호환 |
 | **B1** Kotlin 2 | `kotlin("jvm"/"plugin.spring"/"plugin.jpa")` 1.9.25 → 2.x (api·worker) | #106 #108 #109 | 없음 | 중 | 중 — K2 컴파일러가 686개 파일을 다시 본다 |
 | **B2** Testcontainers 2 | `testcontainers-bom` 1.20 → 2.x | #101 | 없음 | 소 | 하 — 테스트 전용, 8개 파일 |
 | **B3** jjwt 0.13 | `jjwt-api`·`jjwt-impl`·`jjwt-jackson` 0.12.6 → 0.13 | #102 | 없음 | 소 | **상** — 인증 경로 |
@@ -21,7 +22,7 @@ dependabot은 의존성마다 PR을 하나씩 연다. 메이저는 대개 **짝�
 | **W3** 툴체인 | TypeScript 7, vitest 5, jsdom 30, @types/node | #112 일부 | W1 | 소~중 | 하 |
 | **M1** Expo SDK | Expo 52 → 58 (expo-router·expo-notifications·RN·React 19·Babel 8) | #113 #114 #120, #121 모바일분 | 없음 | 중 | 중 — 앱은 작지만(TS 7개) 6개 SDK를 건넌다 |
 
-**권장 순서**: B2 → B1 → B3 → (W1 → W2 → W3, M1은 병렬) → B4. 백엔드 트랙은 실거래 경로에 걸리므로 한 번에 하나씩, 각각 독립 PR로 머지하고 며칠 운영(또는 로컬 장시간 기동)을 거친 뒤 다음으로 간다. 웹·모바일 트랙은 백엔드와 독립이라 병렬로 진행해도 된다.
+**권장 순서**: B2 → B0 → B1 → B3 → (W1 → W2 → W3, M1은 병렬) → B4. 백엔드 트랙은 실거래 경로에 걸리므로 한 번에 하나씩, 각각 독립 PR로 머지하고 며칠 운영(또는 로컬 장시간 기동)을 거친 뒤 다음으로 간다. 웹·모바일 트랙은 백엔드와 독립이라 병렬로 진행해도 된다.
 
 ---
 
@@ -36,6 +37,17 @@ dependabot은 의존성마다 PR을 하나씩 연다. 메이저는 대개 **짝�
 ---
 
 ## 3. 백엔드 트랙
+
+### B0. Gradle 8.14 → 9.x
+
+2026-10-07 dependabot 재실행에서 새로 나왔다(#135 #138). 빌드 도구라 운영 코드는 바뀌지 않지만, 플러그인(Spring Boot·dependency-management·Kotlin)과 Gradle 9의 호환을 먼저 본다.
+
+1. 두 모듈의 wrapper를 같은 버전으로 올린다(`./gradlew wrapper --gradle-version …`). wrapper jar·스크립트도 함께 갱신된다.
+2. deprecated 경고(`--warning-mode all`)를 8.14에서 먼저 0으로 만든다. Gradle 9는 8.x의 deprecated API를 제거했다.
+3. 커스텀 소스셋(`integrationTest`)과 `configurations[...]` 접근 방식이 그대로 동작하는지 확인한다.
+
+**확인할 것**: Spring Boot 3.5 Gradle 플러그인과 Kotlin 1.9.25 플러그인의 Gradle 9 지원 여부. 지원하지 않으면 B1(Kotlin 2) 뒤로 미룬다.
+**검증**: api·worker `test`·`integrationTest`, `bootJar`·Docker 이미지 빌드(deploy-images).
 
 ### B1. Kotlin 1.9 → 2.x
 
@@ -147,7 +159,9 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 
 - `ignore` (메이저): gradle — `org.springframework.boot`, `io.spring.dependency-management`, `org.springframework.modulith:*`, `org.testcontainers:*`, `net.logstash.logback:*`, `org.jetbrains.kotlin*`, `io.jsonwebtoken:*`(0.x라 minor도). npm — `next`, `eslint-config-next`, `eslint`, `tailwindcss`, `typescript`, `vitest`, `jsdom`, `@types/node`, `@babel/core`, `expo`, `expo-*`, `react-native`, `react`, `@types/react`
 - `groups`:
-  - `kotlin` — `org.jetbrains.kotlin*` (jvm·spring·jpa 플러그인을 한 PR로)
+  - `kotlin` — `jvm`, `plugin.spring`, `plugin.jpa`, `org.jetbrains.kotlin*` (jvm·spring·jpa 플러그인을 한 PR로). dependabot은 Kotlin Gradle 플러그인을 **짧은 id**로 부른다 — 처음엔 `org.jetbrains.kotlin*`만 걸어 ignore가 듣지 않았다(#140)
+  - Expo 패키지(`expo-*`)와 `react-native`는 0.x라 **minor가 SDK를 바꾼다**. 그래서 minor도 ignore했다(#139가 react-native 0.76 → 0.87을 가져왔다)
+  - `gradle-wrapper` 메이저 — B0
   - `jjwt` — `io.jsonwebtoken:*`
   - `react` — `react`, `react-dom`, `@types/react`, `@types/react-dom`. 워크스페이스가 lockfile 하나라 웹·모바일을 그룹으로 나눌 수 없다. 그래서 react 메이저는 ignore에 두었다(모바일 18 → 19는 M1에서, 웹은 이미 19).
   - `expo` — `expo*`, `react-native`
