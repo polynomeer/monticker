@@ -12,7 +12,7 @@ dependabot은 의존성마다 PR을 하나씩 연다. 메이저는 대개 **짝�
 
 | 트랙 | 대상 | 닫은 PR | 선행 조건 | 크기 | 위험 |
 |---|---|---|---|---|---|
-| **B0** Gradle 9 | Gradle wrapper 8.14 → 9.x (api·worker) | #135 #138 | 없음 | 소~중 | 중 — 빌드 스크립트·플러그인 호환 |
+| **B0** Gradle 9 | Gradle wrapper 8.14 → 9.x (api·worker) | #135 #138 | **B1**(Kotlin 플러그인 2.0+) | 소 | 하 — 확인 결과 다른 걸림돌 없음 |
 | **B1** Kotlin 2 | `kotlin("jvm"/"plugin.spring"/"plugin.jpa")` 1.9.25 → 2.x (api·worker) | #106 #108 #109 | 없음 | 중 | 중 — K2 컴파일러가 686개 파일을 다시 본다 |
 | **B2** Testcontainers 2 | `testcontainers-bom` 1.20 → 2.x | #101 | 없음 | 소 | 하 — 테스트 전용, 8개 파일 |
 | **B3** jjwt 0.13 | `jjwt-api`·`jjwt-impl`·`jjwt-jackson` 0.12.6 → 0.13 | #102 | 없음 | 소 | **상** — 인증 경로 |
@@ -22,7 +22,7 @@ dependabot은 의존성마다 PR을 하나씩 연다. 메이저는 대개 **짝�
 | **W3** 툴체인 | TypeScript 7, vitest 5, jsdom 30, @types/node | #112 일부 | W1 | 소~중 | 하 |
 | **M1** Expo SDK | Expo 52 → 58 (expo-router·expo-notifications·RN·React 19·Babel 8) | #113 #114 #120, #121 모바일분 | 없음 | 중 | 중 — 앱은 작지만(TS 7개) 6개 SDK를 건넌다 |
 
-**권장 순서**: B2 → B0 → B1 → B3 → (W1 → W2 → W3, M1은 병렬) → B4. 백엔드 트랙은 실거래 경로에 걸리므로 한 번에 하나씩, 각각 독립 PR로 머지하고 며칠 운영(또는 로컬 장시간 기동)을 거친 뒤 다음으로 간다. 웹·모바일 트랙은 백엔드와 독립이라 병렬로 진행해도 된다.
+**권장 순서**: B2(완료) → B1 → B0 → B3 → (W1 → W2 → W3, M1은 병렬) → B4. 백엔드 트랙은 실거래 경로에 걸리므로 한 번에 하나씩, 각각 독립 PR로 머지하고 며칠 운영(또는 로컬 장시간 기동)을 거친 뒤 다음으로 간다. 웹·모바일 트랙은 백엔드와 독립이라 병렬로 진행해도 된다.
 
 ---
 
@@ -46,7 +46,12 @@ dependabot은 의존성마다 PR을 하나씩 연다. 메이저는 대개 **짝�
 2. deprecated 경고(`--warning-mode all`)를 8.14에서 먼저 0으로 만든다. Gradle 9는 8.x의 deprecated API를 제거했다.
 3. 커스텀 소스셋(`integrationTest`)과 `configurations[...]` 접근 방식이 그대로 동작하는지 확인한다.
 
-**확인할 것**: Spring Boot 3.5 Gradle 플러그인과 Kotlin 1.9.25 플러그인의 Gradle 9 지원 여부. 지원하지 않으면 B1(Kotlin 2) 뒤로 미룬다.
+**확인 결과**(2026-10-07):
+- **Gradle 9.0부터 Kotlin Gradle 플러그인은 2.0.0 이상이어야 한다**([Gradle 9 업그레이드 가이드](https://docs.gradle.org/current/userguide/upgrading_major_version_9.html)). 1.9.25는 Gradle 9가 제거한 API에 의존한다. → **B1(Kotlin 2) 뒤로 미뤘다.**
+- Gradle 9 데몬은 JVM 17+ — 우리는 21이라 문제없다.
+- Spring Boot 3.5.x Gradle 플러그인은 Gradle 9를 지원한다(현재 3.5.16).
+- `junit-platform-launcher`는 이미 `testRuntimeOnly`로 선언돼 있다(Gradle 9는 자동으로 넣지 않는다).
+- 8.14.5에서 `--warning-mode all`로 compile·bootJar를 돌리면 deprecated 경고가 하나만 나온다(`StartParameter.isConfigurationCacheRequested`, 플러그인 쪽, **Gradle 10**에서 제거 예정). Gradle 9를 막는 것은 Kotlin 플러그인 버전뿐이다. B1을 마치면 B0은 wrapper만 올리면 될 것으로 본다.
 **검증**: api·worker `test`·`integrationTest`, `bootJar`·Docker 이미지 빌드(deploy-images).
 
 ### B1. Kotlin 1.9 → 2.x
@@ -181,5 +186,6 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 | (선행) web React 19.3 | 완료 | #129 | #121·#122를 대체. 모바일은 18 유지 |
 | (선행) react-query packageExtensions 범위화 | 완료 | #117 | 고정 버전 키 때문에 타입 검사가 깨졌던 것 |
 | (선행) dependabot ignore·groups | 완료 | #130 | §5 |
-| B2 Testcontainers 2 | 머지 대기 | #143 | 2.0.5. 위 확인 결과 참고 |
-| B0, B1, B3, B4, W1~W3, M1 | 시작 전 | — | |
+| B2 Testcontainers 2 | 완료 | #143 | 2.0.5. 위 확인 결과 참고 |
+| B0 Gradle 9 | 보류 — B1 선행 | — | Gradle 9는 Kotlin 플러그인 2.0+ 필요 |
+| B1, B3, B4, W1~W3, M1 | 시작 전 | — | |
