@@ -78,7 +78,7 @@ class QuantSignalFeedService(
                     signalTime  = rs.getTimestamp("signal_time").toInstant(),
                 )
             },
-            *(ids + limit.coerceIn(1, MAX_LIMIT)).toTypedArray(),
+            *(ids + limit.coerceIn(1, MAX_LIMIT)).toTypedArray<Any>(),
         )
     }
 

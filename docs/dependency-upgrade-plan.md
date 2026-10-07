@@ -63,7 +63,12 @@ Kotlin 컴파일러 플러그인(`plugin.spring`·`plugin.jpa`)은 `kotlin("jvm"
 3. `kotlin-reflect`와 `jackson-module-kotlin`이 새 Kotlin과 호환되는지 본다. 그 위에서 data class 역직렬화(Kafka 메시지, API 요청 DTO)가 그대로 동작하는지 테스트로 확인한다.
 4. `freeCompilerArgs`(`-Xjsr305=strict`)가 그대로 유효한지 확인한다.
 
-**확인할 것**: Boot 3.5가 공식 지원하는 Kotlin 최고 버전. `allOpen`/`noArg` 설정이 K2에서 같은 동작인지.
+**확인 결과**(2026-10-07, **2.3.21**로 올림):
+- 목표 버전은 Spring Boot 4.1.1 BOM의 `kotlin.version`(2.3.21)에 맞췄다 — B4에서 Kotlin을 다시 올리지 않는다. Boot 3.5.16 Gradle 플러그인이 `kotlin.version`을 플러그인 버전에 맞춰 줘서 런타임 `kotlin-reflect`도 2.3.21로 바뀐다. `jackson-module-kotlin`은 Boot BOM의 2.21.4.
+- K2가 낸 **오류는 1건**: JDBC 가변 인자 배열이 `Long`·`Int`의 교집합 타입으로 추론됐다(`QuantSignalFeedService`). `toTypedArray<Any>()`로 명시했다 — JDBC는 원래 `Object[]`를 받으므로 동작 같음.
+- 생성자 프로퍼티 파라미터의 어노테이션(`@Value` 30·`@Qualifier` 14·`@JsonProperty` 2·`@DateTimeFormat` 2)이 "앞으로 필드에도 붙는다"는 경고 → `-Xannotation-default-target=first-only`로 **1.9와 같은 동작을 고정**했다. 새 기본값(param-property)으로 바꾸는 건 별도 작업.
+- 남은 경고: Java deprecated API 사용(기존), 불필요한 `!!`·`?.`, 통합 테스트 한 곳의 checkerframework 타입 어노테이션 접근 경고(Kotlin 2.4에서 오류가 된다, KT-80247 — 2.4로 올릴 때 처리).
+- `allOpen`(JPA 엔티티)은 그대로 동작한다 — 엔티티 매핑 통합 테스트 통과.
 **검증**: api·worker `test` + `integrationTest`. `ModulithStructureTest`(모듈 경계)가 통과해야 한다. `JsonbColumnMappingTest`처럼 리플렉션으로 엔티티를 훑는 테스트에 주의한다.
 
 ### B2. Testcontainers 1.20 → 2.x
@@ -187,5 +192,6 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 | (선행) react-query packageExtensions 범위화 | 완료 | #117 | 고정 버전 키 때문에 타입 검사가 깨졌던 것 |
 | (선행) dependabot ignore·groups | 완료 | #130 | §5 |
 | B2 Testcontainers 2 | 완료 | #143 | 2.0.5. 위 확인 결과 참고 |
+| B1 Kotlin 2 | PR | — | 2.3.21 (Boot 4.1 BOM과 같은 버전) |
 | B0 Gradle 9 | 보류 — B1 선행 | — | Gradle 9는 Kotlin 플러그인 2.0+ 필요 |
-| B1, B3, B4, W1~W3, M1 | 시작 전 | — | |
+| B3, B4, W1~W3, M1 | 시작 전 | — | |

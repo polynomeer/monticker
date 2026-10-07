@@ -67,14 +67,6 @@ updates:
       jjwt:
         patterns: ["io.jsonwebtoken:*"]
     ignore:
-      - dependency-name: "jvm"                            # B1 — Kotlin 플러그인(짧은 id)
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "plugin.spring"                  # B1
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "plugin.jpa"                     # B1
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "org.jetbrains.kotlin*"          # B1
-        update-types: ["version-update:semver-major"]
       - dependency-name: "gradle-wrapper"                 # B0 — Gradle 9
         update-types: ["version-update:semver-major"]
       - dependency-name: "io.jsonwebtoken:*"              # B3 — 0.x라 minor가 breaking이다
@@ -101,14 +93,6 @@ updates:
       jjwt:
         patterns: ["io.jsonwebtoken:*"]
     ignore:
-      - dependency-name: "jvm"                            # B1 — Kotlin 플러그인(짧은 id)
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "plugin.spring"                  # B1
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "plugin.jpa"                     # B1
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "org.jetbrains.kotlin*"          # B1
-        update-types: ["version-update:semver-major"]
       - dependency-name: "gradle-wrapper"                 # B0 — Gradle 9
         update-types: ["version-update:semver-major"]
       - dependency-name: "io.jsonwebtoken:*"              # B3 — 0.x라 minor가 breaking이다
