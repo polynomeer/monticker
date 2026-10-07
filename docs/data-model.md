@@ -685,6 +685,25 @@ CREATE TABLE portfolio_optimizations (
 
 ---
 
+## Market Calendar Tables (V83 — done, [ADR-086](decisions/086-krx-trading-calendar.md))
+
+### market_holidays
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| market | VARCHAR(16) | `KRX` (PK 일부) |
+| holiday_date | DATE | 평일 휴장일만(CHECK ISODOW 1~5). 주말은 규칙으로 휴장 (PK 일부) |
+| name | VARCHAR(100) | 예: `추석`, `개천절 대체공휴일`, `연말 휴장일` |
+| source | VARCHAR(32) | `SEED_RULE_DERIVED`(규칙 유도·미검증) / `KRX_NOTICE`(공고 대조) / `TEMPORARY_HOLIDAY` |
+
+### market_calendar_years
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| market, year | PK | 이 해의 휴장일을 다 넣었다는 표시. 없는 해는 주말만 휴장으로 계산하고 경고·메트릭을 남긴다 |
+| verified | BOOLEAN | KRX 공식 공고와 대조했는가 |
+| note | TEXT | 출처 메모 |
+
+쓰기는 Flyway 마이그레이션으로만 한다. api(`common.calendar.MarketCalendar`)·worker(`KrxHolidayCalendarLoader`)가 1시간마다 다시 읽는다.
+
 ## TimescaleDB Tables
 
 ### ~~price_ticks~~ — 제거됨 (V42, [ADR-041](decisions/041-timescale-hypertable-promotion.md))

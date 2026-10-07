@@ -54,7 +54,7 @@
 |---|---|---|---|---|
 | 지수 카드(KOSPI·KOSDAQ·USD/KRW)와 상단 지수 스탯 | `—`, "지수 시세 준비 중" | 지수·환율 시세 수집(worker)과 `GET /api/market/indices` | P1 | 부분 — 수집·저장·API·화면 완료, 공급자는 Mock("모의" 표시). KIS 업종지수 규격 확인·환율 출처 결정 필요 ([ADR-071](decisions/071-market-index-quotes.md)) |
 | 상단 "오늘 이벤트"·"급등·급락" 건수 | `—` | 당일 이벤트 유형별 집계 API(`/api/events/recent`는 최대 50건이라 집계 불가) | P2 | |
-| 장 상태 | 평일 09:00–15:30 KST로 클라이언트에서 계산 | 휴장일 캘린더 API | P2 | |
+| 장 상태 | 평일 09:00–15:30 KST로 클라이언트에서 계산 | 휴장일 캘린더 API | P2 | ✅ [ADR-086](decisions/086-krx-trading-calendar.md) — `GET /api/market/status`·`/api/market/calendar`, 휴장일 이름 표시, 요청 실패 시 클라이언트 규칙. 수능일 시간 변경은 범위 밖 |
 | 이벤트 피드 "이벤트 구간 변동"·"거래량 배수" 열 | `—`(시각·종목·유형·중요도는 실데이터) | `StockEventResponse`에 구간 변동률·거래량 배수 추가 | P1 | ✅ |
 | 퀀트 시그널 패널 | 빈 상태 + 퀀트랩 링크 | 내 전략·구독 전략 시그널을 모으는 피드 API | P1 | ✅ `/api/quant/signals/feed` |
 | 섹터 히트맵 등락률 | 섹터별 24시간 이벤트 수로 색의 진하기를 대신함 | 섹터별 등락률 집계 API | P2 | |
@@ -134,7 +134,7 @@
 | /wallet/replay | 계획 준수율, 계획 외 주문 | `—` | 주문별 계획 여부 집계 | P2 | |
 | /wallet/replay | 주문 복기 행의 감정 칩·코멘트 | 종목·방향·수량·수익률만 | ReplayEvent에 tradeId·emotion·memo. 코멘트는 AI 생성 | P2 | |
 | /wallet/replay | "감정 분포 · 이번 주"·날짜별 % | 전체 기간 분포, 일별 손익 금액 | emotion-analysis 기간 파라미터, 일별 수익률 API | P2 | |
-| /settlement | 이번 주 순액, 공휴일, "완료" 서버 필터 | 정산 예정만 표시, 주말만 건너뜀, 현재 페이지 필터 | 기간별 정산 집계, 영업일 캘린더, `?status=` | P2 | |
+| /settlement | 이번 주 순액, 공휴일, "완료" 서버 필터 | 정산 예정만 표시, 주말만 건너뜀, 현재 페이지 필터 | 기간별 정산 집계, 영업일 캘린더, `?status=` | P2 | ✅ [ADR-086](decisions/086-krx-trading-calendar.md) — `/api/settlement/paper/summary`(이번 주 순액), KRX 휴장일 반영(T+2·정산 캘린더·다가오는 휴장일), `?status=SETTLED`. 기존 PENDING 정산일은 기동 시 재정렬 |
 | /watch-rules | 관심종목 그룹 단위, 주문 유형·금액(계좌 %) | 비활성, 시장가 고정, 수량(주) | 규칙 대상 그룹, 지정가·비율 수량 | P2 | |
 | /watch-rules | 상단 "규칙 경유 손익" | `—` | 규칙 체결 손익 집계 | P2 | |
 | /risk | 한도 초과 시 "경고 후 진행" 모드, VaR 단위(원/%) | "주문 차단" 고정, % 입력 + 원화 환산 병기 | 정책 결정과 severity 처리 | P2 | |
