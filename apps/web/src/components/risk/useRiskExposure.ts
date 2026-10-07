@@ -9,7 +9,21 @@ export interface RiskLimits {
   varLimitPct: number;
   maxPositionCount: number;
   maxHourlyOrders: number;
+  /** 섹터 합산 비중 한도(%) — null이면 미설정(ADR-069) */
+  sectorConcentrationLimitPct: number | null;
+  /** 모의투자 리스크 체크. 실거래 게이트는 이 값과 무관하게 항상 돈다(ADR-069) */
   isActive: boolean;
+  /** 24시간 뒤 적용될 완화 — 위 값은 지금 유효한 한도 */
+  pendingChanges: PendingLimitChange[];
+  coolingOffHours: number;
+}
+
+/** ADR-069 — field는 위 필드 이름, value가 null이면 섹터 한도 해제, isActive는 1/0 */
+export interface PendingLimitChange {
+  field: string;
+  value: number | null;
+  requestedAt: string;
+  effectiveAt: string;
 }
 
 export interface ConcentrationItem { stockId: number; symbol: string; valuePct: number; }

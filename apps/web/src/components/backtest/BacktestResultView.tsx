@@ -28,6 +28,15 @@ interface EquityPoint {
   equity: number;
 }
 
+/** ADR-079 — 서버가 실제로 적용한 비용 */
+interface AppliedCosts {
+  commissionPct: number;
+  sellTaxPct: number;
+  slippagePct: number;
+  sellTaxApplied: boolean;
+  totalCost: number;
+}
+
 export interface BacktestResult {
   strategy: string;
   symbol: string;
@@ -38,12 +47,24 @@ export interface BacktestResult {
   metrics: BacktestMetrics;
   trades: BacktestTrade[];
   equityCurve: EquityPoint[];
+  costs?: AppliedCosts;
+}
+
+function costLabel(c: AppliedCosts | undefined) {
+  if (!c || (c.commissionPct === 0 && c.sellTaxPct === 0 && c.slippagePct === 0)) return "비용 미반영";
+  const parts = [
+    c.commissionPct > 0 && `수수료 ${c.commissionPct}%`,
+    c.sellTaxApplied && `세금 ${c.sellTaxPct}%`,
+    c.slippagePct > 0 && `슬리피지 ${c.slippagePct}%`,
+  ].filter(Boolean);
+  return `${parts.join(" · ")} · 비용 ${fmtNum(c.totalCost)}원`;
 }
 
 interface Props { result: BacktestResult; }
 
 const REASON: Record<string, { label: string; tone: "green" | "red" | "muted" }> = {
   TAKE_PROFIT: { label: "익절", tone: "green" },
+  END: { label: "기간 종료", tone: "muted" },
   STOP_LOSS: { label: "손절", tone: "red" },
   SIGNAL: { label: "신호", tone: "muted" },
 };
@@ -84,6 +105,7 @@ export default function BacktestResultView({ result }: Props) {
           <Stat big label="거래" value={`${metrics.totalTrades}회`} sub={`평균 보유 ${metrics.avgHoldingDays.toFixed(1)}일`} />
           <Stat big label="샤프" value={metrics.sharpeRatio.toFixed(2)} sub={`손익비 ${metrics.profitFactor.toFixed(2)}`} />
         </AutoGrid>
+        <span className="num text-2xs text-tm-muted">{costLabel(result.costs)}</span>
         {equityCurve.length > 1 ? (
           <LineChart
             series={[{ values: equityCurve.map((p) => p.equity), color: finalCapital >= initialCapital ? "#bd93f9" : "#ff79c6", fill: true }]}

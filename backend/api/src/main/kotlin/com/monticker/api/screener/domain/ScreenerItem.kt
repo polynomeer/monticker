@@ -19,4 +19,8 @@ data class ScreenerItem(
     val per: java.math.BigDecimal?,
     val pbr: java.math.BigDecimal?,
     val isFundamentalsMocked: Boolean,
+    /** 최신 일봉 거래량 ÷ 직전 20거래일 평균(ADR-072). 일봉이 모자라면 null */
+    val volumeMultiple: Double? = null,
+    /** 오늘(KST) 이 종목에 생긴 stock_events 유형 */
+    val todayEvents: List<String> = emptyList(),
 )

@@ -17,7 +17,31 @@ interface OrderSubmitter {
         quantity: Int,
         idempotencyKey: String? = null,
     ): MarketOrderResult
+
+    /**
+     * ADR-074 — 지정가 주문. 가격이 이미 교차하면 즉시 체결(fill 1건), 아니면 미체결(PENDING)로 남고
+     * [LimitOrderSweeper][com.monticker.api.matching.application.LimitOrderSweeper]가 이후 시세가 교차할 때 체결한다.
+     * 리스크 게이트(@RiskChecked)는 제출 시점에 한 번 — 이후 체결은 이미 승인된 주문의 이행이다.
+     */
+    fun submitLimit(
+        userId: Long,
+        stockId: Long,
+        side: String,
+        quantity: Int,
+        limitPrice: BigDecimal,
+    ): LimitOrderResult
 }
+
+/** 지정가 주문 제출 결과 — 즉시 체결됐으면 [fill]이 있고 [status]는 FILLED, 아니면 PENDING. */
+data class LimitOrderResult(
+    val orderId: Long,
+    val stockId: Long,
+    val side: String,
+    val quantity: Int,
+    val limitPrice: BigDecimal,
+    val status: String,
+    val fill: MarketOrderResult?,
+)
 
 /** 체결 결과 — MARKET 주문은 즉시 체결되거나(fill 1건) 거절된다. */
 data class MarketOrderResult(

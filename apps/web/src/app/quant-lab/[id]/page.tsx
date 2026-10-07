@@ -15,7 +15,7 @@ import {
   AutoGrid, Btn, BtnLink, Checkbox, DataTable, Field, KV, Legend, LineChart, Notice, Panel, PanelCol, PanelRow,
   Pill, PreviewTag, Stat, TerminalPage, fmtNum, fmtPct, type Column,
 } from "@/components/terminal";
-import { MonthlyHeatmap, TradeHistogram, rulesetStatus } from "@/components/quant/parts";
+import { MonthlyHeatmap, TradeHistogram, fmtMatch, fmtMdd, matchTone, rulesetStatus } from "@/components/quant/parts";
 
 type BacktestResult = QuantBacktestResult;
 type Trade = BacktestResult["trades"][number];
@@ -25,6 +25,8 @@ const EXIT_REASON_LABEL: Record<string, { label: string; tone: "green" | "red" |
   END: { label: "기간 종료", tone: "muted" },
   TAKE_PROFIT: { label: "익절", tone: "green" },
   STOP_LOSS: { label: "손절", tone: "red" },
+  MAX_HOLD: { label: "최대 보유", tone: "muted" },
+  TRAILING_STOP: { label: "트레일링", tone: "red" },
 };
 
 const SIGNAL_DIRECTION_LABEL: Record<string, string> = { BUY: "매수", SELL: "매도" };
@@ -208,7 +210,7 @@ export default function QuantLabDetailPage() {
       title={ruleSet.name}
       crumb={<>퀀트랩 / 전략 상세 · <span className="num">v{ruleSet.version}</span> · {st.label}</>}
       stats={[
-        { label: "포워드 일치율", value: "—", tone: "text-tm-muted" },
+        { label: "포워드 일치율", value: fmtMatch(forwardTest?.matchRate, forwardTest?.comparedSignals), tone: matchTone(forwardTest?.matchRate) },
         { label: "포워드 기간", value: fwRunning ? `${weeksSince(forwardTest!.startedAt)}주` : "—", tone: fwRunning ? undefined : "text-tm-muted" },
         { label: "운용 자산", value: fwRunning ? `${won(forwardTest!.currentEquity)}원` : "—", tone: fwRunning ? undefined : "text-tm-muted" },
         { label: "구독자", value: "—", tone: "text-tm-muted" },
@@ -267,8 +269,8 @@ export default function QuantLabDetailPage() {
                 <AutoGrid min={120}>
                   <Stat big label="누적 수익" value={fmtPct(latestResult.totalReturn, 1)} valueClassName={(latestResult.totalReturn ?? 0) >= 0 ? "text-up" : "text-down"} sub={`벤치마크 ${fmtPct(latestResult.benchmarkReturn, 1)} · 초과 ${fmtPct(latestResult.excessReturn, 1)}`} />
                   <Stat big label="CAGR" value={fmtPct(latestResult.annualReturn, 1)} valueClassName={(latestResult.annualReturn ?? 0) >= 0 ? "text-up" : "text-down"} sub={years ? `${years.toFixed(1)}년` : undefined} />
-                  <Stat big label="MDD" value={fmtPct(latestResult.mdd, 1)} valueClassName={Math.abs(latestResult.mdd ?? 0) >= 0.05 ? "text-down" : undefined} />
-                  <Stat big label="샤프" value="—" valueClassName="text-tm-muted" sub="준비 중" />
+                  <Stat big label="MDD" value={fmtMdd(latestResult.mdd)} valueClassName={(latestResult.mdd ?? 0) > 0.05 ? "text-down" : undefined} />
+                  <Stat big label="샤프" value={latestResult.sharpe == null ? "—" : latestResult.sharpe.toFixed(2)} valueClassName={latestResult.sharpe == null ? "text-tm-muted" : undefined} sub={latestResult.sharpe == null ? "이전 결과는 다시 실행하면 계산" : "연환산 · 무위험 3%"} />
                   <Stat big label="승률" value={latestResult.winRate == null ? "—" : `${latestResult.winRate.toFixed(0)}%`} sub={`${latestResult.tradeCount ?? "—"}회 · 평균 보유 ${latestResult.avgHoldingDays?.toFixed(1) ?? "—"}일`} />
                   <Stat big label="손익비" value={latestResult.profitFactor?.toFixed(2) ?? "—"} sub="평균 익/손" />
                 </AutoGrid>
@@ -298,6 +300,12 @@ export default function QuantLabDetailPage() {
                   <Stat label="초기 자본" value={`${won(forwardTest.initialCapital)}원`} />
                   <Stat label="포지션" value={forwardTest.holdingQty > 0 ? `보유 ${forwardTest.holdingQty}주` : "미보유"} />
                   <Stat label="시작일" value={new Date(forwardTest.startedAt).toLocaleDateString("ko-KR")} />
+                  <Stat
+                    label="포워드 일치율"
+                    value={fmtMatch(forwardTest.matchRate, forwardTest.comparedSignals)}
+                    valueClassName={matchTone(forwardTest.matchRate)}
+                    sub={forwardTest.comparedSignals ? `${forwardTest.matchedSignals}/${forwardTest.comparedSignals} 신호 일치` : "같은 기간 재실행과 비교"}
+                  />
                 </AutoGrid>
                 {forwardTest.equityCurve.length > 1 && (
                   <LineChart series={[{ values: forwardTest.equityCurve.map(p => p.equity), color: "#50fa7b", fill: true }]} width={320} height={140} label="포워드 테스트 운용 자산 곡선" />
@@ -355,10 +363,13 @@ export default function QuantLabDetailPage() {
                 className="resize-y rounded-[10px] border border-tm-line2 bg-tm-inner p-3 text-sm leading-relaxed text-dracula-fg outline-none placeholder:text-[#8b92b8] focus:border-dracula-purple"
               />
             </label>
-            <Field label="월 구독료 (0이면 무료)" unit="원" type="number" min={0} value={sharePrice} onChange={e => setSharePrice(Math.max(0, +e.target.value))} />
+            <Field label="월 구독료 (0이면 무료)" unit="원" type="number" min={0} max={1000000} step={1000} value={sharePrice} onChange={e => setSharePrice(Math.min(1_000_000, Math.max(0, Math.floor(+e.target.value))))} />
+            {sharePrice > 0 && (
+              <Notice tone="warn">유료 구독 결제는 아직 열리지 않았습니다. 가격은 표시되지만 구독자는 결제가 열릴 때까지 이 전략을 구독할 수 없습니다.</Notice>
+            )}
             <div className="flex flex-col gap-2">
               <div className="flex items-start gap-2">
-                <Checkbox checked={false} disabled label="포워드 테스트 12주 이상 — 검증 배지 신청" sub={fwRunning ? `현재 ${weeksSince(forwardTest!.startedAt)}주 · 일치율 —` : "포워드 테스트 중이 아닙니다"} />
+                <Checkbox checked={false} disabled label="포워드 테스트 12주 이상 — 검증 배지 신청" sub={fwRunning ? `현재 ${weeksSince(forwardTest!.startedAt)}주 · 일치율 ${fmtMatch(forwardTest!.matchRate, forwardTest!.comparedSignals)}` : "포워드 테스트 중이 아닙니다"} />
                 <PreviewTag className="mt-0.5" />
               </div>
               <Checkbox checked={shareAck} onChange={setShareAck} label="과거 성과가 미래 수익을 보장하지 않음을 구독자에게 고지" />

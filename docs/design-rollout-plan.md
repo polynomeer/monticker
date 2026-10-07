@@ -42,8 +42,8 @@
 | 패널 헤더 + / 설정 / 확대 아이콘 | 아이콘만 있고 동작 없음. 내보내기는 일부 화면(포트폴리오·지갑)만 CSV로 동작 | 패널 확대 모달, 탭 추가, 패널별 설정을 키트 `Panel`에 구현 | P2 | |
 | 상단 계좌 칩 잔액 | 잔액 없이 "모의투자 계좌 / 실전 계좌"만 표시 | 모의 총자산·실계좌 가용 현금 요약 조회를 셸에서 공유 | P2 | |
 | 라이트·시스템 테마 | 다크 고정(`forcedTheme`) | 토큰을 CSS 변수로 바꾸고 테마별 값 세트를 둔다([ADR-066](decisions/066-terminal-ui-shell.md) Revisit) | P2 | |
-| 리스크 한도 근접 경고(80%) | 없음(P0-5에서 분리) | VaR·집중도·일간 손실 사용률을 주기적으로 평가해 임계값을 넘는 순간 한 번 알림(사용자·규칙·일자별 dedupKey). 차단된 조건부 주문은 이미 ADR-065로 알린다 | P1 | |
-| 고대비 모드 | `a11yStore.highContrast`는 연결돼 있다. 하지만 globals.css 규칙이 옛 토큰(`dracula-comment`)만 덮어 새 화면에서는 효과가 약하다 | `tm-muted`·`tm-line2` 등 새 토큰용 고대비 규칙 | P1 | |
+| 리스크 한도 근접 경고(80%) | 없음(P0-5에서 분리) | VaR·집중도·일간 손실 사용률을 주기적으로 평가해 임계값을 넘는 순간 한 번 알림(사용자·규칙·일자별 dedupKey). 차단된 조건부 주문은 이미 ADR-065로 알린다 | P1 | ✅ [ADR-070](decisions/070-risk-limit-near-warnings.md) — 모의계좌, 5분 주기, 항목·일자별 1회, 끌 수 없음(실계좌는 잔고 캐시 필요해 보류) |
+| 고대비 모드 | `a11yStore.highContrast`는 연결돼 있다. 하지만 globals.css 규칙이 옛 토큰(`dracula-comment`)만 덮어 새 화면에서는 효과가 약하다 | `tm-muted`·`tm-line2` 등 새 토큰용 고대비 규칙 | P1 | ✅ tm-* 토큰 고대비 규칙 |
 | 접근성 설정: 글자 "작게", 움직임 줄이기, 숫자 고정폭, 가격 깜빡임 | 비활성 | `a11yStore` 필드를 추가하고 ECharts 애니메이션·`.num` 글꼴을 설정값에 연동 | P2 | |
 | 고정폭 숫자 글꼴 | 시스템 모노 스택(OS마다 다름) | 모노 웹폰트를 self-host(CSP `font-src 'self'`)할지 결정 | P2 | |
 
@@ -52,11 +52,11 @@
 ### / 홈
 | 항목 | 지금 | 필요한 것 | 우선순위 | 상태 |
 |---|---|---|---|---|
-| 지수 카드(KOSPI·KOSDAQ·USD/KRW)와 상단 지수 스탯 | `—`, "지수 시세 준비 중" | 지수·환율 시세 수집(worker)과 `GET /api/market/indices` | P1 | |
+| 지수 카드(KOSPI·KOSDAQ·USD/KRW)와 상단 지수 스탯 | `—`, "지수 시세 준비 중" | 지수·환율 시세 수집(worker)과 `GET /api/market/indices` | P1 | 부분 — 수집·저장·API·화면 완료, 공급자는 Mock("모의" 표시). KIS 업종지수 규격 확인·환율 출처 결정 필요 ([ADR-071](decisions/071-market-index-quotes.md)) |
 | 상단 "오늘 이벤트"·"급등·급락" 건수 | `—` | 당일 이벤트 유형별 집계 API(`/api/events/recent`는 최대 50건이라 집계 불가) | P2 | |
 | 장 상태 | 평일 09:00–15:30 KST로 클라이언트에서 계산 | 휴장일 캘린더 API | P2 | |
-| 이벤트 피드 "이벤트 구간 변동"·"거래량 배수" 열 | `—`(시각·종목·유형·중요도는 실데이터) | `StockEventResponse`에 구간 변동률·거래량 배수 추가 | P1 | |
-| 퀀트 시그널 패널 | 빈 상태 + 퀀트랩 링크 | 내 전략·구독 전략 시그널을 모으는 피드 API | P1 | |
+| 이벤트 피드 "이벤트 구간 변동"·"거래량 배수" 열 | `—`(시각·종목·유형·중요도는 실데이터) | `StockEventResponse`에 구간 변동률·거래량 배수 추가 | P1 | ✅ |
+| 퀀트 시그널 패널 | 빈 상태 + 퀀트랩 링크 | 내 전략·구독 전략 시그널을 모으는 피드 API | P1 | ✅ `/api/quant/signals/feed` |
 | 섹터 히트맵 등락률 | 섹터별 24시간 이벤트 수로 색의 진하기를 대신함 | 섹터별 등락률 집계 API | P2 | |
 | 테마 탭 | 빈 상태 | 테마 분류 데이터와 API | P2 | |
 | 시안에 없어 홈에서 뺀 위젯(포트폴리오 스냅샷, 최근 본 종목 스트립, 관심종목 티커) | 제거 | 다른 화면이나 패널로 재배치할지 결정(최근 본 종목은 검색 화면에 남아 있음) | P2 | |
@@ -64,23 +64,23 @@
 ### /screener
 | 항목 | 지금 | 필요한 것 | 우선순위 | 상태 |
 |---|---|---|---|---|
-| 섹터 칩 필터 | 표시만 | `/api/screener`에 `sector` 파라미터 | P1 | |
-| 등락률·거래량 배수 범위 슬라이더 | 비활성 모형 | `minChange/maxChange`, `minVolMult` 파라미터와 거래량 배수 계산 | P1 | |
-| 이벤트 체크박스(뉴스·공시 동반, 퀀트 시그널, 감성 급변) | 비활성 | 스크리너 쿼리에 당일 이벤트를 조인하는 필터 | P1 | |
-| 조건 저장 + 저장된 스크린 탭 | 버튼 비활성. 탭은 기존 실시간/급등·급락/외국인·기관 | 저장 스크린 CRUD API와 실행 | P1 | |
-| 결과 열 거래량 배수·오늘 스파크라인·이벤트, 상단 평균 거래량 배수·이벤트 동반 | `—` | 응답에 거래량 배수·당일 이벤트 추가, 장중 미니 시계열 일괄 API | P1 | |
+| 섹터 칩 필터 | 표시만 | `/api/screener`에 `sector` 파라미터 | P1 | ✅ [ADR-072](decisions/072-screener-criteria-and-saved-screens.md) |
+| 등락률·거래량 배수 범위 슬라이더 | 비활성 모형 | `minChange/maxChange`, `minVolMult` 파라미터와 거래량 배수 계산 | P1 | ✅ 거래량 배수 = 최신 일봉 ÷ 직전 20일 평균 |
+| 이벤트 체크박스(뉴스·공시 동반, 퀀트 시그널, 감성 급변) | 비활성 | 스크리너 쿼리에 당일 이벤트를 조인하는 필터 | P1 | ✅ |
+| 조건 저장 + 저장된 스크린 탭 | 버튼 비활성. 탭은 기존 실시간/급등·급락/외국인·기관 | 저장 스크린 CRUD API와 실행 | P1 | ✅ 사용자당 20개 |
+| 결과 열 거래량 배수·오늘 스파크라인·이벤트, 상단 평균 거래량 배수·이벤트 동반 | `—` | 응답에 거래량 배수·당일 이벤트 추가, 장중 미니 시계열 일괄 API | P1 | ✅ `/api/market/intraday` |
 | 시장 세그먼트 KOSPI/KOSDAQ | 동작하는 전체/국내/해외로 대체 | `ScreenerRepository`에 kospi/kosdaq 구분 추가 | P2 | |
 | 시가총액 범위 | 기존 대형/중형/소형 구간 | 필요하면 `minCap/maxCap` | P2 | |
 
 ### /stocks/[symbol] 트레이딩
 | 항목 | 지금 | 필요한 것 | 우선순위 | 상태 |
 |---|---|---|---|---|
-| 주문 유형 "지정가" | 비활성 옵션. 시장가만 동작 | 모의 주문 API(`/api/paper/buy·sell`)는 시장가만 받는다. 지정가 매칭엔진(`/api/matching`)은 별도 가상계좌라 통합 방식을 정하는 ADR이 필요 | P1 | |
-| 익절/손절 + "체결 시 자동 등록", 주문 패널 "조건부" 탭 | 비활성 + 실전 조건부 주문 링크 | 모의계좌용 조건부 주문 백엔드 | P1 | |
-| 호가 "체결" 탭(틱) | 준비 중 | 실시간 체결 틱 조회/WS | P1 | |
-| 타임프레임 3분/15분/1시간 | 비활성 | `candles_3m/15m/1h` 집계와 `CandleService` interval | P1 | |
-| 이벤트 레이어 "퀀트 시그널"·"감성" | 비활성 칩 | 종목별 포워드 테스트 시그널 조회, `sentimentScore` 기반 레이어 | P1 | |
-| 상단 시가총액·거래대금 | screener quotes. 펀더멘털이 모의 데이터면 `—` | KIS 펀더멘털 실데이터 연동 | P1 | |
+| 주문 유형 "지정가" | 비활성 옵션. 시장가만 동작 | 모의 주문 API(`/api/paper/buy·sell`)는 시장가만 받는다. 지정가 매칭엔진(`/api/matching`)은 별도 가상계좌라 통합 방식을 정하는 ADR이 필요 | P1 | ✅ [ADR-074](decisions/074-paper-limit-orders-and-fill-sweeper.md) |
+| 익절/손절 + "체결 시 자동 등록", 주문 패널 "조건부" 탭 | 비활성 + 실전 조건부 주문 링크 | 모의계좌용 조건부 주문 백엔드 | P1 | ✅ [ADR-075](decisions/075-paper-conditional-orders.md) |
+| 호가 "체결" 탭(틱) | 준비 중 | 실시간 체결 틱 조회/WS | P1 | ✅ 메모리 링 버퍼(재시작 시 비었다가 다시 참) |
+| 타임프레임 3분/15분/1시간 | 비활성 | `candles_3m/15m/1h` 집계와 `CandleService` interval | P1 | ✅ [ADR-076](decisions/076-query-time-candle-aggregation.md) |
+| 이벤트 레이어 "퀀트 시그널"·"감성" | 비활성 칩 | 종목별 포워드 테스트 시그널 조회, `sentimentScore` 기반 레이어 | P1 | ✅ |
+| 상단 시가총액·거래대금 | screener quotes. 펀더멘털이 모의 데이터면 `—` | KIS 펀더멘털 실데이터 연동 | P1 | 보류 — 코드 경로는 있음, 실제 KIS 키와 단위 검증 필요 |
 | 계좌 세그 "실전 · 연동 필요" | 항상 비활성. 이 폼은 실주문을 보내지 않는다 | 종목 화면 실주문은 [ADR-055](decisions/055-price-provenance-gate-for-real-orders.md)/[056](decisions/056-brokerage-order-unknown-outcome.md) 경로 정리 후 별도 설계 | P2 | |
 | 주문 전 리스크 체크 | "점검하기" 버튼으로 `POST /api/risk/check` 호출(감사 로그가 남아 자동 호출하지 않음) | 감사 로그 없는 미리보기 전용 엔드포인트가 있으면 입력할 때마다 점검 | P2 | |
 | 감정 태그 "계획대로" | `OTHER` + 메모 "계획대로"로 저장 | `EmotionType`에 `PLANNED` 추가 | P2 | |
@@ -94,16 +94,16 @@
 |---|---|---|---|---|---|
 | /stocks/search | 많이 찾는 종목 | 거래대금 상위로 대신 표시 | 검색 로그 집계 API | P2 | |
 | /stocks/search | 전략 검색 | `/api/quant/market` 상위 50개를 클라이언트에서 필터 | 서버 측 전략 검색 | P2 | |
-| /compare | 베타(KOSPI) | `—` | KOSPI 지수 일봉 | P1 | |
+| /compare | 베타(KOSPI) | `—` | KOSPI 지수 일봉 | P1 | ✅ (지수가 모의면 표시) |
 | /compare | 배당수익률 | `—` | 배당 데이터 소스 | P2 | |
 | /compare | 이벤트 수 | 종목당 100건까지만 조회해 "100+" | 이벤트 count API | P2 | |
-| /watchlist | 오늘(장중 스파크라인)·거래량 배수 열 | `—` | 장중 시계열 일괄 API, 거래량 배수 | P1 | |
+| /watchlist | 오늘(장중 스파크라인)·거래량 배수 열 | `—` | 장중 시계열 일괄 API, 거래량 배수 | P1 | ✅ |
 | /watchlist | 정규장/시간외/NXT | 동작하는 전체/국내/해외로 대체 | 세션별 시세 | P2 | |
 | /watchlist | 순서 이동 | ⋯ 메뉴에 "순서 이동(준비 중)" | 정렬 순서 변경 API(`PATCH sortOrder`) | P2 | |
 | /watchlist | 외국인 순매수 | `—` | 투자자별 매매동향 | P2 | |
 | /watchlist | 52주 최고/최저 | 1년 일봉으로 계산. 데이터가 300일 미만이면 `—` | 종목 기본정보에 52주 고저 추가 | P2 | |
-| /alerts | 읽지 않음 표시·탭·"모두 읽음", 상단 "읽지 않음" | 탭에서 제외, 비활성, `—` | `alert_histories.read_at`과 읽음 처리 API | P1 | |
-| /alerts | 규칙 켜기/끄기 토글 | 켜짐 상태로 비활성 표시 | 규칙 재활성화 API(지금은 DELETE 비활성화만 있음) | P1 | |
+| /alerts | 읽지 않음 표시·탭·"모두 읽음", 상단 "읽지 않음" | 탭에서 제외, 비활성, `—` | `alert_histories.read_at`과 읽음 처리 API | P1 | ✅ [ADR-073](decisions/073-alert-read-state-and-rule-pause.md) |
+| /alerts | 규칙 켜기/끄기 토글 | 켜짐 상태로 비활성 표시 | 규칙 재활성화 API(지금은 DELETE 비활성화만 있음) | P1 | ✅ |
 | /alerts | 시그널 탭 | 필터는 동작하지만 항상 비어 있음 | 퀀트 시그널을 알림 이력에 적재 | P2 | |
 | /alerts | 새 알림 규칙 | 종목 검색으로 이동 | 알림 화면에서 바로 만드는 폼(기존 `POST /api/alerts/rules`) | P2 | |
 | /alerts | 전달 채널 | `—` | 알림 채널 설정 조회 API | P2 | |
@@ -112,16 +112,16 @@
 
 | 화면 | 항목 | 지금 | 필요한 것 | 우선순위 | 상태 |
 |---|---|---|---|---|---|
-| /wallet, /settlement | "잔액 불일치 N건" | `—` | `LedgerReconciliationService` 결과 조회 API(`/api/wallet/reconciliation`) | P1 | |
-| /wallet/replay | 캔들 리플레이 + 재생 컨트롤 | 실제 B/S 주문 마커만 표시, 컨트롤 비활성 | 과거 일자 분봉 조회 API(날짜 지정), 재생 엔진(프론트), 이벤트에 stockId | P1 | |
-| /portfolio | 거래 내역 "경로"(직접/Watch Rule) | `—` | `/api/paper/history`에 `source`·`watchRuleId` | P1 | |
-| /matching | 시장 전체 체결 테이프 | 내 체결만 표시 | 종목별 시장 체결 조회/스트림 | P1 | |
-| /watch-rules | 퀀트랩 전략 신호를 감지 조건으로, 규칙 이름, 복합 조건 | 이벤트 3종(거래량 급증·급등·급락)만 | Watch Rule에 전략 시그널 소스·이름·복합 조건 필드 | P1 | |
-| /watch-rules | 하루 최대 발동 한도, 카드의 "오늘 발동 / 한도" | 입력 비활성, 오늘 발동 횟수만(실데이터) | 규칙별 일일 한도 필드와 서버 집행 | P1 | |
-| /risk | 섹터 집중도 한도 | 섹터 비중은 실계산, 한도는 "미설정" | `SECTOR_CONCENTRATION` 규칙(RiskLimit 컬럼, RiskChecker) | P1 | |
-| /risk | 리스크 체크 활성화 토글 | 현재 값만 표시. 예전 화면은 체크해도 실제로 바뀌지 않았다 | `PUT /api/risk/limits`에 `isActive` 추가 | P1 | |
-| /risk | 한도 완화 쿨링오프("24시간 뒤 적용") | 문구 자체를 뺐다(사실이 아님) | 완화 지연 적용. 실거래 전에 필요할 수 있다 | P1 | |
-| /risk | 차단·경고 기록, 상단 "이번 달 차단" | 빈 상태, `—` | 리스크 게이트 판정 이력 저장·조회(`/api/risk/decisions`) | P1 | |
+| /wallet, /settlement | "잔액 불일치 N건" | `—` | `LedgerReconciliationService` 결과 조회 API(`/api/wallet/reconciliation`) | P1 | ✅ `/api/wallet/reconciliation`(스냅샷 기준) |
+| /wallet/replay | 캔들 리플레이 + 재생 컨트롤 | 실제 B/S 주문 마커만 표시, 컨트롤 비활성 | 과거 일자 분봉 조회 API(날짜 지정), 재생 엔진(프론트), 이벤트에 stockId | P1 | ✅ |
+| /portfolio | 거래 내역 "경로"(직접/Watch Rule) | `—` | `/api/paper/history`에 `source`·`watchRuleId` | P1 | ✅ |
+| /matching | 시장 전체 체결 테이프 | 내 체결만 표시 | 종목별 시장 체결 조회/스트림 | P1 | ✅ |
+| /watch-rules | 퀀트랩 전략 신호를 감지 조건으로, 규칙 이름, 복합 조건 | 이벤트 3종(거래량 급증·급등·급락)만 | Watch Rule에 전략 시그널 소스·이름·복합 조건 필드 | P1 | ✅ [ADR-077](decisions/077-watch-rule-signals-compound-daily-limit.md) |
+| /watch-rules | 하루 최대 발동 한도, 카드의 "오늘 발동 / 한도" | 입력 비활성, 오늘 발동 횟수만(실데이터) | 규칙별 일일 한도 필드와 서버 집행 | P1 | ✅ |
+| /risk | 섹터 집중도 한도 | 섹터 비중은 실계산, 한도는 "미설정" | `SECTOR_CONCENTRATION` 규칙(RiskLimit 컬럼, RiskChecker) | P1 | ✅ [ADR-069](decisions/069-risk-limit-changes-cooling-off.md) |
+| /risk | 리스크 체크 활성화 토글 | 현재 값만 표시. 예전 화면은 체크해도 실제로 바뀌지 않았다 | `PUT /api/risk/limits`에 `isActive` 추가 | P1 | ✅ 모의투자에만, 끄기는 24시간 뒤 |
+| /risk | 한도 완화 쿨링오프("24시간 뒤 적용") | 문구 자체를 뺐다(사실이 아님) | 완화 지연 적용. 실거래 전에 필요할 수 있다 | P1 | ✅ [ADR-069](decisions/069-risk-limit-changes-cooling-off.md) |
+| /risk | 차단·경고 기록, 상단 "이번 달 차단" | 빈 상태, `—` | 리스크 게이트 판정 이력 저장·조회(`/api/risk/decisions`) | P1 | ✅ 차단 기록(경고 모드는 P2) |
 | /portfolio | 상단 "벤치마크 대비 KOSPI" | `—` | 지수 기간 수익률 API | P2 | |
 | /portfolio | 거래 내역 감정 칸 | 실데이터. 단, 거래마다 개별 조회(N+1) | history 응답에 emotion 포함 | P2 | |
 | /portfolio | 평균단가 차트 매수 마커 | 평균단가선만 | StockChart에 거래 마커 prop | P2 | |
@@ -143,18 +143,18 @@
 
 | 화면 | 항목 | 지금 | 필요한 것 | 우선순위 | 상태 |
 |---|---|---|---|---|---|
-| /quant-lab | 카드 "포워드 일치율" | `—` | 포워드 신호와 백테스트 신호의 일치율 지표·API | P1 | |
-| /quant-lab | 카드 CAGR·MDD·곡선 | 실데이터. 단, 카드마다 백테스트 조회(N+1) | 룰셋 목록에 최신 백테스트 요약과 다운샘플 곡선 포함 | P1 | |
-| /quant-lab/builder | 뉴스 감성·공시 유형·시가총액·배당 블록 | 비활성 | 퀀트 엔진 지표 추가(감성·공시·펀더멘털 연동) | P1 | |
-| /quant-lab/builder | 청산 "최대 보유"·"트레일링" | 비활성 | `ruleDefinition`과 엔진에 `MAX_HOLD_DAYS`·`TRAILING_STOP` | P1 | |
-| /quant-lab/builder, [id] | 샤프 지수 | `—` | `QuantBacktestResult.sharpe`(단순 백테스트 엔진에는 이미 있음) | P1 | |
-| /backtest | 수수료·세금·슬리피지 반영 | 비활성 체크 | `BacktestService` 비용 모델 | P1 | |
-| /analytics | 현재 포트폴리오 비중 비교 | 동일가중 기준 | 사용자 보유 비중으로 최적화 비교 | P1 | |
-| /analytics | "리밸런싱으로 보내기" | 비활성. 실거래 화면이라 연결하지 않았다 | 추천 비중을 리밸런싱 **초안**으로 넘기는 흐름. 실주문 검증 선행 | P1 | |
-| /quant-lab/market | 카드 성과(CAGR·MDD·포워드·곡선) | `—` | 마켓 목록 API에 성과 요약 포함 | P1 | |
-| /quant-lab/market | 신호 이력·이번 달 신호 | 화면을 연 뒤 들어온 WS 신호만 | 구독 전략 신호 이력 API, WS를 단일 연결 다중 토픽으로 통합 | P1 | |
-| /quant-lab/market | 유료 구독 | 비활성(기존과 동일) | PG 결제 연동([ADR-035](decisions/035-strategy-market-signal-access-control.md)) | P1 | |
-| /quant-lab/earnings | 월별 수익 차트, 이번 달, 활성 구독자, 전략별 지표 | `—`, "전략 #id" | 월 단위·전략별 집계 API(`summary.byStrategy`에 이름·지표) | P1 | |
+| /quant-lab | 카드 "포워드 일치율" | `—` | 포워드 신호와 백테스트 신호의 일치율 지표·API | P1 | ✅ [ADR-078](decisions/078-forward-match-rate-and-list-performance.md) |
+| /quant-lab | 카드 CAGR·MDD·곡선 | 실데이터. 단, 카드마다 백테스트 조회(N+1) | 룰셋 목록에 최신 백테스트 요약과 다운샘플 곡선 포함 | P1 | ✅ |
+| /quant-lab/builder | 뉴스 감성·공시 유형·시가총액·배당 블록 | 비활성 | 퀀트 엔진 지표 추가(감성·공시·펀더멘털 연동) | P1 | 부분 — 감성·공시·배당 공시 ✅, 시가총액은 일별 이력 필요 ([ADR-079](decisions/079-quant-engine-aux-indicators-hard-exits-costs.md)) |
+| /quant-lab/builder | 청산 "최대 보유"·"트레일링" | 비활성 | `ruleDefinition`과 엔진에 `MAX_HOLD_DAYS`·`TRAILING_STOP` | P1 | ✅ |
+| /quant-lab/builder, [id] | 샤프 지수 | `—` | `QuantBacktestResult.sharpe`(단순 백테스트 엔진에는 이미 있음) | P1 | ✅ |
+| /backtest | 수수료·세금·슬리피지 반영 | 비활성 체크 | `BacktestService` 비용 모델 | P1 | ✅ |
+| /analytics | 현재 포트폴리오 비중 비교 | 동일가중 기준 | 사용자 보유 비중으로 최적화 비교 | P1 | ✅ |
+| /analytics | "분석 비중을 리밸런싱 초안으로"(구 "리밸런싱으로 보내기") | 비활성. 실거래 화면이라 연결하지 않았다 | 분석 결과 비중을 리밸런싱 **초안**으로 넘기는 흐름. 실주문 검증 선행 | P1 | ✅ 저장 안 된 초안으로만 |
+| /quant-lab/market | 카드 성과(CAGR·MDD·포워드·곡선) | `—` | 마켓 목록 API에 성과 요약 포함 | P1 | ✅ |
+| /quant-lab/market | 신호 이력·이번 달 신호 | 화면을 연 뒤 들어온 WS 신호만 | 구독 전략 신호 이력 API, WS를 단일 연결 다중 토픽으로 통합 | P1 | ✅ |
+| /quant-lab/market | 유료 구독 | 비활성(기존과 동일) | PG 결제 연동([ADR-035](decisions/035-strategy-market-signal-access-control.md)) | P1 | 보류 — 서버가 유료 구독을 거부하도록 막음, 법무 결정 필요 ([ADR-080](decisions/080-paid-strategy-subscription-closed.md)) |
+| /quant-lab/earnings | 월별 수익 차트, 이번 달, 활성 구독자, 전략별 지표 | `—`, "전략 #id" | 월 단위·전략별 집계 API(`summary.byStrategy`에 이름·지표) | P1 | ✅ (이탈률은 이력 없음) |
 | /quant-lab | "운용 중"(실전 자동 운용) | 비활성 | 실전 자동 운용 상태와 실행 경로. ADR 필요, 실주문 검증 선행 | P2 | |
 | /quant-lab | 상단 오늘 신호·구독 중 | `—` | 사용자별 집계 | P2 | |
 | /quant-lab/builder | 블록 드래그앤드롭 | 클릭으로 추가 | 프론트 DnD | P2 | |
@@ -171,9 +171,9 @@
 
 | 화면 | 항목 | 지금 | 필요한 것 | 우선순위 | 상태 |
 |---|---|---|---|---|---|
-| /brokerage/orders | 상단 "등락" | `—` | `/api/stocks/{id}/price`에 전일 종가·등락률 | P1 | |
-| /brokerage/orders | 호가 단위·현재가 ±30% 검증 | 클라이언트에서 계산(국내 6자리 종목). 막지 않는 '참고' 항목 | **서버** 호가 단위·가격제한폭 검증(400 거부)과 전일 종가 데이터 | P1 | |
-| /brokerage/orders | 정정 | "주문 취소"만 동작 | 정정 API(KIS/Toss), 결과 불명 처리 포함 | P1 | |
+| /brokerage/orders | 상단 "등락" | `—` | `/api/stocks/{id}/price`에 전일 종가·등락률 | P1 | ✅ |
+| /brokerage/orders | 호가 단위·현재가 ±30% 검증 | 클라이언트에서 계산(국내 6자리 종목). 막지 않는 '참고' 항목 | **서버** 호가 단위·가격제한폭 검증(400 거부)과 전일 종가 데이터 | P1 | ✅ [ADR-081](decisions/081-krx-limit-order-price-validation.md) |
+| /brokerage/orders | 정정 | "주문 취소"만 동작 | 정정 API(KIS/Toss), 결과 불명 처리 포함 | P1 | 보류 — KIS 정정 후 수명주기·Toss 정정 API 규격 확인 필요, 실주문 코드 없음 |
 | /brokerage | API 지연시간 | tokenValid로 "정상/재인증 필요"만 | 계좌 상태 응답에 latency·lastError | P2 | |
 | /brokerage | 보유·주문 CSV 내보내기 | 없음 | 프론트 | P2 | |
 | /brokerage/connect | 4단계 스테퍼, 권한(scope) 확인 | 한 화면 폼 + 진행 표시. connect 토큰 발급으로만 확인 | 권한 확인 API | P2 | |
@@ -187,10 +187,10 @@
 
 | 화면 | 항목 | 지금 | 필요한 것 | 우선순위 | 상태 |
 |---|---|---|---|---|---|
-| /signup | [선택] 마케팅 수신 동의 | 동의는 저장된다(ADR-068). 철회는 `DELETE /api/users/me/consents/MARKETING` | 설정 화면에 철회 토글, 실제 마케팅 발송 경로가 최신 동의를 확인 | P1 | 부분 ✅ |
-| /subscription | 다음 결제일 | 만료일(`expiresAt`)로 표시 | 정기결제 스케줄(`next_billing_at`) | P1 | |
-| /subscription | FAQ 답변(플랜별 기능 범위·환불) | 사실에 맞게 고쳤고, 환불은 "[법률 검토 후 확정]" | 플랜별 기능 게이팅 정책, 환불 정책 | P1 | |
-| /settings/notifications | 전체 알림, 거래량 급증, 퀀트 시그널, 체결·정산, 전략 마켓 소식 | 비활성 토글 | `NotificationPreferenceRequest` 필드 추가와 발송 경로 확인(리스크·결과 확인 중은 0-5) | P1 | |
+| /signup | [선택] 마케팅 수신 동의 | 동의는 저장된다(ADR-068). 철회는 `DELETE /api/users/me/consents/MARKETING` | 설정 화면에 철회 토글, 실제 마케팅 발송 경로가 최신 동의를 확인 | P1 | ✅ 설정 화면 토글 |
+| /subscription | 다음 결제일 | 만료일(`expiresAt`)로 표시 | 정기결제 스케줄(`next_billing_at`) | P1 | ✅ [ADR-083](decisions/083-next-billing-date-derived-from-renewal-schedule.md) |
+| /subscription | FAQ 답변(플랜별 기능 범위·환불) | 사실에 맞게 고쳤고, 환불은 "[법률 검토 후 확정]" | 플랜별 기능 게이팅 정책, 환불 정책 | P1 | 보류 — 플랜별 기능 제한 정책(사업 결정)·환불 정책(법무) 필요 |
+| /settings/notifications | 전체 알림, 거래량 급증, 퀀트 시그널, 체결·정산, 전략 마켓 소식 | 비활성 토글 | `NotificationPreferenceRequest` 필드 추가와 발송 경로 확인(리스크·결과 확인 중은 0-5) | P1 | ✅ [ADR-082](decisions/082-notification-preferences-enforced-at-delivery.md) |
 | /login | 로그인 상태 유지 | 비활성 | refresh 토큰 수명 2단계 | P2 | |
 | /onboarding | 관심 분야·사용 방식 저장 | 선택만 되고 저장 안 함 | `PUT /api/users/me/preferences`, 홈·알림 우선순위 반영 | P2 | |
 | /onboarding | 시작 자금 3,000만원·1억원 | 비활성(1,000만원 고정) | 모의 계좌 생성 시 초기 자금 파라미터 | P2 | |

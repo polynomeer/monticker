@@ -20,6 +20,7 @@ import { TradingHaltBanner } from "@/components/brokerage/TradingHaltBanner";
 import { LiveNotice, LoginRequired, NoAccount, StockSearchBox, sideClass, sideLabel, useLastRebalanceExecution, useSymbolQuotes, type StockHit } from "@/components/brokerage/shared";
 import { cn } from "@/lib/utils";
 import type { RebalanceExecutionResponse, RebalanceLegResponse, RebalanceTargetSource } from "@monticker/types";
+import { takeRebalanceDraft } from "@/lib/rebalanceDraft";
 
 interface WeightRow { symbol: string; name: string; weightPct: string; id?: number; }
 
@@ -62,7 +63,9 @@ export default function RebalancePage() {
 
   const { data: account, isLoading: accountLoading } = useBrokerageAccount();
   const { data: balance, isError: balanceError } = useBrokerageBalance(!!account);
-  const { data: target } = useRebalanceTarget(!!account);
+  const { data: target, isFetched: targetFetched } = useRebalanceTarget(!!account);
+  // /analytics "리밸런싱으로 보내기"가 남긴 초안 — 저장된 목표를 먼저 읽은 뒤 편집 중 상태로만 채운다.
+  const [fromAnalytics, setFromAnalytics] = useState(false);
   const saveTarget = useSaveRebalanceTarget();
   const { data: previewData, isLoading: previewLoading, isFetching: previewFetching, refetch: refetchPreview } = useRebalancePreview(false);
   const executeMutation = useExecuteRebalance();
@@ -76,6 +79,17 @@ export default function RebalancePage() {
     setSource(target.source);
     setIsDirty(false);
   }, [target]);
+
+  useEffect(() => {
+    if (!targetFetched) return;
+    const draft = takeRebalanceDraft();
+    if (!draft) return;
+    setRows(draft.rows.map(r => ({ symbol: r.symbol, name: r.name, id: r.stockId, weightPct: r.weightPct.toFixed(1) })));
+    setSource("OPTIMIZER");
+    setOptimizeInfo({ expectedReturn: draft.expectedReturn, expectedRisk: draft.expectedRisk, suggestion: draft.suggestion });
+    setIsDirty(true);
+    setFromAnalytics(true);
+  }, [targetFetched]);
 
   // 미리보기를 다시 보거나 편집하면 실행 확인은 처음부터 다시 받는다.
   useEffect(() => { setConfirming(false); }, [isDirty, previewData, showPreview]);
@@ -366,6 +380,9 @@ export default function RebalancePage() {
           {balanceError && <p className="px-3 text-xs text-dracula-orange">잔고를 확인할 수 없어 현재 비중을 표시하지 않습니다.</p>}
 
           <div className="flex flex-col gap-2 px-1.5 pt-1">
+            {fromAnalytics && isDirty && (
+              <Notice tone="warn">포트폴리오 분석 화면의 분석 결과 비중을 초안으로 채웠습니다. 아직 저장되지 않았고 주문도 나가지 않았습니다 — 비중을 확인한 뒤 저장하고, 괴리 미리보기와 실행 확인을 거쳐야 실제 주문이 제출됩니다.</Notice>
+            )}
             {optimizeError && <Notice tone="danger">{optimizeError}</Notice>}
             {optimizeInfo && optimizeInfo.suggestion && <Notice tone="info">{optimizeInfo.suggestion}</Notice>}
             {saveError && <Notice tone="danger">{saveError}</Notice>}

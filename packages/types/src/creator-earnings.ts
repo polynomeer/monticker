@@ -45,3 +45,31 @@ export interface CreatorPayout {
   requestedAt: string;
   processedAt: string | null;
 }
+
+// GET /api/quant/market/creator/dashboard — 제작자 대시보드 집계(수익은 취소분 제외, 월은 KST)
+export interface MonthlyNetPoint {
+  /** YYYY-MM */
+  month: string;
+  net: number;
+}
+
+export interface CreatorStrategyRow {
+  /** strategy_market.id — 수익 내역의 strategyId와 같다 */
+  marketId: number;
+  rulesetId: string;
+  name: string;
+  price: number;
+  subscribers: number;
+  thisMonthNet: number;
+  totalNet: number;
+  sharedAt: string | null;
+}
+
+export interface CreatorDashboard {
+  /** 최근 12개월, 이번 달 포함. 수익 없는 달은 0 */
+  monthly: MonthlyNetPoint[];
+  thisMonthNet: number;
+  totalNet: number;
+  activeSubscribers: number;
+  strategies: CreatorStrategyRow[];
+}

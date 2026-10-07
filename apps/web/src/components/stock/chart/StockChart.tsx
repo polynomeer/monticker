@@ -2,7 +2,7 @@
 
 import { useMemo }       from "react";
 import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
-import type { ChartTheme, CandleData, EventMarker, IndicatorKey, OrderLine, DrawingTool, Drawing } from "./types";
+import type { ChartTheme, CandleData, EventMarker, IndicatorKey, OrderLine, DrawingTool, Drawing, SignalMarker, SentimentMarker } from "./types";
 import EChartsAdapter from "./EChartsAdapter";
 
 const ActiveAdapter = EChartsAdapter;
@@ -16,6 +16,8 @@ interface Props {
   enabledIndicators?: IndicatorKey[];
   orderLines?: OrderLine[];
   onCancelOrderLine?: (orderId: number) => void;
+  signalMarkers?: SignalMarker[];
+  sentimentMarkers?: SentimentMarker[];
   activeDrawingTool?: DrawingTool | null;
   drawings?: Drawing[];
   onDrawingsChange?: (drawings: Drawing[]) => void;
@@ -23,7 +25,7 @@ interface Props {
 
 export default function StockChart({
   candles, events = [], height = 340, vwapData, onEventClick,
-  enabledIndicators, orderLines, onCancelOrderLine,
+  enabledIndicators, orderLines, onCancelOrderLine, signalMarkers, sentimentMarkers,
   activeDrawingTool, drawings, onDrawingsChange,
 }: Props) {
   const { chartTheme }    = useThemeStore();
@@ -63,6 +65,8 @@ export default function StockChart({
       enabledIndicators={enabledIndicators}
       orderLines={orderLines}
       onCancelOrderLine={onCancelOrderLine}
+      signalMarkers={signalMarkers}
+      sentimentMarkers={sentimentMarkers}
       activeDrawingTool={activeDrawingTool}
       drawings={drawings}
       onDrawingsChange={onDrawingsChange}

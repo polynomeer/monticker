@@ -50,6 +50,13 @@ class OrderSagaOrchestrator(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
+    companion object {
+        /** 미체결 SELL 주문의 잔량 합 — 매도 가능 수량에서 뺀다(ADR-074). */
+        const val PENDING_SELL_QTY_SQL =
+            "SELECT COALESCE(SUM(quantity - filled_qty), 0) AS qty FROM orders " +
+                "WHERE user_id = ? AND stock_id = ? AND side = 'SELL' AND status IN ('PENDING', 'PARTIALLY_FILLED')"
+    }
+
     @Timed("matching.saga.submit", tags = ["module=saga"])
     @Transactional
     fun execute(userId: Long, req: SubmitOrderRequest): SubmitOrderResponse {
@@ -94,12 +101,21 @@ class OrderSagaOrchestrator(
 
         // ADR-047: 매도는 보유 수량 안에서만. 이전엔 이 확인이 구 페이퍼 경로에만 있어 매칭 엔진으로는 공매도가 됐다.
         // portfolio_positions는 paper 모듈의 프로젝션이지만 paper_accounts와 같은 수준의 JDBC 읽기다.
+        // ADR-074: 미체결 SELL 지정가의 잔량은 이미 "팔기로 한" 수량이다 — 빼고 판정한다. 포지션 행을 FOR UPDATE로 잡아
+        // 같은 종목의 동시 매도 제출을 직렬화한다(둘 다 같은 보유량을 보고 각자 통과하던 이중 매도 창을 닫는다).
         if (req.side == "SELL") {
             val held = jdbc.query(
-                "SELECT net_qty FROM portfolio_positions WHERE user_id = ? AND stock_id = ?",
+                "SELECT net_qty FROM portfolio_positions WHERE user_id = ? AND stock_id = ? FOR UPDATE",
                 { rs, _ -> rs.getInt("net_qty") }, userId, req.stockId,
             ).firstOrNull() ?: 0
-            require(held >= req.quantity) { "보유 수량 부족: 보유 $held, 요청 ${req.quantity}" }
+            val pendingSell = jdbc.query(
+                PENDING_SELL_QTY_SQL, { rs, _ -> rs.getInt("qty") }, userId, req.stockId,
+            ).firstOrNull() ?: 0
+            val available = held - pendingSell
+            require(available >= req.quantity) {
+                if (pendingSell > 0) "보유 수량 부족: 보유 $held, 미체결 매도 $pendingSell, 요청 ${req.quantity}"
+                else "보유 수량 부족: 보유 $held, 요청 ${req.quantity}"
+            }
         }
 
         // STEP 2: RESERVE_CASH (BUY 전용)

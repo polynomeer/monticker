@@ -6,10 +6,11 @@ import { cn } from "@/lib/utils";
 import { Icon } from "@/components/terminal";
 import ScreenerRow from "./ScreenerRow";
 import type { ScreenerItem } from "@/hooks/useScreener";
+import { useIntradaySeriesChunked } from "@/hooks/useIntradaySeries";
 
 /**
  * 표시 컬럼 묶음.
- * - basic: 시안(Screener.dc.html)의 결과 표 그대로 — 거래량 배수·오늘 스파크라인·이벤트는 아직 API가 없어 "—"
+ * - basic: 시안(Screener.dc.html)의 결과 표 그대로 — 거래량 배수(20일 평균 대비)·오늘 스파크라인(10분 간격)·오늘 이벤트
  * - trade: 기존 스크리너의 거래대금·매수/매도 비율
  * - valuation: 시가총액·PER·PBR
  */
@@ -71,6 +72,8 @@ export default function ScreenerTable({
   items, loading, loadingMore, hasMore, onLoadMore, columnSet = "basic",
 }: Props) {
   const columns = columnsFor(columnSet);
+  const showToday = columns.some((c) => c.key === "today");
+  const intraday = useIntradaySeriesChunked(items.map((i) => i.stockId), showToday);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // ── 가상화 ────────────────────────────────────────────────
@@ -138,7 +141,7 @@ export default function ScreenerTable({
                 ref={virtualizer.measureElement}
                 style={{ position: "absolute", top: virtualRow.start, left: 0, width: "100%", height: ROW_HEIGHT }}
               >
-                <ScreenerRow item={item} columns={columns} />
+                <ScreenerRow item={item} columns={columns} intraday={intraday.get(item.stockId)} />
               </div>
             );
           })}

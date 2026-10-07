@@ -25,6 +25,33 @@ interface CreatorEarningRepository : JpaRepository<CreatorEarning, Long> {
     """)
     fun findEarningsByStrategy(@Param("creatorId") creatorId: Long): List<Array<Any>>
 
+    /** 월(KST)별 순수익 — 취소분 제외. 행: [ym 'YYYY-MM', sum] */
+    @Query(
+        value = """
+            SELECT to_char(earned_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM') AS ym, SUM(net_amount) AS total
+            FROM creator_earnings
+            WHERE creator_id = :creatorId AND status <> 'CANCELLED' AND earned_at >= :since
+            GROUP BY ym
+            ORDER BY ym
+        """,
+        nativeQuery = true,
+    )
+    fun sumMonthlyNet(@Param("creatorId") creatorId: Long, @Param("since") since: java.time.Instant): List<Array<Any>>
+
+    /** 전략별 누적·기간 순수익 — 취소분 제외. 행: [strategy_id, total, recent] */
+    @Query(
+        value = """
+            SELECT strategy_id,
+                   SUM(net_amount) AS total,
+                   SUM(CASE WHEN earned_at >= :since THEN net_amount ELSE 0 END) AS recent
+            FROM creator_earnings
+            WHERE creator_id = :creatorId AND status <> 'CANCELLED'
+            GROUP BY strategy_id
+        """,
+        nativeQuery = true,
+    )
+    fun sumNetByStrategy(@Param("creatorId") creatorId: Long, @Param("since") since: java.time.Instant): List<Array<Any>>
+
     fun existsByStrategyIdAndSubscriberId(strategyId: Long, subscriberId: Long): Boolean
 
     fun findAllByCreatorIdAndStatus(creatorId: Long, status: EarningStatus): List<CreatorEarning>

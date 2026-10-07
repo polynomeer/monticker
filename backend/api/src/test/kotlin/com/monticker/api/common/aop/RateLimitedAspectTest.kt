@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.data.redis.core.script.RedisScript
 import org.springframework.data.redis.core.ValueOperations
 import org.springframework.http.HttpStatus
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
@@ -58,7 +59,7 @@ class RateLimitedAspectTest {
 
     @Test
     fun `한도 이내 요청은 정상 처리된다`() {
-        every { valueOps.increment(any<String>()) } returns 1L
+        every { redis.execute(any<RedisScript<Long>>(), any<List<String>>(), any<String>()) } returns 1L
 
         val result = aspect.limit(makePjp(), makeAnnotation(10, 60, "test"))
 
@@ -67,7 +68,7 @@ class RateLimitedAspectTest {
 
     @Test
     fun `한도 초과 시 429를 던진다`() {
-        every { valueOps.increment(any<String>()) } returns 11L
+        every { redis.execute(any<RedisScript<Long>>(), any<List<String>>(), any<String>()) } returns 11L
 
         val ex = assertThrows<ResponseStatusException> {
             aspect.limit(makePjp(), makeAnnotation(10, 60, "test"))
@@ -82,60 +83,60 @@ class RateLimitedAspectTest {
         val auth = UsernamePasswordAuthenticationToken(42L, null, emptyList())
         SecurityContextHolder.getContext().authentication = auth
 
-        val capturedKey = mutableListOf<String>()
-        every { valueOps.increment(capture(capturedKey)) } returns 1L
+        val capturedKey = mutableListOf<List<String>>()
+        every { redis.execute(any<RedisScript<Long>>(), capture(capturedKey), any<String>()) } returns 1L
 
         aspect.limit(makePjp(), makeAnnotation(10, 60, "ai.summary"))
 
-        assertThat(capturedKey.first()).isEqualTo("ratelimit:ai.summary:42")
+        assertThat(capturedKey.first().single()).isEqualTo("ratelimit:ai.summary:42")
     }
 
     @Test
     fun `SecurityContextHolder 없으면 anon 키를 사용한다`() {
-        val capturedKey = mutableListOf<String>()
-        every { valueOps.increment(capture(capturedKey)) } returns 1L
+        val capturedKey = mutableListOf<List<String>>()
+        every { redis.execute(any<RedisScript<Long>>(), capture(capturedKey), any<String>()) } returns 1L
 
         aspect.limit(makePjp(), makeAnnotation(10, 60, "test"))
 
-        assertThat(capturedKey.first()).isEqualTo("ratelimit:test:anon")
+        assertThat(capturedKey.first().single()).isEqualTo("ratelimit:test:anon")
     }
 
     @Test
     fun `파라미터명이 userId면 해당 값을 키로 사용한다`() {
-        val capturedKey = mutableListOf<String>()
-        every { valueOps.increment(capture(capturedKey)) } returns 1L
+        val capturedKey = mutableListOf<List<String>>()
+        every { redis.execute(any<RedisScript<Long>>(), capture(capturedKey), any<String>()) } returns 1L
 
         aspect.limit(
             makePjp(paramNames = arrayOf("userId"), args = arrayOf(99L)),
             makeAnnotation(10, 60, "quant.backtest"),
         )
 
-        assertThat(capturedKey.first()).isEqualTo("ratelimit:quant.backtest:99")
+        assertThat(capturedKey.first().single()).isEqualTo("ratelimit:quant.backtest:99")
     }
 
     @Test
     fun `첫 요청 시 TTL을 설정한다`() {
-        every { valueOps.increment(any<String>()) } returns 1L
+        every { redis.execute(any<RedisScript<Long>>(), any<List<String>>(), any<String>()) } returns 1L
 
         aspect.limit(makePjp(), makeAnnotation(10, 300, "test"))
 
-        verify { redis.expire("ratelimit:test:anon", Duration.ofSeconds(300)) }
+        verify { redis.execute(any<RedisScript<Long>>(), listOf("ratelimit:test:anon"), "300") }
     }
 
     @Test
     fun `keyPrefix가 비어 있으면 클래스명 메서드명으로 키를 만든다`() {
-        val capturedKey = mutableListOf<String>()
-        every { valueOps.increment(capture(capturedKey)) } returns 1L
+        val capturedKey = mutableListOf<List<String>>()
+        every { redis.execute(any<RedisScript<Long>>(), capture(capturedKey), any<String>()) } returns 1L
 
         aspect.limit(makePjp(), makeAnnotation(10, 60, ""))
 
-        assertThat(capturedKey.first()).startsWith("ratelimit:RateLimitedAspectTest.testMethod:")
+        assertThat(capturedKey.first().single()).startsWith("ratelimit:RateLimitedAspectTest.testMethod:")
     }
 
     // resilience-plan P0-1 — Redis 장애 시 레이트리밋은 fail-open
     @Test
     fun `Redis 연결 실패 시 요청을 통과시키고 실패 카운터를 올린다`() {
-        every { valueOps.increment(any<String>()) } throws RedisConnectionFailureException("down")
+        every { redis.execute(any<RedisScript<Long>>(), any<List<String>>(), any<String>()) } throws RedisConnectionFailureException("down")
 
         val result = aspect.limit(makePjp(), makeAnnotation(10, 60, "test"))
 

@@ -1,12 +1,14 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
 
 export interface AlertStats {
   totalFired: number; totalSent: number; totalFailed: number;
   successRate: number; activeRules: number;
   recentFires: { date: string; count: number }[];
+  /** 읽지 않은 알림 수(ADR-073) */
+  unread?: number;
 }
 
 /** GET /api/alerts/history/search 응답(AlertHistoryResponse) */
@@ -18,6 +20,8 @@ export interface AlertHistory {
   message: string;
   deliveryStatus: string;
   triggeredAt: string;
+  /** null이면 읽지 않음(ADR-073) */
+  readAt?: string | null;
 }
 
 export interface AlertRule {
@@ -56,15 +60,62 @@ export function useAlertHistory(enabled: boolean) {
   });
 }
 
+/**
+ * 알림 화면의 규칙 목록 — 꺼 둔 규칙도 포함(includePaused). 다른 화면(관심종목)이 쓰는
+ * ["alerts","rules"](켜진 규칙만)과 키를 나눠 캐시가 섞이지 않게 한다.
+ */
 export function useAlertRules(enabled: boolean) {
   return useQuery<AlertRule[]>({
-    queryKey: ["alerts", "rules"],
+    queryKey: ["alerts", "rules", "all"],
     queryFn: async () => {
-      const r = await authFetch("/api/alerts/rules");
+      const r = await authFetch("/api/alerts/rules?includePaused=true");
       return r.ok ? r.json() : [];
     },
     enabled,
   });
+}
+
+async function failWith(r: Response): Promise<never> {
+  const body = await r.json().catch(() => null);
+  throw new Error(body?.message ?? `요청이 실패했습니다 (${r.status})`);
+}
+
+/** 규칙 켜기/끄기 · 읽음 처리(ADR-073). 성공하면 알림 관련 캐시를 모두 새로 받는다. */
+export function useAlertMutations() {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["alerts"] });
+
+  const toggleRule = useMutation({
+    mutationFn: async ({ id, isActive }: { id: number; isActive: boolean }) => {
+      const r = await authFetch(`/api/alerts/rules/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive }),
+      });
+      if (!r.ok) await failWith(r);
+      return (await r.json()) as AlertRule;
+    },
+    onSuccess: invalidate,
+  });
+
+  const markRead = useMutation({
+    mutationFn: async (id: number) => {
+      const r = await authFetch(`/api/alerts/history/${id}/read`, { method: "POST" });
+      if (!r.ok && r.status !== 404) await failWith(r);
+    },
+    onSuccess: invalidate,
+  });
+
+  /** upTo: 화면에 보이는 목록을 받은 시각 — 그 뒤에 온 알림은 남긴다 */
+  const markAllRead = useMutation({
+    mutationFn: async (upTo: Date) => {
+      const r = await authFetch(`/api/alerts/history/read-all?upTo=${encodeURIComponent(upTo.toISOString())}`, { method: "POST" });
+      if (!r.ok) await failWith(r);
+    },
+    onSuccess: invalidate,
+  });
+
+  return { toggleRule, markRead, markAllRead };
 }
 
 /** 알림 종류 → 시안의 원형 글자 배지·분류 탭 */

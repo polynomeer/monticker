@@ -2,8 +2,16 @@ package com.monticker.api.screener.api
 
 import com.monticker.api.screener.application.ScreenerResult
 import com.monticker.api.screener.application.ScreenerService
+import com.monticker.api.common.aop.RateLimited
+import com.monticker.api.screener.application.SavedScreen
+import com.monticker.api.screener.application.SavedScreenService
+import com.monticker.api.screener.domain.ScreenerCriteria
 import com.monticker.api.screener.domain.ScreenerItem
+import com.monticker.api.screener.infrastructure.SectorCount
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.security.core.context.SecurityContextHolder
+import org.springframework.web.server.ResponseStatusException
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 import java.math.BigDecimal
@@ -12,12 +20,33 @@ import java.time.Instant
 @Validated
 @RestController
 @RequestMapping("/api/screener")
-class ScreenerController(private val screenerService: ScreenerService) {
+class ScreenerController(
+    private val screenerService: ScreenerService,
+    private val savedScreenService: SavedScreenService,
+) {
+
+    /** 로그인했으면 사용자 id(이 경로는 비로그인 공개라 없을 수 있다) */
+    private fun optionalUserId(): Long? = SecurityContextHolder.getContext().authentication?.principal as? Long
+
+    private fun requireUserId(): Long = optionalUserId()
+        ?: throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다")
+
+    /** 공개 경로라 깊은 OFFSET 스캔을 비로그인으로 반복시킬 수 있다 — 상한을 둔다(보안 리뷰 2026-10). 음수는 0으로 본다. */
+    private fun requireOffset(offset: Int) {
+        require(offset <= MAX_OFFSET) { "offset은 $MAX_OFFSET 이하여야 합니다" }
+    }
+
+    companion object {
+        const val MAX_OFFSET = 1000
+    }
 
     /**
-     * 시세 기반 스크리너 (기존).
+     * 시세 기반 스크리너. 조건은 ADR-072.
      *
      * GET /api/screener?tab=realtime&market=domestic&sort=amount
+     * GET /api/screener?sectors=반도체,2차전지&minChange=1&maxChange=30&minVolMult=2&events=NEWS,QUANT_SIGNAL
+     *
+     * events: NEWS | DISCLOSURE | SENTIMENT | QUANT_SIGNAL(로그인 필요, 내 룰셋·구독 전략 신호만) — 모두 만족(AND)
      */
     @GetMapping
     fun getScreener(
@@ -27,9 +56,73 @@ class ScreenerController(private val screenerService: ScreenerService) {
         @RequestParam(defaultValue = "20")       limit: Int,
         @RequestParam(defaultValue = "0")        offset: Int,
         @RequestParam(defaultValue = "all")      marketCapTier: String,
+        @RequestParam(required = false)          sectors: String?,
+        @RequestParam(required = false)          minChange: Double?,
+        @RequestParam(required = false)          maxChange: Double?,
+        @RequestParam(required = false)          minVolMult: Double?,
+        @RequestParam(required = false)          events: String?,
     ): ResponseEntity<ScreenerResponse> {
-        val result = screenerService.getItems(tab, market, sort, limit, offset, marketCapTier)
+        requireOffset(offset)
+        val criteria = ScreenerCriteria(
+            market        = market,
+            marketCapTier = marketCapTier,
+            sectors       = ScreenerCriteria.splitList(sectors),
+            minChange     = minChange,
+            maxChange     = maxChange,
+            minVolMult    = minVolMult,
+            events        = ScreenerCriteria.parseEvents(events),
+            sort          = sort,
+        ).normalized()   // 잘못된 값은 IllegalArgumentException → 400
+        return run(tab, criteria, limit, offset)
+    }
+
+    private fun run(tab: String, criteria: ScreenerCriteria, limit: Int, offset: Int): ResponseEntity<ScreenerResponse> {
+        val userId = optionalUserId()
+        if (criteria.requiresQuantSignal && userId == null) {
+            throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "퀀트 시그널 조건은 로그인 후 쓸 수 있습니다")
+        }
+        val result = screenerService.getItems(tab, criteria, limit.coerceIn(1, 50), offset.coerceAtLeast(0), userId)
         return ResponseEntity.ok(result.toResponse())
+    }
+
+    /** 섹터 칩 목록 — 활성 종목의 섹터와 종목 수(많은 순, 최대 100개). GET /api/screener/sectors?market=domestic */
+    @GetMapping("/sectors")
+    fun sectors(@RequestParam(defaultValue = "all") market: String): ResponseEntity<List<SectorCount>> =
+        ResponseEntity.ok(screenerService.getSectors(market))
+
+    // ── 저장한 스크린(ADR-072) — 로그인 필요(SecurityConfig) ───────────────────────
+
+    @GetMapping("/saved")
+    fun listSaved(): ResponseEntity<List<SavedScreenResponse>> =
+        ResponseEntity.ok(savedScreenService.list(requireUserId()).map { SavedScreenResponse.from(it) })
+
+    @PostMapping("/saved")
+    @RateLimited(limit = 30, windowSec = 3600, keyPrefix = "screener.saved")
+    fun createSaved(@RequestBody req: SavedScreenRequest): ResponseEntity<SavedScreenResponse> =
+        ResponseEntity.status(HttpStatus.CREATED)
+            .body(SavedScreenResponse.from(savedScreenService.create(requireUserId(), req.name, req.criteria)))
+
+    @PutMapping("/saved/{id}")
+    fun updateSaved(@PathVariable id: Long, @RequestBody req: SavedScreenRequest): ResponseEntity<SavedScreenResponse> =
+        ResponseEntity.ok(SavedScreenResponse.from(savedScreenService.update(requireUserId(), id, req.name, req.criteria)))
+
+    @DeleteMapping("/saved/{id}")
+    fun deleteSaved(@PathVariable id: Long): ResponseEntity<Void> {
+        savedScreenService.delete(requireUserId(), id)
+        return ResponseEntity.noContent().build()
+    }
+
+    /** 저장한 조건으로 실행 — GET /api/screener/saved/{id}/run?tab=realtime&limit=20&offset=0 */
+    @GetMapping("/saved/{id}/run")
+    fun runSaved(
+        @PathVariable id: Long,
+        @RequestParam(defaultValue = "realtime") tab: String,
+        @RequestParam(defaultValue = "20") limit: Int,
+        @RequestParam(defaultValue = "0") offset: Int,
+    ): ResponseEntity<ScreenerResponse> {
+        requireOffset(offset)
+        val saved = savedScreenService.get(requireUserId(), id)
+        return run(tab, saved.criteria, limit, offset)
     }
 
     /**
@@ -97,6 +190,10 @@ data class ScreenerItemResponse(
     val per: BigDecimal?,
     val pbr: BigDecimal?,
     val isFundamentalsMocked: Boolean,
+    /** 최신 일봉 거래량 ÷ 직전 20거래일 평균(ADR-072). 없으면 null */
+    val volumeMultiple: Double?,
+    /** 오늘(KST) 생긴 이벤트 유형(중요도 높은 순) */
+    val todayEvents: List<String>,
 ) {
     companion object {
         fun from(i: ScreenerItem) = ScreenerItemResponse(
@@ -117,6 +214,25 @@ data class ScreenerItemResponse(
             per          = i.per,
             pbr          = i.pbr,
             isFundamentalsMocked = i.isFundamentalsMocked,
+            volumeMultiple = i.volumeMultiple,
+            todayEvents    = i.todayEvents,
         )
+    }
+}
+
+data class SavedScreenRequest(
+    val name: String,
+    val criteria: ScreenerCriteria,
+)
+
+data class SavedScreenResponse(
+    val id: Long,
+    val name: String,
+    val criteria: ScreenerCriteria,
+    val createdAt: Instant,
+    val updatedAt: Instant,
+) {
+    companion object {
+        fun from(s: SavedScreen) = SavedScreenResponse(s.id, s.name, s.criteria, s.createdAt, s.updatedAt)
     }
 }

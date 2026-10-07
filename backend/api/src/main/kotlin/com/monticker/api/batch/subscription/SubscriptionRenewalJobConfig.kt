@@ -2,6 +2,7 @@ package com.monticker.api.batch.subscription
 
 import com.monticker.api.batch.KeysetItemReader
 import com.monticker.api.subscription.application.RenewResult
+import com.monticker.api.subscription.application.RenewalSchedule
 import com.monticker.api.subscription.application.SubscriptionService
 import com.monticker.api.subscription.domain.UserSubscription
 import com.monticker.api.subscription.infrastructure.UserSubscriptionRepository
@@ -19,7 +20,6 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.data.domain.PageRequest
 import org.springframework.transaction.PlatformTransactionManager
 import java.time.Instant
-import java.time.temporal.ChronoUnit
 
 @Configuration
 class SubscriptionRenewalJobConfig(
@@ -57,7 +57,7 @@ class SubscriptionRenewalJobConfig(
     @StepScope
     fun expiringSubscriptionReader(): KeysetItemReader<UserSubscription> {
         // 키셋 — 갱신(expiresAt 연장)·강등(status 변경)되면 조건에서 빠지므로 offset 페이징은 20건씩 건너뛴다.
-        val threshold = Instant.now().plus(1, ChronoUnit.DAYS)
+        val threshold = Instant.now().plus(RenewalSchedule.LOOKAHEAD)   // ADR-083 — 다음 결제일 계산과 같은 값
         return KeysetItemReader("expiringSubscriptionReader", 20, UserSubscription::id) { afterId, limit ->
             subscriptionRepo.findExpiringBeforeAfter(threshold, afterId, PageRequest.of(0, limit))
         }

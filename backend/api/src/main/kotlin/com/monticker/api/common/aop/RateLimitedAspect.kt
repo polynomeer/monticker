@@ -5,6 +5,7 @@ import org.aspectj.lang.annotation.Around
 import org.aspectj.lang.annotation.Aspect
 import org.aspectj.lang.reflect.MethodSignature
 import com.monticker.api.common.redis.RedisGuard
+import com.monticker.api.common.redis.WindowCounter
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Component
@@ -40,9 +41,7 @@ class RateLimitedAspect(
 
         // Redis 장애 시 fail-open — 카운트를 0으로 보고 통과시킨다 (resilience-plan P0-1).
         val count = guard.failOpen(op = "rate_limited_aspect", fallback = 0L) {
-            val c = redis.opsForValue().increment(redisKey) ?: 1L
-            if (c == 1L) redis.expire(redisKey, Duration.ofSeconds(rateLimited.windowSec))
-            c
+            WindowCounter.incrementInWindow(redis, redisKey, Duration.ofSeconds(rateLimited.windowSec))
         }
 
         if (count > rateLimited.limit) {

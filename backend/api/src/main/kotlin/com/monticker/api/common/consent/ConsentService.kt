@@ -66,6 +66,22 @@ class ConsentService(private val repo: UserConsentRepository) {
         }
     }
 
+    /**
+     * 선택 항목 하나에 (다시) 동의한다 — 설정 화면의 마케팅 수신 토글. 필수 항목은 이 길로 받지 않는다: 필수 동의는 가입·동의 화면에서
+     * 묶음으로, 문서 전문을 보여 준 뒤 받는다([requireAndRecord]). 이미 현재 버전으로 동의한 상태면 행을 더 쌓지 않는다.
+     */
+    fun agreeOptional(userId: Long, type: ConsentType, source: ConsentSource) {
+        require(isOptional(type)) { "${label(type)}은(는) 여기서 동의할 수 없는 항목입니다." }
+        val latest = latestByType(userId)[type]
+        if (latest != null && latest.agreed && latest.documentVersion == ConsentDocuments.versionOf(type)) return
+        record(userId, setOf(type), source)
+    }
+
+    /** 그 항목의 최신 기록이 현재 버전의 동의인가. 마케팅(광고성 정보) 발송 경로는 보내기 직전에 이것을 확인해야 한다. */
+    @Transactional(readOnly = true)
+    fun isAgreed(userId: Long, type: ConsentType): Boolean =
+        latestByType(userId)[type]?.let { it.agreed && it.documentVersion == ConsentDocuments.versionOf(type) } ?: false
+
     /** 선택 항목만 철회할 수 있다. 필수 항목 철회는 서비스 탈퇴다. */
     fun withdraw(userId: Long, type: ConsentType, source: ConsentSource) {
         require(ConsentGroup.entries.none { type in it.required }) { "필수 동의는 철회할 수 없습니다. 탈퇴로 처리해야 합니다." }
@@ -78,6 +94,9 @@ class ConsentService(private val repo: UserConsentRepository) {
         repo.saveAll(types.map { UserConsent(userId = userId, consentType = it, documentVersion = ConsentDocuments.versionOf(it), agreed = true, source = source, recordedAt = now) })
         log.info("동의 기록: userId={} source={} types={}", userId, source, types)
     }
+
+    private fun isOptional(type: ConsentType) =
+        ConsentGroup.entries.any { type in it.optional } && ConsentGroup.entries.none { type in it.required }
 
     private fun latestByType(userId: Long): Map<ConsentType, UserConsent> =
         repo.findAllByUserIdOrderByRecordedAtDescIdDesc(userId).groupBy { it.consentType }.mapValues { it.value.first() }

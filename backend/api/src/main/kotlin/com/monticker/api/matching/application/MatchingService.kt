@@ -15,6 +15,7 @@ import com.monticker.api.matching.statemachine.OrderStateMachineService
 import com.monticker.api.matching.statemachine.OrderStates
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.jdbc.core.JdbcTemplate
+import com.monticker.api.matching.submit.LimitOrderResult
 import com.monticker.api.matching.submit.MarketOrderResult
 import com.monticker.api.matching.submit.OrderSubmitter
 import org.springframework.stereotype.Service
@@ -101,6 +102,34 @@ class MatchingService(
         return MarketOrderResult(
             orderId = res.order.id, fillId = fill.id, stockId = fill.stockId, side = fill.side,
             quantity = fill.quantity, fillPrice = fill.fillPrice, amount = fill.amount, filledAt = fill.filledAt,
+        )
+    }
+
+    /**
+     * ADR-074 — paper 파사드의 지정가 진입점. `limitPrice` 파라미터 이름으로 @RiskChecked가 예상 가격을 읽는다.
+     * 교차하면 사가가 즉시 체결하고, 아니면 미체결로 남아 [LimitOrderSweeper]가 이후 시세로 체결한다.
+     */
+    @RiskChecked
+    override fun submitLimit(
+        userId: Long,
+        stockId: Long,
+        side: String,
+        quantity: Int,
+        limitPrice: BigDecimal,
+    ): LimitOrderResult {
+        require(limitPrice > BigDecimal.ZERO) { "지정가는 0보다 커야 합니다" }
+        val res = submitOrder(userId, SubmitOrderRequest(
+            stockId = stockId, side = side, orderType = "LIMIT", quantity = quantity, limitPrice = limitPrice,
+        ))
+        val fill = res.fills.singleOrNull()?.let {
+            MarketOrderResult(
+                orderId = res.order.id, fillId = it.id, stockId = it.stockId, side = it.side,
+                quantity = it.quantity, fillPrice = it.fillPrice, amount = it.amount, filledAt = it.filledAt,
+            )
+        }
+        return LimitOrderResult(
+            orderId = res.order.id, stockId = stockId, side = side, quantity = quantity,
+            limitPrice = limitPrice, status = res.order.status, fill = fill,
         )
     }
 

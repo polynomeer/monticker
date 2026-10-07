@@ -39,6 +39,11 @@ export async function agreeConsents(consents: ConsentType[]): Promise<ConsentSta
   }));
 }
 
+/** 선택 동의(마케팅) 하나에 (다시) 동의한다 — 설정 화면. 필수 항목은 서버가 400으로 거부한다. */
+export async function agreeOptionalConsent(type: ConsentType): Promise<ConsentStatus> {
+  return read(await authFetch(`/api/users/me/consents/${type}`, { method: "PUT" }));
+}
+
 export async function withdrawConsent(type: ConsentType): Promise<ConsentStatus> {
   return read(await authFetch(`/api/users/me/consents/${type}`, { method: "DELETE" }));
 }

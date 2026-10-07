@@ -21,6 +21,24 @@ html.dark[data-contrast="high"] .dark\:text-dracula-comment,
 html.dark[data-contrast="high"] .text-dracula-comment { color: #c8d0ea !important; }
 html.dark[data-contrast="high"] .dark\:border-dracula-line,
 html.dark[data-contrast="high"] .border-dracula-line { border-color: #7a83ad !important; }
+/* 고대비 — 터미널 토큰(ADR-066 tm-*): 표면은 더 어둡게(검정 바탕), 그 위 글자·테두리는 더 밝게 해 층 사이 대비를 벌린다.
+   대비: muted #dde1f5·soft #f2f4fc는 패널(#14141a) 위에서 WCAG AAA(7:1)를 넘는다. */
+html[data-contrast="high"] .bg-tm-page  { background-color: #000000 !important; }
+html[data-contrast="high"] .bg-tm-panel { background-color: #14141a !important; }
+html[data-contrast="high"] .bg-tm-inner { background-color: #0a0a0e !important; }
+html[data-contrast="high"] .bg-tm-raised,
+html[data-contrast="high"] .hover\:bg-tm-raised:hover { background-color: #2e2f3d !important; }
+html[data-contrast="high"] .bg-tm-line,
+html[data-contrast="high"] .bg-tm-line2,
+html[data-contrast="high"] .hover\:bg-tm-line2:hover { background-color: #5c6185 !important; }
+html[data-contrast="high"] .text-tm-muted,
+html[data-contrast="high"] .placeholder\:text-tm-muted::placeholder { color: #dde1f5 !important; }
+html[data-contrast="high"] .text-tm-soft { color: #f2f4fc !important; }
+html[data-contrast="high"] .border-tm-line { border-color: #6e7499 !important; }
+html[data-contrast="high"] .border-tm-line2,
+html[data-contrast="high"] .hover\:border-tm-line2:hover,
+html[data-contrast="high"] .border-tm-muted,
+html[data-contrast="high"] .hover\:border-tm-muted:hover { border-color: #9aa1c8 !important; }
 /* 키보드 포커스 링 — 대비와 무관한 접근성 이득 */
 html[data-contrast="high"] :focus-visible { outline: 2px solid currentColor !important; outline-offset: 2px !important; }
 

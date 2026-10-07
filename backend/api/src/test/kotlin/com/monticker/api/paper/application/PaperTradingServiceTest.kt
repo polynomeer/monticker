@@ -32,8 +32,10 @@ class PaperTradingServiceTest {
     private val projection = mockk<PortfolioPositionProjection>(relaxed = true)
     private val orderSubmitter = mockk<OrderSubmitter>()
 
+    private val conditionalService = mockk<PaperConditionalOrderService>(relaxed = true)
+
     private val service = PaperTradingService(
-        accountRepo, tradeRepo, jdbc, eventPublisher, projection, orderSubmitter,
+        accountRepo, tradeRepo, jdbc, eventPublisher, projection, orderSubmitter, conditionalService,
     )
 
     // ADR-047 — buy/sell은 파사드다: 매칭 엔진에 MARKET 주문을 내고, 리스너가 같은 트랜잭션에 만든 paper_trades 행을 돌려준다.
@@ -120,5 +122,60 @@ class PaperTradingServiceTest {
 
         io.mockk.verify(exactly = 0) { accountRepo.save(any()) }
         io.mockk.verify(exactly = 0) { jdbc.update(any<String>(), 7L) }
+    }
+
+    // ADR-074 — 지정가가 교차하지 않으면 미체결로 접수된다: tradeId 없음, orderId로 취소·조회.
+    @Test
+    fun `placeOrder LIMIT that does not cross returns a pending order without a trade`() {
+        every { accountRepo.findByUserId(1L) } returns Optional.of(PaperAccount(userId = 1L))
+        every { orderSubmitter.submitLimit(1L, 5L, "BUY", 2, java.math.BigDecimal("60000")) } returns com.monticker.api.matching.submit.LimitOrderResult(
+            orderId = 31L, stockId = 5L, side = "BUY", quantity = 2, limitPrice = java.math.BigDecimal("60000"), status = "PENDING", fill = null,
+        )
+        every { jdbc.query(match<String> { it.contains("SELECT cash") }, any<org.springframework.jdbc.core.RowMapper<java.math.BigDecimal>>(), 1L) } returns listOf(java.math.BigDecimal("9880000"))
+
+        val r = service.placeOrder(1L, PaperOrderRequest(stockId = 5L, side = "BUY", orderType = "LIMIT", quantity = 2, limitPrice = java.math.BigDecimal("60000")))
+
+        org.assertj.core.api.Assertions.assertThat(r.status).isEqualTo("PENDING")
+        org.assertj.core.api.Assertions.assertThat(r.orderId).isEqualTo(31L)
+        org.assertj.core.api.Assertions.assertThat(r.tradeId).isNull()
+        org.assertj.core.api.Assertions.assertThat(r.remainingCash).isEqualByComparingTo("9880000")
+    }
+
+    @Test
+    fun `placeOrder LIMIT without a positive limit price is rejected before reaching the engine`() {
+        assertThatThrownBy {
+            service.placeOrder(1L, PaperOrderRequest(stockId = 5L, side = "BUY", orderType = "LIMIT", quantity = 2, limitPrice = null))
+        }.isInstanceOf(IllegalArgumentException::class.java)
+        assertThatThrownBy {
+            service.placeOrder(1L, PaperOrderRequest(stockId = 5L, side = "BUY", orderType = "LIMIT", quantity = 2, limitPrice = java.math.BigDecimal("-1")))
+        }.isInstanceOf(IllegalArgumentException::class.java)
+        io.mockk.verify(exactly = 0) { orderSubmitter.submitLimit(any(), any(), any(), any(), any()) }
+    }
+
+    // ADR-075 — 미체결 지정가 매수에 익절/손절을 붙이면 WAITING_PARENT로 등록되고 부모 주문 id가 연결된다.
+    @Test
+    fun `placeOrder with a bracket attaches waiting conditional orders to a pending limit buy`() {
+        every { accountRepo.findByUserId(1L) } returns Optional.of(PaperAccount(userId = 1L))
+        every { orderSubmitter.submitLimit(1L, 5L, "BUY", 2, java.math.BigDecimal("60000")) } returns com.monticker.api.matching.submit.LimitOrderResult(
+            orderId = 31L, stockId = 5L, side = "BUY", quantity = 2, limitPrice = java.math.BigDecimal("60000"), status = "PENDING", fill = null,
+        )
+        every { jdbc.query(match<String> { it.contains("SELECT cash") }, any<org.springframework.jdbc.core.RowMapper<java.math.BigDecimal>>(), 1L) } returns listOf(java.math.BigDecimal("9880000"))
+        every { conditionalService.attachBracket(1L, 5L, 2, 31L, false, java.math.BigDecimal("66000"), java.math.BigDecimal("57000")) } returns listOf(
+            PaperConditionalOrderResponse(41L, 5L, "SELL", "TAKE_PROFIT", java.math.BigDecimal("66000"), 2, null, 31L, "WAITING_PARENT", null, null, java.time.Instant.now(), null),
+        )
+
+        val r = service.placeOrder(1L, PaperOrderRequest(stockId = 5L, side = "BUY", orderType = "LIMIT", quantity = 2,
+            limitPrice = java.math.BigDecimal("60000"), takeProfitPrice = java.math.BigDecimal("66000"), stopLossPrice = java.math.BigDecimal("57000")))
+
+        org.assertj.core.api.Assertions.assertThat(r.conditionalOrderIds).containsExactly(41L)
+    }
+
+    @Test
+    fun `a stop-loss above the limit price is rejected before the order is placed`() {
+        assertThatThrownBy {
+            service.placeOrder(1L, PaperOrderRequest(stockId = 5L, side = "BUY", orderType = "LIMIT", quantity = 2,
+                limitPrice = java.math.BigDecimal("60000"), stopLossPrice = java.math.BigDecimal("61000")))
+        }.isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("손절가")
+        io.mockk.verify(exactly = 0) { orderSubmitter.submitLimit(any(), any(), any(), any(), any()) }
     }
 }

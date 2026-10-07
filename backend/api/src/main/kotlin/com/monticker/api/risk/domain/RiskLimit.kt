@@ -31,6 +31,10 @@ class RiskLimit(
     @Column(name = "max_hourly_orders", nullable = false)
     var maxHourlyOrders: Int = 5,
 
+    /** ADR-069 — 한 섹터(종목 sector) 합산 비중 한도. null이면 미설정 — SectorConcentrationRule을 평가하지 않는다. */
+    @Column(name = "sector_concentration_limit_pct", precision = 5, scale = 2)
+    var sectorConcentrationLimitPct: BigDecimal? = null,
+
     @Column(name = "is_active", nullable = false)
     var isActive: Boolean = true,
 

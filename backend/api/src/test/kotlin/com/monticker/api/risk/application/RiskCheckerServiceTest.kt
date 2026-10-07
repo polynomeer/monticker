@@ -21,9 +21,14 @@ class RiskCheckerServiceTest {
     private val objectMapper = ObjectMapper()
     private val riskRuleQueryService = RiskRuleQueryService(jdbc)
     private val auditLogger = RiskCheckAuditLogger(jdbc, objectMapper)
-    private val service = RiskCheckerService(riskLimitRepo, riskRuleQueryService, auditLogger, io.micrometer.core.instrument.simple.SimpleMeterRegistry(), jdbc)
+    private val service = RiskCheckerService(RiskLimitService(riskLimitRepo, jdbc), riskRuleQueryService, auditLogger, io.micrometer.core.instrument.simple.SimpleMeterRegistry(), jdbc)
 
     private val userId = 1L
+
+    init {
+        // ADR-069 — 대기 중인 한도 완화 없음(유효 한도 = 저장된 한도)
+        every { jdbc.query(match<String> { it.contains("risk_limit_pending_changes") }, any<RowMapper<Any>>(), *anyVararg()) } returns emptyList()
+    }
     private val stockId = 100L
     private val estimatedPrice = BigDecimal("1000")
 
@@ -388,5 +393,175 @@ class RiskCheckerServiceTest {
         }
         // 감사 로그 INSERT 는 실행되지 않아야 한다 (FK 위반 500 방지)
         verify(exactly = 0) { jdbc.update(match<String> { it.contains("risk_check_logs") }, *anyVararg()) }
+    }
+
+    // ── ADR-069 — 리스크 체크 끄기 ────────────────────────────────────────────
+
+    private fun inactiveLimits() = RiskLimit(userId = userId, dailyLossLimitPct = BigDecimal("3.00"), isActive = false)
+
+    @Test
+    fun `모의계좌에서 리스크 체크를 끄면 한도를 넘어도 통과하고 그 사실을 기록한다`() {
+        stubSafeDefaults(inactiveLimits())
+        every { jdbc.query(match<String> { it.contains("avg_cost") }, any<RowMapper<BigDecimal>>(), userId, any()) } returns listOf(BigDecimal("-400000"))
+
+        val result = service.check(userId, stockId, "BUY", 1, estimatedPrice)
+
+        assertThat(result.approved).isTrue()
+        assertThat(result.checks.map { it.rule }).containsExactly("RiskChecksDisabled")
+        verify { jdbc.update(match<String> { it.contains("INSERT INTO risk_check_logs") }, *anyVararg()) }
+    }
+
+    @Test
+    fun `리스크 체크를 꺼도 0 이하 수량은 막는다`() {
+        stubSafeDefaults(inactiveLimits())
+
+        val result = service.check(userId, stockId, "BUY", 0, estimatedPrice)
+
+        assertThat(result.approved).isFalse()
+        assertThat(result.blockedBy).isEqualTo("QuantityRule")
+    }
+
+    @Test
+    fun `실거래 게이트는 리스크 체크를 꺼도 한도를 적용한다`() {
+        stubSafeDefaults(inactiveLimits())
+        val snapshot = PortfolioSnapshot(
+            cash = BigDecimal("10000000"), holdings = emptyList(), dailyPnl = BigDecimal("-400000"), recentOrderCount = 0,
+            totalAssets = BigDecimal("10000000"),
+        )
+
+        val result = service.checkBrokerageOrder(userId, stockId, "BUY", 1, estimatedPrice, snapshot)
+
+        assertThat(result.approved).isFalse()
+        assertThat(result.blockedBy).isEqualTo("DailyLossRule")
+    }
+
+    // ── ADR-074 Note — 미체결 모의 지정가 매수(예약금이 이미 현금에서 빠진 주문)도 노출로 센다 ──
+
+    private fun stubRestingBuys(vararg rows: PaperPendingBuy) {
+        every {
+            jdbc.query(RiskRuleQueryService.PAPER_PENDING_BUYS_SQL, any<RowMapper<PaperPendingBuy>>(), userId)
+        } returns rows.toList()
+    }
+
+    private fun stubCash(cash: String) {
+        every {
+            jdbc.query(match<String> { it.contains("paper_accounts") }, any<RowMapper<BigDecimal>>(), userId)
+        } returns listOf(BigDecimal(cash))
+    }
+
+    @Test
+    fun `resting paper limit buys of the same stock count toward concentration`() {
+        stubSafeDefaults()
+        // 1,000만 중 250만(25주×10만)이 미체결 지정가로 예약돼 현금은 750만. 추가 20주(200만):
+        // 대기 포함 450만 / (현금 750만 + 예약 250만) = 45% > 30%. 대기를 빼면 200만/750만 = 26.7%로 통과했다.
+        stubCash("7500000")
+        stubRestingBuys(PaperPendingBuy(orderId = 7L, stockId = stockId, qty = 25, limitPrice = BigDecimal("100000")))
+
+        val result = service.check(userId, stockId, "BUY", 20, BigDecimal("100000"))
+
+        val c = result.checks.first { it.rule == "ConcentrationRule" }
+        assertThat(c.passed).isFalse()
+        assertThat(c.current).isCloseTo(45.0, org.assertj.core.data.Offset.offset(0.01))
+        assertThat(result.blockedBy).isEqualTo("ConcentrationRule")
+    }
+
+    @Test
+    fun `reserved cash of resting buys stays in the concentration denominator`() {
+        stubSafeDefaults()
+        // 다른 종목에 250만 예약 — 분모는 여전히 1,000만이어야 한다(예약금은 계좌 자산). 신규 25주×10만 = 25% < 30%.
+        stubCash("7500000")
+        stubRestingBuys(PaperPendingBuy(orderId = 7L, stockId = 200L, qty = 25, limitPrice = BigDecimal("100000")))
+
+        val result = service.check(userId, stockId, "BUY", 25, BigDecimal("100000"))
+
+        val c = result.checks.first { it.rule == "ConcentrationRule" }
+        assertThat(c.current).isCloseTo(25.0, org.assertj.core.data.Offset.offset(0.01))
+        assertThat(c.passed).isTrue()
+    }
+
+    @Test
+    fun `resting paper limit buys of other stocks count as positions`() {
+        stubSafeDefaults(RiskLimit(userId = userId, dailyLossLimitPct = BigDecimal("3.00"), concentrationLimitPct = BigDecimal("30.00"), varLimitPct = BigDecimal("5.00"), maxPositionCount = 1, maxHourlyOrders = 5))
+        stubRestingBuys(PaperPendingBuy(orderId = 7L, stockId = 200L, qty = 1, limitPrice = BigDecimal("1000")))
+
+        val result = service.check(userId, stockId, "BUY", 1, estimatedPrice)
+
+        assertThat(result.checks.first { it.rule == "PositionCountRule" }.passed).isFalse()
+        assertThat(result.approved).isFalse()
+    }
+
+    @Test
+    fun `fill-time recheck excludes the order itself and ignores the hourly order count`() {
+        stubSafeDefaults()
+        // 주문 7(20주×10만)을 체결하려 한다. 자기 자신을 대기로 또 세면 400만/1,000만 = 40%로 잘못 막힌다.
+        stubCash("8000000")
+        stubRestingBuys(PaperPendingBuy(orderId = 7L, stockId = stockId, qty = 20, limitPrice = BigDecimal("100000")))
+        // 주문 시점에 이미 센 빈도 한도는 체결 시점에 다시 걸지 않는다.
+        every { jdbc.query(match<String> { it.contains("FROM orders") && it.contains("created_at") }, any<RowMapper<Long>>(), userId, any()) } returns listOf(99L)
+
+        val result = service.checkPaperFill(userId, stockId, 20, BigDecimal("100000"), orderId = 7L)
+
+        val c = result.checks.first { it.rule == "ConcentrationRule" }
+        assertThat(c.current).isCloseTo(20.0, org.assertj.core.data.Offset.offset(0.01))
+        assertThat(result.checks.none { it.rule == "TradingFrequencyRule" }).isTrue()
+        assertThat(result.approved).isTrue()
+    }
+
+    @Test
+    fun `fill-time recheck blocks when the fill would breach concentration`() {
+        stubSafeDefaults()
+        stubCash("6000000")
+        // 다른 미체결 같은 종목 매수 15주 + 이번 체결 20주 = 350만 / (600만 + 예약 350만 + 보유 0) ≈ 36.8% > 30%
+        stubRestingBuys(
+            PaperPendingBuy(orderId = 7L, stockId = stockId, qty = 20, limitPrice = BigDecimal("100000")),
+            PaperPendingBuy(orderId = 8L, stockId = stockId, qty = 15, limitPrice = BigDecimal("100000")),
+        )
+
+        val result = service.checkPaperFill(userId, stockId, 20, BigDecimal("100000"), orderId = 7L)
+
+        assertThat(result.approved).isFalse()
+        assertThat(result.blockedBy).isEqualTo("ConcentrationRule")
+    }
+
+    // ── 보안 리뷰 — side는 메트릭 라벨·감사 행이 된다. 자유 문자열이면 시계열이 무한히 늘어난다 ──
+
+    @Test
+    fun `check rejects a side other than BUY or SELL before any audit row`() {
+        stubSafeDefaults()
+
+        org.assertj.core.api.Assertions.assertThatThrownBy { service.check(userId, stockId, "HOLD-${'$'}{System.nanoTime()}", 1, estimatedPrice) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+        verify(exactly = 0) { jdbc.update(match<String> { it.contains("INSERT INTO risk_check_logs") }, *anyVararg()) }
+    }
+
+    @Test
+    fun `checkBrokerageOrder rejects a side other than BUY or SELL`() {
+        stubSafeDefaults()
+        val snapshot = PortfolioSnapshot(BigDecimal("10000000"), emptyList(), BigDecimal.ZERO, 0, totalAssets = BigDecimal("10000000"))
+
+        org.assertj.core.api.Assertions.assertThatThrownBy { service.checkBrokerageOrder(userId, stockId, "buy", 1, estimatedPrice, snapshot) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+    }
+
+    @Test
+    fun `dry run is audited as a dry run and not counted in the risk metric`() {
+        stubSafeDefaults()
+        val registry = io.micrometer.core.instrument.simple.SimpleMeterRegistry()
+        val svc = RiskCheckerService(RiskLimitService(riskLimitRepo, jdbc), riskRuleQueryService, auditLogger, registry, jdbc)
+
+        val result = svc.dryRun(userId, stockId, "BUY", 4000, estimatedPrice)
+
+        assertThat(result.approved).isFalse()
+        verify { jdbc.update(match<String> { it.contains("INSERT INTO risk_check_logs") }, *anyVararg(), true) }
+        assertThat(registry.find("risk_check_total").counters()).isEmpty()
+    }
+
+    @Test
+    fun `a real check is audited as not a dry run`() {
+        stubSafeDefaults()
+
+        service.check(userId, stockId, "BUY", 1, estimatedPrice)
+
+        verify { jdbc.update(match<String> { it.contains("INSERT INTO risk_check_logs") }, *anyVararg(), false) }
     }
 }

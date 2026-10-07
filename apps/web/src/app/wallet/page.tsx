@@ -9,6 +9,7 @@ import type { LedgerEvent } from "@/hooks/useWalletLedger";
 import WalletLedger, { type LedgerFilter } from "@/components/wallet/WalletLedger";
 import { ReceiptCard, type Receipt } from "@/components/wallet/ReceiptCard";
 import { useRiskExposure } from "@/components/risk/useRiskExposure";
+import { reconciliationLabel, useReconciliation } from "@/components/wallet/useReconciliation";
 import { EmptyNote, LoginRequired, Skeleton } from "@/components/portfolio/PaperStates";
 import {
   AutoGrid, Bar, BtnLink, Panel, PanelCol, PanelRow, Seg, TerminalPage, Tile, dirClass, fmtNum, fmtPct, fmtSigned, type TopStat,
@@ -87,6 +88,8 @@ export default function WalletPage() {
   });
 
   const { data: exposure } = useRiskExposure(isLoggedIn);
+  const { data: recon } = useReconciliation(isLoggedIn);
+  const reconLabel = reconciliationLabel(recon);
 
   const title = { title: "투자 월렛", crumb: "모의투자 · 내 돈이 어디에 어떤 상태로 있는지" };
 
@@ -187,8 +190,10 @@ export default function WalletPage() {
         >
           <div className="flex flex-wrap justify-between gap-2">
             {ledgerTab === "원장 타임라인" ? <Seg options={LEDGER_SEG} value={filter} onChange={setFilter} /> : <span />}
-            {/* 잔액 대사(LedgerReconciliationService) 결과는 아직 API로 노출되지 않는다 — 불일치 건수는 표시하지 않는다 */}
-            <span className="self-center text-xs text-tm-muted">이중 기입 원장 기준</span>
+            {/* ADR-043 일일 대사(스냅샷) 결과 — 불일치는 자동 교정하지 않고 조사한다 */}
+            <span className="self-center text-xs text-tm-muted" title={reconLabel.title}>
+              이중 기입 원장 기준 · 잔액 불일치 <span className={`num ${reconLabel.tone}`}>{reconLabel.value}</span>
+            </span>
           </div>
           {/* ADR-043 커서 페이징 (recentLedger 10건이 아니라 전체를 무한 스크롤) */}
           <WalletLedger filter={filter} />

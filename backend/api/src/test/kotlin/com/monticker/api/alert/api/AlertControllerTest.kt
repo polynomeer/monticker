@@ -117,4 +117,45 @@ class AlertControllerTest {
         mockMvc.perform(delete("/api/alerts/rules/99"))
             .andExpect(status().isNotFound)
     }
+
+    @Test
+    fun `GET rules with includePaused passes the flag`() {
+        every { alertService.getRules(1L, true) } returns listOf(makeRule())
+
+        mockMvc.perform(get("/api/alerts/rules").param("includePaused", "true"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$[0].id").value(1))
+
+        verify { alertService.getRules(1L, true) }
+    }
+
+    @Test
+    fun `PATCH rule toggles active state`() {
+        every { alertService.setActive(1L, 1L, false) } returns makeRule().apply { isActive = false }
+
+        mockMvc.perform(patch("/api/alerts/rules/1").contentType(MediaType.APPLICATION_JSON).content("""{"isActive":false}"""))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.isActive").value(false))
+    }
+
+    @Test
+    fun `PATCH rule without isActive is rejected`() {
+        mockMvc.perform(patch("/api/alerts/rules/1").contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isBadRequest)
+        verify(exactly = 0) { alertService.setActive(any(), any(), any()) }
+    }
+
+    @Test
+    fun `read endpoints mark history as read for the caller`() {
+        justRun { alertService.markRead(1L, 5L) }
+        every { alertService.markAllRead(1L, any()) } returns 3
+
+        mockMvc.perform(post("/api/alerts/history/5/read")).andExpect(status().isNoContent)
+        mockMvc.perform(post("/api/alerts/history/read-all").param("upTo", "2099-01-01T00:00:00Z"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.updated").value(3))
+
+        // 미래 시각은 지금으로 잘라 화면을 연 뒤 들어올 알림까지 읽음 처리하지 않는다
+        verify { alertService.markAllRead(1L, match { it.isBefore(Instant.now().plusSeconds(1)) }) }
+    }
 }

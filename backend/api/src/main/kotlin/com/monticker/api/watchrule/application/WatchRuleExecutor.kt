@@ -2,6 +2,8 @@ package com.monticker.api.watchrule.application
 
 import com.monticker.api.common.aop.RiskLimitException
 import com.monticker.api.matching.submit.OrderSubmitter
+import com.monticker.api.quant.application.StrategySignalAccess
+import com.monticker.api.quant.events.QuantSignalEmittedEvent
 import com.monticker.api.watchrule.domain.WatchRule
 import com.monticker.api.watchrule.domain.WatchRuleExecution
 import com.monticker.api.watchrule.domain.WatchRuleExecutionStatus
@@ -37,6 +39,8 @@ class WatchRuleExecutor(
     private val execRepo: WatchRuleExecutionRepository,
     private val orderSubmitter: OrderSubmitter,
     registry: MeterRegistry,
+    private val guards: WatchRuleGuards,
+    private val signalAccess: StrategySignalAccess,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -45,8 +49,32 @@ class WatchRuleExecutor(
     private val rejected = registry.counter("watch_rule_executions_total", "status", "rejected")
     private val skipped = registry.counter("watch_rule_executions_total", "status", "skipped")
 
+    /** 발동 원인 — 탐지 이벤트 또는 퀀트 신호(ADR-077). 기록·멱등 키가 원인별로 갈린다. */
+    private data class Trigger(
+        val stockEventId: Long?,
+        val quantSignalId: Long?,
+        val importanceScore: Int?,
+        val time: Instant,
+    ) {
+        fun key(ruleId: Long) = if (stockEventId != null) idempotencyKey(ruleId, stockEventId) else signalIdempotencyKey(ruleId, quantSignalId!!)
+        override fun toString() = stockEventId?.let { "event=$it" } ?: "signal=$quantSignalId"
+    }
+
+    /** ADR-077 — 포워드 테스트 신호. 이 종목·이 전략·이 방향의 활성 규칙만 발동한다. */
+    fun onQuantSignal(event: QuantSignalEmittedEvent) {
+        val rules = ruleRepo.findAllByStockIdAndEventTypeAndRuleSetIdAndIsActiveTrue(event.stockId, WatchRule.QUANT_SIGNAL, event.ruleSetId)
+            .filter { it.signalDirection == event.direction }
+        runAll(rules, Trigger(stockEventId = null, quantSignalId = event.signalId, importanceScore = null, time = event.signalTime))
+    }
+
     fun onEvent(event: StockEventDetectedEvent) {
         val rules = ruleRepo.findAllByStockIdAndEventTypeAndIsActiveTrue(event.stockId, event.eventType)
+        // eventTimeMillis가 빠진 와이어(기본값 0)는 수신 시각으로 — 복합 조건 창이 1970년을 보지 않게.
+        val time = if (event.eventTimeMillis > 0) Instant.ofEpochMilli(event.eventTimeMillis) else Instant.now()
+        runAll(rules, Trigger(event.eventId, null, event.importanceScore, time))
+    }
+
+    private fun runAll(rules: List<WatchRule>, trigger: Trigger) {
         if (rules.isEmpty()) return
         // 한 룰의 실패가 같은 이벤트에 걸린 다른 사용자의 룰을 막지 않는다 — 룰 단위로 격리해 끝까지 돈 뒤,
         // 인프라 예외가 있었으면 다시 던져 컨슈머 재시도(@RetryableTopic → DLT)로 보낸다. 재시도 때 이미 처리된
@@ -54,55 +82,85 @@ class WatchRuleExecutor(
         // 일어나지 않았다(2026-10 설계 리뷰).
         var failure: Throwable? = null
         rules.forEach { rule ->
-            runCatching { applyRule(rule, event) }.onFailure {
-                log.error("watch rule 처리 실패 ruleId={} eventId={}", rule.id, event.eventId, it)
+            runCatching { applyRule(rule, trigger) }.onFailure {
+                log.error("watch rule 처리 실패 ruleId={} {}", rule.id, trigger, it)
                 failure?.addSuppressed(it) ?: run { failure = it }
             }
         }
         failure?.let { throw it }
     }
 
-    private fun applyRule(rule: WatchRule, event: StockEventDetectedEvent) {
+    private fun applyRule(rule: WatchRule, trigger: Trigger) {
         // 빠른 경로 — 이미 처리된 조합이면 주문 시도 자체를 건너뛴다(정확성은 DB 제약이 보장한다).
-        if (execRepo.existsByWatchRuleIdAndStockEventId(rule.id, event.eventId)) {
-            log.debug("watch rule 중복 이벤트 무시 ruleId={} eventId={}", rule.id, event.eventId)
+        val seen = if (trigger.stockEventId != null) execRepo.existsByWatchRuleIdAndStockEventId(rule.id, trigger.stockEventId)
+            else execRepo.existsByWatchRuleIdAndQuantSignalId(rule.id, trigger.quantSignalId!!)
+        if (seen) {
+            log.debug("watch rule 중복 발동 무시 ruleId={} {}", rule.id, trigger)
             return
         }
 
-        if (!rule.acceptsImportance(event.importanceScore)) {
-            record(rule, event, WatchRuleExecutionStatus.SKIPPED,
-                reason = "중요도 ${event.importanceScore} < 하한 ${rule.minImportanceScore}")
+        if (trigger.importanceScore != null && !rule.acceptsImportance(trigger.importanceScore)) {
+            record(rule, trigger, WatchRuleExecutionStatus.SKIPPED,
+                reason = "중요도 ${trigger.importanceScore} < 하한 ${rule.minImportanceScore}")
             return
+        }
+
+        // ADR-035 — 구독을 끊었으면 전략 신호로 주문하지 않는다(등록 때 확인했어도 발동 때 다시 본다).
+        if (rule.isQuantSignalRule && !signalAccess.canAccess(rule.userId, rule.ruleSetId!!)) {
+            record(rule, trigger, WatchRuleExecutionStatus.SKIPPED, reason = "전략 신호 접근 권한 없음(구독 해지 등)")
+            return
+        }
+
+        // ADR-077 복합 조건 — 주 원인 앞 창 안에 동반 이벤트가 모두 있었는가.
+        val required = rule.requiredTypes()
+        if (required.isNotEmpty()) {
+            val missing = guards.missingRequiredEvents(rule.stockId, required, trigger.time, rule.conditionWindowSec ?: DEFAULT_WINDOW_SEC)
+            if (missing.isNotEmpty()) {
+                record(rule, trigger, WatchRuleExecutionStatus.SKIPPED,
+                    reason = "복합 조건 미충족: ${missing.joinToString()} 없음 (${(rule.conditionWindowSec ?: DEFAULT_WINDOW_SEC) / 60}분 내)")
+                return
+            }
         }
 
         if (inCooldown(rule)) {
-            record(rule, event, WatchRuleExecutionStatus.SKIPPED,
+            record(rule, trigger, WatchRuleExecutionStatus.SKIPPED,
                 reason = "쿨다운 ${rule.cooldownSec}초 이내 재발동")
             return
         }
 
+        // ADR-077 하루 최대 발동 — 주문 전에 슬롯을 원자적으로 잡는다. 주문이 나가지 않으면 돌려준다.
+        if (!guards.claimDailySlot(rule.id, rule.dailyLimit)) {
+            record(rule, trigger, WatchRuleExecutionStatus.SKIPPED, reason = "하루 최대 발동 ${rule.dailyLimit}회 도달")
+            return
+        }
+
+        var filled = false
         try {
             val result = orderSubmitter.submitMarket(
                 userId = rule.userId,
                 stockId = rule.stockId,
                 side = rule.side.name,
                 quantity = rule.quantity,
-                idempotencyKey = idempotencyKey(rule.id, event.eventId),
+                idempotencyKey = trigger.key(rule.id),
             )
-            record(rule, event, WatchRuleExecutionStatus.EXECUTED,
+            filled = true
+            record(rule, trigger, WatchRuleExecutionStatus.EXECUTED,
                 orderId = result.orderId, fillPrice = result.fillPrice, quantity = result.quantity)
-            log.info("watch rule 발동 ruleId={} eventId={} orderId={}", rule.id, event.eventId, result.orderId)
+            log.info("watch rule 발동 ruleId={} {} orderId={}", rule.id, trigger, result.orderId)
         } catch (e: RiskLimitException) {
-            record(rule, event, WatchRuleExecutionStatus.REJECTED, reason = "리스크 한도: ${e.message}")
+            record(rule, trigger, WatchRuleExecutionStatus.REJECTED, reason = "리스크 한도: ${e.message}")
         } catch (e: IllegalArgumentException) {
             // 잔고 부족·보유 수량 부족 등 사가의 사전 조건 위반.
-            record(rule, event, WatchRuleExecutionStatus.REJECTED, reason = e.message ?: "주문 거부")
+            record(rule, trigger, WatchRuleExecutionStatus.REJECTED, reason = e.message ?: "주문 거부")
         } catch (e: IllegalStateException) {
             // 현재가 없음·시장가 미체결 등. 사용자 잘못이 아니지만 이 이벤트로는 체결되지 않았다.
-            record(rule, event, WatchRuleExecutionStatus.REJECTED, reason = e.message ?: "주문 실패")
+            record(rule, trigger, WatchRuleExecutionStatus.REJECTED, reason = e.message ?: "주문 실패")
+        } finally {
+            // 체결되지 않았으면(거부·인프라 예외 모두) 슬롯을 돌려준다. 그 외(DB·네트워크 등 인프라 예외)는
+            // 삼키지 않는다 — 호출자를 거쳐 컨슈머 재시도로 간다. 재시도해도 멱등 키 덕에 중복 체결은 없다.
+            if (!filled) runCatching { guards.releaseDailySlot(rule.id) }
+                .onFailure { log.warn("watch rule 슬롯 반환 실패 ruleId={} — 오늘 한도가 1 적게 남는다(안전한 방향)", rule.id) }
         }
-        // 그 외(DB·네트워크 등 인프라 예외)는 삼키지 않는다 — 호출자를 거쳐 컨슈머 재시도로 간다.
-        // 재시도해도 멱등 키 덕에 중복 체결은 없다.
     }
 
     private fun inCooldown(rule: WatchRule): Boolean {
@@ -113,7 +171,7 @@ class WatchRuleExecutor(
 
     private fun record(
         rule: WatchRule,
-        event: StockEventDetectedEvent,
+        trigger: Trigger,
         status: WatchRuleExecutionStatus,
         orderId: Long? = null,
         fillPrice: java.math.BigDecimal? = null,
@@ -125,7 +183,8 @@ class WatchRuleExecutor(
                 WatchRuleExecution(
                     watchRuleId = rule.id,
                     userId = rule.userId,
-                    stockEventId = event.eventId,
+                    stockEventId = trigger.stockEventId,
+                    quantSignalId = trigger.quantSignalId,
                     status = status,
                     orderId = orderId,
                     fillPrice = fillPrice,
@@ -135,7 +194,7 @@ class WatchRuleExecutor(
             )
         } catch (e: DataIntegrityViolationException) {
             // (룰, 이벤트) 유니크 충돌 — 다른 스레드가 같은 이벤트를 먼저 기록했다. 정상 동작이다.
-            log.debug("watch rule 기록 중복 무시 ruleId={} eventId={}", rule.id, event.eventId)
+            log.debug("watch rule 기록 중복 무시 ruleId={} {}", rule.id, trigger)
             return
         }
         when (status) {
@@ -148,5 +207,11 @@ class WatchRuleExecutor(
     companion object {
         /** 주문 테이블의 부분 유니크 인덱스(V48)에 들어가는 값. 100자 제한 안에 들어온다. */
         fun idempotencyKey(ruleId: Long, eventId: Long) = "WR:$ruleId:$eventId"
+
+        /** ADR-077 — 퀀트 신호 발동. "WR:" 접두는 같게 두어 거래 내역 경로(TradeRoute)가 그대로 Watch Rule로 읽는다. */
+        fun signalIdempotencyKey(ruleId: Long, signalId: Long) = "WR:$ruleId:Q$signalId"
+
+        /** 복합 조건 창의 기본값 — 30분 */
+        const val DEFAULT_WINDOW_SEC = 1800
     }
 }

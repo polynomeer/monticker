@@ -10,7 +10,11 @@ import com.monticker.api.quant.infrastructure.QuantForwardTestEquityRepository
 import com.monticker.api.quant.infrastructure.QuantForwardTestRepository
 import com.monticker.api.quant.infrastructure.QuantSignalRepository
 import com.monticker.api.quant.infrastructure.RuleSetRepository
+import com.monticker.api.quant.events.QuantSignalEmittedEvent
 import org.slf4j.LoggerFactory
+import com.monticker.api.common.notification.NotificationCategory
+import com.monticker.api.common.notification.UserNotificationCommand
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -30,8 +34,14 @@ class ForwardTestService(
     private val signalRepository: QuantSignalRepository,
     private val equityRepository: QuantForwardTestEquityRepository,
     private val messagingTemplate: SimpMessagingTemplate,
+    private val events: ApplicationEventPublisher,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+
+    companion object {
+        /** 평가일마다 지표 계산에 쓰는 일봉 창(달력일). 재실행(ForwardReplay)도 같은 값을 쓴다. */
+        const val LOOKBACK_DAYS = 400L
+    }
 
     @Transactional
     fun start(ruleSetId: String, userId: Long, req: StartForwardTestRequest): ForwardTestResponse {
@@ -63,6 +73,10 @@ class ForwardTestService(
 
         ft.stop()
         forwardTestRepository.save(ft)
+        // 중지 시점의 최종 일치율 — 계산 실패가 중지 자체를 막아서는 안 된다.
+        runCatching {
+            if (ruleSetService.verifyFingerprint(doc)) refreshMatch(ft, ruleSetService.parseRuleDefinition(doc.ruleDefinition))
+        }.onFailure { log.warn("중지 시 포워드 일치율 계산 실패: forwardTestId={} error={}", ft.id, it.message) }
         doc.unpublish()
         ruleSetRepository.save(doc)
 
@@ -104,7 +118,7 @@ class ForwardTestService(
         }
 
         val ruleDef = ruleSetService.parseRuleDefinition(doc.ruleDefinition)
-        val candles = ruleSetService.loadDailyCandles(ft.stockId, asOfDate.minusDays(400), asOfDate)
+        val candles = ruleSetService.loadDailyCandles(ft.stockId, asOfDate.minusDays(LOOKBACK_DAYS), asOfDate)
         if (candles.isEmpty() || candles.last().date != asOfDate) {
             log.info("오늘자 캔들이 아직 없어 평가를 건너뜀: forwardTestId={} date={}", ft.id, asOfDate)
             return
@@ -114,26 +128,21 @@ class ForwardTestService(
         val price = candles.last().close.toDouble()
         var signal: SignalDirection? = null
 
-        if (ft.isHolding) {
-            val entryPrice = ft.holdingEntryPrice!!.toDouble()
-            if (RuleEvaluator.evaluateExit(ruleDef.exitRules, candles, idx, entryPrice, price)) {
-                val exitPrice = price * (1 - QuantBacktestEngine.SLIPPAGE_RATE)
-                ft.closePosition(BigDecimal.valueOf(exitPrice))
+        // ADR-078 — 판단은 백테스트와 같은 QuantDayStep으로 한다.
+        val position = if (ft.isHolding) {
+            SimPosition(ft.holdingQty, ft.holdingEntryPrice!!.toDouble(), ft.holdingEntryDate ?: asOfDate)
+        } else null
+        val aux = ruleSetService.loadAuxData(ft.stockId, candles.first().date, asOfDate, ruleDef)
+        when (val action = QuantDayStep.decide(ruleDef, candles, idx, ft.cash.toDouble(), position, aux)) {
+            is DayAction.Exit -> {
+                ft.closePosition(BigDecimal.valueOf(action.fillPrice), BigDecimal.valueOf(action.commission))
                 signal = SignalDirection.SELL
             }
-        } else {
-            if (RuleEvaluator.evaluateEntry(ruleDef.entryRules, candles, idx) && ft.cash.toDouble() > price) {
-                val ratio      = ruleDef.positionSizing.value / 100.0
-                val buyPrice   = price * (1 + QuantBacktestEngine.SLIPPAGE_RATE)
-                val budget     = ft.cash.toDouble() * ratio
-                val qty        = (budget / buyPrice).toInt().coerceAtLeast(1)
-                val commission = qty * buyPrice * QuantBacktestEngine.COMMISSION_RATE
-                val cost       = qty * buyPrice + commission
-                if (cost <= ft.cash.toDouble()) {
-                    ft.openPosition(qty, BigDecimal.valueOf(buyPrice), asOfDate)
-                    signal = SignalDirection.BUY
-                }
+            is DayAction.Enter -> {
+                ft.openPosition(action.qty, BigDecimal.valueOf(action.fillPrice), asOfDate, BigDecimal.valueOf(action.commission))
+                signal = SignalDirection.BUY
             }
+            DayAction.Hold -> {}
         }
 
         ft.lastEvaluatedDate = asOfDate
@@ -153,7 +162,7 @@ class ForwardTestService(
         )
 
         if (signal != null) {
-            signalRepository.save(
+            val saved = signalRepository.save(
                 QuantSignal(
                     forwardTestId = ft.id,
                     ruleSetId     = ft.ruleSetId,
@@ -161,19 +170,64 @@ class ForwardTestService(
                     direction     = signal,
                     signalTime    = Instant.now(),
                     evalDate      = asOfDate,
+                    price         = BigDecimal.valueOf(price),
                 )
             )
             log.info("포워드 테스트 신호 발생: forwardTestId={} direction={} price={}", ft.id, signal, price)
+            // ADR-077 — 같은 트랜잭션에서 발행: 신호가 롤백되면 이벤트도 없다. watchrule의 "전략 신호" 규칙이 구독한다.
+            events.publishEvent(QuantSignalEmittedEvent(
+                signalId = saved.id, ruleSetId = saved.ruleSetId, stockId = saved.stockId,
+                direction = saved.direction.name, signalTime = saved.signalTime,
+            ))
+            // ADR-082 — 룰셋 주인에게 알린다(알림 설정 "퀀트 시그널"). 이 트랜잭션이 커밋돼야 나간다. 하루·방향당 한 번.
+            events.publishEvent(
+                UserNotificationCommand(
+                    userId = doc.userId,
+                    category = NotificationCategory.QUANT_SIGNAL,
+                    title = "${doc.name} ${if (signal == SignalDirection.BUY) "매수" else "매도"} 신호",
+                    body = "포워드 테스트에서 ${if (signal == SignalDirection.BUY) "매수" else "매도"} 신호가 났습니다(종가 ${"%,.0f".format(price)}원, $asOfDate). " +
+                        "모의 신호이며 실제 주문은 나가지 않았습니다.",
+                    dedupKey = "quant-signal:${ft.id}:$asOfDate:${signal.name}",
+                    data = mapOf("type" to "QUANT_SIGNAL", "ruleSetId" to ft.ruleSetId, "stockId" to ft.stockId, "direction" to signal.name),
+                ),
+            )
             messagingTemplate.convertAndSend(
                 "/topic/rulesets/${ft.ruleSetId}/signals",
                 mapOf(
                     "type" to "SIGNAL",
+                    // 한 연결에서 여러 전략 토픽을 받는 클라이언트가 출처를 알 수 있게(웹 useRuleSetSignalsWs)
+                    "rulesetId" to ft.ruleSetId,
                     "direction" to signal.name,
                     "stockId" to ft.stockId,
                     "price" to price,
                     "evalDate" to asOfDate.toString(),
                 ),
             )
+        }
+
+        refreshMatch(ft, ruleDef)
+    }
+
+    /**
+     * ADR-078 — 포워드 일치율 갱신. 같은 기간을 지금 저장된 데이터로 포워드와 같은 절차로 재실행해
+     * 실제 포워드 신호와 비교한다. 지표 계산이 실패해도 평가 자체(포지션·신호)는 이미 끝났으므로
+     * 여기서 난 예외는 삼키고 이전 값을 유지한다.
+     */
+    internal fun refreshMatch(ft: QuantForwardTest, ruleDef: com.monticker.api.quant.domain.RuleDefinition) {
+        val to = ft.lastEvaluatedDate ?: return
+        try {
+            val from = ForwardReplay.firstEvaluationDate(ft.startedAt)
+            if (to < from) return
+            val candles = ruleSetService.loadDailyCandles(ft.stockId, from.minusDays(LOOKBACK_DAYS), to)
+            val aux = ruleSetService.loadAuxData(ft.stockId, from.minusDays(LOOKBACK_DAYS), to, ruleDef)
+            val replayed = ForwardReplay.replay(candles, ruleDef, ft.initialCapital.toDouble(), from, to, aux = aux)
+            val actual = signalRepository.findAllByForwardTestIdOrderBySignalTimeDesc(ft.id)
+                .mapNotNull { s -> s.evalDate?.let { ReplaySignal(it, s.direction) } }
+            val match = ForwardReplay.compare(actual, replayed)
+            ft.recordMatch(match.rate, match.matched, match.compared)
+            forwardTestRepository.save(ft)
+        } catch (e: Exception) {
+            log.warn("포워드 일치율 계산 실패: forwardTestId={} error={}", ft.id, e.message)
         }
     }
 
@@ -192,6 +246,10 @@ class ForwardTestService(
         currentEquity     = equity.lastOrNull()?.equity?.toDouble() ?: initialCapital.toDouble(),
         startedAt         = startedAt.toString(),
         stoppedAt         = stoppedAt?.toString(),
+        matchRate         = matchRate?.toDouble(),
+        matchedSignals    = matchedSignals,
+        comparedSignals   = comparedSignals,
+        matchEvaluatedAt  = matchEvaluatedAt?.toString(),
         equityCurve       = equity.map { ForwardTestEquityPointResponse(it.evalDate.toString(), it.equity.toDouble(), it.drawdown.toDouble()) },
         signals           = signals.map { ForwardTestSignalResponse(it.direction.name, it.signalTime.toString(), it.evalDate?.toString()) },
     )
@@ -217,6 +275,11 @@ data class ForwardTestResponse(
     val currentEquity: Double,
     val startedAt: String,
     val stoppedAt: String?,
+    /** ADR-078 — 0~1. 비교할 신호가 아직 없거나 계산 전이면 null */
+    val matchRate: Double?,
+    val matchedSignals: Int?,
+    val comparedSignals: Int?,
+    val matchEvaluatedAt: String?,
     val equityCurve: List<ForwardTestEquityPointResponse>,
     val signals: List<ForwardTestSignalResponse>,
 )

@@ -33,15 +33,54 @@ class AlertRule(
 
     @Column(nullable = false)
     var updatedAt: Instant = Instant.now(),
+
+    /** ADR-073 — 삭제 시각. 삭제한 규칙은 다시 켤 수 없다(끄기는 isActive=false만). */
+    @Column(name = "deleted_at")
+    var deletedAt: Instant? = null,
 ) {
+    val isDeleted: Boolean get() = deletedAt != null
+
+    /** 끄기(일시 중지) — 다시 켤 수 있다 */
     fun deactivate() {
         isActive = false
         updatedAt = Instant.now()
     }
 
+    /** 삭제 — 꺼지고 다시 켤 수 없다 */
+    fun delete() {
+        isActive = false
+        if (deletedAt == null) deletedAt = Instant.now()
+        updatedAt = Instant.now()
+    }
+
     fun activate() {
+        check(!isDeleted) { "삭제한 알림 규칙은 다시 켤 수 없습니다" }
         isActive = true
         updatedAt = Instant.now()
+    }
+}
+
+/**
+ * 워커가 평가할 수 있는 규칙인지 — 생성과 다시 켜기가 같은 기준을 쓴다.
+ * 워커의 AlertEvaluator가 조건 필드를 못 찾으면 조용히 무시하고 룰이 영영 발동하지 않는다(evaluateRule의
+ * `?: return` 패턴) — "저장은 됐는데 평생 안 울리는 룰"이 쌓이지 않게 최소한의 필드 존재만 확인한다.
+ * 값 자체(0 이하 등)는 워커 쪽 지표 계산 가드가 처리한다.
+ */
+object AlertRuleConditions {
+    fun isValid(type: AlertRuleType, stockId: Long?, condition: Map<String, Any?>): Boolean {
+        fun num(key: String) = condition[key] as? Number
+        // 워커(AlertRuleIndex)는 stock_id 기준으로 룰을 색인한다 — stock_id 없는 룰은 어떤 틱에도 매칭되지 않아
+        // 평생 안 울린다(backlog §9). V45가 컬럼도 NOT NULL로 만들었다.
+        if (stockId == null) return false
+        return when (type) {
+            AlertRuleType.PRICE_ABOVE, AlertRuleType.PRICE_BELOW -> num("threshold") != null
+            AlertRuleType.RSI_BELOW, AlertRuleType.RSI_ABOVE -> num("threshold") != null
+            AlertRuleType.PRICE_BELOW_MA, AlertRuleType.PRICE_ABOVE_MA -> true
+            AlertRuleType.HOLDING_DROP -> num("dropPct") != null
+            AlertRuleType.VOLUME_SURGE -> true
+            // 평가기가 없는 타입 — 저장은 되지만 어떤 워커도 보지 않는다.
+            AlertRuleType.NEWS_PUBLISHED, AlertRuleType.DISCLOSURE_PUBLISHED -> false
+        }
     }
 }
 

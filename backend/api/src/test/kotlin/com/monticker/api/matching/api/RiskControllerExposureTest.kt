@@ -3,7 +3,8 @@ package com.monticker.api.matching.api
 import com.monticker.api.matching.infrastructure.OrderRepository
 import com.monticker.api.risk.application.RiskCheckerService
 import com.monticker.api.risk.domain.RiskLimit
-import com.monticker.api.risk.infrastructure.RiskLimitRepository
+import com.monticker.api.risk.application.RiskLimitService
+import com.monticker.api.risk.application.RiskLimitsView
 import io.mockk.every
 import io.mockk.mockk
 import org.assertj.core.api.Assertions.assertThat
@@ -14,21 +15,20 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.core.context.SecurityContextHolder
 import java.math.BigDecimal
-import java.util.Optional
 
 class RiskControllerExposureTest {
 
     private val userId = 7L
-    private val riskLimitRepo = mockk<RiskLimitRepository>()
+    private val limitService = mockk<RiskLimitService>()
     private val orderRepo = mockk<OrderRepository>(relaxed = true)
     private val jdbc = mockk<JdbcTemplate>(relaxed = true)
     private val riskChecker = mockk<RiskCheckerService>()
-    private val controller = RiskController(riskLimitRepo, riskChecker, orderRepo, jdbc)
+    private val controller = RiskController(limitService, riskChecker, orderRepo, jdbc)
 
     @BeforeEach
     fun setUp() {
         SecurityContextHolder.getContext().authentication = UsernamePasswordAuthenticationToken(userId, null, emptyList())
-        every { riskLimitRepo.findByUserId(userId) } returns Optional.of(RiskLimit(userId = userId))
+        every { limitService.view(userId) } returns RiskLimitsView(RiskLimit(userId = userId), emptyList())
         every { jdbc.queryForObject(match<String> { it.contains("paper_accounts") }, BigDecimal::class.java, userId) } returns BigDecimal("7385871")
         every { jdbc.queryForList(match<String> { it.contains("paper_trades") }, userId) } returns emptyList()
         // 이전 구현이 읽던 '오늘 체결 현금 흐름' — 매수만 했으면 음수가 된다. 이 값이 손익으로 새면 안 된다.

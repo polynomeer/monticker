@@ -1,6 +1,7 @@
 package com.monticker.api.quant.application
 
 import com.monticker.api.quant.domain.DailyCandle
+import com.monticker.api.quant.domain.QuantAuxData
 import com.monticker.api.quant.domain.RuleCondition
 import com.monticker.api.quant.domain.RuleGroup
 
@@ -10,8 +11,9 @@ object RuleEvaluator {
         group: RuleGroup,
         candles: List<DailyCandle>,
         idx: Int,
+        aux: QuantAuxData = QuantAuxData.EMPTY,
     ): Boolean {
-        val results = group.conditions.map { evaluateEntryCondition(it, candles, idx) }
+        val results = group.conditions.map { evaluateEntryCondition(it, candles, idx, aux) }
         return combine(group.operator, results)
     }
 
@@ -21,13 +23,16 @@ object RuleEvaluator {
         idx: Int,
         entryPrice: Double,
         currentPrice: Double,
+        aux: QuantAuxData = QuantAuxData.EMPTY,
     ): Boolean {
-        val results = group.conditions.map { evaluateExitCondition(it, candles, idx, entryPrice, currentPrice) }
+        val results = group.conditions.map { evaluateExitCondition(it, candles, idx, entryPrice, currentPrice, aux) }
         return combine(group.operator, results)
     }
 
+    // 조건이 하나도 없는 그룹은 절대 충족되지 않는다 — all()은 빈 목록에서 true라, 강제 청산만 두고
+    // 매도 조건을 비운 AND 룰이 매일 청산되는 일이 생긴다.
     private fun combine(operator: String, results: List<Boolean>): Boolean =
-        when (operator.uppercase()) {
+        if (results.isEmpty()) false else when (operator.uppercase()) {
             "AND" -> results.all { it }
             "OR"  -> results.any { it }
             else  -> results.all { it }
@@ -37,6 +42,7 @@ object RuleEvaluator {
         cond: RuleCondition,
         candles: List<DailyCandle>,
         idx: Int,
+        aux: QuantAuxData,
     ): Boolean {
         val period = (cond.params["period"] as? Number)?.toInt() ?: 20
         val candle = candles[idx]
@@ -82,6 +88,18 @@ object RuleEvaluator {
                     else          -> false
                 }
             }
+            // ADR-079 — 보조 데이터 지표. 창은 최근 period 거래일(사이의 주말·휴일 포함).
+            AuxIndicators.NEWS_SENTIMENT -> {
+                val p = (cond.params["period"] as? Number)?.toInt() ?: 5
+                val range = AuxIndicators.window(candles.map { it.date }, idx, p) ?: return false
+                val net = AuxIndicators.netSentiment(aux, range) ?: return false
+                compare(cond.comparator, net, cond.value, null)
+            }
+            AuxIndicators.DISCLOSURE -> {
+                val p = (cond.params["period"] as? Number)?.toInt() ?: 5
+                val range = AuxIndicators.window(candles.map { it.date }, idx, p) ?: return false
+                AuxIndicators.hasDisclosure(aux, range, cond.comparator)
+            }
             else -> false
         }
     }
@@ -92,6 +110,7 @@ object RuleEvaluator {
         idx: Int,
         entryPrice: Double,
         currentPrice: Double,
+        aux: QuantAuxData,
     ): Boolean {
         if (entryPrice == 0.0) return false
         val returnPct = (currentPrice - entryPrice) / entryPrice * 100
@@ -99,7 +118,7 @@ object RuleEvaluator {
         return when (cond.indicator.uppercase()) {
             "PROFIT_RATE" -> compare(cond.comparator, returnPct, cond.value, null)
             "LOSS_RATE"   -> compare(cond.comparator, returnPct, cond.value, null)
-            else          -> evaluateEntryCondition(cond, candles, idx)
+            else          -> evaluateEntryCondition(cond, candles, idx, aux)
         }
     }
 

@@ -6,6 +6,8 @@ import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import com.monticker.api.common.metrics.SearchMetrics
 import com.monticker.api.alert.domain.AlertRule
+import com.monticker.api.alert.domain.AlertRuleConditions
+import com.monticker.api.common.exception.BusinessRuleException
 import com.monticker.api.alert.domain.AlertRuleType
 import com.monticker.api.alert.infrastructure.AlertHistoryDocument
 import com.monticker.api.alert.infrastructure.AlertHistorySearchRepository
@@ -33,9 +35,11 @@ class AlertService(
 ) {
     companion object { const val ALERT_RULES_CHANGED_CHANNEL = "alert:rules:changed" }   // worker와 관례로 동기화
     private val log = LoggerFactory.getLogger(javaClass)
+    /** 기본은 켜진 규칙만(모바일 등 기존 호출부). includePaused면 꺼 둔 규칙도(삭제한 것은 제외). */
     @Transactional(readOnly = true)
-    fun getRules(userId: Long): List<AlertRule> =
-        alertRuleRepository.findAllByUserIdAndIsActiveTrue(userId)
+    fun getRules(userId: Long, includePaused: Boolean = false): List<AlertRule> =
+        if (includePaused) alertRuleRepository.findAllByUserIdAndDeletedAtIsNullOrderByCreatedAtAsc(userId)
+        else alertRuleRepository.findAllByUserIdAndIsActiveTrue(userId)
 
     fun createRule(
         userId: Long,
@@ -54,15 +58,85 @@ class AlertService(
         return saved
     }
 
+    /** DELETE — 규칙 삭제(ADR-073: 꺼지고 다시 켤 수 없다). */
     fun deactivateRule(userId: Long, ruleId: Long) {
         val rule = alertRuleRepository.findById(ruleId).orElseThrow {
             NoSuchElementException("Alert rule not found: $ruleId")
         }
         require(rule.userId == userId) { "Access denied" }
-        rule.deactivate()
-        alertRuleRepository.save(rule)
+        alertRuleRepository.markDeleted(ruleId, userId)
         publishChangedAfterCommit(rule.stockId)
     }
+
+    /**
+     * ADR-073 — 규칙 켜기/끄기. 삭제한 규칙·남의 규칙은 없는 것처럼 404. 다시 켤 때는 생성과 같은 조건 검사
+     * (평가기가 없는 유형·조건 필드 누락이면 409)를 한다. 변경은 커밋 후 워커 인메모리 인덱스에 알린다(ADR-044).
+     */
+    fun setActive(userId: Long, ruleId: Long, active: Boolean): AlertRule {
+        val rule = alertRuleRepository.findById(ruleId).orElse(null)
+            ?.takeIf { it.userId == userId && !it.isDeleted }
+            ?: throw NoSuchElementException("알림 규칙을 찾을 수 없습니다: $ruleId")
+        if (rule.isActive == active) return rule
+        if (active) {
+            val condition: Map<String, Any?> = runCatching {
+                @Suppress("UNCHECKED_CAST")
+                objectMapper.readValue(rule.conditionJson, Map::class.java) as Map<String, Any?>
+            }.getOrDefault(emptyMap())
+            if (!AlertRuleConditions.isValid(rule.ruleType, rule.stockId, condition)) {
+                throw BusinessRuleException("이 알림 규칙은 다시 켤 수 없습니다(지원하지 않는 조건). 새 규칙을 만들어 주세요")
+            }
+        }
+        // 조건부 UPDATE — 읽은 뒤 다른 요청이 삭제했으면 0행이라 되살리지 않는다
+        if (alertRuleRepository.updateActive(ruleId, userId, active) == 0) {
+            throw NoSuchElementException("알림 규칙을 찾을 수 없습니다: $ruleId")
+        }
+        publishChangedAfterCommit(rule.stockId)
+        return alertRuleRepository.findById(ruleId).orElseThrow()
+    }
+
+    // ── ADR-073 읽음 상태 ──────────────────────────────────────────────────
+
+    /** 이력 id들의 읽음 시각(내 규칙의 이력만). 없는 id는 결과에 없다. */
+    @Transactional(readOnly = true)
+    fun readStates(userId: Long, historyIds: Collection<Long>): Map<Long, Instant?> {
+        if (historyIds.isEmpty()) return emptyMap()
+        val ids = historyIds.distinct().take(200)
+        val placeholders = ids.joinToString(",") { "?" }
+        return jdbc.query(
+            """
+            SELECT ah.id, ah.read_at FROM alert_histories ah
+            JOIN alert_rules ar ON ar.id = ah.rule_id
+            WHERE ar.user_id = ? AND ah.id IN ($placeholders)
+            """,
+            { rs, _ -> rs.getLong("id") to rs.getTimestamp("read_at")?.toInstant() },
+            *(listOf<Any>(userId) + ids).toTypedArray(),
+        ).toMap()
+    }
+
+    /** 이력 한 건 읽음. 이미 읽었으면 그대로(멱등). 내 이력이 아니면 404. */
+    fun markRead(userId: Long, historyId: Long) {
+        val updated = jdbc.update(
+            """
+            UPDATE alert_histories ah SET read_at = now()
+            FROM alert_rules ar
+            WHERE ah.id = ? AND ar.id = ah.rule_id AND ar.user_id = ? AND ah.read_at IS NULL
+            """,
+            historyId, userId,
+        )
+        if (updated == 0 && readStates(userId, listOf(historyId)).isEmpty()) {
+            throw NoSuchElementException("알림을 찾을 수 없습니다: $historyId")
+        }
+    }
+
+    /** [upTo] 이전에 발동한 내 알림을 모두 읽음으로. 화면을 연 뒤 새로 온 알림까지 읽음 처리하지 않게 시각을 받는다. */
+    fun markAllRead(userId: Long, upTo: Instant): Int = jdbc.update(
+        """
+        UPDATE alert_histories ah SET read_at = now()
+        FROM alert_rules ar
+        WHERE ar.id = ah.rule_id AND ar.user_id = ? AND ah.read_at IS NULL AND ah.triggered_at <= ?
+        """,
+        userId, java.sql.Timestamp.from(upTo),
+    )
 
     /**
      * ADR-044 — 워커의 인메모리 룰 인덱스에 변경을 알린다. 커밋 후에만 발행한다(롤백된 변경이 전파되면 안 된다).
@@ -101,6 +175,15 @@ class AlertService(
         val total   = sent + failed + pending
         val rate    = if (sent + failed > 0) sent.toDouble() / (sent + failed) * 100 else 0.0
 
+        val unread = jdbc.queryForObject(
+            """
+            SELECT COUNT(*) FROM alert_histories ah
+            JOIN alert_rules ar ON ar.id = ah.rule_id
+            WHERE ar.user_id = ? AND ah.read_at IS NULL
+            """,
+            Int::class.java, userId
+        ) ?: 0
+
         val activeRules = jdbc.queryForObject(
             "SELECT COUNT(*) FROM alert_rules WHERE user_id = ? AND is_active = true",
             Int::class.java, userId
@@ -114,7 +197,7 @@ class AlertService(
             GROUP BY d ORDER BY d
         """, { rs, _ -> AlertFireStat(rs.getString("d"), rs.getInt("cnt")) }, userId)
 
-        return AlertStatsResponse(total, sent, failed, rate, activeRules, daily)
+        return AlertStatsResponse(total, sent, failed, rate, activeRules, daily, unread)
     }
 
     /**
@@ -170,9 +253,12 @@ class AlertService(
                 .withMaxResults(limit.coerceIn(1, 100))
                 .build()
 
-            esOps.search(nativeQuery, AlertHistoryDocument::class.java)
+            val hits = esOps.search(nativeQuery, AlertHistoryDocument::class.java)
                 .map { hit -> AlertHistoryResult.from(hit.content, hit.score) }
                 .toList()
+            // 읽음 상태는 DB가 원본이다(ADR-073). ES 문서에는 없다.
+            val reads = readStates(userId, hits.map { it.id })
+            hits.map { it.copy(readAt = reads[it.id]) }
         } catch (e: Exception) {
             searchMetrics.fallback("alert_histories")
             log.warn("ES alert history search failed for userId={}: {}", userId, e.message)
@@ -184,7 +270,9 @@ class AlertService(
 data class AlertStatsResponse(
     val totalFired: Int, val totalSent: Int, val totalFailed: Int,
     val successRate: Double, val activeRules: Int,
-    val recentFires: List<AlertFireStat>
+    val recentFires: List<AlertFireStat>,
+    /** ADR-073 — 읽지 않은 알림 수 */
+    val unread: Int = 0,
 )
 data class AlertFireStat(val date: String, val count: Int)
 
@@ -197,6 +285,8 @@ data class AlertHistoryResult(
     val deliveryStatus: String,
     val triggeredAt: Instant,
     val score: Float?,
+    /** ADR-073 — DB(alert_histories.read_at)에서 붙인다. null이면 읽지 않음 */
+    val readAt: Instant? = null,
 ) {
     companion object {
         fun from(doc: AlertHistoryDocument, score: Float) = AlertHistoryResult(

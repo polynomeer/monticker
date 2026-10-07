@@ -6,7 +6,7 @@ import kotlin.math.*
 
 object BacktestEngine {
 
-    fun run(candles: List<DailyCandle>, request: BacktestRequest, symbol: String): BacktestResult {
+    fun run(candles: List<DailyCandle>, request: BacktestRequest, symbol: String, domestic: Boolean = true): BacktestResult {
         val strategy: BacktestStrategy = when (request.strategy) {
             StrategyType.MA_CROSSOVER  -> MaCrossoverStrategy(request.shortPeriod, request.longPeriod)
             StrategyType.RSI           -> RsiStrategy(request.rsiPeriod, request.rsiOversold, request.rsiOverbought)
@@ -17,9 +17,17 @@ object BacktestEngine {
             .filter { it.date >= request.fromDate && it.date <= request.toDate }
             .sortedBy { it.date }
 
+        val c = request.costs
+        val commission = c.commissionPct / 100
+        val sellTax    = if (domestic) c.sellTaxPct / 100 else 0.0
+        val slippage   = c.slippagePct / 100
+        var totalCost  = 0.0
+
         var cash     = request.initialCapital
         var holding  = 0
-        var entryPrice = 0.0
+        var entryPrice = 0.0      // 손절·익절 판단 기준(진입일 종가)
+        var entryFill  = 0.0      // 슬리피지 반영 체결가
+        var entryCost  = 0.0      // 수수료 포함 매수 총액
         var entryDate  = filtered.first().date
         val trades   = mutableListOf<TradeRecord>()
         val equity   = mutableListOf<EquityPoint>()
@@ -41,16 +49,20 @@ object BacktestEngine {
                     else                                -> null
                 }
                 if (exitReason != null) {
-                    val proceeds = holding * price
-                    val pnl = proceeds - holding * entryPrice
+                    val fill     = price * (1 - slippage)
+                    val gross    = holding * fill
+                    val proceeds = gross * (1 - commission - sellTax)
+                    totalCost   += holding * price - proceeds
+                    val pnl = proceeds - entryCost
                     trades.add(TradeRecord(
                         entryDate  = entryDate,
                         exitDate   = candle.date,
-                        entryPrice = entryPrice,
-                        exitPrice  = price,
+                        entryPrice = entryFill,
+                        exitPrice  = fill,
                         quantity   = holding,
                         pnl        = pnl,
-                        pnlPct     = changePct,
+                        // 비용이 없으면 이전과 같은 가격 변화율, 있으면 비용 차감 후 실현 수익률
+                        pnlPct     = if (c == CostModel.NONE) changePct else pnl / entryCost * 100,
                         exitReason = exitReason,
                     ))
                     cash += proceeds
@@ -61,11 +73,19 @@ object BacktestEngine {
 
             // 미보유 — 매수 신호
             if (holding == 0 && signal == Signal.BUY && cash > price) {
-                holding    = (cash * 0.95 / price).toInt().coerceAtLeast(1)
-                entryPrice = price
-                entryDate  = candle.date
-                cash      -= holding * price
-                strategyState["holding"] = true
+                val fill   = price * (1 + slippage)
+                val unit   = fill * (1 + commission)
+                val qty    = (cash * 0.95 / unit).toInt().coerceAtLeast(1)
+                if (qty * unit <= cash) {
+                    holding    = qty
+                    entryPrice = price
+                    entryFill  = fill
+                    entryCost  = qty * unit
+                    entryDate  = candle.date
+                    cash      -= entryCost
+                    totalCost += qty * unit - qty * price
+                    strategyState["holding"] = true
+                }
             }
 
             // 당일 평가자산
@@ -77,20 +97,23 @@ object BacktestEngine {
 
         // 마지막 포지션 강제 청산
         if (holding > 0 && filtered.isNotEmpty()) {
-            val last  = filtered.last()
-            val price = last.close.toDouble()
-            val pnl   = holding * (price - entryPrice)
+            val last     = filtered.last()
+            val price    = last.close.toDouble()
+            val fill     = price * (1 - slippage)
+            val proceeds = holding * fill * (1 - commission - sellTax)
+            totalCost   += holding * price - proceeds
+            val pnl      = proceeds - entryCost
             trades.add(TradeRecord(
                 entryDate  = entryDate,
                 exitDate   = last.date,
-                entryPrice = entryPrice,
-                exitPrice  = price,
+                entryPrice = entryFill,
+                exitPrice  = fill,
                 quantity   = holding,
                 pnl        = pnl,
-                pnlPct     = (price - entryPrice) / entryPrice * 100,
+                pnlPct     = if (c == CostModel.NONE) (price - entryPrice) / entryPrice * 100 else pnl / entryCost * 100,
                 exitReason = "END",
             ))
-            cash += holding * price
+            cash += proceeds
         }
 
         val finalCapital = cash
@@ -107,6 +130,13 @@ object BacktestEngine {
             trades        = trades,
             equityCurve   = equity,
             metrics       = metrics,
+            costs         = AppliedCosts(
+                commissionPct  = c.commissionPct,
+                sellTaxPct     = if (domestic) c.sellTaxPct else 0.0,
+                slippagePct    = c.slippagePct,
+                sellTaxApplied = domestic && c.sellTaxPct > 0,
+                totalCost      = totalCost,
+            ),
         )
     }
 

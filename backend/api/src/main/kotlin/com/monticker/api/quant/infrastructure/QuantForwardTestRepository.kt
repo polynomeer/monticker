@@ -9,4 +9,5 @@ interface QuantForwardTestRepository : JpaRepository<QuantForwardTest, Long> {
     fun findByRuleSetIdAndStatus(ruleSetId: String, status: ForwardTestStatus): Optional<QuantForwardTest>
     fun findAllByRuleSetIdOrderByStartedAtDesc(ruleSetId: String): List<QuantForwardTest>
     fun findAllByStatus(status: ForwardTestStatus): List<QuantForwardTest>
+    fun findAllByRuleSetIdIn(ruleSetIds: Collection<String>): List<QuantForwardTest>
 }

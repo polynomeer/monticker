@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useRef, useCallback } from "react";
-import type { ChartAdapterProps, CandleData, IndicatorKey, Drawing } from "./types";
+import type { ChartAdapterProps, CandleData, IndicatorKey, Drawing, SignalMarker, SentimentMarker } from "./types";
 
 let echartsPromise: Promise<typeof import("echarts")> | null = null;
 function loadECharts() {
@@ -86,6 +86,10 @@ function resolveCategoryTime(value: unknown, candles: CandleData[], dates: strin
   return candles[idx >= 0 ? idx : candles.length - 1].time;
 }
 
+// 기본값을 모듈 상수로 — 매 렌더 새 []면 buildOption deps가 바뀌어 차트를 통째로 다시 만든다.
+const NO_SIGNALS: SignalMarker[] = [];
+const NO_SENTIMENT: SentimentMarker[] = [];
+
 export default function EChartsAdapter({
   candles,
   events = [],
@@ -96,6 +100,8 @@ export default function EChartsAdapter({
   enabledIndicators,
   orderLines = [],
   onCancelOrderLine,
+  signalMarkers = NO_SIGNALS,
+  sentimentMarkers = NO_SENTIMENT,
   activeDrawingTool = null,
   drawings = [],
   onDrawingsChange,
@@ -143,6 +149,49 @@ export default function EChartsAdapter({
           };
         })
         .filter(Boolean);
+
+      // 시각 t가 속한 봉 — t 이하인 마지막 봉. 첫 봉보다 이르면 표시하지 않는다(차트 구간 밖).
+      const candleIndexAt = (t: number) => {
+        if (t < candles[0].time) return -1;
+        let lo = 0, hi = candles.length - 1;
+        while (lo < hi) {
+          const mid = (lo + hi + 1) >> 1;
+          if (candles[mid].time <= t) lo = mid; else hi = mid - 1;
+        }
+        return lo;
+      };
+      // 퀀트 시그널 — 매수는 봉 아래 ▲, 매도는 봉 위 ▼
+      for (const s of signalMarkers) {
+        const idx = candleIndexAt(s.time);
+        if (idx < 0) continue;
+        const buy = s.direction === "BUY";
+        markData.push({
+          name: `${s.label} ${buy ? "매수" : "매도"} 신호`,
+          coord: [dates[idx], buy ? candles[idx].low : candles[idx].high],
+          value: buy ? "▲" : "▼",
+          symbol: "pin",
+          symbolRotate: buy ? 180 : 0,
+          itemStyle: { color: buy ? theme.upColor : theme.downColor },
+          label: { color: "#1b1c24", fontSize: 9 },
+          symbolSize: 20,
+          eventId: undefined,
+        } as never);
+      }
+      // 감성 — 점수 부호로 색, 크기는 절댓값
+      for (const s of sentimentMarkers) {
+        const idx = candleIndexAt(s.time);
+        if (idx < 0) continue;
+        const color = s.score > 0.05 ? "#50fa7b" : s.score < -0.05 ? "#ff5555" : "#6272a4";
+        markData.push({
+          name: `감성 ${s.score >= 0 ? "+" : ""}${s.score.toFixed(2)} · ${s.title}`,
+          coord: [dates[idx], candles[idx].high],
+          value: s.score >= 0 ? "+" : "−",
+          itemStyle: { color: "#1b1c24", borderColor: color, borderWidth: 2 },
+          label: { color },
+          symbolSize: 12 + Math.round(Math.min(1, Math.abs(s.score)) * 8),
+          eventId: undefined,
+        } as never);
+      }
 
       // 현재가 라인 + 실전투자 미체결 주문선을 같은 markLine에 합친다(시리즈당
       // markLine은 하나뿐이라 data 배열에 함께 넣어야 한다).
@@ -428,7 +477,7 @@ export default function EChartsAdapter({
       };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [candles, events, height, theme, vwapData, orderLines, enabledIndicators]
+    [candles, events, height, theme, vwapData, orderLines, enabledIndicators, signalMarkers, sentimentMarkers]
   );
 
   // 드로잉을 현재 줌/팬 상태 기준 픽셀 좌표로 다시 그린다 — data 좌표(시각+가격)로

@@ -8,15 +8,17 @@ import { emotionLabel } from "@/components/wallet/emotions";
 import { EmptyNote, LoginRequired, Skeleton } from "@/components/portfolio/PaperStates";
 import { fmtTime } from "@/components/portfolio/format";
 import {
-  AutoGrid, Icon, IconBtn, Panel, PanelCol, PanelRow, PreviewTag, Seg, Stat, TerminalPage, dirClass, fmtNum, fmtSigned,
+  AutoGrid, Icon, IconBtn, Panel, PanelCol, PanelRow, PreviewTag, Stat, TerminalPage, dirClass, fmtNum, fmtSigned,
 } from "@/components/terminal";
 import { cn } from "@/lib/utils";
+import CandleReplay from "@/components/wallet/CandleReplay";
 
 /** 백엔드 ReplayEvent — 필드 이름이 qty, 종목명은 없고 심볼만 온다. 예전 응답 모양(quantity·stockName)도 받아 준다. */
 interface ReplayEvent {
   time: string;
   type: string;
   stockSymbol: string | null;
+  stockId?: number | null;
   stockName?: string | null;
   qty?: number | null;
   quantity?: number | null;
@@ -88,7 +90,7 @@ async function fetchReplay(date: string): Promise<DailyReplay> {
   return res.json();
 }
 
-/** 장중(09:00–15:30) 시간축 위에 그날 주문을 찍는다 — 캔들 리플레이(재생)는 준비 중 */
+/** 장중(09:00–15:30) 시간축 위에 그날 주문을 찍는다 — 캔들 재생은 CandleReplay */
 function DayTimeline({ events }: { events: ReplayEvent[] }) {
   const trades = events.filter((e) => e.type === "BUY" || e.type === "SELL");
   const open = 9 * 60;
@@ -225,20 +227,14 @@ export default function ReplayPage() {
       </Panel>
 
       <PanelRow>
-        <Panel tabs={["리플레이"]} actions={["expand"]} preview className="flex-[999_1_620px]">
-          {isLoading ? <Skeleton className="h-[230px]" /> : <DayTimeline events={data?.events ?? []} />}
-          {/* 캔들 재생 컨트롤 — 시안 요소. 당일 분봉 히스토리 + 재생 엔진이 생기면 연결한다 */}
-          <div className="flex flex-wrap items-center gap-2.5" aria-disabled="true">
-            <IconBtn name="skipb" label="처음으로 (준비 중)" size={36} disabled className="disabled:opacity-50" />
-            <button type="button" aria-label="재생 (준비 중)" disabled className="grid h-11 w-11 place-items-center rounded-full bg-dracula-purple text-tm-page opacity-50">
-              <Icon name="play" size={18} strokeWidth={2.4} />
-            </button>
-            <IconBtn name="skipf" label="다음 주문으로 (준비 중)" size={36} disabled className="disabled:opacity-50" />
-            <div className="relative h-1 min-w-[160px] flex-1 rounded-full bg-tm-inner" />
-            <span className="num text-xs text-tm-muted">09:00 / 15:30</span>
-            <Seg options={[{ value: "1", label: "1×" }, { value: "4", label: "4×" }, { value: "16", label: "16×" }]} value="1" size="lg" className="opacity-50" />
-            <PreviewTag />
-          </div>
+        <Panel tabs={["리플레이"]} actions={["expand"]} className="flex-[999_1_620px]">
+          {isLoading ? <Skeleton className="h-[230px]" /> : (
+            <>
+              {/* 그날 거래한 종목의 1분봉을 재생하며 내 주문이 그 시점에 나타난다. 거래가 없는 날은 시간축만 */}
+              <CandleReplay date={date} events={data?.events ?? []} />
+              <DayTimeline events={data?.events ?? []} />
+            </>
+          )}
         </Panel>
 
         <PanelCol className="flex-[1_1_320px]">
