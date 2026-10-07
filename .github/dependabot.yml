@@ -77,8 +77,6 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "gradle-wrapper"                 # B0 — Gradle 9
         update-types: ["version-update:semver-major"]
-      - dependency-name: "org.testcontainers:*"           # B2
-        update-types: ["version-update:semver-major"]
       - dependency-name: "io.jsonwebtoken:*"              # B3 — 0.x라 minor가 breaking이다
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "org.springframework.boot"       # B4
@@ -112,8 +110,6 @@ updates:
       - dependency-name: "org.jetbrains.kotlin*"          # B1
         update-types: ["version-update:semver-major"]
       - dependency-name: "gradle-wrapper"                 # B0 — Gradle 9
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "org.testcontainers:*"           # B2
         update-types: ["version-update:semver-major"]
       - dependency-name: "io.jsonwebtoken:*"              # B3 — 0.x라 minor가 breaking이다
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
