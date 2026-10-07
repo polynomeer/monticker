@@ -8,6 +8,7 @@ import com.monticker.api.screener.domain.ScreenerCriteria
 import com.monticker.api.screener.domain.ScreenerItem
 import com.monticker.api.screener.infrastructure.ScreenerRepository
 import com.monticker.api.screener.infrastructure.SectorCount
+import com.monticker.api.screener.infrastructure.SectorPerformance
 import com.monticker.api.stock.application.StockSearchService
 import org.slf4j.LoggerFactory
 import org.springframework.cache.annotation.Cacheable
@@ -108,6 +109,18 @@ class ScreenerService(
     fun getSectors(market: String): List<SectorCount> {
         require(market in ScreenerCriteria.MARKETS) { "알 수 없는 market: $market" }
         return repo.findSectors(market)
+    }
+
+    /**
+     * 섹터별 등락률(동일가중 평균)과 오늘(KST) 이벤트 수 — ADR-087. 30초 캐시(CacheConfig.SECTOR_PERFORMANCE).
+     * 잘못된 market은 IllegalArgumentException(캐시에 넣기 전에 던지므로 키가 늘지 않는다).
+     */
+    @Cacheable(cacheNames = [CacheConfig.SECTOR_PERFORMANCE], key = "#market")
+    fun getSectorPerformance(market: String): List<SectorPerformance> {
+        require(market in ScreenerCriteria.MARKETS) { "알 수 없는 market: $market" }
+        val from = todayStart()
+        val to = LocalDate.ofInstant(from, KST).plusDays(1).atStartOfDay(KST).toInstant()
+        return repo.findSectorPerformance(market, from, to)
     }
 
     /**

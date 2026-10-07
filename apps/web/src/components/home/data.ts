@@ -64,6 +64,32 @@ export function useRecentEvents() {
   });
 }
 
+/** GET /api/events/summary — 하루(KST) 이벤트 유형별 집계(ADR-087) */
+export interface EventSummary {
+  date: string;
+  from: string;
+  to: string;
+  total: number;
+  byType: { eventType: string; count: number; stockCount: number }[];
+  /** 급등(PRICE_SPIKE) 이벤트가 난 종목 수 */
+  surgeStocks: number;
+  /** 급락(PRICE_DROP) 이벤트가 난 종목 수 */
+  plungeStocks: number;
+}
+
+/** 오늘(KST) 이벤트 집계 — 30초 폴링(서버 캐시도 30초). 실패하면 null(화면은 "—") */
+export function useEventSummary() {
+  return useQuery<EventSummary | null>({
+    queryKey: ["events", "summary", "today"],
+    queryFn: async () => {
+      const r = await fetch("/api/events/summary");
+      return r.ok ? r.json() : null;
+    },
+    refetchInterval: 30_000,
+    staleTime: 30_000,
+  });
+}
+
 /** 관심종목 그룹 — useWatchlistIds/WatchlistTicker와 같은 키 */
 export function useWatchlistGroups(enabled: boolean) {
   return useQuery<WatchlistGroup[]>({

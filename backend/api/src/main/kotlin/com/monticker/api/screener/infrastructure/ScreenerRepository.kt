@@ -8,12 +8,31 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.sql.Timestamp
 import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
 
 /** 페이지에 오른 종목의 보조 정보(거래량 배수·오늘 이벤트) */
 data class ScreenerDayContext(val volumeMultiple: Double?, val todayEvents: List<String>)
 
 /** 섹터와 활성 종목 수 */
 data class SectorCount(val sector: String, val count: Int)
+
+/**
+ * 섹터 등락률 집계 한 행(ADR-087). Redis 캐시에 그대로 들어가므로 문자열·숫자만 쓴다.
+ * - stockCount: 섹터의 활성 종목 수 / pricedCount: 그중 등락률을 계산할 수 있는 종목 수
+ * - avgChangeRate: pricedCount 종목 등락률(%)의 단순 평균. pricedCount가 0이면 null
+ * - eventCount: 오늘(KST) 그 섹터 종목의 이벤트 수(보조 정보)
+ */
+data class SectorPerformance(
+    val sector: String,
+    val stockCount: Int,
+    val pricedCount: Int,
+    val avgChangeRate: Double?,
+    val advancers: Int,
+    val decliners: Int,
+    val unchanged: Int,
+    val eventCount: Int,
+)
 
 @Repository
 class ScreenerRepository(private val jdbc: JdbcTemplate) {
@@ -289,6 +308,60 @@ class ScreenerRepository(private val jdbc: JdbcTemplate) {
             *(ids + Timestamp.from(todayStart)).toTypedArray(),
         ).groupBy({ it.first }, { it.second })
         return ids.associateWith { ScreenerDayContext(vol[it], events[it] ?: emptyList()) }
+    }
+
+    /**
+     * 섹터별 등락률 집계(ADR-087) — 홈 섹터 히트맵.
+     *
+     * 종목 등락률은 스크리너 목록과 **같은 식**([buildBase]의 change_pct: 최신 1분봉 종가 vs 직전 일봉 종가)을
+     * 그대로 쓴다. 섹터 값은 등락률을 계산할 수 있는 종목(change_pct가 NULL이 아닌 종목)의 **단순 평균**(동일가중)이다 —
+     * 시가총액(stock_fundamentals.market_cap)은 비어 있거나 모의값(is_mocked)인 종목이 있어 가중치로 쓰면
+     * 지어낸 숫자가 섹터 값을 좌우한다. eventCount는 [eventsFrom, eventsTo) 구간 그 섹터 활성 종목의 이벤트 수.
+     *
+     * market은 호출부가 [ScreenerCriteria.MARKETS]로 검증한 값이고(화이트리스트 SQL 조각), 시각은 `?` 바인딩이다.
+     */
+    fun findSectorPerformance(market: String, eventsFrom: Instant, eventsTo: Instant): List<SectorPerformance> {
+        val base = buildBase(ScreenerCriteria(market = market), null, Instant.EPOCH)
+        val sql = base.sql + """
+            , ev AS (
+                SELECT s.sector, COUNT(*) AS cnt
+                FROM stock_events e
+                JOIN stocks s ON s.id = e.stock_id
+                WHERE e.event_time >= ? AND e.event_time < ?
+                  AND s.is_active = true AND s.sector IS NOT NULL ${marketFilter(market)}
+                GROUP BY s.sector
+            )
+            SELECT q.sector,
+                   COUNT(*)                                    AS stock_count,
+                   COUNT(q.change_pct)                         AS priced_count,
+                   AVG(q.change_pct)::float8                   AS avg_change,
+                   COUNT(*) FILTER (WHERE q.change_pct > 0)    AS advancers,
+                   COUNT(*) FILTER (WHERE q.change_pct < 0)    AS decliners,
+                   COUNT(*) FILTER (WHERE q.change_pct = 0)    AS unchanged,
+                   COALESCE(MAX(ev.cnt), 0)                    AS event_count
+            FROM q
+            LEFT JOIN ev ON ev.sector = q.sector
+            WHERE q.sector IS NOT NULL AND q.sector <> ''
+            GROUP BY q.sector
+            ORDER BY stock_count DESC, q.sector ASC
+            LIMIT 100
+        """.trimIndent()
+        val args = base.args + listOf(
+            OffsetDateTime.ofInstant(eventsFrom, ZoneOffset.UTC),
+            OffsetDateTime.ofInstant(eventsTo, ZoneOffset.UTC),
+        )
+        return jdbc.query(sql, { rs, _ ->
+            SectorPerformance(
+                sector        = rs.getString("sector"),
+                stockCount    = rs.getInt("stock_count"),
+                pricedCount   = rs.getInt("priced_count"),
+                avgChangeRate = rs.getDouble("avg_change").let { if (rs.wasNull()) null else it },
+                advancers     = rs.getInt("advancers"),
+                decliners     = rs.getInt("decliners"),
+                unchanged     = rs.getInt("unchanged"),
+                eventCount    = rs.getInt("event_count"),
+            )
+        }, *args.toTypedArray())
     }
 
     /** 활성 종목의 섹터와 종목 수(많은 순). 섹터 칩 목록용 */

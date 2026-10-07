@@ -8,6 +8,7 @@ import com.monticker.api.screener.application.SavedScreenService
 import com.monticker.api.screener.domain.ScreenerCriteria
 import com.monticker.api.screener.domain.ScreenerItem
 import com.monticker.api.screener.infrastructure.SectorCount
+import com.monticker.api.screener.infrastructure.SectorPerformance
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.context.SecurityContextHolder
@@ -90,6 +91,24 @@ class ScreenerController(
     fun sectors(@RequestParam(defaultValue = "all") market: String): ResponseEntity<List<SectorCount>> =
         ResponseEntity.ok(screenerService.getSectors(market))
 
+    /**
+     * 섹터별 등락률 — 홈 섹터 히트맵(ADR-087). 종목 등락률은 이 스크리너 목록과 같은 식(최신 1분봉 종가 vs 직전 일봉 종가),
+     * 섹터 값은 등락률이 있는 종목의 단순 평균(동일가중). 종목 수 많은 순 최대 100개.
+     *
+     * GET /api/screener/sectors/performance?market=domestic
+     */
+    @GetMapping("/sectors/performance")
+    fun sectorPerformance(@RequestParam(defaultValue = "all") market: String): ResponseEntity<SectorPerformanceResponse> =
+        ResponseEntity.ok(
+            SectorPerformanceResponse(
+                market      = market,
+                weighting   = "EQUAL",
+                eventsSince = ScreenerService.todayStart(),
+                sectors     = screenerService.getSectorPerformance(market),
+                updatedAt   = Instant.now(),
+            ),
+        )
+
     // ── 저장한 스크린(ADR-072) — 로그인 필요(SecurityConfig) ───────────────────────
 
     @GetMapping("/saved")
@@ -164,6 +183,16 @@ class ScreenerController(
         updatedAt = Instant.now(),
     )
 }
+
+data class SectorPerformanceResponse(
+    val market: String,
+    /** 섹터 값의 가중 방식 — EQUAL(종목 단순 평균) */
+    val weighting: String,
+    /** sectors[].eventCount를 세기 시작한 시각(오늘 KST 자정) */
+    val eventsSince: Instant,
+    val sectors: List<SectorPerformance>,
+    val updatedAt: Instant,
+)
 
 data class ScreenerResponse(
     val items: List<ScreenerItemResponse>,

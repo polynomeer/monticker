@@ -53,11 +53,11 @@
 | 항목 | 지금 | 필요한 것 | 우선순위 | 상태 |
 |---|---|---|---|---|
 | 지수 카드(KOSPI·KOSDAQ·USD/KRW)와 상단 지수 스탯 | `—`, "지수 시세 준비 중" | 지수·환율 시세 수집(worker)과 `GET /api/market/indices` | P1 | 부분 — 수집·저장·API·화면 완료, 공급자는 Mock("모의" 표시). KIS 업종지수 규격 확인·환율 출처 결정 필요 ([ADR-071](decisions/071-market-index-quotes.md)) |
-| 상단 "오늘 이벤트"·"급등·급락" 건수 | `—` | 당일 이벤트 유형별 집계 API(`/api/events/recent`는 최대 50건이라 집계 불가) | P2 | |
+| 상단 "오늘 이벤트"·"급등·급락" 건수 | `—` | 당일 이벤트 유형별 집계 API(`/api/events/recent`는 최대 50건이라 집계 불가) | P2 | ✅ `GET /api/events/summary` — KST 하루 유형별 건수, 급등·급락은 종목 수 ([ADR-087](decisions/087-event-and-sector-aggregates-at-query-time.md)) |
 | 장 상태 | 평일 09:00–15:30 KST로 클라이언트에서 계산 | 휴장일 캘린더 API | P2 | ✅ [ADR-086](decisions/086-krx-trading-calendar.md) — `GET /api/market/status`·`/api/market/calendar`, 휴장일 이름 표시, 요청 실패 시 클라이언트 규칙. 수능일 시간 변경은 범위 밖 |
 | 이벤트 피드 "이벤트 구간 변동"·"거래량 배수" 열 | `—`(시각·종목·유형·중요도는 실데이터) | `StockEventResponse`에 구간 변동률·거래량 배수 추가 | P1 | ✅ |
 | 퀀트 시그널 패널 | 빈 상태 + 퀀트랩 링크 | 내 전략·구독 전략 시그널을 모으는 피드 API | P1 | ✅ `/api/quant/signals/feed` |
-| 섹터 히트맵 등락률 | 섹터별 24시간 이벤트 수로 색의 진하기를 대신함 | 섹터별 등락률 집계 API | P2 | |
+| 섹터 히트맵 등락률 | 섹터별 24시간 이벤트 수로 색의 진하기를 대신함 | 섹터별 등락률 집계 API | P2 | ✅ `GET /api/screener/sectors/performance` — 스크리너와 같은 등락률 식, 동일가중 평균, 오늘 이벤트 수는 보조 ([ADR-087](decisions/087-event-and-sector-aggregates-at-query-time.md)) |
 | 테마 탭 | 빈 상태 | 테마 분류 데이터와 API | P2 | |
 | 시안에 없어 홈에서 뺀 위젯(포트폴리오 스냅샷, 최근 본 종목 스트립, 관심종목 티커) | 제거 | 다른 화면이나 패널로 재배치할지 결정(최근 본 종목은 검색 화면에 남아 있음) | P2 | |
 
@@ -96,7 +96,7 @@
 | /stocks/search | 전략 검색 | `/api/quant/market` 상위 50개를 클라이언트에서 필터 | 서버 측 전략 검색 | P2 | |
 | /compare | 베타(KOSPI) | `—` | KOSPI 지수 일봉 | P1 | ✅ (지수가 모의면 표시) |
 | /compare | 배당수익률 | `—` | 배당 데이터 소스 | P2 | |
-| /compare | 이벤트 수 | 종목당 100건까지만 조회해 "100+" | 이벤트 count API | P2 | |
+| /compare | 이벤트 수 | 종목당 100건까지만 조회해 "100+" | 이벤트 count API | P2 | ✅ `GET /api/events/counts` — 여러 종목 한 번에, 정확한 건수. 겹침 점·이벤트 후 평균은 여전히 최근 100건 ([ADR-087](decisions/087-event-and-sector-aggregates-at-query-time.md)) |
 | /watchlist | 오늘(장중 스파크라인)·거래량 배수 열 | `—` | 장중 시계열 일괄 API, 거래량 배수 | P1 | ✅ |
 | /watchlist | 정규장/시간외/NXT | 동작하는 전체/국내/해외로 대체 | 세션별 시세 | P2 | |
 | /watchlist | 순서 이동 | ⋯ 메뉴에 "순서 이동(준비 중)" | 정렬 순서 변경 API(`PATCH sortOrder`) | P2 | |

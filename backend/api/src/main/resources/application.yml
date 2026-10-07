@@ -24,6 +24,10 @@ spring:
     enabled: true
     locations: classpath:db/migration
     repair-on-migrate: true
+    # 세션 단위 advisory lock. 기본값(트랜잭션 lock)은 잠금 연결이 트랜잭션을 연 채 기다려서,
+    # CREATE INDEX CONCURRENTLY(V84)가 그 트랜잭션이 끝나기를 영원히 기다린다.
+    postgresql:
+      transactional-lock: false
   batch:
     jdbc:
       initialize-schema: never   # V17 Flyway 마이그레이션으로 관리

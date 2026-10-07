@@ -184,6 +184,8 @@ CREATE TABLE stock_events (
 CREATE INDEX idx_stock_events_stock_time ON stock_events (stock_id, event_time DESC);
 CREATE INDEX idx_stock_events_type       ON stock_events (event_type);
 CREATE INDEX idx_stock_events_importance ON stock_events (importance_score DESC);
+-- V84 (ADR-087): 하루 전 종목 유형별 집계(GET /api/events/summary)를 index-only scan으로
+CREATE INDEX idx_stock_events_time_type_stock ON stock_events (event_time, event_type, stock_id);
 ```
 
 Event types:

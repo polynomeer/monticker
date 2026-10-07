@@ -29,6 +29,9 @@ import java.time.Duration
  *   portfolio-optimizer 30분 — Markowitz/Kelly 행렬 연산 비용 절감
  *   stock-score        1시간  — 밸류에이션 백분위 계산 시 전체 종목 스캔 비용 절감 (원본 데이터도 일 단위 갱신)
  *   intraday          30초  — 장중 미니 시계열 일괄 조회(ADR-072). 10분 버킷이라 30초 지연은 모양에 영향 없음
+ *   event-summary     30초  — 하루(KST) 이벤트 유형별 집계(ADR-087). 홈 상단 스탯이 폴링한다
+ *   event-counts      60초  — 종목별 기간 이벤트 수(ADR-087). /compare 지표라 분 단위 지연은 무의미
+ *   sector-performance 30초 — 섹터별 등락률(ADR-087). 전 종목 LATERAL이라 스크리너(5초)보다 길게
  *
  * 기본 직렬화: GenericJackson2JsonRedisSerializer (타입 정보 포함)
  * → Redis 에서 inspect 가능하며 역직렬화 시 클래스 정보 보존.
@@ -75,6 +78,9 @@ class CacheConfig(
         const val PORTFOLIO_OPTIMIZER = "portfolio-optimizer"
         const val STOCK_SCORE         = "stock-score"
         const val INTRADAY            = "intraday"
+        const val EVENT_SUMMARY       = "event-summary"
+        const val EVENT_COUNTS        = "event-counts"
+        const val SECTOR_PERFORMANCE  = "sector-performance"
     }
 
     @Bean
@@ -103,6 +109,9 @@ class CacheConfig(
             .withCacheConfiguration(PORTFOLIO_OPTIMIZER, config(Duration.ofMinutes(30)))
             .withCacheConfiguration(STOCK_SCORE,         config(Duration.ofHours(1)))
             .withCacheConfiguration(INTRADAY,            config(Duration.ofSeconds(30)))
+            .withCacheConfiguration(EVENT_SUMMARY,       config(Duration.ofSeconds(30)))
+            .withCacheConfiguration(EVENT_COUNTS,        config(Duration.ofSeconds(60)))
+            .withCacheConfiguration(SECTOR_PERFORMANCE,  config(Duration.ofSeconds(30)))
             .build()
     }
 }
