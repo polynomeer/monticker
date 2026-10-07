@@ -17,30 +17,37 @@ jobs:
         with:
           fetch-depth: 0
 
+      # diff를 step output(heredoc)으로 넘기면 diff 안에 구분자 줄이 있을 때 깨진다 — 파일로 넘긴다
       - name: Get diff
-        id: diff
         run: |
           git fetch origin ${{ github.base_ref }}
-          DIFF=$(git diff origin/${{ github.base_ref }}...HEAD -- '*.kt' '*.tsx' '*.ts' '*.sql' | head -c 12000)
-          echo "diff<<EOF" >> $GITHUB_OUTPUT
-          echo "$DIFF" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          git diff origin/${{ github.base_ref }}...HEAD -- '*.kt' '*.tsx' '*.ts' '*.sql' | head -c 12000 > "$RUNNER_TEMP/pr.diff"
 
+      # 리뷰는 참고용이라 실패해도 PR을 막지 않는다. 대신 응답에 본문이 없으면 댓글을 달지 않고
+      # 사유를 경고로 남긴다 — 예전엔 오류 응답의 .content[0].text가 null이라 "null" 댓글이 달렸다.
       - name: Claude code review
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          PR_DIFF: ${{ steps.diff.outputs.diff }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
-          REVIEW=$(curl -s https://api.anthropic.com/v1/messages \
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::warning::ANTHROPIC_API_KEY 시크릿이 없어 리뷰를 건너뜀"
+            exit 0
+          fi
+          if [ ! -s "$RUNNER_TEMP/pr.diff" ]; then
+            echo "리뷰 대상 파일(.kt/.ts/.tsx/.sql) 변경 없음 — 건너뜀"
+            exit 0
+          fi
+
+          RESPONSE=$(curl -sS https://api.anthropic.com/v1/messages \
             -H "x-api-key: $ANTHROPIC_API_KEY" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
             -d "$(jq -n \
-              --arg diff "$PR_DIFF" \
+              --rawfile diff "$RUNNER_TEMP/pr.diff" \
               --arg title "$PR_TITLE" \
               '{
                 model: "claude-haiku-4-5-20251001",
@@ -49,10 +56,18 @@ jobs:
                   role: "user",
                   content: ("PR: " + $title + "\n\nDiff:\n" + $diff + "\n\nReview this diff for: (1) correctness bugs, (2) security issues (SQL injection, XSS, auth bypass), (3) missing error handling at boundaries, (4) any financial safety issues (real trade execution, investment recommendations). Keep it concise — bullet points only, group by severity: 🔴 Critical / 🟡 Warning / 🟢 Note. If nothing notable, say LGTM.")
                 }]
-              }')" | jq -r '.content[0].text')
+              }')") || { echo "::warning::Anthropic API 호출 실패 — 리뷰를 건너뜀"; exit 0; }
 
-          curl -s -X POST \
-            "https://api.github.com/repos/$REPO/issues/$PR_NUMBER/comments" \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "$(jq -n --arg body "## 🤖 Claude Code Review\n\n$REVIEW" '{body: $body}')"
+          REVIEW=$(jq -r '[.content[]? | select(.type == "text") | .text] | join("\n") ' <<< "$RESPONSE" 2>/dev/null || true)
+          if [ -z "$REVIEW" ]; then
+            ERROR=$(jq -r '.error.type? // "unknown"' <<< "$RESPONSE" 2>/dev/null || echo "unparseable")
+            echo "::warning::리뷰 본문이 비어 댓글을 달지 않음 (error: ${ERROR:-empty response})"
+            exit 0
+          fi
+
+          jq -n --arg review "$REVIEW" '{body: ("## 🤖 Claude Code Review\n\n" + $review)}' \
+            | curl -sS --fail-with-body -X POST \
+                "https://api.github.com/repos/$REPO/issues/$PR_NUMBER/comments" \
+                -H "Authorization: Bearer $GITHUB_TOKEN" \
+                -H "Content-Type: application/json" \
+                -d @- > /dev/null
