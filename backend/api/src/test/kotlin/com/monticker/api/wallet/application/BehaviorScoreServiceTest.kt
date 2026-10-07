@@ -116,6 +116,29 @@ class BehaviorScoreServiceTest {
         assertThat(result.feedback).anyMatch { it.contains("FOMO 거래 1건") }
     }
 
+    // ADR-085 — 조급함은 불안과 같이 "감정적 충동": 보너스만 빠지고 감점은 없다
+    @Test
+    fun `an IMPATIENT tag removes the no-impulse bonus without a FOMO penalty`() {
+        val tradedAt = Instant.now()
+        every {
+            jdbc.queryForList(match<String> { it.contains("FROM paper_trades WHERE user_id = ? AND traded_at >=") }, userId, any(), any())
+        } returns listOf(
+            mapOf("id" to 10L, "stock_id" to 100L, "side" to "BUY", "price" to BigDecimal("1000"), "quantity" to 5, "traded_at" to tradedAt)
+        )
+        every { emotionTagRepo.findAllByUserIdOrderByCreatedAtDesc(userId) } returns listOf(
+            EmotionTag(id = 1L, paperTradeId = 10L, userId = userId, emotion = EmotionType.IMPATIENT)
+        )
+        every {
+            jdbc.queryForObject(match<String> { it.contains("candles_1m") }, BigDecimal::class.java, 100L, any())
+        } throws EmptyResultDataAccessException(1)
+
+        val result = service.getOrCalculateScore(userId, date)
+
+        // 70 + 15 (not impulsive) = 85 — +10 보너스 없음, FOMO 감점 없음
+        assertThat(result.behaviorScore).isEqualTo(85)
+        assertThat(result.feedback).noneMatch { it.contains("감정적 충동 거래 없음") }
+    }
+
     @Test
     fun `penalises behavior score for trading more than 5 times in a day`() {
         val tradedAt = Instant.now()
