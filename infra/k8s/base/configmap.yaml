@@ -24,6 +24,11 @@ data:
   # 최초 배포는 report: 대사가 한 번도 돈 적이 없으니 기존 드리프트가 나올 수 있다 — 조사·정리 후 alert로
   # (human-action-items §3). report 모드에서도 카운터는 mode="report"로 올라가 Grafana에서 보인다.
   LEDGER_RECON_MODE: "report"
+  # ADR-084 — api가 X-Forwarded-For를 믿을 직전 홉(ingress-nginx 컨트롤러 파드)의 CIDR. 비우면 모든 요청의
+  # 클라이언트 IP가 ingress 파드 IP 하나로 보여 IP 레이트리밋 버킷을 전 사용자가 공유한다(전면 429).
+  # base는 RFC1918 전체 — 외부 클라이언트는 TCP 피어로 사설 주소를 가질 수 없으므로 안전한 상한이다.
+  # 실배포 전에 클러스터의 실제 파드 CIDR(예: kubeadm/flannel 10.244.0.0/16)로 좁힐 것.
+  APP_HTTP_TRUSTED_PROXIES: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4318"
   PINPOINT_ENABLE: "false"
   PINPOINT_COLLECTOR_IP: "pinpoint-collector"
