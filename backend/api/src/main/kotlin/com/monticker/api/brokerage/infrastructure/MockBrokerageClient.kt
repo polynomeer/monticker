@@ -1,5 +1,7 @@
 package com.monticker.api.brokerage.infrastructure
 
+import com.monticker.api.common.calendar.KrxCalendar
+import com.monticker.api.common.calendar.TradingCalendar
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -28,6 +30,8 @@ class MockBrokerageClient(
     // ADR-056 로컬 검증용 — 이 종목들의 주문은 증권사(인메모리)에는 접수되지만 응답이 유실된 것처럼
     // INDETERMINATE를 돌려준다. 결과 불명 → 대조 잡 매칭 → 해소 흐름을 실제 앱에서 재현하기 위함이다.
     @Value("\${app.brokerage.mock.indeterminate-symbols:}") indeterminateSymbolsRaw: String = "",
+    // ADR-086 — 가짜 증권사도 결제일은 KRX 캘린더로. 단위 테스트에서 생략하면 주말만 건너뛴다.
+    private val calendar: TradingCalendar = KrxCalendar.empty(),
 ) : BrokerageClient {
 
     // ADR-060 — 개발용 가짜 증권사. 합성 시세로도 조건부 주문을 만들고 발동시킬 수 있다.
@@ -62,7 +66,7 @@ class MockBrokerageClient(
 
     override fun submitOrder(credentials: BrokerageCredentials, request: BrokerageOrderRequest, clientOrderId: String): BrokerageOrderResult {
         val pgOrderId = "KIS${System.currentTimeMillis()}-${UUID.randomUUID().toString().take(8)}"
-        val settleDate = addBusinessDays(LocalDate.now(), 2)
+        val settleDate = calendar.settlementDate(Instant.now())
 
         val order = MockOrder(pgOrderId = pgOrderId, status = "SUBMITTED", request = request, settleDate = settleDate)
 
@@ -194,16 +198,6 @@ class MockBrokerageClient(
                 BigDecimal::class.java, symbol,
             )
         }.getOrNull()
-
-    private fun addBusinessDays(from: LocalDate, days: Int): LocalDate {
-        var date = from
-        var remaining = days
-        while (remaining > 0) {
-            date = date.plusDays(1)
-            if (date.dayOfWeek.value !in 6..7) remaining--
-        }
-        return date
-    }
 
     companion object {
         private val FEE_RATE      = BigDecimal("0.00015")

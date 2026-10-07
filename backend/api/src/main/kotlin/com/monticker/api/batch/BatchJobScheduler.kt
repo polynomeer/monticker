@@ -1,6 +1,8 @@
 package com.monticker.api.batch
 
 import com.monticker.api.common.cache.CacheConfig
+import com.monticker.api.common.calendar.KrxCalendar
+import com.monticker.api.common.calendar.TradingCalendar
 import com.monticker.api.subscription.application.RenewalSchedule
 import org.slf4j.LoggerFactory
 import org.springframework.batch.core.Job
@@ -23,6 +25,7 @@ class BatchJobScheduler(
     @Qualifier("brokerageSettlementJob")  private val brokerageSettlementJob: Job,
     @Qualifier("ledgerReconciliationJob") private val ledgerReconciliationJob: Job,
     @Qualifier("paymentReconciliationJob") private val paymentReconciliationJob: Job,
+    private val calendar: TradingCalendar,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -67,18 +70,24 @@ class BatchJobScheduler(
     // 장 마감 후 17:00 KST — T+2 기준일 도래한 실거래 증권사 정산 처리
     @Scheduled(cron = "0 0 17 * * MON-FRI", zone = "Asia/Seoul")
     fun runBrokerageSettlement() {
+        val today = LocalDate.now(KrxCalendar.ZONE)
+        // ADR-086 — 평일 휴장일에는 결제가 일어나지 않는다. 그날로 잡힌 정산(있다면)은 다음 영업일 실행이 함께 처리한다.
+        if (!calendar.isBusinessDay(today)) { log.info("Brokerage settlement skipped: {} is not a KRX business day ({})", today, calendar.holidayName(today)); return }
         log.info("Brokerage settlement job starting...")
         runJob(brokerageSettlementJob, JobParametersBuilder()
-            .addString("date", LocalDate.now().toString())
+            .addString("date", today.toString())
             .toJobParameters())
     }
 
     // 장 마감 후 16:30 KST — T+2 기준일 도래한 페이퍼트레이딩 정산 처리
     @Scheduled(cron = "0 30 16 * * MON-FRI", zone = "Asia/Seoul")
     fun runPaperSettlement() {
+        val today = LocalDate.now(KrxCalendar.ZONE)
+        // ADR-086 — 휴장일에는 정산하지 않는다(MON-FRI cron은 공휴일을 모른다).
+        if (!calendar.isBusinessDay(today)) { log.info("Paper settlement skipped: {} is not a KRX business day ({})", today, calendar.holidayName(today)); return }
         log.info("Paper settlement job starting...")
         runJob(paperSettlementJob, JobParametersBuilder()
-            .addString("date", LocalDate.now().toString())
+            .addString("date", today.toString())
             .toJobParameters())
     }
 

@@ -1,5 +1,6 @@
 package com.monticker.api.brokerage.application
 
+import com.monticker.api.common.calendar.TradingCalendar
 import com.monticker.api.common.consent.ConsentGroup
 import com.monticker.api.common.consent.ConsentService
 import com.monticker.api.common.consent.ConsentSource
@@ -66,6 +67,7 @@ class BrokerageService(
     private val consentService: ConsentService,
     private val outcomeNotices: OrderOutcomeNotices,
     private val priceGuard: OrderPriceGuard,
+    private val calendar: TradingCalendar,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -820,7 +822,8 @@ class BrokerageService(
         val fee      = gross.multiply(BigDecimal("0.00015")).setScale(0, java.math.RoundingMode.UP)
         val tax      = if (order.side == OrderSide.SELL) gross.multiply(BigDecimal("0.0018")).setScale(0, java.math.RoundingMode.UP) else BigDecimal.ZERO
         val net      = if (order.side == OrderSide.BUY) gross.add(fee) else gross.subtract(fee).subtract(tax)
-        val settle   = addBusinessDays(LocalDate.now(), 2)
+        // ADR-086 — KRX 거래일 캘린더로 T+2(공휴일·연말 휴장일 건너뜀), 기준일은 KST
+        val settle   = calendar.settlementDate(order.filledAt ?: Instant.now())
 
         settlementRepo.save(
             BrokerageSettlement(
@@ -844,16 +847,6 @@ class BrokerageService(
         runCatching {
             jdbc.queryForObject("SELECT id FROM stocks WHERE symbol = ?", Long::class.java, symbol)
         }.getOrNull()
-
-    private fun addBusinessDays(from: LocalDate, days: Int): LocalDate {
-        var date = from
-        var remaining = days
-        while (remaining > 0) {
-            date = date.plusDays(1)
-            if (date.dayOfWeek.value !in 6..7) remaining--
-        }
-        return date
-    }
 
     companion object {
         // ADR-027 — 취소된 앱키로 매 요청마다 브로커 인증 엔드포인트를 두드리지 않기 위한 쿨다운.
