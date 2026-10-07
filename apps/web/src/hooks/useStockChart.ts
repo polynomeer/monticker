@@ -22,8 +22,12 @@ export const stockKeys = {
 };
 
 // ── Fetchers ─────────────────────────────────────────────────
-async function fetchCandles(stockId: number, interval: string): Promise<CandleData[]> {
-  const res = await fetch(`/api/stocks/${stockId}/candles?interval=${interval}`);
+/** range를 주면 그 구간(ISO-8601 Instant)만 조회한다. 없으면 서버 기본 구간(최근 30일 등). */
+async function fetchCandles(
+  stockId: number, interval: string, range?: { from: string; to: string },
+): Promise<CandleData[]> {
+  const q = new URLSearchParams({ interval, ...(range ?? {}) });
+  const res = await fetch(`/api/stocks/${stockId}/candles?${q}`);
   if (!res.ok) return [];
   const data = await res.json();
   const mapped: CandleData[] = data.map((c: {

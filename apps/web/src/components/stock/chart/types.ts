@@ -34,6 +34,24 @@ export interface SentimentMarker {
   title: string;
 }
 
+/** 캔들 봉 단위 — 거래 마커를 어느 봉에 붙일지 정할 때 쓴다(버킷 경계는 Asia/Seoul). */
+export type ChartInterval = "1m" | "3m" | "15m" | "1h" | "1d";
+
+/** 거래(체결) 마커 — 내 체결·백테스트 거래를 캔들 위 매수▲·매도▼로 표시 */
+export interface TradeMarker {
+  /** 체결 식별자(선택). 같은 봉 안 체결은 하나로 묶이므로 표시에는 쓰지 않는다 */
+  id?: string | number;
+  /** 체결 시각, Unix epoch seconds */
+  time: number;
+  side: "BUY" | "SELL";
+  /** 체결가 */
+  price: number;
+  /** 체결 수량(주) */
+  qty: number;
+  /** 툴팁에 덧붙일 설명(예: "익절") */
+  label?: string;
+}
+
 export interface ChartTheme {
   bg: string;
   text: string;
@@ -82,6 +100,10 @@ export interface ChartAdapterProps {
   sentimentMarkers?: SentimentMarker[];
   /** 실전투자 미체결 주문을 가격선으로 표시 */
   orderLines?: OrderLine[];
+  /** 거래 마커 — 같은 봉·같은 방향 체결은 건수와 함께 하나로 묶는다 */
+  trades?: TradeMarker[];
+  /** candles의 봉 단위. trades를 봉에 맞출 때 쓴다(기본 1d) */
+  interval?: ChartInterval;
   onCancelOrderLine?: (orderId: number) => void;
   /** 현재 선택된 드로잉 도구 — null이면 그리기 비활성 (차트는 평소처럼 줌/팬만) */
   activeDrawingTool?: DrawingTool | null;
