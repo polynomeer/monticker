@@ -67,8 +67,6 @@ updates:
       jjwt:
         patterns: ["io.jsonwebtoken:*"]
     ignore:
-      - dependency-name: "gradle-wrapper"                 # B0 — Gradle 9
-        update-types: ["version-update:semver-major"]
       - dependency-name: "io.jsonwebtoken:*"              # B3 — 0.x라 minor가 breaking이다
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "org.springframework.boot"       # B4
@@ -93,8 +91,6 @@ updates:
       jjwt:
         patterns: ["io.jsonwebtoken:*"]
     ignore:
-      - dependency-name: "gradle-wrapper"                 # B0 — Gradle 9
-        update-types: ["version-update:semver-major"]
       - dependency-name: "io.jsonwebtoken:*"              # B3 — 0.x라 minor가 breaking이다
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "org.springframework.boot"       # B4

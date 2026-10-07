@@ -51,6 +51,7 @@ dependabot은 의존성마다 PR을 하나씩 연다. 메이저는 대개 **짝�
 - Gradle 9 데몬은 JVM 17+ — 우리는 21이라 문제없다.
 - Spring Boot 3.5.x Gradle 플러그인은 Gradle 9를 지원한다(현재 3.5.16).
 - `junit-platform-launcher`는 이미 `testRuntimeOnly`로 선언돼 있다(Gradle 9는 자동으로 넣지 않는다).
+- **9.8.0으로 올림**(B1 위에서): 빌드 스크립트 변경 없이 wrapper만 바꿨다. `--warning-mode all`의 deprecated 경고는 `Configuration.setVisible`(플러그인 쪽, Gradle 11에서 제거 예정) 하나다. Docker 빌드 단계(eclipse-temurin 21 alpine)도 통과.
 - 8.14.5에서 `--warning-mode all`로 compile·bootJar를 돌리면 deprecated 경고가 하나만 나온다(`StartParameter.isConfigurationCacheRequested`, 플러그인 쪽, **Gradle 10**에서 제거 예정). Gradle 9를 막는 것은 Kotlin 플러그인 버전뿐이다. B1을 마치면 B0은 wrapper만 올리면 될 것으로 본다.
 **검증**: api·worker `test`·`integrationTest`, `bootJar`·Docker 이미지 빌드(deploy-images).
 
@@ -193,5 +194,5 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 | (선행) dependabot ignore·groups | 완료 | #130 | §5 |
 | B2 Testcontainers 2 | 완료 | #143 | 2.0.5. 위 확인 결과 참고 |
 | B1 Kotlin 2 | PR | — | 2.3.21 (Boot 4.1 BOM과 같은 버전) |
-| B0 Gradle 9 | 보류 — B1 선행 | — | Gradle 9는 Kotlin 플러그인 2.0+ 필요 |
+| B0 Gradle 9 | PR (B1 위) | — | 9.8.0. wrapper만 변경 |
 | B3, B4, W1~W3, M1 | 시작 전 | — | |
