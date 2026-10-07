@@ -52,7 +52,7 @@ jobs:
       # 저장소 설정에서 Dependency Graph가 꺼져 있으면 제출이 거부된다 — 그걸로 테스트 매트릭스
       # 전체를 죽이지 않고 경고만 남긴다(기본값 false면 첫 모듈 실패가 나머지를 cancel한다).
       - name: Submit dependency graph — ${{ matrix.module }}
-        uses: gradle/actions/dependency-submission@v4
+        uses: gradle/actions/dependency-submission@v6
         with:
           build-root-directory: backend/${{ matrix.module }}
           dependency-graph-continue-on-failure: true
