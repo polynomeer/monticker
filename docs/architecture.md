@@ -404,10 +404,12 @@ GET    /api/stocks/{stockId}/price | candles | orderbook | vwap | vwap/series
 GET    /api/market/summary
 GET    /api/latency
 GET    /api/screener | /api/screener/quotes | /api/screener/search
+GET    /api/screener/sectors/performance  # 섹터 등락률(동일가중), ADR-087
 
 # 이벤트 · 뉴스 · 공시 · AI 요약
 GET    /api/stocks/{stockId}/events | news | disclosures
 GET    /api/events/recent | /api/events/search | /api/sectors/events
+GET    /api/events/summary | /api/events/counts   # KST 하루 유형별 집계, 종목별 기간 건수 (ADR-087)
 GET    /api/news/search | /api/disclosures/search | /api/summaries/search
 GET    /api/stocks/{stockId}/summary          # AI 요약
 GET    /api/stocks/{stockId}/score            # 밸류에이션 (국내 한정, ADR-020)
