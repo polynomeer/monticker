@@ -565,6 +565,7 @@ CREATE TABLE watch_rules (
     quantity             INTEGER     NOT NULL,
     min_importance_score INTEGER     NOT NULL DEFAULT 0,   -- 이 값 미만이면 발동 안 함
     cooldown_sec         INTEGER     NOT NULL DEFAULT 600, -- 직전 체결 후 재발동 금지 구간
+    last_fired_at        TIMESTAMPTZ,            -- V80: 마지막 발동 시각. 행 잠금 아래에서 쿨다운 판정·기록(ADR-077 Note)
     is_active            BOOLEAN     NOT NULL DEFAULT true,
     created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),

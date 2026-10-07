@@ -58,10 +58,31 @@ Accepted
 - watchrule이 `quant::api`·`quant::events`에 의존한다. quant는 watchrule을 모른다(순환 없음).
 - `watch_rule_executions.stock_event_id`가 nullable이 됐다(CHECK: 이벤트·신호 중 정확히 하나).
 - 쿨다운 판정은 여전히 "조회 후 판단"이라 동시 이벤트 두 개가 쿨다운을 함께 통과할 수 있다. 하루 한도는 이 창을 닫지만
-  쿨다운 자체는 이번 범위가 아니다.
+  쿨다운 자체는 이번 범위가 아니다. → 2026-10 Note에서 해소.
+
+## Note (2026-10 보안 리뷰 후속 — 쿨다운의 원자적 집행)
+
+- **레이스**: 쿨다운은 "최근 `cooldown_sec` 안에 EXECUTED 기록이 있는가"를 조회한 뒤 주문했다. 그 기록은 체결 **뒤에야**
+  생기므로, 같은 규칙에 **서로 다른** 이벤트(또는 신호) 두 개가 동시에 오면 둘 다 조회를 통과해 두 번 체결됐다. (룰, 이벤트)
+  유니크와 멱등 키 `WR:{ruleId}:{eventId}`는 이벤트가 달라 막지 못하고, 하루 한도가 없거나 2 이상이면 슬롯도 막지 못한다.
+- **결정**: `watch_rules.last_fired_at`(V80, 마지막 EXECUTED 시각으로 백필)을 두고, `WatchRuleGuards.claimFiring`이 한 짧은
+  트랜잭션에서 ① 규칙 행을 `FOR UPDATE`로 잠그고(잠근 시점의 `is_active`·`cooldown_sec`·`daily_limit` 사용) ② 쿨다운을
+  `clock_timestamp()` 기준으로 판정하고 ③ 위 하루 슬롯 UPSERT를 잡고 ④ `last_fired_at`을 기록한다. 동시 평가는 행 잠금에서
+  기다린 뒤 갱신된 값을 보고 SKIPPED(쿨다운)로 떨어진다. 주문 제출은 이 트랜잭션 **밖**이다(ADR-051 — 거부 기록을 남기려고).
+- 주문이 체결되지 않으면(거부·인프라 예외) `releaseFiring`이 슬롯을 돌려주고 `last_fired_at`을 이전 값으로 되돌린다
+  (우리가 쓴 값일 때만 — compare-and-set). 쿨다운은 예전처럼 **체결된 발동만** 센다. 잠금 순서는 획득·반환 모두
+  `watch_rules` → `watch_rule_daily_counts`라 교착이 없다.
+- 위 Revisit 항목의 "슬롯 테이블에 `last_executed_at`" 대신 규칙 행에 뒀다 — 쿨다운은 날짜를 넘어 이어지므로 일자별 행에
+  둘 수 없고, 규칙 행 잠금이 쿨다운·한도를 함께 직렬화하는 가장 단순한 단위다. 새 동시성 관례가 아니라 기존 관례(행 잠금 +
+  조건부 UPSERT, design-review-2026-10)의 적용이다.
+- 트레이드오프: 같은 규칙의 평가는 발동권 판정 구간(밀리초)만큼 직렬화된다. 체결 후 기록 전에 인프라 예외로 재전달되면 예전엔
+  같은 멱등 키로 첫 체결을 돌려받아 EXECUTED로 기록했지만, 이제는 `last_fired_at`이 남아 있어 SKIPPED(쿨다운)로 기록될 수
+  있다 — 주문은 여전히 하나(보수적 방향)지만 그 이벤트의 기록 상태가 실제와 다를 수 있다.
+- 증명: `WatchRuleCooldownRaceIntegrationTest` — 10개 동시 판정에서 정확히 1건, 쿨다운 0 + 한도 3에서 정확히 3건, 실제
+  `WatchRuleExecutor`로 서로 다른 이벤트 10개 동시 처리 시 주문 1건.
 
 ## Revisit When
 
 - 지표·가격 조건을 섞은 일반 조건 트리가 필요할 때 — 퀀트랩 RuleEvaluator를 재사용하는 별도 설계.
 - 여러 종목(관심종목 그룹)에 하나의 규칙을 걸 때 — 슬롯·멱등 키의 단위를 다시 정한다.
-- 쿨다운도 원자적으로 집행해야 할 때 — 같은 슬롯 테이블에 `last_executed_at`을 두는 방향.
+- ~~쿨다운도 원자적으로 집행해야 할 때~~ — 2026-10 Note에서 집행(`watch_rules.last_fired_at` + 행 잠금).
