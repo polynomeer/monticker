@@ -2,7 +2,7 @@
 
 import { useMemo }       from "react";
 import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
-import type { ChartTheme, CandleData, EventMarker, IndicatorKey, OrderLine, DrawingTool, Drawing, SignalMarker, SentimentMarker } from "./types";
+import type { ChartTheme, CandleData, EventMarker, IndicatorKey, OrderLine, DrawingTool, Drawing, SignalMarker, SentimentMarker, TradeMarker, ChartInterval } from "./types";
 import EChartsAdapter from "./EChartsAdapter";
 
 const ActiveAdapter = EChartsAdapter;
@@ -18,6 +18,10 @@ interface Props {
   onCancelOrderLine?: (orderId: number) => void;
   signalMarkers?: SignalMarker[];
   sentimentMarkers?: SentimentMarker[];
+  /** 거래(체결) 마커 — 매수▲·매도▼, 같은 봉의 여러 체결은 건수와 함께 묶인다 */
+  trades?: TradeMarker[];
+  /** candles의 봉 단위(기본 1d). trades를 Asia/Seoul 기준 봉 버킷에 맞출 때 쓴다 */
+  interval?: ChartInterval;
   activeDrawingTool?: DrawingTool | null;
   drawings?: Drawing[];
   onDrawingsChange?: (drawings: Drawing[]) => void;
@@ -26,7 +30,7 @@ interface Props {
 export default function StockChart({
   candles, events = [], height = 340, vwapData, onEventClick,
   enabledIndicators, orderLines, onCancelOrderLine, signalMarkers, sentimentMarkers,
-  activeDrawingTool, drawings, onDrawingsChange,
+  trades, interval, activeDrawingTool, drawings, onDrawingsChange,
 }: Props) {
   const { chartTheme }    = useThemeStore();
   const ct                = CHART_THEMES[chartTheme] ?? CHART_THEMES.default;
@@ -67,6 +71,8 @@ export default function StockChart({
       onCancelOrderLine={onCancelOrderLine}
       signalMarkers={signalMarkers}
       sentimentMarkers={sentimentMarkers}
+      trades={trades}
+      interval={interval}
       activeDrawingTool={activeDrawingTool}
       drawings={drawings}
       onDrawingsChange={onDrawingsChange}

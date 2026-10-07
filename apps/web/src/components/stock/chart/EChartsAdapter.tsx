@@ -7,7 +7,8 @@
  */
 
 import { useEffect, useRef, useCallback } from "react";
-import type { ChartAdapterProps, CandleData, IndicatorKey, Drawing, SignalMarker, SentimentMarker } from "./types";
+import type { ChartAdapterProps, CandleData, IndicatorKey, Drawing, SignalMarker, SentimentMarker, TradeMarker } from "./types";
+import { aggregateTradeMarkers, describeTradeGroup, tradeMarkPoints, tradeTimesKst } from "./tradeMarkers";
 
 let echartsPromise: Promise<typeof import("echarts")> | null = null;
 function loadECharts() {
@@ -89,6 +90,7 @@ function resolveCategoryTime(value: unknown, candles: CandleData[], dates: strin
 // 기본값을 모듈 상수로 — 매 렌더 새 []면 buildOption deps가 바뀌어 차트를 통째로 다시 만든다.
 const NO_SIGNALS: SignalMarker[] = [];
 const NO_SENTIMENT: SentimentMarker[] = [];
+const NO_TRADES: TradeMarker[] = [];
 
 export default function EChartsAdapter({
   candles,
@@ -102,6 +104,8 @@ export default function EChartsAdapter({
   onCancelOrderLine,
   signalMarkers = NO_SIGNALS,
   sentimentMarkers = NO_SENTIMENT,
+  trades = NO_TRADES,
+  interval = "1d",
   activeDrawingTool = null,
   drawings = [],
   onDrawingsChange,
@@ -193,6 +197,12 @@ export default function EChartsAdapter({
         } as never);
       }
 
+      // 거래 마커 — 같은 봉·같은 방향 체결은 건수와 함께 하나로 묶는다
+      const tradeGroups = aggregateTradeMarkers(candles, trades, interval);
+      markData.push(...(tradeMarkPoints(tradeGroups, candles, theme) as never[]));
+      const tradeGroupsAt = new Map<number, typeof tradeGroups>();
+      for (const g of tradeGroups) tradeGroupsAt.set(g.index, [...(tradeGroupsAt.get(g.index) ?? []), g]);
+
       // 현재가 라인 + 실전투자 미체결 주문선을 같은 markLine에 합친다(시리즈당
       // markLine은 하나뿐이라 data 배열에 함께 넣어야 한다).
       const priceLine = { yAxis: last.close, orderId: undefined as number | undefined };
@@ -270,6 +280,9 @@ export default function EChartsAdapter({
               `<span style="color:${theme.text}">저가 </span><b style="color:${theme.downColor}">${fmtPrice(c.low)}</b>`,
               `<span style="color:${theme.text}">종가 </span><b style="color:${col}">${fmtPrice(c.close)} <small>(${sign}${pct.toFixed(2)}%)</small></b>`,
               `<span style="color:${theme.text}">거래량 </span><b style="color:${theme.text}">${fmtVol(c.volume ?? 0)}</b>`,
+              ...(tradeGroupsAt.get(i) ?? []).map(g =>
+                `<b style="color:${g.side === "BUY" ? theme.upColor : theme.downColor}">${describeTradeGroup(g)}</b>` +
+                `<br/><small style="color:${theme.text}">${tradeTimesKst(g)}</small>`),
             ].join("<br/>");
           },
         },
@@ -477,7 +490,7 @@ export default function EChartsAdapter({
       };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [candles, events, height, theme, vwapData, orderLines, enabledIndicators, signalMarkers, sentimentMarkers]
+    [candles, events, height, theme, vwapData, orderLines, enabledIndicators, signalMarkers, sentimentMarkers, trades, interval]
   );
 
   // 드로잉을 현재 줌/팬 상태 기준 픽셀 좌표로 다시 그린다 — data 좌표(시각+가격)로
