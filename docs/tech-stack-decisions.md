@@ -33,11 +33,11 @@ monticker가 쓰는 **모든 기술**에 대해 무엇을 골랐고, 무엇과 �
 
 | 기술 | 버전 (실제 코드) | 역할 | 고려한 대안 / 근거 | 등급 |
 |------|-----------------|------|-------------------|------|
-| Kotlin | **1.9.25** | 백엔드 언어 | — | 없음 |
+| Kotlin | **2.3.21** (2026-10-07, #154 — Spring Boot 4.1 BOM과 같은 버전) | 백엔드 언어 | 업그레이드 경위는 [dependency-upgrade-plan.md](dependency-upgrade-plan.md) B1 | 없음 |
 | JVM | Java **21** toolchain, Temurin 21 이미지 | 런타임 | 17로 시작했으나 Dockerfile(21 이미지)과 불일치로 빌드가 깨져 21로 맞춤 (`a46e7c9`). 설계 결정이 아니라 빌드 수정 | 커밋 |
-| Gradle Kotlin DSL | wrapper 8.14.5, api·worker 독립 루트 | 빌드 | — | 없음 |
-| Spring Boot | 3.5.0 | 프레임워크 | 첫 커밋부터 3.5.0 | 없음 |
-| Spring Modulith | BOM 1.3.4 | 모듈 경계 검증(`ModulithStructureTest`), `@Externalized` Outbox | §1 참고 | 없음 / ADR-008·019 |
+| Gradle Kotlin DSL | wrapper 9.8.0 (#156), api·worker 독립 루트 | 빌드 | — | 없음 |
+| Spring Boot | 3.5.16 | 프레임워크 | 첫 커밋부터 3.5.x. 4.x는 [dependency-upgrade-plan.md](dependency-upgrade-plan.md) B4 | 없음 |
+| Spring Modulith | BOM 1.4.13 | 모듈 경계 검증(`ModulithStructureTest`), `@Externalized` Outbox | §1 참고 | 없음 / ADR-008·019 |
 | Spring Data JPA + `JdbcTemplate` | Boot 관리 | ORM + 원시 SQL 혼용 (JpaRepository 41개 파일, JdbcTemplate api 61·worker 19개 파일). jOOQ·QueryDSL 없음 | ORM 선택 근거 없음. 원자적 조건부 UPDATE(`WHERE cash >= ?`)는 락 전략 실측 결과로 채택 — ADR-052 | 없음 / ADR [052](decisions/052-cash-reservation-lock-strategy.md) |
 | Flyway | V1–V56 | 스키마 마이그레이션. api만 소유, worker는 `flyway.enabled: false` | 도구 선택 근거 없음. worker가 마이그레이션을 돌리지 않는 이유는 스키마 소유권을 api 하나로 두기 위함(worker `build.gradle.kts` integrationTest 주석) | 없음 / 문서 |
 | Spring Batch | Boot 관리 | 7개 잡(정산·구독갱신·원장 대사·결제 대사 등)을 `@Scheduled` cron이 트리거 | Batch vs 순수 `@Scheduled` 근거 없음. ADR-024는 포워드 테스트에 Batch를 쓰지 않기로 함. design-review-2026-10 §: 다중 인스턴스 중복 실행 방지가 JobInstance 유일성에 "우연히" 기대고 있음 | 없음 |
@@ -55,7 +55,7 @@ monticker가 쓰는 **모든 기술**에 대해 무엇을 골랐고, 무엇과 �
 | logstash-logback-encoder | 7.4 (api만) | prod 프로필 JSON 구조화 로그 | "prod는 JSON(ELK/Loki 수집용), dev는 사람이 읽는 형식" (`4f98020`). 대안 비교 없음, 수집기도 미배포 | 커밋 |
 | Micrometer + Prometheus registry | Boot 관리 | 메트릭 | §6 참고 | 없음 / ADR-054 |
 | Guava | 33.7.1-jre (worker) | 뉴스 URL Bloom Filter | Redis `BF.ADD`는 인프라 의존성 추가라 기각 | ADR [010](decisions/010-bloom-filter-news-deduplication.md) |
-| 테스트: JUnit5 + MockK + Testcontainers | MockK 1.14.11(api)/1.13.10(worker), Testcontainers 1.20.4 | 단위 / `integrationTest` 소스셋 | 컨텍스트 없는 순수 단위 테스트 우선은 [backend-test-strategy.md](technical/backend-test-strategy.md). 정합성 검증에 Testcontainers를 쓰는 이유는 ADR-045. MockK·Kotest 비교는 없음 | 문서 / ADR [045](decisions/045-performance-slo-and-verification-harness.md) |
+| 테스트: JUnit5 + MockK + Testcontainers | MockK 1.14.11, Testcontainers 2.0.5 (#143) | 단위 / `integrationTest` 소스셋 | 컨텍스트 없는 순수 단위 테스트 우선은 [backend-test-strategy.md](technical/backend-test-strategy.md). 정합성 검증에 Testcontainers를 쓰는 이유는 ADR-045. MockK·Kotest 비교는 없음 | 문서 / ADR [045](decisions/045-performance-slo-and-verification-harness.md) |
 
 ## 3. 데이터 저장소·메시징
 
@@ -76,7 +76,7 @@ monticker가 쓰는 **모든 기술**에 대해 무엇을 골랐고, 무엇과 �
 
 | 기술 | 버전 | 역할 | 고려한 대안 / 근거 | 등급 |
 |------|------|------|-------------------|------|
-| Next.js App Router | 15.5.25 (정확히 고정) | 웹 프레임워크. 페이지 39개 중 35개가 `"use client"` — 사실상 클라이언트 렌더링 | 선택 근거 없음. 15.1.0 → 15.5.25는 CVE 75건(치명 5건) 해소 목적([engineering-backlog.md](engineering-backlog.md)). 버전을 정확히 고정하는 이유: `pnpm.packageExtensions`가 `next@15.5.25` 키로 `@types/react` 문제를 막고 있어서 | 없음 / 문서 |
+| Next.js App Router | 16.4.0 (정확히 고정, Turbopack 빌드) | 웹 프레임워크. 페이지 39개 중 35개가 `"use client"` — 사실상 클라이언트 렌더링 | 선택 근거 없음. 15.1.0 → 15.5.25는 CVE 75건(치명 5건) 해소 목적([engineering-backlog.md](engineering-backlog.md)). 16 업그레이드 경위는 [dependency-upgrade-plan.md](dependency-upgrade-plan.md) W1. `pnpm.packageExtensions`는 예전엔 `next@15.5.25` 정확한 키라 패치만 올라가도 `@types/react`가 두 벌 섞였다(#142) — 지금은 `next@16` 범위 키 | 없음 / 문서 |
 | React | 19 (web), 18.3 (mobile) | UI | 근거 없음. 한 워크스페이스에 두 메이저가 공존해 `@types/react` 팬텀 호이스트 버그가 났음([troubleshooting-casebook.md](technical/troubleshooting-casebook.md)) | 없음 |
 | TypeScript | 5.9 (web), 5.3 (mobile) | 언어 | — | 없음 |
 | TanStack Query | 5 | 서버 상태, 폴링 single-flight 중복 제거 | [request-deduplication.md](technical/request-deduplication.md). SWR 등과의 비교 없음 | 문서 |
@@ -91,7 +91,7 @@ monticker가 쓰는 **모든 기술**에 대해 무엇을 골랐고, 무엇과 �
 | TanStack Virtual | 3 | 스크리너 가상 스크롤 (500행 → DOM ~17개) | DOM 노드 과다([screener-virtualization.md](technical/screener-virtualization.md)). react-window 등과의 비교 없음 | 문서 |
 | Vitest + Testing Library + jsdom | Vitest 4 | 단위·컴포넌트 테스트 | — | 없음 |
 | Playwright | 1.62 | E2E (실 API + Next.js) | 목 단위 테스트로 못 잡는 실제 경계 버그(CSP, 실 API)를 잡기 위함 (`playwright.config.ts` 주석, `a523f41`) | 문서 |
-| ESLint | 8, `next/core-web-vitals` | 린트 (`ignoreDuringBuilds: true`) | — | 없음 |
+| ESLint | 9, flat config(`eslint.config.mjs`, `eslint-config-next` core-web-vitals·typescript) | 린트. Next 16부터 `next build`는 린트하지 않고 `pnpm lint`(= `eslint .`)로 따로 돈다. react-hooks 7의 React Compiler 규칙은 기존 위반 때문에 warn | — | 없음 |
 | 토큰 저장 | 액세스 = localStorage, 리프레시 = HttpOnly 쿠키 (`SameSite=Lax`, `Path=/api/auth`) | 인증 | 리프레시만 쿠키로 옮김. 액세스 토큰은 TTL 15분·사용처 19곳(WebSocket 인증 포함)이라 "이득 대비 위험이 과도"하다고 판단해 보류 (`df86b22`) | 커밋 / [security-review.md](security-review.md) C2 |
 | CSP | `next.config.ts` 정적 헤더 | XSS 방어 | prod에서 `'unsafe-eval'` 제거. nonce 방식은 정적 프리렌더에 요청 컨텍스트가 없어 실패 → `'unsafe-inline'` 유지 (`next.config.ts` 주석) | 문서 |
 | Toss Payments SDK | V2 2.8 | 구독 결제창 | 카드 입력을 토스 도메인에서 렌더해 PCI 범위를 우리 쪽에서 제외(`129a803`, CSP 주석). PG로 토스를 고른 이유는 §7 | 문서 / 없음 |
@@ -159,7 +159,7 @@ monticker가 쓰는 **모든 기술**에 대해 무엇을 골랐고, 무엇과 �
 | **자체 `@DistributedLock`** | 필요한 기능이 SETNX + TTL 정도라 의존성 추가 없이 충분 | api 쪽 스케줄러에는 락이 없음. 락 만료 후 작업이 계속 도는 경우(펜싱 토큰 없음)를 실거래 정산에 쓰기 전에 ShedLock 등과 비교할 것 |
 | **MongoDB (rule_sets 하나)** | 룰셋 버전을 문서에 embed하는 모델이 자연스러움 | 컬렉션 하나 때문에 운영 대상 DB가 하나 늘어남. Postgres JSONB로 같은 모델이 가능하므로 운영 인프라를 확정할 때(K8s 상태 저장 서비스 결정) 다시 볼 것 |
 | **Elasticsearch** | nori 형태소 분석·퍼지·부스팅·edge_ngram이 필요한 한국어 종목·뉴스 검색, DB 폴백이 있음 | Postgres FTS(+ pg_trgm)로 충분한지 비교한 적 없음. 관리형으로 갈 때 OpenSearch 비교 |
-| **Kotlin 1.9 / Spring Boot 3.5 / JPA+JdbcTemplate 혼용** | 팀(1인)의 숙련도와 Spring 생태계(Modulith·Kafka·Batch)를 한 번에 씀. 원시 SQL은 원자적 조건부 UPDATE처럼 동시성이 걸린 곳에 필요 | Kotlin 2.x 이전, JPA와 JdbcTemplate이 같은 테이블을 쓸 때 1차 캐시 불일치 위험 |
+| **Kotlin 2 / Spring Boot 3.5 / JPA+JdbcTemplate 혼용** | 팀(1인)의 숙련도와 Spring 생태계(Modulith·Kafka·Batch)를 한 번에 씀. 원시 SQL은 원자적 조건부 UPDATE처럼 동시성이 걸린 곳에 필요 | Kotlin 2.x 이전, JPA와 JdbcTemplate이 같은 테이블을 쓸 때 1차 캐시 불일치 위험 |
 | **Next.js (사실상 CSR)** | 라우팅·빌드·이미지 최적화를 한 번에 얻음 | SSR을 거의 쓰지 않아 정적 SPA(Vite)로도 충분할 수 있음. nonce CSP를 못 쓰는 제약도 여기서 나옴 |
 | **`packages/types` 수기 작성** | 타입 수가 적고(~500 LOC) 빠르게 시작 가능 | 백엔드 DTO와 어긋나도 컴파일러가 못 잡음. springdoc이 이미 있으므로 openapi-typescript 생성을 검토 |
 | **Expo 모바일** | 웹과 같은 React/TS로 푸시까지 빠르게 얻음 | 인증 없이 보호 API를 호출하는 상태 — 기능 확장 전에 인증부터 |
@@ -173,7 +173,7 @@ monticker가 쓰는 **모든 기술**에 대해 무엇을 골랐고, 무엇과 �
 
 | 문서 | 문서의 서술 | 실제 |
 |------|------------|------|
-| [architecture.md](architecture.md) Tech Stack, [portfolio.md](portfolio.md) | Kotlin 2.0 | 1.9.25 (처음부터) |
+| [architecture.md](architecture.md) Tech Stack, [portfolio.md](portfolio.md) | Kotlin 2.0 | 1.9.25였다 → 2026-10-07에 2.3.21로 올리면서 두 문서도 고쳤다 |
 | [architecture.md](architecture.md) Tech Stack | Batch: Spring @Scheduled | Spring Batch 잡 7개 (`@Scheduled`는 트리거) — 같은 문서 다른 절은 Spring Batch라고 씀 |
 | [architecture.md](architecture.md), 루트 README | MongoDB에 `rule_sets`, `alert_histories` | `alert_histories`는 Postgres 테이블(`V6`) + ES 인덱스. Mongo는 `rule_sets`만 |
 | 루트 README, [portfolio.md](portfolio.md) | 캔들을 continuous aggregate로 집계 | ADR-041에서 기각. `CandleAggregator`가 메모리에서 집계 |
