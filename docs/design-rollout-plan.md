@@ -69,7 +69,7 @@
 | 이벤트 체크박스(뉴스·공시 동반, 퀀트 시그널, 감성 급변) | 비활성 | 스크리너 쿼리에 당일 이벤트를 조인하는 필터 | P1 | ✅ |
 | 조건 저장 + 저장된 스크린 탭 | 버튼 비활성. 탭은 기존 실시간/급등·급락/외국인·기관 | 저장 스크린 CRUD API와 실행 | P1 | ✅ 사용자당 20개 |
 | 결과 열 거래량 배수·오늘 스파크라인·이벤트, 상단 평균 거래량 배수·이벤트 동반 | `—` | 응답에 거래량 배수·당일 이벤트 추가, 장중 미니 시계열 일괄 API | P1 | ✅ `/api/market/intraday` |
-| 시장 세그먼트 KOSPI/KOSDAQ | 동작하는 전체/국내/해외로 대체 | `ScreenerRepository`에 kospi/kosdaq 구분 추가 | P2 | |
+| 시장 세그먼트 KOSPI/KOSDAQ | 동작하는 전체/국내/해외로 대체 | `ScreenerRepository`에 kospi/kosdaq 구분 추가 | P2 | ✅ `market=kospi`·`kosdaq` — 화이트리스트(`ScreenerCriteria.MARKETS`)와 고정 SQL 조각. 화면은 "국내"를 고르면 국내 전체/코스피/코스닥 하위 세그먼트 |
 | 시가총액 범위 | 기존 대형/중형/소형 구간 | 필요하면 `minCap/maxCap` | P2 | |
 
 ### /stocks/[symbol] 트레이딩
@@ -85,7 +85,7 @@
 | 주문 전 리스크 체크 | "점검하기" 버튼으로 `POST /api/risk/check` 호출(감사 로그가 남아 자동 호출하지 않음) | 감사 로그 없는 미리보기 전용 엔드포인트가 있으면 입력할 때마다 점검 | P2 | |
 | 감정 태그 "계획대로" | `OTHER` + 메모 "계획대로"로 저장 | `EmotionType`에 `PLANNED` 추가 | P2 | ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — `PLANNED`로 저장, 기존 `OTHER`+"계획대로" 행은 V82가 이관 |
 | 호가 "체결강도"·"내 주문" 표시 | 생략 | 체결강도 데이터, 모의 지정가 도입 후 | P2 | |
-| 이벤트 패널 "호가 깊이" 탭 | 준비 중 | 프론트만: 기존 호가로 누적 깊이 차트 | P2 | |
+| 이벤트 패널 "호가 깊이" 탭 | 준비 중 | 프론트만: 기존 호가로 누적 깊이 차트 | P2 | ✅ 호가 패널과 같은 쿼리(추가 요청 없음)를 누적. 차트는 어댑터 뒤(`components/stock/chart/DepthChart`), 매수=상승색·매도=하락색(차트 테마). 보이는 호가 단계만의 누적이다 |
 | 차트 유형 버튼, 그리기 도구(펜·텍스트·측정·확대·자석·잠금) | 비활성. 십자선·추세선·수평선·숨기기·지우기는 동작 | `EChartsAdapter` 드로잉 확장 | P2 | |
 | 하단 보유 종목 "최근 이벤트"·"진입 경로" | `—` | 종목별 최근 이벤트 조회, 체결에 진입 출처(Watch Rule/전략/직접) 기록 | P2 | ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — `GET /api/events/latest` 일괄 조회, 가장 최근 매수 체결의 출처. 판정 불가 과거 거래는 `—` |
 
@@ -99,13 +99,13 @@
 | /compare | 이벤트 수 | 종목당 100건까지만 조회해 "100+" | 이벤트 count API | P2 | ✅ `GET /api/events/counts` — 여러 종목 한 번에, 정확한 건수. 겹침 점·이벤트 후 평균은 여전히 최근 100건 ([ADR-087](decisions/087-event-and-sector-aggregates-at-query-time.md)) |
 | /watchlist | 오늘(장중 스파크라인)·거래량 배수 열 | `—` | 장중 시계열 일괄 API, 거래량 배수 | P1 | ✅ |
 | /watchlist | 정규장/시간외/NXT | 동작하는 전체/국내/해외로 대체 | 세션별 시세 | P2 | |
-| /watchlist | 순서 이동 | ⋯ 메뉴에 "순서 이동(준비 중)" | 정렬 순서 변경 API(`PATCH sortOrder`) | P2 | |
+| /watchlist | 순서 이동 | ⋯ 메뉴에 "순서 이동(준비 중)" | 정렬 순서 변경 API(`PATCH sortOrder`) | P2 | ✅ [ADR-088](decisions/088-watchlist-order-group-row-lock.md) — `PATCH /api/watchlists/items/{id}/sort-order`, 그룹 행 잠금 + 0..n-1 재번호(V85). ⋯ 메뉴 위로/아래로(키보드 가능), "내 순서" 정렬에서만 |
 | /watchlist | 외국인 순매수 | `—` | 투자자별 매매동향 | P2 | |
-| /watchlist | 52주 최고/최저 | 1년 일봉으로 계산. 데이터가 300일 미만이면 `—` | 종목 기본정보에 52주 고저 추가 | P2 | |
+| /watchlist | 52주 최고/최저 | 1년 일봉으로 계산. 데이터가 300일 미만이면 `—` | 종목 기본정보에 52주 고저 추가 | P2 | ✅ 관심종목 응답 `range52w` — candles_1d, KST 오늘-52주 자정부터 한 쿼리로 일괄. 52주를 다 덮지 못하면 있는 기간의 고저와 실제 기간을 표시 |
 | /alerts | 읽지 않음 표시·탭·"모두 읽음", 상단 "읽지 않음" | 탭에서 제외, 비활성, `—` | `alert_histories.read_at`과 읽음 처리 API | P1 | ✅ [ADR-073](decisions/073-alert-read-state-and-rule-pause.md) |
 | /alerts | 규칙 켜기/끄기 토글 | 켜짐 상태로 비활성 표시 | 규칙 재활성화 API(지금은 DELETE 비활성화만 있음) | P1 | ✅ |
 | /alerts | 시그널 탭 | 필터는 동작하지만 항상 비어 있음 | 퀀트 시그널을 알림 이력에 적재 | P2 | |
-| /alerts | 새 알림 규칙 | 종목 검색으로 이동 | 알림 화면에서 바로 만드는 폼(기존 `POST /api/alerts/rules`) | P2 | |
+| /alerts | 새 알림 규칙 | 종목 검색으로 이동 | 알림 화면에서 바로 만드는 폼(기존 `POST /api/alerts/rules`) | P2 | ✅ 알림 규칙 패널 안 폼 — StockPicker 종목 검색, 서버 필수 조건 + 범위 검사, 400·429 등 서버 오류 표시 |
 | /alerts | 전달 채널 | `—` | 알림 채널 설정 조회 API | P2 | |
 
 ## 3. 모의투자 · 지갑
