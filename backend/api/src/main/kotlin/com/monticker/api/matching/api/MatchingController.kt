@@ -1,19 +1,26 @@
 package com.monticker.api.matching.api
 
 import com.monticker.api.common.aop.RateLimited
+import com.monticker.api.common.time.KstPeriod
+import com.monticker.api.matching.application.ExecutionQualityService
 import com.monticker.api.matching.application.MatchingService
 import com.monticker.api.matching.application.SubmitOrderRequest
 import com.monticker.api.matching.submit.OrderOrigin
+import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
 import java.math.BigDecimal
+import java.time.LocalDate
 
 @Validated
 @RestController
 @RequestMapping("/api/matching")
-class MatchingController(private val matchingService: MatchingService) {
+class MatchingController(
+    private val matchingService: MatchingService,
+    private val executionQualityService: ExecutionQualityService,
+) {
 
     private fun userId(): Long = SecurityContextHolder.getContext().authentication.principal as Long
 
@@ -47,6 +54,17 @@ class MatchingController(private val matchingService: MatchingService) {
     @GetMapping("/fills")
     fun getMyFills(): ResponseEntity<*> =
         ResponseEntity.ok(matchingService.getMyFills(userId()))
+
+    /**
+     * ADR-091 — 내 모의 체결의 평균 슬리피지(접수 시점 최우선 호가 대비, bps)와 엔진 지연(시장가 접수 → 체결, ms).
+     * 기간은 체결 시각 기준 KST 날짜 `[from, to]`, 생략하면 최근 30일, 최대 1년.
+     */
+    @GetMapping("/execution-quality")
+    fun getExecutionQuality(
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) from: LocalDate?,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) to: LocalDate?,
+    ): ResponseEntity<*> =
+        ResponseEntity.ok(executionQualityService.summary(userId(), KstPeriod.parse(from, to, defaultDays = 30)))
 }
 
 /**
