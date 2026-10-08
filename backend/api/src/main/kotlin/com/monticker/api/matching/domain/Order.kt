@@ -68,6 +68,23 @@ class Order(
     @Column(name = "origin_ref")
     val originRef: Long? = null,
 
+    /** ADR-091 — 접수 시점 최우선 호가(실시간 호가만). 없으면 null이고 슬리피지 집계에서 빠진다. */
+    @Column(name = "quote_bid", precision = 18, scale = 4)
+    val quoteBid: java.math.BigDecimal? = null,
+
+    @Column(name = "quote_ask", precision = 18, scale = 4)
+    val quoteAsk: java.math.BigDecimal? = null,
+
+    @Column(name = "quote_at")
+    val quoteAt: Instant? = null,
+
+    @Column(name = "quote_source", length = 20)
+    val quoteSource: String? = null,
+
+    /** ADR-091 — 사가 진입 시각(엔진 지연의 시작점). V88 이전 주문은 null. */
+    @Column(name = "submitted_at")
+    val submittedAt: Instant? = null,
+
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant = Instant.now(),
 

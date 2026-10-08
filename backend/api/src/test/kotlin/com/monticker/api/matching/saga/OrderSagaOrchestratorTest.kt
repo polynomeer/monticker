@@ -130,6 +130,51 @@ class OrderSagaOrchestratorTest {
         assertThat(event.captured.originRef).isEqualTo(42L)
     }
 
+    // ADR-091 — 접수 시점 최우선 호가와 접수 시각을 주문 행에 남긴다(슬리피지·엔진 지연의 근거)
+    @Test
+    fun `execute records the best quote and the submit time on the order row`() {
+        stubStockExistsAndPrice()
+        stubAccountCash()
+        val savedOrders = mutableListOf<com.monticker.api.matching.domain.Order>()
+        every { orderRepo.save(capture(savedOrders)) } answers { savedOrders.last() }
+        every { fillRepo.save(any()) } answers { firstArg() }
+        val quotedAt = Instant.now().minusSeconds(1)
+        val withQuote = OrderSagaOrchestrator(
+            sagaRepo, orderRepo, fillRepo, fillQueryService, orderBookService, stateMachineService, eventPublisher, jdbc,
+            bestQuoteSource = { com.monticker.api.common.domain.BestQuote(BigDecimal("995"), BigDecimal("1005"), quotedAt, "KIS_REALTIME") },
+        )
+        val before = Instant.now()
+
+        withQuote.execute(userId, SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 1, origin = OrderOrigin.MANUAL))
+
+        val o = savedOrders.first()
+        assertThat(o.quoteBid).isEqualByComparingTo("995")
+        assertThat(o.quoteAsk).isEqualByComparingTo("1005")
+        assertThat(o.quoteAt).isEqualTo(quotedAt)
+        assertThat(o.quoteSource).isEqualTo("KIS_REALTIME")
+        assertThat(o.submittedAt).isNotNull().isBetween(before, Instant.now())
+    }
+
+    @Test
+    fun `a failing quote source does not block the order - the quote is simply not recorded`() {
+        stubStockExistsAndPrice()
+        stubAccountCash()
+        val savedOrders = mutableListOf<com.monticker.api.matching.domain.Order>()
+        every { orderRepo.save(capture(savedOrders)) } answers { savedOrders.last() }
+        every { fillRepo.save(any()) } answers { firstArg() }
+        val failing = OrderSagaOrchestrator(
+            sagaRepo, orderRepo, fillRepo, fillQueryService, orderBookService, stateMachineService, eventPublisher, jdbc,
+            bestQuoteSource = { throw IllegalStateException("redis down") },
+        )
+
+        val res = failing.execute(userId, SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "MARKET", quantity = 1, origin = OrderOrigin.MANUAL))
+
+        assertThat(res.order.status).isEqualTo("FILLED")
+        assertThat(savedOrders.first().quoteBid).isNull()
+        assertThat(savedOrders.first().quoteAsk).isNull()
+        assertThat(savedOrders.first().submittedAt).isNotNull()
+    }
+
     @Test
     fun `execute leaves a LIMIT order unfilled and submits it to the order book when price does not cross`() {
         stubStockExistsAndPrice()
