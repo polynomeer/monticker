@@ -38,8 +38,11 @@ dependencies {
 	implementation("io.github.resilience4j:resilience4j-kotlin:2.4.0")
 	implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.4.0")
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
-	// ADR-042 §2 — ES 인덱싱 이벤트를 Outbox(event_publication, api와 공유)로 기록하고 Kafka search.index로 외부화한다
-	implementation("org.springframework.modulith:spring-modulith-starter-jpa")
+	// ADR-042 §2 — ES 인덱싱 이벤트를 Outbox로 기록하고 Kafka search.index로 외부화한다.
+	// ADR-094 — worker의 발행 기록은 api와 분리된 worker_outbox.event_publication(JDBC 레지스트리 + schema 설정)에 둔다.
+	// JPA 레지스트리는 테이블 이름이 고정이라 api와 같은 public.event_publication을 공유하게 되고, 서로의 이벤트 클래스를
+	// 해석하지 못해 재전송 전체가 실패했다.
+	implementation("org.springframework.modulith:spring-modulith-starter-jdbc")
 	implementation("org.springframework.modulith:spring-modulith-events-api")
 	implementation("org.springframework.modulith:spring-modulith-events-kafka")
 	implementation("org.springframework.boot:spring-boot-starter-aop")
@@ -69,7 +72,7 @@ dependencies {
 sourceSets {
 	create("integrationTest") {
 		kotlin.srcDir("src/integrationTest/kotlin")
-		resources.srcDir("src/integrationTest/resources")
+		// src/integrationTest/resources는 소스셋 관례 경로라 따로 더하지 않는다 — 더하면 같은 파일이 두 번 복사돼 빌드가 실패한다
 		compileClasspath += sourceSets.main.get().output + sourceSets.test.get().output
 		runtimeClasspath += sourceSets.main.get().output + sourceSets.test.get().output
 	}
