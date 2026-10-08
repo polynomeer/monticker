@@ -1,7 +1,8 @@
 # ADR-095: Watch Rule 대상 그룹·지정가 오프셋·계좌 % 수량
 
 ## Status
-Accepted
+Accepted — 일부 Superseded by [ADR-098](098-watch-rule-limit-outcome-and-rule-reshape.md)
+("PLACED는 이후에도 PLACED로 남는다", "기준은 PATCH로 바꾸지 않는다", "그룹이 지워진 규칙은 다시 켤 수 없다 — 새 규칙"). 나머지는 유효하다.
 
 ## Context
 
@@ -141,3 +142,10 @@ DB 트리거가 그룹이 지워지는 **모든 경로**(화면, 회원 탈퇴 �
 - 그룹 삭제 API가 생겨 "삭제 전에 걸린 규칙을 보여 주기" 같은 UX가 필요할 때.
 - 지정가 미체결 이후 체결·취소를 발동 기록에 반영해 달라는 요구가 생길 때(주문 상태 이벤트 구독).
 - 호가 단위 검증을 모의투자에도 넣을 때 — 지정가 반올림을 호가 단위로 바꾼다.
+
+## Notes
+
+- 2026-10 — [ADR-098](098-watch-rule-limit-outcome-and-rule-reshape.md): PLACED였던 지정가가 이후 체결·취소되면 발동 기록이
+  FILLED·CANCELLED(결과 시각·체결가·취소 사유)로 바뀐다(V94, 체결·취소와 같은 트랜잭션의 조건부 UPDATE + 기록 직후 주문 행 잠금 대조).
+  규칙 경유 손익은 여전히 paper_trades 기준이라 이중 집계가 없다. PATCH로 대상·주문 유형·수량 기준을 생성과 같은 검증으로 바꿀 수 있고,
+  그룹이 지워져 꺼진 규칙은 대상을 바꾸면 다시 켤 수 있다. `DELETE /api/watchlists/groups/{id}`가 생겨 위 §3 트리거가 화면 경로에서도 돈다.

@@ -655,6 +655,16 @@ stock_id BIGINT, limit_price NUMERIC(18,4), status += 'PLACED'(지정가 접수�
 -- 트리거: watchlist_groups 삭제 → 그 그룹을 대상으로 한 활성 규칙 is_active = false (연쇄 삭제 아님)
 ```
 
+### V94 — 지정가 발동의 이후 결과 ([ADR-098](decisions/098-watch-rule-limit-outcome-and-rule-reshape.md))
+
+```sql
+-- watch_rule_executions
+status      += 'FILLED'(접수했던 지정가가 이후 체결) | 'CANCELLED'(체결 전 취소)
+resolved_at TIMESTAMPTZ          -- CHECK: FILLED·CANCELLED ⇔ resolved_at 있음, FILLED ⇒ fill_price(체결가) 있음
+idx_watch_rule_exec_placed_order (order_id) WHERE status = 'PLACED'
+-- 전이: PLACED → FILLED|CANCELLED, `WHERE status = 'PLACED'` 조건부 UPDATE(체결·취소와 같은 트랜잭션 + 기록 직후 orders 행 잠금 대조)
+```
+
 ---
 
 ## Quant Analytics Tables (V16 — done)
