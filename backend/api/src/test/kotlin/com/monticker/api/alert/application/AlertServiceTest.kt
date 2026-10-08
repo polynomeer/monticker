@@ -11,6 +11,7 @@ import com.monticker.api.alert.infrastructure.AlertRuleRepository
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -36,11 +37,27 @@ class AlertServiceTest {
             conditionJson = """{"threshold":75000}""",
         )
         every { repo.save(any()) } returns rule
+        every { jdbc.queryForObject(any<String>(), Boolean::class.java, 1L) } returns true
 
         val result = service.createRule(1L, 1L, AlertRuleType.PRICE_ABOVE, mapOf("threshold" to 75000))
 
         assertThat(result.ruleType).isEqualTo(AlertRuleType.PRICE_ABOVE)
         verify { repo.save(any()) }
+    }
+
+    @Test
+    fun `createRule rejects an unknown or inactive stock before insert with one fixed message`() {
+        val sql = slot<String>()
+        every { jdbc.queryForObject(capture(sql), Boolean::class.java, 404L) } returns false
+
+        val unknown = runCatching { service.createRule(1L, 404L, AlertRuleType.PRICE_ABOVE, mapOf("threshold" to 1)) }.exceptionOrNull()
+        val missing = runCatching { service.createRule(1L, null, AlertRuleType.PRICE_ABOVE, mapOf("threshold" to 1)) }.exceptionOrNull()
+
+        assertThat(unknown).isInstanceOf(IllegalArgumentException::class.java).hasMessage(AlertService.UNKNOWN_STOCK_MESSAGE)
+        assertThat(missing).isInstanceOf(IllegalArgumentException::class.java).hasMessage(AlertService.UNKNOWN_STOCK_MESSAGE)
+        // 비활성(상장폐지) 종목도 같은 거부 — 시세가 오지 않아 영원히 울리지 않는다
+        assertThat(sql.captured).contains("is_active = true")
+        verify(exactly = 0) { repo.save(any()) }
     }
 
     @Test

@@ -64,9 +64,11 @@ class AlertDispatcher(
         log.info("[AlertDispatcher] triggered: ruleId={} userId={} price={}", rule.id, rule.userId, currentPrice)
 
         // 꺼진 알림도 발동 기록은 남긴다(SUPPRESSED) — 규칙 화면의 "최근 발동"과 쿨다운은 설정과 무관하다.
+        // ADR-093 — 방해 금지 시간 때문에 푸시만 보내지 않았으면 QUIET_HOURS로 남긴다(알림 화면에서 아침에 본다).
         if (plan.none) {
-            finish(historyId, rule, message, "SUPPRESSED")
-            log.info("[AlertDispatcher] 사용자 설정으로 보내지 않음: ruleId={} userId={} category={}", rule.id, rule.userId, category)
+            val status = if (plan.quietHoursHeld) "QUIET_HOURS" else "SUPPRESSED"
+            finish(historyId, rule, message, status)
+            log.info("[AlertDispatcher] 보내지 않음({}): ruleId={} userId={} category={}", status, rule.id, rule.userId, category)
             return
         }
 

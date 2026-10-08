@@ -115,4 +115,6 @@ allOpen {
 
 tasks.withType<Test> {
 	useJUnitPlatform()
+	// ADR-093 — api·worker가 함께 지키는 사례표(알림 발송 정책). 두 빌드가 코드를 공유할 수 없어 표를 공유한다.
+	systemProperty("monticker.contractsDir", file("../contracts").absolutePath)
 }

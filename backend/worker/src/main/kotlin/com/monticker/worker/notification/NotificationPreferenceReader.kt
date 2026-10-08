@@ -7,6 +7,7 @@ import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
 import java.sql.ResultSet
+import java.time.LocalTime
 
 /**
  * ADR-082 — 발송 직전에 사용자 알림 설정과 마케팅 동의를 읽는다. 캐시하지 않는다: 알림은 사건당 한 번이라 조회 비용이 작고, 끈 직후의
@@ -68,5 +69,20 @@ class NotificationPreferenceReader(
         strategyMarketNewsPush = getBoolean("strategy_market_news_push"),
         strategyMarketNewsEmail = getBoolean("strategy_market_news_email"),
         weeklyReportEmail = getBoolean("weekly_report_email"),
-    )
+    ).withQuietHours(this)
+
+    /**
+     * ADR-093 — 방해 금지 시간(V90). worker가 api보다 먼저 배포되면 V90이 아직 없다(마이그레이션은 api가 한다) — 컬럼이 없으면
+     * 꺼짐(기본값)으로 읽는다. 끌 수 없는 알림은 어차피 이 값을 보지 않는다.
+     */
+    private fun NotificationPreference.withQuietHours(rs: ResultSet): NotificationPreference {
+        val md = rs.metaData
+        val columns = (1..md.columnCount).map { md.getColumnLabel(it).lowercase() }.toSet()
+        if ("quiet_hours_enabled" !in columns) return this
+        return copy(
+            quietHoursEnabled = rs.getBoolean("quiet_hours_enabled"),
+            quietHoursStart = rs.getObject("quiet_hours_start", LocalTime::class.java),
+            quietHoursEnd = rs.getObject("quiet_hours_end", LocalTime::class.java),
+        )
+    }
 }

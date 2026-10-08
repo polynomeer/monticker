@@ -29,7 +29,7 @@ data class UserNotificationMessage(
  * 있게 한다(그렇지 않으면 재시도가 중복으로 판정돼 알림이 사라진다).
  *
  * ADR-082 — 끌 수 있는 종류는 사용자 알림 설정(전체·채널·종류별)과, 광고성이면 마케팅 동의를 따른다. 끌 수 없는 종류(주문 결과
- * 확인 중·조건부 주문 실패)는 설정을 읽지도 않는다.
+ * 확인 중·조건부 주문 실패·리스크 경고)는 설정을 읽지도 않는다 — 방해 금지 시간(ADR-093)도 보지 않고 즉시 보낸다.
  */
 @Component
 class UserNotificationDispatcher(
@@ -49,7 +49,9 @@ class UserNotificationDispatcher(
             marketingAgreed = category == NotificationCategory.STRATEGY_MARKET && preferences.marketingAgreed(msg.userId),
         )
         if (plan.none) {
-            log.info("[UserNotification] 사용자 설정으로 보내지 않음: userId={} category={} dedupKey={}", msg.userId, category, msg.dedupKey)
+            // ADR-093 — 방해 금지 시간이면 미루지 않고 보내지 않는다(이력 테이블이 없는 경로라 로그로만 남는다).
+            log.info("[UserNotification] 보내지 않음({}): userId={} category={} dedupKey={}",
+                if (plan.quietHoursHeld) "방해 금지 시간" else "사용자 설정", msg.userId, category, msg.dedupKey)
             return
         }
 

@@ -465,4 +465,24 @@ class AlertEvaluatorTest {
         verify(exactly = 0) { mailSender.send(any<org.springframework.mail.SimpleMailMessage>()) }
         verify { jdbc.update(match<String> { it.contains("delivery_status") }, "SUPPRESSED", 42L) }
     }
+
+    @Test
+    fun `ADR-093 방해 금지 시간에는 푸시하지 않고 QUIET_HOURS로 기록한다`() {
+        val rule = AlertRuleRow(id = 1L, userId = 10L, stockId = 5L, ruleType = "PRICE_ABOVE", conditionJson = """{"threshold": 70000}""")
+        every { jdbc.query(any<String>(), any<RowMapper<AlertRuleRow>>(), 5L) } returns listOf(rule)
+        // 지금(KST)을 가운데 두는 2시간 구간 — 실행 시각과 무관하게 방해 금지 시간 안이다(자정을 넘어도 같은 규칙)
+        val nowKst = java.time.LocalTime.now(java.time.ZoneId.of("Asia/Seoul")).withSecond(0).withNano(0)
+        every { preferences.forUser(10L) } returns com.monticker.worker.notification.NotificationPreference(
+            quietHoursEnabled = true, quietHoursStart = nowKst.minusHours(1), quietHoursEnd = nowKst.plusHours(1),
+        )
+        stubCooldownAcquired(true)
+        stubHistoryInsert(42L)
+        every { jdbc.update(any<String>(), any(), 42L) } returns 1
+
+        evaluator.processAlert(stockId = 5L, price = BigDecimal("75000"))
+
+        verify(exactly = 0) { pushSender.send(any()) }
+        verify(exactly = 0) { mailSender.send(any<org.springframework.mail.SimpleMailMessage>()) }
+        verify { jdbc.update(match<String> { it.contains("delivery_status") }, "QUIET_HOURS", 42L) }
+    }
 }
