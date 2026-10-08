@@ -8,7 +8,7 @@ import TradeReceipt from "@/components/wallet/TradeReceipt";
 import { sellableQuantity, usePaperOpenOrders, usePaperOrder, usePaperPortfolio } from "@/hooks/usePaperTrade";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
-import { useRiskPreview, type RiskRuleResult as RuleResult } from "@/hooks/useRiskPreview";
+import { useAnchoredPrice, useRiskPreview, type RiskRuleResult as RuleResult } from "@/hooks/useRiskPreview";
 import { authFetch } from "@/services/api";
 import { cn } from "@/lib/utils";
 
@@ -118,9 +118,12 @@ export default function OrderForm({ stock, currentPrice, brokerageConnected }: P
   // 주문 전 리스크 체크 — ADR-092: 입력이 멈추고 400ms 뒤 감사 기록이 남지 않는 미리보기(POST /api/risk/preview)로 판정한다.
   // 예전 "점검하기" 버튼(POST /api/risk/check, dry_run 감사 행)은 이 폼에서 뺐다 — 실제 주문은 제출 시점에 게이트를 다시 돌고
   // 그때 감사 기록이 남으므로, 입력 중 판정을 따로 감사할 이유가 없다. 이 결과로는 아무것도 주문·예약되지 않는다.
+  // 지정가는 사용자가 정한 값이라 그대로, 시장가는 기준가(1% 넘게 움직일 때만 갱신)로 — 틱마다 미리보기가 나가지 않게
+  const anchoredPrice = useAnchoredPrice(currentPrice, `${stock.id}:${side}:${orderType}:${quantity}`);
+  const previewPrice = isLimit ? unitPrice : anchoredPrice;
   const risk = useRiskPreview(
-    { stockId: stock.id, side, quantity, estimatedPrice: unitPrice },
-    isLoggedIn && isValid && unitPrice > 0,
+    { stockId: stock.id, side, quantity, estimatedPrice: previewPrice },
+    isLoggedIn && isValid && previewPrice > 0,
   );
 
   const setQty = (raw: number) => setQuantity(Math.min(Math.max(max, 1), Math.max(1, Math.floor(raw) || 1)));

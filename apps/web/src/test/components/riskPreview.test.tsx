@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, renderHook, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 const authFetch = vi.fn();
 vi.mock("@/services/api", () => ({ authFetch: (...a: unknown[]) => authFetch(...a) }));
 
-import { RISK_PREVIEW_DEBOUNCE_MS, isPreviewable, useRiskPreview, type RiskPreviewInput } from "@/hooks/useRiskPreview";
+import { RISK_PREVIEW_DEBOUNCE_MS, isPreviewable, nextAnchorPrice, useAnchoredPrice, useRiskPreview, type RiskPreviewInput } from "@/hooks/useRiskPreview";
 
 function wrap(children: ReactNode) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -84,5 +84,37 @@ describe("useRiskPreview (ADR-092)", () => {
     expect(screen.getByTestId("out")).toHaveTextContent("error:점검 요청이 많습니다");
     await act(async () => { vi.advanceTimersByTime(10_000); });
     expect(authFetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("시장가 미리보기 기준가 — 틱마다 미리보기를 다시 부르지 않는다", () => {
+  it("1% 이내 움직임은 기준가를 유지하고, 넘으면 실시간가로 옮긴다", () => {
+    expect(nextAnchorPrice(70_000, 70_500)).toBe(70_000);   // +0.7%
+    expect(nextAnchorPrice(70_000, 69_400)).toBe(70_000);   // -0.86%
+    expect(nextAnchorPrice(70_000, 70_800)).toBe(70_800);   // +1.14%
+    expect(nextAnchorPrice(0, 70_000)).toBe(70_000);        // 기준이 없으면 바로 잡는다
+    expect(nextAnchorPrice(70_000, 0)).toBe(70_000);        // 시세가 비면 유지
+  });
+
+  it("실시간가가 매초 조금씩 바뀌어도 기준가는 그대로", () => {
+    const { result, rerender } = renderHook(({ live }) => useAnchoredPrice(live, "2:BUY:MARKET:10"), {
+      initialProps: { live: 70_000 },
+    });
+    for (const live of [70_100, 69_950, 70_200, 70_300, 69_800]) rerender({ live });
+    expect(result.current).toBe(70_000);
+
+    rerender({ live: 71_000 });
+    expect(result.current).toBe(71_000);
+  });
+
+  it("사용자 입력이 바뀌면 그때의 현재가로 다시 잡는다", () => {
+    const { result, rerender } = renderHook(({ live, key }) => useAnchoredPrice(live, key), {
+      initialProps: { live: 70_000, key: "2:BUY:MARKET:10" },
+    });
+    rerender({ live: 70_300, key: "2:BUY:MARKET:10" });
+    expect(result.current).toBe(70_000);
+
+    rerender({ live: 70_300, key: "2:BUY:MARKET:20" });
+    expect(result.current).toBe(70_300);
   });
 });
