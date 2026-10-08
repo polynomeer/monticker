@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo, type ReactNode } from "react";
+import { useState, useEffect, useMemo, type ComponentProps, type DragEvent, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { RuleCondition, RuleOperator, RuleSet } from "@monticker/types";
+import type { RuleSet } from "@monticker/types";
 import { authFetch } from "@/services/api";
+import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
 import {
   AutoGrid, Btn, BtnLink, Divider, Field, H2, Icon, LineChart, Notice, Panel, PanelCol, PanelRow,
@@ -13,30 +14,15 @@ import {
 import { SegOpts, fmtMdd, rulesetStatus } from "@/components/quant/parts";
 import { ChipNumber, ChipSelect, CondShell, JoinTag, NumField } from "@/components/quant/builderParts";
 import { useRuleSetBacktests } from "@/components/quant/RuleSetCard";
+import {
+  INDICATORS, COMPARATOR_LABEL, condToText, indicatorHasValue, parseRuleDefinition, toConditions,
+  type Condition, type ParsedRuleDefinition,
+} from "@/components/quant/ruleDefinition";
+import { conditionListReducer, dropPositionFor, DND_MIME, type ConditionListAction, type DropPosition } from "@/components/quant/conditionList";
+import { VersionPanel } from "@/components/quant/VersionPanel";
+import type { VersionRow } from "@/components/quant/ruleVersions";
 
 // ── 상수 ───────────────────────────────────────────────────────────────────────
-
-const INDICATORS = [
-  { value: "CLOSE_VS_MA",    label: "현재가 vs 이동평균",   params: ["period"], comparators: ["GT","LT"] },
-  { value: "VOLUME_RATIO",   label: "거래량 배율",           params: ["period"], comparators: ["GT","LT"], hasValue: true },
-  { value: "RSI",            label: "RSI",                   params: ["period"], comparators: ["GT","LT","BETWEEN"], hasValue: true },
-  { value: "MACD_CROSS",     label: "MACD 크로스",           params: [],         comparators: ["GOLDEN","DEAD"] },
-  { value: "PRICE_CHANGE",   label: "N일 가격변화율(%)",     params: ["period"], comparators: ["GT","LT"], hasValue: true },
-  { value: "BOLLINGER_BAND", label: "볼린저밴드",            params: ["period"], comparators: ["ABOVE_UPPER","BELOW_LOWER"] },
-  // ADR-079 — 보조 데이터 지표. 장 마감(15:30) 이후 나온 뉴스·공시는 다음 거래일부터 반영된다.
-  { value: "NEWS_SENTIMENT", label: "뉴스 감성(-1~1)",       params: ["period"], comparators: ["GT","LT"], hasValue: true, step: 0.1, defaultPeriod: 5 },
-  { value: "DISCLOSURE",     label: "공시 발생",             params: ["period"], comparators: ["ANY","EARNINGS","BUYBACK","RIGHTS_ISSUE","BONUS_ISSUE","MNA","INSIDER","DIVIDEND"], defaultPeriod: 5 },
-  { value: "PROFIT_RATE",    label: "수익률(%)",             params: [],         comparators: ["GTE","LTE"], hasValue: true, exitOnly: true },
-  { value: "LOSS_RATE",      label: "손실률(%)",             params: [],         comparators: ["LTE"],       hasValue: true, exitOnly: true },
-] as const;
-
-const COMPARATOR_LABEL: Record<string, string> = {
-  GT: ">", LT: "<", GTE: "≥", LTE: "≤",
-  BETWEEN: "사이", GOLDEN: "골든크로스", DEAD: "데드크로스",
-  ABOVE_UPPER: "상단 돌파", BELOW_LOWER: "하단 이탈",
-  ANY: "모든 공시", EARNINGS: "실적·정기보고서", BUYBACK: "자사주 취득", RIGHTS_ISSUE: "유상증자",
-  BONUS_ISSUE: "무상증자", MNA: "합병·분할·인수", INSIDER: "임원·주요주주 지분", DIVIDEND: "배당 결정",
-};
 
 const UNIVERSE_MARKETS = [
   { key: "all", label: "전체" },
@@ -49,11 +35,6 @@ const UNIVERSE_MARKET_CAP_TIERS = [
   { key: "mid", label: "중형주" },
   { key: "small", label: "소형주" },
 ];
-
-interface Condition extends RuleCondition {
-  id: string;
-  params: Record<string, number>;
-}
 
 const DEFAULT_ENTRY: Condition[] = [
   { id: "e1", indicator: "CLOSE_VS_MA",  comparator: "GT",      params: { period: 20 } },
@@ -82,56 +63,25 @@ const BLOCKS: { label: string; icon: IconName; make?: () => Omit<Condition, "id"
 
 const COND_COLORS = ["text-dracula-purple", "text-dracula-cyan", "text-dracula-pink", "text-dracula-orange", "text-dracula-green"];
 
-interface ParsedRuleDefinition {
-  entryRules?: { operator?: RuleOperator; conditions?: RuleCondition[] };
-  exitRules?: { operator?: RuleOperator; conditions?: RuleCondition[] };
-  positionSizing?: { value?: number };
-  hardExits?: { maxHoldDays?: number; trailingStopPct?: number };
-}
-
 function uid() { return Math.random().toString(36).slice(2, 8); }
-
-function indicatorHasValue(meta: (typeof INDICATORS)[number] | undefined): boolean {
-  return !!meta && "hasValue" in meta && meta.hasValue;
-}
-
-// ── 조건을 human-readable 한 줄로 변환 ────────────────────────────────────────
-
-function condToText(c: Condition): string {
-  const meta = INDICATORS.find(i => i.value === c.indicator);
-  const label = meta?.label ?? c.indicator;
-  const period = c.params?.period;
-  const periodStr = period ? `(${period})` : "";
-  const cmpLabel = COMPARATOR_LABEL[c.comparator] ?? c.comparator;
-
-  if (c.indicator === "DISCLOSURE") return `최근 ${period ?? 5}거래일 ${cmpLabel} 공시`;
-  if (c.comparator === "GOLDEN") return `${label} — 골든크로스`;
-  if (c.comparator === "DEAD")   return `${label} — 데드크로스`;
-  if (c.comparator === "ABOVE_UPPER") return `${label}${periodStr} 상단 돌파`;
-  if (c.comparator === "BELOW_LOWER") return `${label}${periodStr} 하단 이탈`;
-  if (c.comparator === "BETWEEN") {
-    const lo = Array.isArray(c.value) ? c.value[0] : "?";
-    const hi = Array.isArray(c.value) ? c.value[1] : "?";
-    return `${label}${periodStr}  ${lo} ~ ${hi}`;
-  }
-  const val = typeof c.value === "number" ? c.value : "";
-  return `${label}${periodStr}  ${cmpLabel} ${val}`;
-}
 
 // ── 조건 행 — 시안 cond(): [지표] [기간] [비교] [값] × ─────────────────────────
 
-function ConditionRow({ cond, color, onChange, onRemove, exitMode }: {
+function ConditionRow({ cond, color, onChange, onRemove, exitMode, onMoveUp, onMoveDown, dragHandle }: {
   cond: Condition;
   color: string;
   onChange: (c: Condition) => void;
   onRemove: () => void;
   exitMode?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  dragHandle?: ComponentProps<typeof CondShell>["dragHandle"];
 }) {
   const meta = INDICATORS.find(i => i.value === cond.indicator);
   const options = INDICATORS.filter(i => exitMode || !("exitOnly" in i && i.exitOnly));
 
   return (
-    <CondShell onRemove={onRemove}>
+    <CondShell onRemove={onRemove} onMoveUp={onMoveUp} onMoveDown={onMoveDown} dragHandle={dragHandle}>
       <ChipSelect
         aria-label="지표"
         colorClass={color}
@@ -193,6 +143,112 @@ const OP_OPTIONS = [
   { value: "OR" as const, label: "하나라도 충족 시" },
 ];
 
+// ── 조건 목록 — 드래그앤드롭 + 키보드 이동 ─────────────────────────────────────
+
+type ListKey = "entry" | "exit";
+/** 지금 끌고 있는 것 — dragover 중에는 dataTransfer 내용을 읽을 수 없어서 상태로 들고 있는다. */
+type DragSource = { kind: "block"; label: string } | { kind: "cond"; list: ListKey; id: string };
+type DropHint = { list: ListKey; targetId: string | null; position: DropPosition };
+
+function SortableConditions({
+  list, items, op, colorOffset = 0, exitMode, dispatch, drag, setDrag, hint, setHint, makeBlock, label,
+}: {
+  list: ListKey;
+  /** 화면에 보이는 조건만 — 매도 쪽은 손절·익절 칸이 빠진 나머지 */
+  items: Condition[];
+  op: "AND" | "OR";
+  colorOffset?: number;
+  exitMode?: boolean;
+  dispatch: (a: ConditionListAction<Condition>) => void;
+  drag: DragSource | null;
+  setDrag: (d: DragSource | null) => void;
+  hint: DropHint | null;
+  setHint: (h: DropHint | null) => void;
+  makeBlock: (label: string) => Condition | null;
+  label: string;
+}) {
+  const visibleIds = items.map(c => c.id);
+  const accepts = (e: DragEvent) =>
+    !!drag && (drag.kind === "block" || drag.list === list) && e.dataTransfer.types.includes(DND_MIME);
+
+  const onContainerOver = (e: DragEvent) => {
+    if (!accepts(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = drag?.kind === "block" ? "copy" : "move";
+    if (!hint || hint.list !== list || hint.targetId !== null) setHint({ list, targetId: null, position: "after" });
+  };
+  const onDrop = (e: DragEvent) => {
+    if (!accepts(e) || !drag) return;
+    e.preventDefault();
+    const at = hint?.list === list ? hint : { targetId: null, position: "after" as const };
+    if (drag.kind === "cond") {
+      dispatch({ type: "move", id: drag.id, targetId: at.targetId, position: at.position });
+    } else {
+      const item = makeBlock(drag.label);
+      if (item) dispatch({ type: "insert", item, targetId: at.targetId, position: at.position });
+    }
+    setDrag(null);
+    setHint(null);
+  };
+
+  return (
+    <div
+      role="list"
+      aria-label={label}
+      onDragOver={onContainerOver}
+      onDrop={onDrop}
+      className={cn("flex flex-col gap-3 rounded-lg", drag && (drag.kind === "block" || drag.list === list) && "outline-dashed outline-1 outline-offset-4 outline-tm-line2")}
+    >
+      {items.map((c, i) => {
+        const line = hint?.list === list && hint.targetId === c.id ? hint.position : null;
+        return (
+          <div
+            key={c.id}
+            role="listitem"
+            data-cond-row
+            onDragOver={e => {
+              if (!accepts(e)) return;
+              e.preventDefault();
+              e.stopPropagation();
+              e.dataTransfer.dropEffect = drag?.kind === "block" ? "copy" : "move";
+              const position = dropPositionFor(e.clientY, e.currentTarget.getBoundingClientRect());
+              if (hint?.list !== list || hint.targetId !== c.id || hint.position !== position) setHint({ list, targetId: c.id, position });
+            }}
+            className={cn(
+              "flex flex-col gap-3 rounded-lg",
+              line === "before" && "shadow-[0_-3px_0_0_#bd93f9]",
+              line === "after" && "shadow-[0_3px_0_0_#bd93f9]",
+              drag?.kind === "cond" && drag.id === c.id && "opacity-40",
+            )}
+          >
+            {i > 0 && <JoinTag op={op} />}
+            <ConditionRow
+              exitMode={exitMode}
+              cond={c}
+              color={COND_COLORS[(i + colorOffset) % COND_COLORS.length]}
+              onChange={nc => dispatch({ type: "update", item: nc })}
+              onRemove={() => dispatch({ type: "remove", id: c.id })}
+              onMoveUp={i > 0 ? () => dispatch({ type: "shift", id: c.id, delta: -1, scope: visibleIds }) : undefined}
+              onMoveDown={i < items.length - 1 ? () => dispatch({ type: "shift", id: c.id, delta: 1, scope: visibleIds }) : undefined}
+              dragHandle={{
+                "aria-hidden": true,
+                onDragStart: e => {
+                  e.dataTransfer.setData(DND_MIME, c.id);
+                  e.dataTransfer.effectAllowed = "move";
+                  const row = e.currentTarget.closest("[data-cond-row]");
+                  if (row) e.dataTransfer.setDragImage(row, 16, 18);
+                  setDrag({ kind: "cond", list, id: c.id });
+                },
+                onDragEnd: () => { setDrag(null); setHint(null); },
+              }}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── 메인 페이지 ───────────────────────────────────────────────────────────────
 
 export default function BuilderPage() {
@@ -214,6 +270,10 @@ export default function BuilderPage() {
   const [universeMarket,         setUniverseMarket]         = useState("all");
   const [universeMarketCapTier,  setUniverseMarketCapTier]  = useState("all");
   const [blockQuery,             setBlockQuery]             = useState("");
+  /** 버전 탭에서 불러온 버전 — 저장할 때 변경 메모로 남긴다. */
+  const [restoredFrom,           setRestoredFrom]           = useState<number | null>(null);
+  const [drag,                   setDrag]                   = useState<DragSource | null>(null);
+  const [dropHint,               setDropHint]               = useState<DropHint | null>(null);
 
   const { data: existing } = useQuery<RuleSet>({
     queryKey: ["quant", "ruleset", editId],
@@ -228,26 +288,34 @@ export default function BuilderPage() {
   const { data: backtests, refetch: refetchBacktests, isFetching: btFetching } = useRuleSetBacktests(editId);
   const latest = backtests?.[0];
 
+  const applyDefinition = (def: ParsedRuleDefinition) => {
+    setEntryOp(def.entryRules?.operator ?? "AND");
+    setExitOp(def.exitRules?.operator ?? "OR");
+    setEntry(toConditions(def.entryRules?.conditions, "e"));
+    setExit(toConditions(def.exitRules?.conditions, "x"));
+    setPositionPct(def.positionSizing?.value ?? 10);
+    setMaxHoldDays(def.hardExits?.maxHoldDays ?? null);
+    setTrailingPct(def.hardExits?.trailingStopPct ?? null);
+  };
+
   useEffect(() => {
     if (!existing) return;
     setName(existing.name);
     setDescription(existing.description ?? "");
-    try {
-      const def: ParsedRuleDefinition = JSON.parse(existing.ruleDefinition ?? "{}");
-      setEntryOp(def.entryRules?.operator ?? "AND");
-      setExitOp(def.exitRules?.operator ?? "OR");
-      setEntry(def.entryRules?.conditions?.map((c, i) => ({ ...c, id: `e${i}`, params: (c as Condition).params ?? {} })) ?? []);
-      setExit(def.exitRules?.conditions?.map((c, i) => ({ ...c, id: `x${i}`, params: (c as Condition).params ?? {} })) ?? []);
-      setPositionPct(def.positionSizing?.value ?? 10);
-      setMaxHoldDays(def.hardExits?.maxHoldDays ?? null);
-      setTrailingPct(def.hardExits?.trailingStopPct ?? null);
-    } catch {}
+    applyDefinition(parseRuleDefinition(existing.ruleDefinition));
+    setRestoredFrom(null);
     try {
       const universe: { market?: string; marketCapTier?: string } = JSON.parse(existing.universeJson || "{}");
       setUniverseMarket(universe.market ?? "all");
       setUniverseMarketCapTier(universe.marketCapTier ?? "all");
     } catch {}
   }, [existing]);
+
+  const restoreVersion = (row: VersionRow) => {
+    applyDefinition(row.def);
+    setRestoredFrom(row.version);
+    toast({ type: "info", title: `v${row.version} 룰을 불러왔습니다`, message: "\"룰셋 업데이트\"를 눌러야 저장됩니다." });
+  };
 
   const buildPayload = () => ({
     name,
@@ -262,6 +330,7 @@ export default function BuilderPage() {
         : {}),
     },
     universeJson: { market: universeMarket, marketCapTier: universeMarketCapTier },
+    ...(restoredFrom != null && { changeSummary: `v${restoredFrom} 룰 복원` }),
   });
 
   const saveMutation = useMutation({
@@ -278,6 +347,7 @@ export default function BuilderPage() {
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["quant", "rulesets"] });
+      qc.invalidateQueries({ queryKey: ["quant", "ruleset", data.id] });
       toast({ type: "success", title: "저장 완료", message: `"${data.name}" 룰셋이 저장되었습니다.` });
       router.push(`/quant-lab/${data.id}`);
     },
@@ -289,6 +359,14 @@ export default function BuilderPage() {
   // 강제 청산(최대 보유·트레일링)만으로도 청산될 수 있으니 매도 조건 대신 쓸 수 있다.
   const hasExit = exit.length > 0 || maxHoldDays != null || trailingPct != null;
   const canSave = name.trim().length > 0 && entry.length > 0 && hasExit && maxHoldValid && trailingValid;
+
+  const dispatchEntry = (a: ConditionListAction<Condition>) => setEntry(p => conditionListReducer(p, a));
+  const dispatchExit = (a: ConditionListAction<Condition>) => setExit(p => conditionListReducer(p, a));
+  const makeBlock = (label: string): Condition | null => {
+    const b = BLOCKS.find(x => x.label === label);
+    return b?.make ? { id: uid(), ...b.make() } : null;
+  };
+  const dndProps = { drag, setDrag, hint: dropHint, setHint: setDropHint, makeBlock };
 
   const addEntry = () => setEntry(p => [...p, { id: uid(), indicator: "CLOSE_VS_MA",  comparator: "GT",  params: { period: 20 } }]);
   const addExit  = () => setExit(p => [...p,  { id: uid(), indicator: "CLOSE_VS_MA",  comparator: "LT",  params: { period: 20 } }]);
@@ -363,6 +441,13 @@ export default function BuilderPage() {
                 disabled={!b.make}
                 title={b.make ? `${b.label} 조건을 매수 조건에 추가` : b.reason ?? "준비 중인 지표입니다"}
                 onClick={() => b.make && setEntry(p => [...p, { id: uid(), ...b.make!() }])}
+                draggable={!!b.make}
+                onDragStart={e => {
+                  e.dataTransfer.setData(DND_MIME, b.label);
+                  e.dataTransfer.effectAllowed = "copy";
+                  setDrag({ kind: "block", label: b.label });
+                }}
+                onDragEnd={() => { setDrag(null); setDropHint(null); }}
                 className="flex h-[38px] items-center gap-2 rounded-lg border border-tm-line bg-tm-inner px-2.5 text-left text-13 text-tm-soft hover:border-tm-line2 hover:text-dracula-fg disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Icon name={b.icon} size={15} />
@@ -370,7 +455,7 @@ export default function BuilderPage() {
               </button>
             ))}
           </div>
-          <span className="text-2xs text-tm-muted">블록을 누르면 오른쪽 매수 조건에 추가됩니다. 뉴스·공시는 장 마감 뒤 나온 것을 다음 거래일부터 반영합니다. 흐린 블록은 이유를 마우스를 올려 확인하세요.</span>
+          <span className="text-2xs text-tm-muted">블록을 누르면 매수 조건에 추가되고, 끌어다 놓으면 매수·매도 조건의 원하는 자리에 넣을 수 있습니다. 조건 순서는 왼쪽 점을 끌거나 ▲▼ 버튼으로 바꿉니다. 뉴스·공시는 장 마감 뒤 나온 것을 다음 거래일부터 반영합니다. 흐린 블록은 이유를 마우스를 올려 확인하세요.</span>
         </Panel>
 
         {/* ── 캔버스 ─────────────────────────────────────── */}
@@ -383,17 +468,7 @@ export default function BuilderPage() {
 
           <H2 sub={<SegOpts label="매수 조건 결합" value={entryOp} onChange={setEntryOp} options={OP_OPTIONS} />}>매수 조건</H2>
           {entry.length === 0 && <p className="m-0 text-13 text-tm-muted">매수 조건이 없습니다 — 왼쪽 블록을 누르거나 조건을 추가하세요.</p>}
-          {entry.map((c, i) => (
-            <div key={c.id} className="flex flex-col gap-3">
-              {i > 0 && <JoinTag op={entryOp} />}
-              <ConditionRow
-                cond={c}
-                color={COND_COLORS[i % COND_COLORS.length]}
-                onChange={nc => setEntry(p => p.map(x => x.id === nc.id ? nc : x))}
-                onRemove={() => setEntry(p => p.filter(x => x.id !== c.id))}
-              />
-            </div>
-          ))}
+          <SortableConditions list="entry" label="매수 조건 목록" items={entry} op={entryOp} dispatch={dispatchEntry} {...dndProps} />
           <button type="button" onClick={addEntry} className="h-10 rounded-lg border border-dashed border-tm-line2 text-13 text-tm-soft hover:text-dracula-fg">
             + 조건 추가
           </button>
@@ -406,18 +481,7 @@ export default function BuilderPage() {
             <NumField label="최대 보유" unit="거래일" value={maxHoldDays} onCommit={setMaxHoldDays} placeholder="예: 20" inputMode="numeric" />
             <NumField label="트레일링" unit="%" value={trailingPct} onCommit={setTrailingPct} placeholder="예: 7" inputClassName="text-down" />
           </div>
-          {otherExits.map((c, i) => (
-            <div key={c.id} className="flex flex-col gap-3">
-              {i > 0 && <JoinTag op={exitOp} />}
-              <ConditionRow
-                exitMode
-                cond={c}
-                color={COND_COLORS[(i + 2) % COND_COLORS.length]}
-                onChange={nc => setExit(p => p.map(x => x.id === nc.id ? nc : x))}
-                onRemove={() => setExit(p => p.filter(x => x.id !== c.id))}
-              />
-            </div>
-          ))}
+          <SortableConditions list="exit" label="매도 조건 목록" exitMode items={otherExits} op={exitOp} colorOffset={2} dispatch={dispatchExit} {...dndProps} />
           <button type="button" onClick={addExit} className="h-10 rounded-lg border border-dashed border-tm-line2 text-13 text-tm-soft hover:text-dracula-fg">
             + 청산 조건 추가
           </button>
@@ -474,6 +538,9 @@ export default function BuilderPage() {
         {/* ── 오른쪽: 미리보기 + 빠른 백테스트 ───────────────── */}
         <PanelCol className="flex-[1_1_360px]">
           <Panel tabs={["전략 미리보기"]} actions={[]} closable={false}>
+            {restoredFrom != null && (
+              <Notice tone="info">v{restoredFrom} 룰을 불러온 상태입니다. &quot;룰셋 업데이트&quot;를 눌러야 새 버전으로 저장됩니다.</Notice>
+            )}
             <p className="m-0 text-sm leading-[1.75] text-tm-soft">
               <b className="text-dracula-fg">{universeLabel}</b> 종목에서,{" "}
               {entry.length === 0 ? <span className="text-tm-muted">(매수 조건 없음)</span> : joinNodes(entry, entryOp === "AND" ? " 그리고 " : " 또는 ")}
@@ -505,6 +572,14 @@ export default function BuilderPage() {
             </Btn>
             <span className="text-center text-2xs text-tm-muted">저장 후 바로 백테스트 화면으로 이동합니다</span>
           </Panel>
+
+          {existing && (
+            <VersionPanel
+              ruleset={existing}
+              onRestore={restoreVersion}
+              restoreBlockedReason={existing.status === "RUNNING" ? "포워드 테스트 운용 중에는 룰을 바꿀 수 없습니다. 먼저 중지하세요." : null}
+            />
+          )}
 
           <Panel
             tabs={["빠른 백테스트"]}
