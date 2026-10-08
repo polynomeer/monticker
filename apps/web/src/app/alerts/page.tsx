@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import NewRuleForm from "@/components/alerts/NewRuleForm";
 import {
-  BtnLink, Notice, Panel, PanelRow, Seg, TerminalPage, TitleBlock, Toggle,
+  Btn, BtnLink, Notice, Panel, PanelRow, Seg, TerminalPage, TitleBlock, Toggle,
 } from "@/components/terminal";
 import { useIsLoggedIn, useQuotes } from "@/components/home/data";
 import {
@@ -37,6 +38,7 @@ function whenLabel(iso: string) {
 export default function AlertsPage() {
   const isLoggedIn = useIsLoggedIn();
   const [filter, setFilter] = useState<Filter>("all");
+  const [showNewRule, setShowNewRule] = useState(false);
 
   const { data: alerts = [], isLoading: loadingHistory, dataUpdatedAt: historyFetchedAt } = useAlertHistory(isLoggedIn);
   const { data: rules = [], isLoading: loadingRules } = useAlertRules(isLoggedIn);
@@ -182,8 +184,10 @@ export default function AlertsPage() {
             ))}
           </ul>
         )}
-        <BtnLink kind="primary" icon="plus" full href="/stocks/search">새 알림 규칙</BtnLink>
-        <span className="text-2xs text-tm-muted">알림 규칙은 종목 상세 화면에서 만듭니다.</span>
+        <Btn kind={showNewRule ? "ghost" : "primary"} icon={showNewRule ? undefined : "plus"} full aria-expanded={showNewRule} onClick={() => setShowNewRule((v) => !v)}>
+          {showNewRule ? "닫기" : "새 알림 규칙"}
+        </Btn>
+        {showNewRule && <NewRuleForm onDone={() => setShowNewRule(false)} />}
         <Link href="/settings/notifications" className="text-xs text-dracula-purple hover:underline">채널·방해 금지 시간 설정 →</Link>
       </Panel>
     </PanelRow>

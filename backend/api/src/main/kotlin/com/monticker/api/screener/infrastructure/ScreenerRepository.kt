@@ -47,6 +47,8 @@ class ScreenerRepository(private val jdbc: JdbcTemplate) {
 
         fun matchesMarket(market: String, itemMarket: String): Boolean = when (market) {
             "domestic" -> itemMarket in setOf("KOSPI", "KOSDAQ")
+            "kospi"    -> itemMarket == "KOSPI"
+            "kosdaq"   -> itemMarket == "KOSDAQ"
             "overseas" -> itemMarket in setOf("NASDAQ", "NYSE")
             else       -> true
         }
@@ -71,6 +73,8 @@ class ScreenerRepository(private val jdbc: JdbcTemplate) {
 
     private fun marketFilter(market: String) = when (market) {
         "domestic" -> "AND s.market IN ('KOSPI', 'KOSDAQ')"
+        "kospi"    -> "AND s.market = 'KOSPI'"
+        "kosdaq"   -> "AND s.market = 'KOSDAQ'"
         "overseas" -> "AND s.market IN ('NASDAQ', 'NYSE')"
         else       -> ""
     }

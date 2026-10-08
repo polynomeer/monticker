@@ -24,7 +24,18 @@ export interface RecentEvent {
   volumeMultiple?: number | null;
 }
 
-export interface WatchlistItem { id: number; stockId: number; symbol: string; name: string; memo?: string | null; }
+/** 52주 최고/최저(서버 candles_1d). fullPeriod=false면 firstDate~lastDate(KST) 구간만의 고저 */
+export interface Range52w {
+  high: number; low: number;
+  from: string; firstDate: string; lastDate: string;
+  tradingDays: number; fullPeriod: boolean;
+}
+export interface WatchlistItem {
+  id: number; stockId: number; symbol: string; name: string; memo?: string | null;
+  /** 그룹 안 자리(0부터) — items 배열이 이미 이 순서다 */
+  sortOrder?: number;
+  range52w?: Range52w | null;
+}
 export interface WatchlistGroup { id: number; name: string; sortOrder?: number; items: WatchlistItem[]; }
 
 /** 서버 EventType → 시안의 이벤트 라벨(EVENT_COLOR 키) */

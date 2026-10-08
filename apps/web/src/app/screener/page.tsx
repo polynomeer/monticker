@@ -7,8 +7,8 @@ import RangeSlider from "@/components/screener/RangeSlider";
 import { useScreener } from "@/hooks/useScreener";
 import { useIsLoggedIn } from "@/components/home/data";
 import {
-  CHANGE_STOPS, DEFAULT_CRITERIA, EVENT_OPTIONS, VOL_MULT_STOPS,
-  changeRangeLabel, changeToStops, sameCriteria, stopsToChange, volMultLabel, volMultToStop,
+  CHANGE_STOPS, DEFAULT_CRITERIA, DOMESTIC_SEGMENTS, EVENT_OPTIONS, MARKET_GROUPS, VOL_MULT_STOPS,
+  changeRangeLabel, marketGroup, changeToStops, sameCriteria, stopsToChange, volMultLabel, volMultToStop,
   type ScreenerCriteria, type ScreenerEvent,
 } from "@/components/screener/criteria";
 import { useSavedScreenMutations, useSavedScreens } from "@/components/screener/savedScreens";
@@ -22,11 +22,6 @@ const BASE_TABS = [
   { key: "movers",   label: "급등·급락" },
   { key: "foreign",  label: "외국인·기관 동향" },
 ];
-const MARKETS = [
-  { value: "all",      label: "전체" },
-  { value: "domestic", label: "국내" },
-  { value: "overseas", label: "해외" },
-] as const;
 const SORTS = [
   { key: "amount",  label: "거래대금순" },
   { key: "volume",  label: "거래량순" },
@@ -152,10 +147,19 @@ export default function ScreenerPage() {
         <Panel tabs={["필터"]} actions={["refresh"]} className="flex-[0_1_300px]">
           <Seg
             full
-            options={MARKETS}
-            value={criteria.market as (typeof MARKETS)[number]["value"]}
+            options={MARKET_GROUPS}
+            value={marketGroup(criteria.market)}
             onChange={(v) => patch({ market: v, ...(v === "overseas" ? { marketCapTier: "all" } : {}) })}
           />
+          {marketGroup(criteria.market) === "domestic" && (
+            <Seg
+              full
+              size="sm"
+              options={DOMESTIC_SEGMENTS}
+              value={criteria.market as (typeof DOMESTIC_SEGMENTS)[number]["value"]}
+              onChange={(v) => patch({ market: v })}
+            />
+          )}
 
           <div className="flex flex-col gap-2">
             <span className="text-2xs text-tm-muted">섹터{criteria.sectors.length > 0 && ` · ${criteria.sectors.length}개 선택`}</span>

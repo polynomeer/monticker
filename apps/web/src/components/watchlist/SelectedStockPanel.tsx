@@ -6,8 +6,9 @@ import { BtnLink, EventBadge, Panel, Stat, dirClass, fmtNum, fmtPct } from "@/co
 import { fetchCandles, fetchEvents, stockKeys } from "@/hooks/useStockChart";
 import type { ScreenerItem } from "@/hooks/useScreener";
 import { eventLabel, kstTime, type WatchlistItem } from "@/components/home/data";
+import { range52wLabels } from "./order";
 
-/** 오른쪽 "선택 종목" 패널 — 1년 일봉(최근 40개 차트 + 52주 고저), PER, 최근 이벤트. */
+/** 오른쪽 "선택 종목" 패널 — 최근 40개 일봉 차트, 52주 고저(서버 계산), PER, 최근 이벤트. */
 export default function SelectedStockPanel({ item, quote }: { item: WatchlistItem | null; quote?: ScreenerItem }) {
   const stockId = item?.stockId ?? null;
 
@@ -32,11 +33,9 @@ export default function SelectedStockPanel({ item, quote }: { item: WatchlistIte
     );
   }
 
-  // 52주 고저 — 받은 일봉이 1년 가까이 쌓여 있을 때만 계산한다(짧으면 52주라고 부를 수 없다)
-  const yearAgo = Date.now() / 1000 - 300 * 86400;
-  const hasYear = candles.length > 0 && candles[0].time <= yearAgo;
-  const hi52 = hasYear ? Math.max(...candles.map((c) => c.high)) : null;
-  const lo52 = hasYear ? Math.min(...candles.map((c) => c.low)) : null;
+  // 52주 고저 — 관심종목 응답(range52w, candles_1d 기준). 일봉이 52주를 다 덮지 못하면 실제 기간을 함께 적는다.
+  const range = item.range52w ?? null;
+  const labels = range52wLabels(range);
   const recent = [...events].sort((a, b) => b.time - a.time).slice(0, 3);
   const rate = quote?.changeRate ?? null;
 
@@ -62,8 +61,8 @@ export default function SelectedStockPanel({ item, quote }: { item: WatchlistIte
       </div>
 
       <div className="grid grid-cols-2 gap-2.5">
-        <Stat label="52주 최고" value={fmtNum(hi52)} />
-        <Stat label="52주 최저" value={fmtNum(lo52)} />
+        <Stat label={labels.high} value={fmtNum(range?.high ?? null)} sub={labels.sub} />
+        <Stat label={labels.low} value={fmtNum(range?.low ?? null)} sub={labels.sub} />
         <Stat label="PER" value={quote?.per != null ? quote.per.toFixed(1) : "—"} />
         <Stat label="외국인 순매수" value="—" sub="준비 중" />
       </div>

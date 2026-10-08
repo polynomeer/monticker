@@ -84,6 +84,52 @@ class CandleRepository(private val jdbc: JdbcTemplate) {
         val ALLOWED_BUCKETS = setOf(3, 15, 60)
     }
 
+    /** [findRanges] 한 행 — 종목별 구간 고저와 첫·마지막 일봉 시각 */
+    data class RangeRow(
+        val stockId: Long,
+        val high: BigDecimal,
+        val low: BigDecimal,
+        val firstTime: Instant,
+        val lastTime: Instant,
+        val days: Int,
+    )
+
+    /**
+     * 종목 여러 개의 [from, to) 구간 일봉 고가 최대·저가 최소를 한 번에(종목 수와 무관하게 쿼리 1번).
+     * 경계는 호출부가 KST 자정을 Instant로 바꿔 넘긴다 — SQL에서 `AT TIME ZONE`으로 날짜를 자르지 않는다.
+     * 일봉이 하나도 없는 종목은 결과에 없다.
+     */
+    fun findRanges(stockIds: Collection<Long>, from: Instant, to: Instant): List<RangeRow> {
+        if (stockIds.isEmpty()) return emptyList()
+        return jdbc.query(
+            { con ->
+                con.prepareStatement(
+                    """
+                    SELECT stock_id, max(high) AS high, min(low) AS low,
+                           min(candle_time) AS first_time, max(candle_time) AS last_time, count(*) AS days
+                    FROM candles_1d
+                    WHERE stock_id = ANY(?) AND candle_time >= ? AND candle_time < ?
+                    GROUP BY stock_id
+                    """.trimIndent(),
+                ).apply {
+                    setArray(1, con.createArrayOf("bigint", stockIds.distinct().toTypedArray()))
+                    setTimestamp(2, java.sql.Timestamp.from(from))
+                    setTimestamp(3, java.sql.Timestamp.from(to))
+                }
+            },
+            { rs, _ ->
+                RangeRow(
+                    stockId   = rs.getLong("stock_id"),
+                    high      = rs.getBigDecimal("high"),
+                    low       = rs.getBigDecimal("low"),
+                    firstTime = rs.getTimestamp("first_time").toInstant(),
+                    lastTime  = rs.getTimestamp("last_time").toInstant(),
+                    days      = rs.getInt("days"),
+                )
+            },
+        )
+    }
+
     /**
      * [before] 이전의 가장 최근 일봉 종가 — 전 거래일 종가. candles_1d.candle_time은 KST 자정이다(worker CandleAggregator).
      * 연휴보다 긴 공백([lookbackDays] 초과)이면 직전 거래일이 아니라고 보고 null.

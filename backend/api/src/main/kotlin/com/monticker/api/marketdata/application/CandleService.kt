@@ -1,9 +1,12 @@
 package com.monticker.api.marketdata.application
 
 import com.monticker.api.marketdata.domain.Candle
+import com.monticker.api.marketdata.domain.PriceRange52w
 import com.monticker.api.marketdata.infrastructure.CandleRepository
 import org.springframework.stereotype.Service
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 
 @Service
@@ -12,6 +15,7 @@ class CandleService(private val candleRepository: CandleRepository) {
     companion object {
         /** interval → (버킷 분, 기본 조회 일수) */
         val BUCKETS: Map<String, Pair<Int, Long>> = mapOf("3m" to (3 to 5L), "15m" to (15 to 15L), "1h" to (60 to 45L))
+        private val KST: ZoneId = ZoneId.of("Asia/Seoul")
     }
 
     /**
@@ -24,6 +28,28 @@ class CandleService(private val candleRepository: CandleRepository) {
         val from = date.atStartOfDay(zone).toInstant()
         val to = date.plusDays(1).atStartOfDay(zone).toInstant().minusMillis(1)
         return candleRepository.findCandles(stockId, "candles_1m", from, to, limit = 600)
+    }
+
+    /**
+     * 종목별 52주 최고/최저(일괄 1쿼리). 구간은 KST 날짜로 [today] - 52주 00:00부터 [today] 다음날 00:00 전까지 —
+     * 오늘 장중 일봉(미확정)도 포함한다(HTS의 52주 고저와 같다). 일봉이 없는 종목은 맵에 없다.
+     */
+    fun get52WeekRanges(stockIds: Collection<Long>, today: LocalDate = LocalDate.now(KST)): Map<Long, PriceRange52w> {
+        if (stockIds.isEmpty()) return emptyMap()
+        val fromDate = PriceRange52w.windowStart(today)
+        val from = fromDate.atStartOfDay(KST).toInstant()
+        val to = today.plusDays(1).atStartOfDay(KST).toInstant()
+        return candleRepository.findRanges(stockIds, from, to).associate { r ->
+            r.stockId to PriceRange52w(
+                stockId     = r.stockId,
+                high        = r.high,
+                low         = r.low,
+                from        = fromDate,
+                firstDate   = r.firstTime.atZone(KST).toLocalDate(),
+                lastDate    = r.lastTime.atZone(KST).toLocalDate(),
+                tradingDays = r.days,
+            )
+        }
     }
 
     fun getCandles(

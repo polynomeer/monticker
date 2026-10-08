@@ -15,6 +15,7 @@ import {
 } from "@/components/home/data";
 import SelectedStockPanel from "@/components/watchlist/SelectedStockPanel";
 import RowMenu from "@/components/watchlist/RowMenu";
+import { applyMove, moveTarget, type MoveDir } from "@/components/watchlist/order";
 import { useIntradaySeriesChunked } from "@/hooks/useIntradaySeries";
 import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
 
@@ -28,6 +29,7 @@ const MARKET_TABS = [
 type MarketTab = (typeof MARKET_TABS)[number]["value"];
 
 const SORT_OPTIONS = [
+  { key: "custom", label: "내 순서" },
   { key: "name",   label: "이름순" },
   { key: "change", label: "등락률순" },
   { key: "price",  label: "현재가순" },
@@ -48,7 +50,7 @@ export default function WatchlistPage() {
   const [showNewGroup, setShowNewGroup] = useState(false);
   const [activeGroupId, setActiveGroupId] = useState<number | null>(null);
   const [market, setMarket] = useState<MarketTab>("all");
-  const [sort, setSort] = useState<Sort>("name");
+  const [sort, setSort] = useState<Sort>("custom");
   const [selectedStockId, setSelectedStockId] = useState<number | null>(null);
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -102,6 +104,30 @@ export default function WatchlistPage() {
     onError: (e: Error) => toast({ type: "error", title: "삭제 실패", message: e.message }),
   });
 
+  // 순서 이동 — PATCH /api/watchlists/items/{id}/sort-order. 화면은 먼저 옮기고(낙관적) 실패하면 되돌린다.
+  const moveItem = useMutation({
+    mutationFn: async ({ itemId, target }: { groupId: number; itemId: number; target: number }) => {
+      const r = await authFetch(`/api/watchlists/items/${itemId}/sort-order`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sortOrder: target }),
+      });
+      if (!r.ok) throw new Error(r.status === 404 ? "종목을 찾을 수 없습니다. 목록을 새로고침합니다." : "순서를 바꾸지 못했습니다.");
+    },
+    onMutate: async ({ groupId, itemId, target }) => {
+      await qc.cancelQueries({ queryKey: ["watchlist", "groups"] });
+      const prev = qc.getQueryData<WatchlistGroup[]>(["watchlist", "groups"]);
+      qc.setQueryData<WatchlistGroup[]>(["watchlist", "groups"], (gs) =>
+        gs?.map((g) => (g.id === groupId ? { ...g, items: applyMove(g.items, itemId, target) } : g)));
+      return { prev };
+    },
+    onError: (e: Error, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["watchlist", "groups"], ctx.prev);
+      toast({ type: "error", title: "순서 이동 실패", message: e.message });
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["watchlist"] }),
+  });
+
   // 개별 종목 알림(가격/거래량)은 종목 상세 페이지에서 설정하는 구조라, 여기서는 그룹
   // 전체에 한 번에 적용 가능한 유일한 조건(거래량 급증 — 종목마다 스스로의 평소 거래량
   // 대비라 그룹 공통 기준값이 필요 없음)만 일괄 등록으로 제공한다. 가격 이상/이하는
@@ -143,6 +169,7 @@ export default function WatchlistPage() {
         return market === "domestic" ? isDomestic(q.market) : !isDomestic(q.market);
       });
     }
+    if (sort === "custom") return filtered; // 서버가 준 그룹 순서 그대로
     return [...filtered].sort((a, b) => {
       if (sort === "name") return a.name.localeCompare(b.name, "ko");
       const qa = quoteByStockId.get(a.stockId);
@@ -162,6 +189,7 @@ export default function WatchlistPage() {
 
   const groupItems = activeGroup?.items ?? [];
   const rows = processItems(groupItems);
+  const visibleIds = rows.map((r) => r.id);
   const selected = rows.find((r) => r.stockId === selectedStockId) ?? rows[0] ?? null;
   const selectedIndex = selected ? rows.indexOf(selected) : -1;
 
@@ -252,7 +280,28 @@ export default function WatchlistPage() {
         </Link>
       ),
     },
-    { key: "menu", header: <span className="sr-only">더 보기</span>, align: "center", cell: (it) => <RowMenu name={it.name} onRemove={() => removeItem.mutate(it.id)} disabled={removeItem.isPending} /> },
+    {
+      key: "menu",
+      header: <span className="sr-only">더 보기</span>,
+      align: "center",
+      cell: (it) => {
+        const move = (dir: MoveDir) => {
+          if (sort !== "custom" || !activeGroup) return undefined;
+          const target = moveTarget(groupItems, visibleIds, it.id, dir);
+          return target == null ? undefined : () => moveItem.mutate({ groupId: activeGroup.id, itemId: it.id, target });
+        };
+        return (
+          <RowMenu
+            name={it.name}
+            onRemove={() => removeItem.mutate(it.id)}
+            onMoveUp={move("up")}
+            onMoveDown={move("down")}
+            moveHint={sort !== "custom" ? "정렬을 '내 순서'로 바꾸면 옮길 수 있습니다" : undefined}
+            disabled={removeItem.isPending || moveItem.isPending}
+          />
+        );
+      },
+    },
   ];
 
   return shell(

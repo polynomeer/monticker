@@ -68,4 +68,21 @@ class ScreenerCriteriaTest {
         val key = ScreenerCriteria(sectors = listOf("반도체".repeat(30))).normalized().cacheKey()
         assertThat(key).matches("[0-9a-f]{64}")
     }
+
+    @Test
+    fun `accepts KOSPI and KOSDAQ segments in lowercase only`() {
+        assertThat(ScreenerCriteria(market = "kospi").normalized().market).isEqualTo("kospi")
+        assertThat(ScreenerCriteria(market = "kosdaq").normalized().market).isEqualTo("kosdaq")
+        assertThatThrownBy { ScreenerCriteria(market = "KOSPI").normalized() }.isInstanceOf(IllegalArgumentException::class.java)
+    }
+
+    @Test
+    fun `market segments match only their own exchange`() {
+        val m = com.monticker.api.screener.infrastructure.ScreenerRepository.Companion
+        assertThat(m.matchesMarket("kospi", "KOSPI")).isTrue()
+        assertThat(m.matchesMarket("kospi", "KOSDAQ")).isFalse()
+        assertThat(m.matchesMarket("kosdaq", "KOSDAQ")).isTrue()
+        assertThat(m.matchesMarket("kosdaq", "NASDAQ")).isFalse()
+        assertThat(m.matchesMarket("domestic", "KOSDAQ")).isTrue()
+    }
 }

@@ -9,6 +9,11 @@ import com.monticker.api.watchlist.domain.WatchlistGroup
 import com.monticker.api.watchlist.domain.WatchlistItem
 import com.monticker.api.watchlist.infrastructure.WatchlistGroupRepository
 import com.monticker.api.watchlist.infrastructure.WatchlistItemRepository
+import com.monticker.api.watchlist.infrastructure.WatchlistOrderRepository
+import com.monticker.api.marketdata.application.CandleService
+import com.monticker.api.marketdata.domain.PriceRange52w
+import java.math.BigDecimal
+import java.time.LocalDate
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -26,7 +31,13 @@ class WatchlistServiceTest {
     private val stockService = mockk<StockService>()
     private val esOps = mockk<ElasticsearchOperations>(relaxed = true)
     private val events = mockk<ApplicationEventPublisher>(relaxed = true)
-    private val service = WatchlistService(groupRepository, itemRepository, stockService, esOps, SearchMetrics(SimpleMeterRegistry()), events)
+    // relaxed: lockGroup=false, lockGroupOfItem=null — 잠금 단계에서 "없음"이 기본값
+    private val orderRepository = mockk<WatchlistOrderRepository>(relaxed = true)
+    private val candleService = mockk<CandleService>()
+    private val service = WatchlistService(
+        groupRepository, itemRepository, stockService, esOps, SearchMetrics(SimpleMeterRegistry()), events,
+        orderRepository, candleService,
+    )
 
     @Test
     fun `createGroup throws when name is blank`() {
@@ -47,6 +58,7 @@ class WatchlistServiceTest {
         val group = WatchlistGroup(id = 1L, userId = 1L, name = "My List")
         val stock = Stock(id = 1L, symbol = "005930", name = "삼성전자", market = Market.KOSPI, exchange = "KRX")
 
+        every { orderRepository.lockGroup(1L, 1L) } returns true
         every { groupRepository.findById(1L) } returns Optional.of(group)
         every { stockService.getById(1L) } returns stock
         every { itemRepository.existsByGroupIdAndStockId(1L, 1L) } returns true
@@ -71,6 +83,8 @@ class WatchlistServiceTest {
         val item = WatchlistItem(id = 42L, group = group, stock = stock, memo = null)
         every { itemRepository.findById(42L) } returns java.util.Optional.of(item)
         every { itemRepository.delete(item) } returns Unit
+        every { itemRepository.flush() } returns Unit
+        every { orderRepository.lockGroupOfItem(1L, 42L) } returns 1L
         val published = slot<Any>()
         every { events.publishEvent(capture(published)) } returns Unit
 
@@ -87,6 +101,7 @@ class WatchlistServiceTest {
 
     @Test
     fun `addItem to another user's group looks exactly like a missing group`() {
+        every { orderRepository.lockGroup(1L, 1L) } returns true
         every { groupRepository.findById(1L) } returns Optional.of(WatchlistGroup(id = 1L, userId = 2L, name = "남의 목록"))
         val others = runCatching { service.addItem(1L, 1L, 1L, null) }.exceptionOrNull()
         every { groupRepository.findById(1L) } returns Optional.empty()
@@ -109,5 +124,82 @@ class WatchlistServiceTest {
         org.assertj.core.api.Assertions.assertThat(others).isInstanceOf(NoSuchElementException::class.java)
         org.assertj.core.api.Assertions.assertThat(others!!.message).isEqualTo(missing!!.message)
         verify(exactly = 0) { itemRepository.delete(any()) }
+    }
+
+    // ── 순서 ─────────────────────────────────────────────────────────────
+
+    @Test
+    fun `addItem appends at the end of the group under the group lock`() {
+        val group = WatchlistGroup(id = 1L, userId = 1L, name = "g")
+        val stock = Stock(id = 7L, symbol = "005930", name = "삼성전자", market = Market.KOSPI, exchange = "KRX")
+        every { orderRepository.lockGroup(1L, 1L) } returns true
+        every { orderRepository.nextSortOrder(1L) } returns 3
+        every { groupRepository.findById(1L) } returns Optional.of(group)
+        every { stockService.getById(7L) } returns stock
+        every { itemRepository.existsByGroupIdAndStockId(1L, 7L) } returns false
+        val saved = slot<WatchlistItem>()
+        every { itemRepository.save(capture(saved)) } answers { saved.captured }
+
+        service.addItem(1L, 1L, 7L, null)
+
+        org.assertj.core.api.Assertions.assertThat(saved.captured.sortOrder).isEqualTo(3)
+        io.mockk.verifyOrder {
+            orderRepository.lockGroup(1L, 1L)
+            orderRepository.nextSortOrder(1L)
+        }
+    }
+
+    @Test
+    fun `removeItem compacts the remaining order after deleting`() {
+        val group = WatchlistGroup(id = 5L, userId = 1L, name = "g")
+        val item = WatchlistItem(id = 42L, group = group, stock = mockk(relaxed = true), memo = null)
+        every { itemRepository.findById(42L) } returns Optional.of(item)
+        every { orderRepository.lockGroupOfItem(1L, 42L) } returns 5L
+        every { itemRepository.delete(item) } returns Unit
+        every { itemRepository.flush() } returns Unit
+
+        service.removeItem(1L, 42L)
+
+        io.mockk.verifyOrder {
+            orderRepository.lockGroupOfItem(1L, 42L)
+            itemRepository.delete(item)
+            itemRepository.flush()
+            orderRepository.compact(5L)
+        }
+    }
+
+    // ── 52주 고저 ─────────────────────────────────────────────────────────
+
+    @Test
+    fun `get52WeekRanges asks once for every distinct stock across groups`() {
+        val s1 = Stock(id = 1L, symbol = "A", name = "a", market = Market.KOSPI, exchange = "KRX")
+        val s2 = Stock(id = 2L, symbol = "B", name = "b", market = Market.KOSPI, exchange = "KRX")
+        val g1 = WatchlistGroup(id = 1L, userId = 1L, name = "g1").apply {
+            items += WatchlistItem(id = 10L, group = this, stock = s1)
+            items += WatchlistItem(id = 11L, group = this, stock = s2)
+        }
+        val g2 = WatchlistGroup(id = 2L, userId = 1L, name = "g2").apply { items += WatchlistItem(id = 12L, group = this, stock = s1) }
+        val range = PriceRange52w(1L, BigDecimal.TEN, BigDecimal.ONE, LocalDate.of(2025, 10, 9), LocalDate.of(2025, 10, 10), LocalDate.of(2026, 10, 8), 240)
+        every { candleService.get52WeekRanges(setOf(1L, 2L), any()) } returns mapOf(1L to range)
+
+        val result = service.get52WeekRanges(listOf(g1, g2))
+
+        org.assertj.core.api.Assertions.assertThat(result).containsEntry(1L, range).doesNotContainKey(2L)
+        verify(exactly = 1) { candleService.get52WeekRanges(any(), any()) }
+    }
+
+    @Test
+    fun `get52WeekRanges failure degrades to an empty map so the list still renders`() {
+        val s1 = Stock(id = 1L, symbol = "A", name = "a", market = Market.KOSPI, exchange = "KRX")
+        val g = WatchlistGroup(id = 1L, userId = 1L, name = "g").apply { items += WatchlistItem(id = 10L, group = this, stock = s1) }
+        every { candleService.get52WeekRanges(any(), any()) } throws RuntimeException("db down")
+
+        org.assertj.core.api.Assertions.assertThat(service.get52WeekRanges(listOf(g))).isEmpty()
+    }
+
+    @Test
+    fun `get52WeekRanges skips the query when there are no items`() {
+        org.assertj.core.api.Assertions.assertThat(service.get52WeekRanges(listOf(WatchlistGroup(id = 1L, userId = 1L, name = "g")))).isEmpty()
+        verify(exactly = 0) { candleService.get52WeekRanges(any(), any()) }
     }
 }
