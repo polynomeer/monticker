@@ -13,7 +13,14 @@ import json, pathlib
 
 OUT = pathlib.Path(__file__).parent / "dashboards"
 API = 'job="monticker-api"'
-WK = 'job="monticker-worker"'
+# worker job은 compose 모놀리스(profile=full)에서 monticker-worker, MSA·K8s에서 monticker-worker-{market,event,alert}다.
+# 정확히 일치로 걸면 K8s에서 worker 패널이 전부 빈다 — 정규식으로 둘 다 받는다(WK를 쓰는 패널은 모두 sum/max로 합산한다).
+WK = 'job=~"monticker-worker.*"'
+# ADR-094: api는 public, worker는 worker_outbox 테이블에 쌓는다 — 게이지 이름은 같고 job으로 구분한다.
+# worker는 배포 형태에 따라 job이 monticker-worker(compose full) 또는 monticker-worker-{market,event,alert}(MSA·K8s)이고
+# 역할마다 같은 테이블을 센다. svc 라벨(api|worker)로 접어서 역할 수만큼 선이 겹치지 않게 한다. alert-rules.yml과 같은 식.
+def by_app(metric):
+    return f'max by (svc) (label_replace({metric}{{job=~"monticker-(api|worker.*)"}}, "svc", "$1", "job", "monticker-(api|worker).*"))'
 
 def ts(title, targets, unit=None, w=12, h=8, desc=None, thresholds=None, stack=False, legend="bottom", max_=None):
     p = {"type": "timeseries", "title": title,
@@ -29,10 +36,10 @@ def ts(title, targets, unit=None, w=12, h=8, desc=None, thresholds=None, stack=F
         p["fieldConfig"]["defaults"]["custom"]["thresholdsStyle"] = {"mode": "line"}
     return p
 
-def stat(title, expr, unit=None, w=4, h=4, desc=None, thresholds=None, decimals=None, legend=""):
+def stat(title, expr, unit=None, w=4, h=4, desc=None, thresholds=None, decimals=None, legend="", text_mode="value"):
     p = {"type": "stat", "title": title, "targets": [{"expr": expr, "refId": "A", "legendFormat": legend, "instant": True}],
          "gridPos": {"w": w, "h": h},
-         "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "textMode": "value"},
+         "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "textMode": text_mode},
          "fieldConfig": {"defaults": {}, "overrides": []}}
     if unit: p["fieldConfig"]["defaults"]["unit"] = unit
     if decimals is not None: p["fieldConfig"]["defaults"]["decimals"] = decimals
@@ -99,8 +106,8 @@ trading = dashboard("monticker-trading", "monticker — Trading", ["trading"], [
     stat("대사 불일치 (24h, report)", f'sum(increase(ledger_reconciliation_mismatch_total{{{API}, mode="report"}}[24h])) or vector(0)', thresholds=[(1, "orange")], desc="LEDGER_RECON_MODE=report 기간의 발견 — 0이 되면 alert로 전환"),
     stat("대사 실행 (26h)", f'sum(increase(ledger_reconciliation_checked_total{{{API}}}[26h])) or vector(0)', thresholds=[(0, "red"), (1, "green")], desc="LedgerReconciliationDidNotRun: 평일 26시간 동안 0이면 배치가 안 돈 것"),
     stat("Saga 미완료", f'max(saga_incomplete{{{API}}})', thresholds=[(1, "orange")], desc="SagaIncomplete. recoverIncomplete가 5분마다 정리한다 — 10분 넘게 남으면 수동 검토"),
-    stat("Outbox 미완료", f'max(outbox_pending{{{API}}})', thresholds=[(100, "orange")], desc="OutboxBacklog: > 100 또는 가장 오래된 것 > 10분"),
-    stat("Outbox 최고령 (s)", f'max(outbox_oldest_age_seconds{{{API}}})', unit="s", thresholds=[(600, "orange")]),
+    stat("Outbox 미완료 (api · worker)", by_app('outbox_pending'), thresholds=[(100, "orange")], legend="{{svc}}", text_mode="value_and_name", desc="OutboxBacklog(api) · WorkerOutboxBacklog(worker): > 100 또는 가장 오래된 것 > 10분. ADR-094 — 테이블이 앱별로 따로라 앱별로 본다"),
+    stat("Outbox 최고령 (s, api · worker)", by_app('outbox_oldest_age_seconds'), unit="s", thresholds=[(600, "orange")], legend="{{svc}}", text_mode="value_and_name"),
     row("브로커 (KIS · Toss) — 실거래"),
     ts("서킷브레이커 상태 (1=CLOSED 2=OPEN 3=HALF_OPEN)", [(f'max by (name) (resilience4j_circuitbreaker_state{{{API}, name=~"kis|toss|tossPg"}} * on() group_left() 1)', "{{name}}")], desc="BrokerCircuitOpen / PaymentCircuitOpen page — runbook broker-cb-open. 폴백이 없는 브레이커 셋(kis/toss/tossPg)만 본다. 잔고 조회는 OPEN 중 503(0원이 아니다)"),
     ts("브로커·PG 느린 호출 / 실패 비율 (%)", [(f'max by (name) (resilience4j_circuitbreaker_slow_call_rate{{{API}, name=~"kis|toss|tossPg"}})', "slow {{name}}"), (f'max by (name) (resilience4j_circuitbreaker_failure_rate{{{API}, name=~"kis|toss|tossPg"}})', "failure {{name}}")], unit="percent", max_=100, thresholds=[(50, "red")], desc="P0-2: slow-call 50% 또는 실패율 50%면 OPEN(브로커 3초/tossPg 5초). -1은 창이 아직 안 찬 것. tossPg는 4xx를 집계하지 않는다(ADR-053)"),
@@ -158,7 +165,7 @@ capacity = dashboard("monticker-capacity", "monticker — Capacity (주간 리�
     ts("백테스트 큐 잔여 / 스레드", [(f'min(executor_queue_remaining_tasks{{{API}, name="backtestExecutor"}})', "queue remaining (20)"), (f'max(executor_active_threads{{{API}, name="backtestExecutor"}})', "active threads (max 4)")], desc="BacktestQueueSaturated. L-06: bulkhead 안에서 조회 p95 무영향"),
     ts("JVM heap 최대 대비 사용 (%)", [('max by (job) (jvm_memory_used_bytes{area="heap"}) / max by (job) (jvm_memory_max_bytes{area="heap"}) * 100', "{{job}}")], unit="percent", max_=100),
     row("적체 — 시간이 지나도 안 줄면 구조 문제"),
-    ts("Outbox 미완료 · 최고령", [(f'max(outbox_pending{{{API}}})', "pending"), (f'max(outbox_oldest_age_seconds{{{API}}}) / 60', "oldest (min)")]),
+    ts("Outbox 미완료 · 최고령 (api · worker)", [(by_app('outbox_pending'), "pending {{svc}}"), (by_app('outbox_oldest_age_seconds') + ' / 60', "oldest (min) {{svc}}")], desc="ADR-094 — api(public.event_publication)와 worker(worker_outbox.event_publication)를 따로 그린다. OutboxBacklog · WorkerOutboxBacklog"),
     ts("DLT 누적 (7일)", [('sum by (topic) (increase(dlt_messages_total[7d]))', "{{topic}}")], stack=True),
     ts("검색 폴백 누적 (7일)", [(f'sum by (index) (increase(search_fallback_total{{{API}}}[7d]))', "{{index}}")], stack=True),
 ], refresh="5m", rng="now-7d")

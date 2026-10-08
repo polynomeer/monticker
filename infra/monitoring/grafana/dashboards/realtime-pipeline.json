@@ -31,7 +31,7 @@
       "title": "틱 처리량 (ticks/s, worker)",
       "targets": [
         {
-          "expr": "sum(rate(tick_latency_total_pipeline_seconds_count{job=\"monticker-worker\"}[1m]))",
+          "expr": "sum(rate(tick_latency_total_pipeline_seconds_count{job=~\"monticker-worker.*\"}[1m]))",
           "legendFormat": "processed/s",
           "refId": "A"
         }
@@ -128,17 +128,17 @@
       "title": "단계별 지연 p99 (ms)",
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(tick_latency_redis_write_seconds_bucket{job=\"monticker-worker\"}[1m]))) * 1000",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(tick_latency_redis_write_seconds_bucket{job=~\"monticker-worker.*\"}[1m]))) * 1000",
           "legendFormat": "redis write",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(tick_latency_broadcast_seconds_bucket{job=\"monticker-worker\"}[1m]))) * 1000",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(tick_latency_broadcast_seconds_bucket{job=~\"monticker-worker.*\"}[1m]))) * 1000",
           "legendFormat": "broadcast",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(tick_latency_total_pipeline_seconds_bucket{job=\"monticker-worker\"}[1m]))) * 1000",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(tick_latency_total_pipeline_seconds_bucket{job=~\"monticker-worker.*\"}[1m]))) * 1000",
           "legendFormat": "total pipeline",
           "refId": "C"
         }
@@ -195,7 +195,7 @@
       "title": "느린 틱 (> 임계, 건/min)",
       "targets": [
         {
-          "expr": "sum(rate(tick_pipeline_slow_total{job=\"monticker-worker\"}[1m])) * 60",
+          "expr": "sum(rate(tick_pipeline_slow_total{job=~\"monticker-worker.*\"}[1m])) * 60",
           "legendFormat": "slow/min",
           "refId": "A"
         }
@@ -450,7 +450,7 @@
       "title": "이벤트 탐지 (건/min)",
       "targets": [
         {
-          "expr": "sum by (source, type) (rate(stock_events_written_total{job=\"monticker-worker\"}[5m])) * 60",
+          "expr": "sum by (source, type) (rate(stock_events_written_total{job=~\"monticker-worker.*\"}[5m])) * 60",
           "legendFormat": "{{source}} {{type}}",
           "refId": "A"
         }
@@ -489,12 +489,12 @@
       "title": "알림 룰 인덱스",
       "targets": [
         {
-          "expr": "max(alert_rule_index_size{job=\"monticker-worker\"})",
+          "expr": "max(alert_rule_index_size{job=~\"monticker-worker.*\"})",
           "legendFormat": "rules",
           "refId": "A"
         },
         {
-          "expr": "max(alert_rule_index_ready{job=\"monticker-worker\"})",
+          "expr": "max(alert_rule_index_ready{job=~\"monticker-worker.*\"})",
           "legendFormat": "ready (1)",
           "refId": "B"
         }
@@ -534,12 +534,12 @@
       "title": "알림 평가 실패 / 발송 발행 실패 (건/min)",
       "targets": [
         {
-          "expr": "sum by (ruleType) (rate(alert_rule_eval_failed_total{job=\"monticker-worker\"}[5m])) * 60",
+          "expr": "sum by (ruleType) (rate(alert_rule_eval_failed_total{job=~\"monticker-worker.*\"}[5m])) * 60",
           "legendFormat": "eval {{ruleType}}",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(alert_notify_publish_failed_total{job=\"monticker-worker\"}[5m])) * 60",
+          "expr": "sum(rate(alert_notify_publish_failed_total{job=~\"monticker-worker.*\"}[5m])) * 60",
           "legendFormat": "notify publish",
           "refId": "B"
         }
@@ -579,7 +579,7 @@
       "title": "캔들 flush 실패 (건/min)",
       "targets": [
         {
-          "expr": "sum(rate(candle_flush_failed_total{job=\"monticker-worker\"}[5m])) * 60",
+          "expr": "sum(rate(candle_flush_failed_total{job=~\"monticker-worker.*\"}[5m])) * 60",
           "legendFormat": "failed/min",
           "refId": "A"
         }

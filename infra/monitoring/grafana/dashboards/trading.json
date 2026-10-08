@@ -577,12 +577,12 @@
     },
     {
       "type": "stat",
-      "title": "Outbox 미완료",
+      "title": "Outbox 미완료 (api · worker)",
       "targets": [
         {
-          "expr": "max(outbox_pending{job=\"monticker-api\"})",
+          "expr": "max by (svc) (label_replace(outbox_pending{job=~\"monticker-(api|worker.*)\"}, \"svc\", \"$1\", \"job\", \"monticker-(api|worker).*\"))",
           "refId": "A",
-          "legendFormat": "",
+          "legendFormat": "{{svc}}",
           "instant": true
         }
       ],
@@ -600,7 +600,7 @@
         },
         "colorMode": "background",
         "graphMode": "none",
-        "textMode": "value"
+        "textMode": "value_and_name"
       },
       "fieldConfig": {
         "defaults": {
@@ -620,17 +620,17 @@
         },
         "overrides": []
       },
-      "description": "OutboxBacklog: > 100 또는 가장 오래된 것 > 10분",
+      "description": "OutboxBacklog(api) · WorkerOutboxBacklog(worker): > 100 또는 가장 오래된 것 > 10분. ADR-094 — 테이블이 앱별로 따로라 앱별로 본다",
       "id": 15
     },
     {
       "type": "stat",
-      "title": "Outbox 최고령 (s)",
+      "title": "Outbox 최고령 (s, api · worker)",
       "targets": [
         {
-          "expr": "max(outbox_oldest_age_seconds{job=\"monticker-api\"})",
+          "expr": "max by (svc) (label_replace(outbox_oldest_age_seconds{job=~\"monticker-(api|worker.*)\"}, \"svc\", \"$1\", \"job\", \"monticker-(api|worker).*\"))",
           "refId": "A",
-          "legendFormat": "",
+          "legendFormat": "{{svc}}",
           "instant": true
         }
       ],
@@ -648,7 +648,7 @@
         },
         "colorMode": "background",
         "graphMode": "none",
-        "textMode": "value"
+        "textMode": "value_and_name"
       },
       "fieldConfig": {
         "defaults": {
