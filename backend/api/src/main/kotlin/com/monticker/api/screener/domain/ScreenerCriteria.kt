@@ -34,7 +34,8 @@ data class ScreenerCriteria(
     val sort: String = "amount",
 ) {
     companion object {
-        val MARKETS = setOf("all", "domestic", "overseas")
+        /** 시장 세그먼트. kospi/kosdaq은 국내(domestic)를 거래소별로 나눈 것 — SQL에는 리포지토리의 고정 조각으로만 들어간다 */
+        val MARKETS = setOf("all", "domestic", "kospi", "kosdaq", "overseas")
         val MARKET_CAP_TIERS = setOf("all", "large", "mid", "small")
         val SORTS = setOf("amount", "volume", "rise", "fall", "volmult")
         const val MAX_SECTORS = 20
