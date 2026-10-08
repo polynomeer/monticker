@@ -29,6 +29,7 @@ export interface DeliveryChannels {
 export const CATEGORY_LABEL: Record<string, string> = {
   PRICE_ALERT: "가격 알림",
   VOLUME_SURGE: "거래량 급증",
+  NEWS: "뉴스·공시",
   QUANT_SIGNAL: "퀀트 시그널",
   FILLS: "체결·정산",
   STRATEGY_MARKET: "전략 마켓 소식",

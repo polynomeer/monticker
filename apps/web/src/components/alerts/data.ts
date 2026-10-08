@@ -121,7 +121,7 @@ export function useAlertMutations() {
 }
 
 /** 알림 종류 → 시안의 원형 글자 배지·분류 탭 */
-export type AlertCategory = "price" | "event" | "signal" | "account";
+export type AlertCategory = "price" | "event" | "news" | "signal" | "account";
 
 export const RULE_META: Record<string, { letter: string; color: string; tag: string; category: AlertCategory }> = {
   PRICE_ABOVE:          { letter: "P", color: "#f1fa8c", tag: "가격", category: "price" },
@@ -131,11 +131,13 @@ export const RULE_META: Record<string, { letter: string; color: string; tag: str
   RSI_ABOVE:            { letter: "R", color: "#8be9fd", tag: "지표", category: "price" },
   RSI_BELOW:            { letter: "R", color: "#8be9fd", tag: "지표", category: "price" },
   VOLUME_SURGE:         { letter: "V", color: "#bd93f9", tag: "거래량", category: "event" },
-  NEWS_PUBLISHED:       { letter: "N", color: "#8be9fd", tag: "뉴스", category: "event" },
-  DISCLOSURE_PUBLISHED: { letter: "D", color: "#ffb86c", tag: "공시", category: "event" },
+  NEWS_PUBLISHED:       { letter: "N", color: "#8be9fd", tag: "뉴스", category: "news" },
+  DISCLOSURE_PUBLISHED: { letter: "D", color: "#ffb86c", tag: "공시", category: "news" },
   HOLDING_DROP:         { letter: "H", color: "#ff8a8a", tag: "보유 종목", category: "account" },
   // ADR-090 — 내 전략·구독 전략의 포워드 테스트 신호(규칙 없이 서버가 적재)
   QUANT_SIGNAL:         { letter: "Q", color: "#50fa7b", tag: "시그널", category: "signal" },
+  // ADR-100 — 관심종목의 새 뉴스·중요 공시(규칙 없이 서버가 적재). 공시는 메시지가 "[공시] …"로 시작한다.
+  NEWS:                 { letter: "N", color: "#8be9fd", tag: "뉴스·공시", category: "news" },
 };
 
 export function ruleMeta(type: string) {
