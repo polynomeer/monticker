@@ -9,8 +9,11 @@ import {
   Btn, BtnLink, Notice, Panel, PanelRow, Seg, TerminalPage, TitleBlock, Toggle,
 } from "@/components/terminal";
 import { useIsLoggedIn, useQuotes } from "@/components/home/data";
+import { useInterestOrdering } from "@/hooks/useUserPreferences";
+import { isInterestSector } from "@/lib/interestSectors";
+import { InterestMark } from "@/components/interest/InterestOrderingToggle";
 import {
-  describeRule, matchesFilter, ruleMeta, useAlertHistory, useAlertMutations, useAlertRules, useAlertStats,
+  describeRule, matchesFilter, matchesInterest, ruleMeta, useAlertHistory, useAlertMutations, useAlertRules, useAlertStats,
 } from "@/components/alerts/data";
 
 const FILTERS = [
@@ -21,7 +24,9 @@ const FILTERS = [
   { value: "signal", label: "시그널" },
   { value: "account", label: "계좌" },
 ] as const;
-type Filter = (typeof FILTERS)[number]["value"];
+/** ADR-099 — 관심 분야를 고른 사용자에게만 보이는 칩. 기본 필터(전체)는 바뀌지 않는다. */
+const INTEREST_FILTER = { value: "interest", label: "관심 분야" } as const;
+type Filter = (typeof FILTERS)[number]["value"] | typeof INTEREST_FILTER.value;
 
 const STATUS_LABEL: Record<string, string> = {
   SENT: "발송됨", FAILED: "발송 실패", PENDING: "발송 대기", EMAIL_FALLBACK: "이메일로 발송",
@@ -59,7 +64,14 @@ export default function AlertsPage() {
   const quotes = useQuotes(stockIds, "alerts");
   const stockName = (id: number | null) => (id == null ? "관심종목 전체" : quotes.get(id)?.name ?? `종목 #${id}`);
 
-  const shown = alerts.filter((a) => matchesFilter(a, filter));
+  const interest = useInterestOrdering(isLoggedIn);
+  const sectorOf = (id: number) => quotes.get(id)?.sector;
+  const filters = interest.available ? [...FILTERS, INTEREST_FILTER] : FILTERS;
+  // 관심 분야를 지워 칩이 사라졌으면 전체로 본다(빈 목록에 갇히지 않게)
+  const effectiveFilter: Filter = filter === "interest" && !interest.available ? "all" : filter;
+  const shown = alerts.filter((a) =>
+    effectiveFilter === "interest" ? matchesInterest(a, sectorOf, interest.interests) : matchesFilter(a, effectiveFilter),
+  );
 
   const todayKey = kstDate(new Date());
   const todayCount = stats?.recentFires.find((d) => d.date === todayKey)?.count ?? (stats ? 0 : null);
@@ -92,7 +104,7 @@ export default function AlertsPage() {
       {/* ── 알림 이력 ─────────────────────────────────────── */}
       <Panel tabs={["알림 이력"]} actions={["sliders"]} closable={false} className="flex-[999_1_600px]" bodyClassName="gap-0 p-0">
         <div className="flex flex-wrap items-center gap-2 border-b border-tm-line px-3.5 py-2.5">
-          <Seg size="sm" options={FILTERS} value={filter} onChange={setFilter} />
+          <Seg size="sm" options={filters} value={effectiveFilter} onChange={setFilter} />
           <span className="ml-auto flex items-center gap-1.5">
             <button
               type="button"
@@ -112,7 +124,7 @@ export default function AlertsPage() {
           <div className="flex flex-col items-center gap-1.5 px-4 py-16 text-center">
             <span className="text-sm font-semibold text-tm-soft">알림 이력이 없습니다</span>
             <span className="text-xs text-tm-muted">
-              {filter === "signal" ? "내 전략·구독 전략에서 포워드 테스트 신호가 나면 여기 쌓입니다." : filter === "unread" ? "최근 알림을 모두 읽었습니다." : "종목 상세 페이지에서 가격 알림을 설정해보세요."}
+              {effectiveFilter === "interest" ? "관심 분야 업종 종목의 최근 알림이 없습니다. 다른 알림은 '전체'에서 볼 수 있어요." : effectiveFilter === "signal" ? "내 전략·구독 전략에서 포워드 테스트 신호가 나면 여기 쌓입니다." : effectiveFilter === "unread" ? "최근 알림을 모두 읽었습니다." : "종목 상세 페이지에서 가격 알림을 설정해보세요."}
             </span>
           </div>
         ) : (
@@ -121,6 +133,7 @@ export default function AlertsPage() {
               const m = ruleMeta(a.ruleType);
               const failed = a.deliveryStatus === "FAILED";
               const unread = !a.readAt;
+              const mine = interest.active && a.stockId != null && isInterestSector(sectorOf(a.stockId), interest.interests);
               return (
                 <li
                   key={a.id}
@@ -138,6 +151,7 @@ export default function AlertsPage() {
                     <span className="flex items-center gap-1.5 text-sm font-semibold">
                       {unread && <span className="h-[7px] w-[7px] rounded-full bg-dracula-pink" aria-label="읽지 않음" />}
                       {stockName(a.stockId)} {m.tag}
+                      {mine && <InterestMark />}
                     </span>
                     <span className="text-13 text-tm-soft">{a.message}</span>
                     <span className="text-2xs text-tm-muted">

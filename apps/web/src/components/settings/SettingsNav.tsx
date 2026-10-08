@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 const ITEMS: { label: string; href: string; icon: IconName }[] = [
   { label: "화면", href: "/settings/appearance", icon: "sun" },
   { label: "알림", href: "/settings/notifications", icon: "bell" },
+  { label: "관심 분야", href: "/settings/interests", icon: "star" },
   { label: "구독", href: "/subscription", icon: "card" },
   { label: "증권사 연동", href: "/brokerage/connect", icon: "key" },
   { label: "리스크 한도", href: "/risk", icon: "shield" },

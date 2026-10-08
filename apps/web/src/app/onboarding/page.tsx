@@ -13,22 +13,13 @@ import {
   PAPER_INITIAL_CAPITALS, fetchPaperAccount, fetchPreferences, openPaperAccount, savePreferences,
   type InterestSector, type PaperAccountInfo, type PaperInitialCapital, type UsageStyle,
 } from "@/services/onboarding";
+import { INTEREST_SECTORS } from "@/lib/interestSectors";
 import { BULK_WATCHLIST_MAX, addStocksToWatchlist, type BulkAddResult, type WatchlistGroupLite } from "@/lib/watchlistBulk";
 
 const TOTAL = 4;
 
-/** 키는 서버 enum(V86 CHECK)과 같다. 라벨은 화면 전용. */
-const SECTORS: { key: InterestSector; label: string }[] = [
-  { key: "SEMICONDUCTOR", label: "반도체" },
-  { key: "SECONDARY_BATTERY", label: "2차전지" },
-  { key: "INTERNET_PLATFORM", label: "인터넷·플랫폼" },
-  { key: "BIO", label: "바이오" },
-  { key: "FINANCE", label: "금융" },
-  { key: "AUTOMOTIVE", label: "자동차" },
-  { key: "DIVIDEND", label: "배당주" },
-  { key: "ETF", label: "ETF" },
-  { key: "SHIPBUILDING_DEFENSE", label: "조선·방산" },
-];
+/** 키는 서버 enum(V86 CHECK)과 같다. 라벨·업종 매핑은 한 곳(lib/interestSectors, ADR-099)에서 가져온다. */
+const SECTORS = INTEREST_SECTORS;
 
 const STYLES: { key: UsageStyle; icon: IconName; title: string; desc: string }[] = [
   { key: "OBSERVE", icon: "eye", title: "관찰 위주", desc: "차트와 이벤트를 먼저 익히고 싶어요" },
@@ -72,7 +63,7 @@ export default function OnboardingPage() {
   const qc = useQueryClient();
   const [step, setStep] = useState(0);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  // ADR-089 — 관심 분야·사용 방식은 PUT /api/users/me/preferences로 저장한다. 홈·알림 우선순위 반영은 아직 없다.
+  // ADR-089 — 관심 분야·사용 방식은 PUT /api/users/me/preferences로 저장한다. ADR-099 — 홈·알림은 관심 분야를 정렬·강조 신호로만 쓴다.
   const [sectors, setSectors] = useState<InterestSector[]>([]);
   const [style, setStyle] = useState<UsageStyle | null>(null);
   const [capital, setCapital] = useState<PaperInitialCapital>(10_000_000);
@@ -117,7 +108,8 @@ export default function OnboardingPage() {
     setSaving(true);
     setSaveError(null);
     try {
-      await savePreferences(sectors, style);
+      const saved = await savePreferences(sectors, style);
+      qc.setQueryData(["users", "me", "preferences"], saved); // 홈·알림의 관심 분야 순(ADR-099)이 바로 반영되게
       if (!account) {
         const opened = await openPaperAccount(capital);
         setAccount(opened);
@@ -182,8 +174,7 @@ export default function OnboardingPage() {
             <>
               <Title
                 title="어떤 시장을 지켜볼까요?"
-                desc="고른 분야와 사용 방식은 계정에 저장되고, 이 화면에서 언제든 바꿀 수 있어요. 홈·알림에 먼저 올려 주는 기능은 준비 중입니다."
-                tag
+                desc="고른 분야와 사용 방식은 계정에 저장되고, 설정 › 관심 분야에서 언제든 바꿀 수 있어요. 홈 섹터·이벤트는 고른 분야를 앞에 두고 표시합니다(끌 수 있고, 숨기는 정보는 없어요)."
               />
               <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))" }}>
                 {SECTORS.map((s) => {
