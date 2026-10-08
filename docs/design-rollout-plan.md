@@ -126,14 +126,14 @@
 | /portfolio | 거래 내역 감정 칸 | 실데이터. 단, 거래마다 개별 조회(N+1) | history 응답에 emotion 포함 | P2 | ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — 내역 응답에 emotion·memo·출처 포함 |
 | /portfolio | 평균단가 차트 매수 마커 | 평균단가선만 | StockChart에 거래 마커 prop | P2 | ✅ [2f336bf1](https://github.com/polynomeer/monticker/commit/2f336bf1) `trades`/`interval` prop(KST 봉 버킷, 같은 봉 체결은 건수로 묶음), [d44d1a6a](https://github.com/polynomeer/monticker/commit/d44d1a6a) 모의 체결 매수·매도 마커(history 100건 단위 일괄 조회, 최근 500건까지) |
 | /matching | 가격별 주문 대기열 조각, "내 주문 · 대기 N번째" | 잔량 막대 하나, "내 주문 · N주 대기" | 호가 API에 가격별 주문 큐와 내 순번 노출 | P2 | |
-| /matching | 상단 평균 슬리피지·지연 | `—` | 주문 시점 최우선호가 저장 → 체결가 비교 집계, 엔진 처리시간 메트릭 | P2 | |
+| /matching | 상단 평균 슬리피지·지연 | `—` | 주문 시점 최우선호가 저장 → 체결가 비교 집계, 엔진 처리시간 메트릭 | P2 | ✅ [ADR-091](decisions/091-wallet-behavior-and-execution-quality-metrics.md) — V88 접수 시점 최우선 호가(KIS 실시간만)·접수 시각, `/api/matching/execution-quality`(최근 30일, 수량 가중 bp, 시장가 지연 중앙값). 호가 기록 없는 체결은 빼고 건수 표시 |
 | /wallet | 원장 행의 돈 흐름(예약금 → 정산 대기)과 출처 | 확실한 유형만 흐름 표시 | 원장 이벤트에 from/to 버킷과 주문 출처 | P2 | 부분 ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — 체결 행에 주문 출처 표시. from/to 버킷은 남음 |
 | /wallet | 영수증 "예약금 잠금" 단계 | 접수 → 체결 → 정산 3단계(모의 즉시체결) | 지정가 영수증 API가 생기면 연결 | P2 | |
 | /wallet | 감정 태그 "조급함"·"계획대로" | 백엔드 `EmotionType` 10종으로 표시 | enum 확장과 마이그레이션 | P2 | ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — `PLANNED`·`IMPATIENT`(12종), V82 데이터 이관 |
-| /wallet | 점수 카드 세부 지표(계획 준수율, 손절 준수율, 지난주 대비) | 등급 + 피드백 목록 | `/api/wallet/score` 세부 지표 | P2 | |
+| /wallet | 점수 카드 세부 지표(계획 준수율, 손절 준수율, 지난주 대비) | 등급 + 피드백 목록 | `/api/wallet/score` 세부 지표 | P2 | ✅ [ADR-091](decisions/091-wallet-behavior-and-execution-quality-metrics.md) — `details`: 이번 주(KST 월~) 계획 준수율(ADR-085 같은 함수)·손절 준수율(손절을 정한 손실 매도만, 처음 손절선 기준)·지난주 대비. 분모 0이면 `—` |
 | /wallet/replay | 계획 준수율, 계획 외 주문 | `—` | 주문별 계획 여부 집계 | P2 | ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — 계획 = 출처 Watch Rule·조건부·전략 또는 `PLANNED` 태그. 정의는 툴팁 |
 | /wallet/replay | 주문 복기 행의 감정 칩·코멘트 | 종목·방향·수량·수익률만 | ReplayEvent에 tradeId·emotion·memo. 코멘트는 AI 생성 | P2 | 부분 ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — tradeId·감정 칩·메모·출처(일괄 조회). AI 코멘트는 남음 |
-| /wallet/replay | "감정 분포 · 이번 주"·날짜별 % | 전체 기간 분포, 일별 손익 금액 | emotion-analysis 기간 파라미터, 일별 수익률 API | P2 | |
+| /wallet/replay | "감정 분포 · 이번 주"·날짜별 % | 전체 기간 분포, 일별 손익 금액 | emotion-analysis 기간 파라미터, 일별 수익률 API | P2 | ✅ [ADR-091](decisions/091-wallet-behavior-and-execution-quality-metrics.md) — `emotion-analysis?from&to`(체결일 기준, 최대 1년, 한 쿼리), `/api/wallet/daily-returns`(그날 손익 ÷ 00:00 평가자산, 입출금 제외, 초기화 이전·시세 없음은 `—`). 날짜 띠 요청 6 → 1 |
 | /settlement | 이번 주 순액, 공휴일, "완료" 서버 필터 | 정산 예정만 표시, 주말만 건너뜀, 현재 페이지 필터 | 기간별 정산 집계, 영업일 캘린더, `?status=` | P2 | ✅ [ADR-086](decisions/086-krx-trading-calendar.md) — `/api/settlement/paper/summary`(이번 주 순액), KRX 휴장일 반영(T+2·정산 캘린더·다가오는 휴장일), `?status=SETTLED`. 기존 PENDING 정산일은 기동 시 재정렬 |
 | /watch-rules | 관심종목 그룹 단위, 주문 유형·금액(계좌 %) | 비활성, 시장가 고정, 수량(주) | 규칙 대상 그룹, 지정가·비율 수량 | P2 | |
 | /watch-rules | 상단 "규칙 경유 손익" | `—` | 규칙 체결 손익 집계 | P2 | ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — 규칙이 낸 매도 체결의 실현 손익(이동평균), 합계·규칙별 |
