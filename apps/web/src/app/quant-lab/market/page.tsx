@@ -8,6 +8,7 @@ import { Btn, BtnLink, Notice, Panel, PanelCol, PanelRow, SelectBox, TerminalPag
 import { SegOpts } from "@/components/quant/parts";
 import { MarketStrategyCard, forwardWeeks } from "@/components/strategy-market/MarketStrategyCard";
 import { SubscribedSignalsPanel, useSubscribedSignalFeed } from "@/components/strategy-market/SubscribedSignalsPanel";
+import { hasNextPage, sharedTotalLabel, useMarketTotal } from "@/components/strategy-market/marketTotal";
 
 const PAGE_SIZE = 20;
 type Filter = "popular" | "new" | "verified" | "free" | "subscribed";
@@ -28,7 +29,9 @@ export default function StrategyMarketPage() {
     queryFn: () => authFetch(`/api/quant/market?page=${page}&size=${PAGE_SIZE}`).then(r => r.json()),
   });
 
+  const { data: total } = useMarketTotal();
   const list = useMemo(() => strategies ?? [], [strategies]);
+  const hasNext = hasNextPage(page, PAGE_SIZE, list.length, total);
   const subscribed = list.filter(s => s.isSubscribed);
   const { data: signalFeed } = useSubscribedSignalFeed(subscribed.length > 0);
 
@@ -52,7 +55,7 @@ export default function StrategyMarketPage() {
       title="전략 마켓"
       crumb="커뮤니티 공유 전략"
       stats={[
-        { label: "공유 전략", value: isLoading ? "—" : `${list.length}${list.length === PAGE_SIZE ? "+" : ""}개` },
+        { label: "공유 전략", value: sharedTotalLabel(total), tone: total == null ? "text-tm-muted" : undefined },
         { label: "검증 배지", value: "—", tone: "text-tm-muted" },
         { label: "구독 중", value: `${subscribed.length}개` },
         { label: "이번 달 신호", value: subscribed.length === 0 ? "0건" : signalFeed ? `${signalFeed.thisMonthCount}건` : "—", tone: signalFeed || subscribed.length === 0 ? undefined : "text-tm-muted" },
@@ -106,10 +109,10 @@ export default function StrategyMarketPage() {
             </div>
           )}
 
-          {(page > 0 || list.length === PAGE_SIZE) && (
+          {(page > 0 || hasNext) && (
             <div className="flex justify-center gap-2 pt-2">
               {page > 0 && <Btn kind="soft" size="sm" onClick={() => setPage(p => p - 1)}>이전</Btn>}
-              {list.length === PAGE_SIZE && <Btn kind="soft" size="sm" onClick={() => setPage(p => p + 1)}>다음</Btn>}
+              {hasNext && <Btn kind="soft" size="sm" onClick={() => setPage(p => p + 1)}>다음</Btn>}
             </div>
           )}
         </PanelCol>
