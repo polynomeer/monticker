@@ -31,7 +31,7 @@
       "title": "틱 처리량 (ticks/s, 1h 평균)",
       "targets": [
         {
-          "expr": "sum(rate(tick_latency_total_pipeline_seconds_count{job=\"monticker-worker\"}[1h]))",
+          "expr": "sum(rate(tick_latency_total_pipeline_seconds_count{job=~\"monticker-worker.*\"}[1h]))",
           "legendFormat": "ticks/s",
           "refId": "A"
         }
@@ -204,7 +204,7 @@
       "title": "파티션당 처리량 (ticks/s ÷ 파티션 수)",
       "targets": [
         {
-          "expr": "sum(rate(tick_latency_total_pipeline_seconds_count{job=\"monticker-worker\"}[1h])) / count(count by (partition) (kafka_consumer_fetch_manager_records_lag_max{topic=\"market_ticks\"}))",
+          "expr": "sum(rate(tick_latency_total_pipeline_seconds_count{job=~\"monticker-worker.*\"}[1h])) / count(count by (partition) (kafka_consumer_fetch_manager_records_lag_max{topic=\"market_ticks\"}))",
           "legendFormat": "per partition",
           "refId": "A"
         }
@@ -397,16 +397,16 @@
     },
     {
       "type": "timeseries",
-      "title": "Outbox 미완료 · 최고령",
+      "title": "Outbox 미완료 · 최고령 (api · worker)",
       "targets": [
         {
-          "expr": "max(outbox_pending{job=\"monticker-api\"})",
-          "legendFormat": "pending",
+          "expr": "max by (svc) (label_replace(outbox_pending{job=~\"monticker-(api|worker.*)\"}, \"svc\", \"$1\", \"job\", \"monticker-(api|worker).*\"))",
+          "legendFormat": "pending {{svc}}",
           "refId": "A"
         },
         {
-          "expr": "max(outbox_oldest_age_seconds{job=\"monticker-api\"}) / 60",
-          "legendFormat": "oldest (min)",
+          "expr": "max by (svc) (label_replace(outbox_oldest_age_seconds{job=~\"monticker-(api|worker.*)\"}, \"svc\", \"$1\", \"job\", \"monticker-(api|worker).*\")) / 60",
+          "legendFormat": "oldest (min) {{svc}}",
           "refId": "B"
         }
       ],
@@ -437,6 +437,7 @@
           "mode": "multi"
         }
       },
+      "description": "ADR-094 — api(public.event_publication)와 worker(worker_outbox.event_publication)를 따로 그린다. OutboxBacklog · WorkerOutboxBacklog",
       "id": 12
     },
     {
