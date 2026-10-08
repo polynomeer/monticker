@@ -108,6 +108,34 @@ export function decimate<T>(points: T[], max: number): T[] {
   return out;
 }
 
+/**
+ * 측정 라벨처럼 점 옆에 붙이는 라벨의 대략 폭(px) — 캔버스 글자 폭을 재지 않고 어림한다.
+ * 한글·전각은 글자 크기만큼, 나머지(숫자·기호)는 약 0.6배로 본다. padX는 좌우 여백 합.
+ */
+export function estimateLabelWidth(text: string, fontPx: number, padX = 0): number {
+  let w = 0;
+  for (const ch of text) w += /[ᄀ-ᇿ　-鿿가-힯＀-￯]/.test(ch) ? fontPx : fontPx * 0.6;
+  return Math.ceil(w + padX);
+}
+
+/**
+ * 점(anchorX, anchorY) 옆 라벨 위치. 기본은 점 오른쪽(gap만큼 띄워 왼쪽 정렬)이고, 차트 폭을 넘으면
+ * 점 왼쪽(오른쪽 정렬)으로 넘긴다 — 마지막 봉까지 잰 측정값이 오른쪽 가격축 밖으로 잘리지 않게.
+ * 양쪽 다 모자라면 차트 왼쪽 끝부터 그린다. y는 라벨 높이의 반만큼 여백을 두고 차트 안으로 자른다.
+ */
+export function placeLabel(
+  anchorX: number, anchorY: number,
+  width: number, height: number,
+  chartWidth: number, chartHeight: number,
+  gap = 6,
+): { x: number; y: number; align: "left" | "right" } {
+  const half = height / 2;
+  const y = Math.max(half, Math.min(chartHeight - half, anchorY));
+  if (anchorX + gap + width <= chartWidth) return { x: anchorX + gap, y, align: "left" };
+  if (anchorX - gap - width >= 0) return { x: anchorX - gap, y, align: "right" };
+  return { x: Math.max(0, chartWidth - width), y, align: "left" };
+}
+
 /** 드로잉 전체를 (봉 인덱스, 가격) 만큼 옮긴 새 점 목록 — 끌어서 옮기기 */
 export function shiftPoints(
   points: DrawingPoint[],

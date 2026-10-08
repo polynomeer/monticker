@@ -10,7 +10,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import type { ChartAdapterProps, CandleData, IndicatorKey, Drawing, DrawingPoint, SignalMarker, SentimentMarker, TradeMarker, ChartInterval } from "./types";
 import { aggregateTradeMarkers, describeTradeGroup, tradeMarkPoints, tradeTimesKst } from "./tradeMarkers";
 import { candleIndexAt, fmtCandleLabel, fractionalIndexAt, inferInterval, isIntraday, timeAtIndex } from "./chartTime";
-import { decimate, formatMeasure, heikinAshi, isDrawingMeaningful, magnetSnap, measure, shiftPoints, zoomWindow, type IndexedPoint } from "./drawingGeometry";
+import { decimate, estimateLabelWidth, formatMeasure, heikinAshi, isDrawingMeaningful, magnetSnap, measure, placeLabel, shiftPoints, zoomWindow, type IndexedPoint } from "./drawingGeometry";
 import { DRAWING_LIMITS } from "./drawingStorage";
 
 let echartsPromise: Promise<typeof import("echarts")> | null = null;
@@ -632,12 +632,15 @@ export default function EChartsAdapter({
       const [xb, yb] = ptPx(m.b);
       const r = measure(m.a, m.b);
       const color = r.priceDiff >= 0 ? theme.upColor : theme.downColor;
+      const text = formatMeasure(r);
+      // 마지막 봉 근처까지 재면 라벨이 오른쪽 가격축 밖으로 잘린다 — 넘치면 점 왼쪽으로 넘긴다
+      const label = placeLabel(xb, yb, estimateLabelWidth(text, 11, 12), 11 + 6, chart.getWidth(), height);
       elements.push(
         { type: "rect", silent: true, z: 51, shape: { x: Math.min(xa, xb), y: Math.min(ya, yb), width: Math.abs(xb - xa), height: Math.abs(yb - ya) }, style: { fill: `${color}26`, stroke: color, lineWidth: 1 } },
         { type: "line", silent: true, z: 51, shape: { x1: xa, y1: ya, x2: xb, y2: yb }, style: { stroke: color, lineWidth: 1, lineDash: [3, 3] } },
         {
           type: "text", silent: true, z: 52,
-          style: { text: formatMeasure(r), x: xb + 6, y: yb, fill: theme.bg, font: "bold 11px Pretendard, sans-serif", backgroundColor: color, padding: [3, 6], borderRadius: 3, verticalAlign: "middle" },
+          style: { text, x: label.x, y: label.y, align: label.align, fill: theme.bg, font: "bold 11px Pretendard, sans-serif", backgroundColor: color, padding: [3, 6], borderRadius: 3, verticalAlign: "middle" },
         },
       );
     }

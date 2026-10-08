@@ -184,6 +184,7 @@ describe("EChartsAdapter — 드로잉", () => {
     expect(onChange).not.toHaveBeenCalled();
     const label = lastGraphic().children.find((c) => typeof (c.style as { text?: string })?.text === "string");
     expect((label!.style as { text: string }).text).toBe("+10 (+10.00%) · 5봉");
+    expect(label!.style).toMatchObject({ x: 48 + 7 * 10 + 6, align: "left" });
   });
 
   it("구간 확대 — 두 점 사이로 dataZoom 후 도구 해제", async () => {
