@@ -17,14 +17,16 @@ class OrderBookService(
     private val mockProvider: MockOrderBookProvider,
 ) {
     fun getOrderBook(stockId: Long): OrderBookResponse {
-        val row = jdbc.queryForMap("SELECT symbol, name, market FROM stocks WHERE id = ?", stockId)
+        // queryForMap·queryForObject는 행이 없으면 예외라 없는 종목·시세 없는 종목이 404가 아니라 500이었다
+        val row = jdbc.queryForList("SELECT symbol, name, market FROM stocks WHERE id = ?", stockId).firstOrNull()
+            ?: throw NoSuchElementException("종목을 찾을 수 없습니다")
         val symbol = row["symbol"] as String
         val market = (row["market"] as? String) ?: "KOSPI"
 
-        val currentPrice: BigDecimal = jdbc.queryForObject(
+        val currentPrice: BigDecimal = jdbc.query(
             "SELECT close FROM candles_1m WHERE stock_id = ? ORDER BY candle_time DESC LIMIT 1",
-            BigDecimal::class.java, stockId,
-        ) ?: throw IllegalArgumentException("현재가 없음: stockId=$stockId")
+            { rs, _ -> rs.getBigDecimal(1) }, stockId,
+        ).firstOrNull() ?: throw NoSuchElementException("현재가가 없어 호가를 만들 수 없습니다")
 
         // 우선순위: KIS 실시간 → Yahoo Finance → Mock
         val snapshot =
