@@ -11,7 +11,8 @@
 # 메트릭 출처: Spring Boot Actuator(Micrometer) + resilience4j-micrometer + 이 저장소가 직접 등록한
 # 카운터(redis_command_failed_total, search_fallback_total, candle_flush_failed_total,
 # alert_rule_eval_failed_total, dlt_messages_total, ws_active_connections, outbox_pending,
-# saga_incomplete, brokerage_order_unresolved, trading_halt_active, conditional_order_active_without_feed). 규칙을 추가할 때는 그 메트릭이 실제로 노출되는지 먼저 확인할 것 —
+# saga_incomplete, brokerage_order_unresolved, trading_halt_active, conditional_order_active_without_feed,
+# market_calendar_coverage_years_ahead, market_calendar_uncovered_lookups_total, payment_result_total, ledger_reconciliation_*). 규칙을 추가할 때는 그 메트릭이 실제로 노출되는지 먼저 확인할 것 —
 # 존재하지 않는 메트릭에 건 알람은 영원히 조용하다. 실제로 그랬다: 게이지를 `_total`로 등록하면 Micrometer가
 # 접미사를 떼고 노출해 OutboxBacklog·SagaIncomplete가 빈 시계열을 보고 있었다(2026-09-14, 대시보드 작업 중 발견).
 # 검증: infra/monitoring/check-metrics.py 가 규칙·대시보드의 메트릭 이름을 실제 /actuator/prometheus 출력과 대조한다.
@@ -269,12 +270,70 @@ groups:
           description: "지난 15분간 {{ $value }}건이 재시도 후 DLT로 갔습니다. 수동 재처리 대상 — 원인을 보고 재발행할 것 (runbook: tick-stalled)."
 
       - alert: OutboxBacklog
-        expr: outbox_pending > 100 or outbox_oldest_age_seconds > 600   # 게이지엔 _total이 붙지 않는다 (BacklogGauges 주석)
+        # api Outbox(public.event_publication). ADR-094 이후 worker도 같은 게이지 이름으로 자기 테이블을 내보내므로 job으로
+        # 가른다 — 필터가 없으면 worker 적체에 "event_publication(api)"라는 엉뚱한 문구로 울린다. worker는 WorkerOutboxBacklog.
+        # pod마다 같은 테이블을 세므로 max로 접는다(replica 수만큼 알람이 중복되지 않게).
+        # 게이지엔 _total이 붙지 않는다 (BacklogGauges 주석).
+        expr: |
+          max(outbox_pending{job="monticker-api"}) > 100
+          or
+          max(outbox_oldest_age_seconds{job="monticker-api"}) > 600
         for: 5m
         labels: { severity: warning }
         annotations:
-          summary: "Outbox 적체"
-          description: "event_publication에 미완료 이벤트 {{ $value }}건 또는 10분 이상 된 이벤트가 있습니다. Kafka 발행이 막혀 있을 수 있습니다."
+          summary: "api Outbox 적체"
+          description: "public.event_publication에 미완료 이벤트가 100건을 넘거나 10분 넘은 이벤트가 있습니다(값 {{ $value }}). Kafka 발행 또는 모듈 리스너가 막혀 있을 수 있습니다 (runbook: outbox-backlog)."
+
+      - alert: WorkerOutboxBacklog
+        # ADR-094 — worker Outbox(worker_outbox.event_publication). WorkerOutboxSchemaGuard가 같은 이름의 게이지를 내보낸다.
+        # worker job은 compose 모놀리스에서 monticker-worker, MSA·K8s에서 monticker-worker-{market,event,alert} —
+        # 역할마다 같은 테이블을 세므로 max로 접는다. 임계는 api와 같다.
+        expr: |
+          max(outbox_pending{job=~"monticker-worker.*"}) > 100
+          or
+          max(outbox_oldest_age_seconds{job=~"monticker-worker.*"}) > 600
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "worker Outbox 적체"
+          description: "worker_outbox.event_publication에 미완료 이벤트가 100건을 넘거나 10분 넘은 이벤트가 있습니다(값 {{ $value }}). worker 재전송이 따라가지 못하거나 Kafka 발행이 막혀 있습니다 — 수집 이벤트(탐지·알림)가 늦게 나갑니다 (runbook: outbox-backlog)."
+
+      - alert: MarketCalendarNextYearMissing
+        # ADR-086 — KRX 휴장일 캘린더가 올해까지만 있다(0) 또는 올해도 없다(-1). 다음 해 휴장일 마이그레이션
+        # (V{n}__krx_holidays_{year}.sql)이 필요하다. KRX는 보통 12월에 다음 해 휴장일을 공지하므로 11월부터 티켓을 연다
+        # (month()는 UTC — KST 11월 1일 09시에 시작해도 충분히 이르다). 1~10월의 0은 정상이다.
+        # 게이지는 api(MarketCalendar)만 내보낸다. pod마다 같은 값이라 max로 접는다.
+        expr: |
+          max(market_calendar_coverage_years_ahead{job="monticker-api"}) <= 0
+          and on() month() >= 11
+        for: 1h
+        labels: { severity: warning }
+        annotations:
+          summary: "내년 KRX 휴장일 캘린더 없음 (coverage={{ $value }})"
+          description: "market_calendar_years에 내년 행이 없습니다. 1월 1일이 지나면 정산일(T+2)·영업일 계산이 주말만 휴장으로 돌아갑니다 — 내년 KRX 휴장일 마이그레이션을 넣을 것 (runbook: market-calendar)."
+
+      - alert: MarketCalendarCurrentYearMissing
+        # 올해 데이터조차 없다(-1). 지금 이 순간 실거래·모의 정산일이 공휴일을 영업일로 세고 있다. 월과 무관하게 바로 연다.
+        expr: |
+          max(market_calendar_coverage_years_ahead{job="monticker-api"}) < 0
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "올해 KRX 휴장일 캘린더 없음"
+          description: "market_calendar_years에 올해 행이 없어 정산일·영업일이 주말만 휴장으로 계산되고 있습니다. 즉시 올해 휴장일 마이그레이션을 넣을 것 — 넣으면 1시간 안에 다시 읽고 정산일을 재정렬합니다 (runbook: market-calendar)."
+
+      - alert: MarketCalendarUncoveredLookup
+        # ADR-086 — 캘린더에 없는 해를 실제로 물었다(주말만 휴장으로 답함). 커버리지 게이지와 달리 "실제로 틀린 답이 나갔다"는 신호.
+        # 카운터는 첫 조회 때 생기므로 increase()는 처음 생긴 시계열의 첫 증가를 놓친다 — 1시간 안에 새로 생긴 {year}
+        # 시계열도 함께 잡는다(unless offset).
+        expr: |
+          sum by (year) (increase(market_calendar_uncovered_lookups_total[1h])) > 0
+          or
+          sum by (year) (market_calendar_uncovered_lookups_total unless market_calendar_uncovered_lookups_total offset 1h) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "캘린더에 없는 해({{ $labels.year }}) 조회 발생"
+          description: "{{ $labels.year }}년 KRX 휴장일 데이터 없이 영업일·정산일을 계산했습니다 — 결과가 공휴일을 영업일로 셌을 수 있습니다. 미래 해면 휴장일 마이그레이션, 과거 해면 호출 경로를 확인할 것 (runbook: market-calendar)."
 
       - alert: SagaIncomplete
         expr: saga_incomplete > 0
