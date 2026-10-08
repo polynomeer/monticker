@@ -209,10 +209,7 @@ class StrategyMarketControllerTest {
 
     // ── search — 서버 측 전략 검색 ────────────────────────────────────────────────
 
-    private fun nameView(id: String, name: String) = object : RuleSetNameView {
-        override val id: String? = id
-        override val name: String = name
-    }
+    private fun nameView(id: String, name: String) = RuleSetNameView(id, name)
 
     @Test
     fun `search rejects blank, too long, oversized and too deep queries before touching storage`() {
