@@ -27,6 +27,8 @@ data class BehaviorScoreResponse(
     val grade: BehaviorGrade,
     val feedback: List<String>,
     val reliabilityNotes: Map<String, Any?>,
+    /** ADR-091 — 점수 카드 세부 지표(계획·손절 준수율, 지난주 대비). 조회 때 계산해 붙인다(저장하지 않는다). */
+    val details: ScoreDetails? = null,
 )
 
 /**
