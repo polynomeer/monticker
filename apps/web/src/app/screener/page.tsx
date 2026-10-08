@@ -13,6 +13,7 @@ import {
   type ScreenerCriteria, type ScreenerEvent,
 } from "@/components/screener/criteria";
 import { useSavedScreenMutations, useSavedScreens } from "@/components/screener/savedScreens";
+import { downloadCsv, kstDateStamp } from "@/components/portfolio/csv";
 import {
   Btn, Checkbox, Chip, Notice, Panel, PanelRow, Seg, SelectBox, TerminalPage, TitleBlock, fmtPct, dirClass,
 } from "@/components/terminal";
@@ -21,7 +22,7 @@ import {
 const BASE_TABS = [
   { key: "realtime", label: "실시간 차트" },
   { key: "movers",   label: "급등·급락" },
-  { key: "foreign",  label: "외국인·기관 동향" },
+  { key: "foreign",  label: "외국인·기관 동향 · 준비 중" },
 ];
 const SORTS = [
   { key: "amount",  label: "거래대금순" },
@@ -290,7 +291,15 @@ export default function ScreenerPage() {
             else setCriteria((c) => ({ ...c, sort: "amount" }));
           }}
           actions={["plus", "download", "expand"]}
-          onAction={(a) => { if (a === "plus" && isLoggedIn) { save.reset(); setNaming(""); } }}
+          onAction={(a) => {
+            if (a === "plus" && isLoggedIn) { save.reset(); setNaming(""); }
+            if (a === "download" && items.length) {
+              // 화면에 보이는 결과 그대로 — 수급 비율은 실제 소스가 없어 넣지 않는다
+              downloadCsv(`screener-${kstDateStamp()}.csv`,
+                ["종목코드", "종목명", "시장", "섹터", "현재가", "등락률(%)", "거래량 배수", "거래대금", "시가총액", "PER", "PBR"],
+                items.map((i) => [i.symbol, i.name, i.market, i.sector ?? "", i.price, i.changeRate, i.volumeMultiple ?? "", i.amount, i.marketCap ?? "", i.per ?? "", i.pbr ?? ""]));
+            }
+          }}
           className="flex-[999_1_640px]"
           bodyClassName="gap-0 px-1.5 pb-1.5 pt-1"
           right={
@@ -303,6 +312,11 @@ export default function ScreenerPage() {
             </div>
           }
         >
+          {tab === "foreign" && (
+            <Notice className="m-2">
+              외국인·기관 수급 데이터는 아직 연동되지 않았습니다(준비 중). 지금은 실시간 차트와 같은 목록을 보여 줍니다.
+            </Notice>
+          )}
           {error && (
             <Notice tone="warn" className="m-2">
               {error.status === 401 ? "퀀트 시그널 조건은 로그인 후 쓸 수 있습니다." : error.message}

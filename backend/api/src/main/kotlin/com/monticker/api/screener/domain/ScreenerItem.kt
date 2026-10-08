@@ -13,8 +13,9 @@ data class ScreenerItem(
     val changeAmount: java.math.BigDecimal,
     val volume: Long,
     val amount: java.math.BigDecimal, // 거래대금
-    val buyRatio: Int,                // Mock: 40~70
-    val sellRatio: Int,               // 100 - buyRatio
+    /** 실제 매수/매도(외국인·기관) 수급 데이터 소스가 없다 — 지어낸 값을 보내지 않고 null. 화면은 "—"·준비 중 */
+    val buyRatio: Int? = null,
+    val sellRatio: Int? = null,
     val marketCap: Long?,             // 시가총액 (원 단위) — KOSPI/KOSDAQ만 존재
     val per: java.math.BigDecimal?,
     val pbr: java.math.BigDecimal?,

@@ -237,7 +237,6 @@ class ScreenerRepository(private val jdbc: JdbcTemplate) {
         val changeAmount = if (prevClose != null) price.subtract(prevClose) else BigDecimal.ZERO
         val volume = rs.getLong("volume")
         val amount = rs.getBigDecimal("amount") ?: BigDecimal.ZERO
-        val buyRatio = (40 + (rs.getLong("stock_id") * 7 + volume) % 31).toInt()
         val marketCap = rs.getLong("market_cap").let { if (rs.wasNull()) null else it }
         val volMult = rs.getDouble("vol_mult").let { if (rs.wasNull()) null else it }
 
@@ -254,8 +253,8 @@ class ScreenerRepository(private val jdbc: JdbcTemplate) {
             changeAmount = changeAmount,
             volume       = volume,
             amount       = amount,
-            buyRatio     = buyRatio,
-            sellRatio    = 100 - buyRatio,
+            buyRatio     = null,   // 종목 id·거래량으로 만든 가짜 비율(40~70%)을 보내던 것을 끊었다 — 실제 수급 소스 없음
+            sellRatio    = null,
             marketCap    = marketCap,
             per          = rs.getBigDecimal("per"),
             pbr          = rs.getBigDecimal("pbr"),

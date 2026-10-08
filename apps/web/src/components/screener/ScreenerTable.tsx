@@ -39,7 +39,7 @@ const COL: Record<ColumnKey, ScreenerColumn> = {
   marketCap: { key: "marketCap", label: "시가총액",     width: "w-24 justify-end" },
   sector:    { key: "sector",    label: "섹터",         width: "w-24" },
   amount:    { key: "amount",    label: "거래대금",     width: "w-24 justify-end" },
-  buySell:   { key: "buySell",   label: "매수/매도 비율", width: "w-36" },
+  buySell:   { key: "buySell",   label: "매수/매도 비율 · 준비 중", width: "w-36" },
   per:       { key: "per",       label: "PER",          width: "w-16 justify-end" },
   pbr:       { key: "pbr",       label: "PBR",          width: "w-16 justify-end" },
   actions:   { key: "actions",   label: "",             width: "w-[84px] justify-end" },

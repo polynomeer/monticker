@@ -139,11 +139,11 @@ export default function NotificationSettingsPage() {
 
   const price = pair("priceAlertPush", "priceAlertEmail");
   const volume = pair("volumeSurgePush", "volumeSurgeEmail");
-  const news = pair("newsAlertPush", "newsAlertEmail");
   const quant = pair("quantSignalPush", "quantSignalEmail");
   const fills = pair("fillsPush", "fillsEmail");
   const market = pair("strategyMarketNewsPush", "strategyMarketNewsEmail");
-  const kinds = [price.on, volume.on, news.on, quant.on, fills.on, market.on, pref.weeklyReportEmail];
+  // 뉴스·공시 알림과 주간 리포트는 설정만 저장되고 보내는 코드가 아직 없다(준비 중) — 켜진 알림 수에 넣지 않는다
+  const kinds = [price.on, volume.on, quant.on, fills.on, market.on];
   const onCount = pref.allEnabled ? kinds.filter(Boolean).length : 0;
   const channels = [pref.pushEnabled && "푸시", pref.emailEnabled && "이메일"].filter(Boolean).join(" · ") || "없음";
 
@@ -193,8 +193,8 @@ export default function NotificationSettingsPage() {
                 <Row title="거래량 급증" sub="거래량 급증 알림 규칙 · 관심종목 거래량 급증 이벤트" extra={volume.channels}>
                   <Toggle checked={volume.on} onChange={volume.toggle} label="거래량 급증" />
                 </Row>
-                <Row title="뉴스·공시" sub="관심종목 관련 뉴스와 DART 공시" extra={news.channels}>
-                  <Toggle checked={news.on} onChange={news.toggle} label="뉴스·공시" />
+                <Row title="뉴스·공시" sub="관심종목 관련 뉴스와 DART 공시 — 아직 보내지 않습니다" preview>
+                  <Toggle checked={false} disabled label="뉴스·공시 (준비 중)" />
                 </Row>
                 <Row title="퀀트 시그널" sub="내 전략의 포워드 테스트 매수·매도 신호 (모의 신호 — 주문은 나가지 않습니다)" extra={quant.channels}>
                   <Toggle checked={quant.on} onChange={quant.toggle} label="퀀트 시그널" />
@@ -212,8 +212,8 @@ export default function NotificationSettingsPage() {
 
               <H2>리포트</H2>
               <div>
-                <Row title="주간 투자 행동 리포트" sub="매주 월요일 · 이메일">
-                  <Toggle checked={pref.weeklyReportEmail} onChange={set("weeklyReportEmail")} label="주간 투자 행동 리포트" />
+                <Row title="주간 투자 행동 리포트" sub="매주 월요일 · 이메일 — 아직 보내지 않습니다" preview>
+                  <Toggle checked={false} disabled label="주간 투자 행동 리포트 (준비 중)" />
                 </Row>
                 <Row
                   title="전략 마켓 소식"

@@ -73,7 +73,7 @@ export default function PositionsPanel({ symbol, stockId, brokerageConnected, ac
   ];
 
   return (
-    <Panel tabs={tabs} active={tab} onTabChange={(k) => setTab(k as Tab)} actions={["plus", "download", "expand"]} bodyClassName="px-1.5 pb-1.5 pt-1">
+    <Panel tabs={tabs} active={tab} onTabChange={(k) => setTab(k as Tab)} actions={["plus", "expand"]} bodyClassName="px-1.5 pb-1.5 pt-1">
       {!isLoggedIn ? (
         <p className="m-0 py-8 text-center text-13 text-tm-muted">로그인이 필요합니다.</p>
       ) : tab === "holdings" ? (
