@@ -163,7 +163,7 @@
 | /quant-lab/builder | 버전 탭 | 제목에 vN만 | 프론트만(`GET /rulesets/{id}/versions`가 이미 있음) | P2 | ✅ [552db045](https://github.com/polynomeer/monticker/commit/552db045) 버전 목록·읽기 전용 보기·이전 버전 대비 변경 요약, 불러오기는 기존 저장(PUT)으로만 새 버전 기록, 운용 중에는 막음 |
 | /quant-lab/[id] | KOSPI 비교선, 포워드 일치율·구독자, 검증 배지 신청 | 수치만, `—`, 비활성 | 벤치마크 시계열, 구독자 조회, 배지 심사 정책 | P2 | |
 | /backtest | 캔들 + 매수·매도 마커, 종목 검색 | 자산 곡선, 하드코딩 5종목 | StockChart 거래 마커, StockPicker 교체 | P2 | ✅ [125e1c48](https://github.com/polynomeer/monticker/commit/125e1c48) 기간 일봉 + 진입·청산 마커(`TradeRecord.quantity`), StockPicker 검색 |
-| /analytics | 무작위 포트폴리오 산점도·최대 샤프 점, 분석 기간 | 실제 프론티어만, "보유 일봉 전체" | 표본 응답, max-Sharpe 최적화, 기간 파라미터 | P2 | |
+| /analytics | 무작위 포트폴리오 산점도·최대 샤프 점, 분석 기간 | 실제 프론티어만, "보유 일봉 전체" | 표본 응답, max-Sharpe 최적화, 기간 파라미터 | P2 | ✅ [ADR-097](decisions/097-analytics-random-portfolios-and-max-sharpe.md) [2a74549c](https://github.com/polynomeer/monticker/commit/2a74549c)·[c5849c5a](https://github.com/polynomeer/monticker/commit/c5849c5a) — 기간 3M~2Y·직접 지정(KST, 60일~3년), 모든 종목이 함께 거래된 날로 정렬, 고정 시드 Dirichlet 표본(≤2,000)·"샤프 비율 최대 지점 (과거 데이터 기준)"(표본 최댓값에서 투영 경사상승), 무위험 수익률은 서버 설정. 차트는 어댑터(`EChartsFrontierAdapter`) |
 | /quant-lab/market | 검증 배지·필터·정렬, 공유 전략 총수 | "검증 전", 비활성, "N+개" | 배지 부여 로직, total count | P2 | 부분 — 공유 전략 총수 ✅ [9bbb2135](https://github.com/polynomeer/monticker/commit/9bbb2135)·[f0c37c35](https://github.com/polynomeer/monticker/commit/f0c37c35) `GET /api/quant/market/count`(목록과 같은 FROM·JOIN). 검증 배지는 심사 정책 결정 필요 |
 | /quant-lab/earnings | 평균 별점, 다음 정산일 | `—` | 리뷰·별점, 정산 일정 | P2 | |
 

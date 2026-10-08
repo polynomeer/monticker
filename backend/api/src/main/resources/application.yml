@@ -208,6 +208,10 @@ app:
     manage-indices: ${SEARCH_MANAGE_INDICES:true}
     # 기동 시 DB → ES 전량 동기화. 인덱스가 커지면 기동 자체가 장애라 기본 false — dev/local 프로필만 true.
     reindex-on-startup: ${SEARCH_REINDEX_ON_STARTUP:false}
+  analytics:
+    # ADR-097 — /analytics 샤프 비율의 연 무위험 수익률(소수, 0.03 = 3%). 기본 0: 국내·해외 종목을 섞어 분석하므로
+    # 특정 통화 금리를 가정하지 않는다. 허용 범위 -0.05~0.2(벗어나면 기동 실패). 응답의 riskFreeRate로 노출된다.
+    risk-free-rate: ${ANALYTICS_RISK_FREE_RATE:0.0}
   wallet:
     # ADR-043 — 일일 원장 대사의 불일치 처리. alert: ERROR + LedgerMismatch 페이지 알람.
     # report: WARN + mode="report" 카운터만 — 최초 실행에서 기존 드리프트를 조사·정리할 때까지 (운영 ConfigMap이 결정).

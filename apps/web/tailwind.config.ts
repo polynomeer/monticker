@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import { dracula, tm } from "./src/lib/designTokens";
 
 const config: Config = {
   content: [
@@ -10,35 +11,14 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        dracula: {
-          bg: "#282a36",
-          surface: "#21222c",
-          line: "#44475a",
-          comment: "#6272a4",
-          fg: "#f8f8f2",
-          purple: "#bd93f9",
-          pink: "#ff79c6",
-          green: "#50fa7b",
-          cyan: "#8be9fd",
-          orange: "#ffb86c",
-          red: "#ff5555",
-          yellow: "#f1fa8c",
-        },
+        // 값은 src/lib/designTokens.ts 한 곳에 둔다 — 캔버스 차트도 같은 값을 읽는다
+        dracula: { ...dracula },
         market: {
           up: "#0ecb81",
           down: "#f6465d",
         },
         // 터미널 디자인 시안(ADR-066) 표면 토큰 — 페이지 < 패널 < 인셋/강조 순서로 밝아진다
-        tm: {
-          page: "#1b1c24",
-          panel: "#282a36",
-          inner: "#21222c",
-          raised: "#343746",
-          line: "#34364a",
-          line2: "#44475a",
-          soft: "#c3c8e2",
-          muted: "#a4abcf",
-        },
+        tm: { ...tm },
         // 상승/하락 색 — 사용자 차트 테마(themeStore)를 따라 CSS 변수로 바뀐다
         up: "rgb(var(--mt-up) / <alpha-value>)",
         down: "rgb(var(--mt-down) / <alpha-value>)",

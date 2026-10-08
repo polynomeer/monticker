@@ -26,7 +26,7 @@ class HoldingsComparisonService(
     private val paperPortfolio: PaperPortfolioQueryService,
     private val optimizerQuery: PortfolioOptimizerQueryService,
 ) {
-    fun compare(userId: Long, stockIds: List<Long>): CurrentPortfolioPoint? {
+    fun compare(userId: Long, stockIds: List<Long>, period: AnalysisPeriod): CurrentPortfolioPoint? {
         val ids = stockIds.distinct()
         val holdings = paperPortfolio.buildHoldings(userId).filter { it.value > BigDecimal.ZERO }
         if (holdings.isEmpty()) return null
@@ -37,7 +37,7 @@ class HoldingsComparisonService(
         if (scopeValue <= BigDecimal.ZERO) return null
 
         val weights = inScope.associate { it.stockId to it.value.toDouble() / scopeValue.toDouble() }
-        val (ret, risk) = optimizerQuery.evaluateWeights(ids, weights) ?: return null
+        val (ret, risk) = optimizerQuery.evaluateWeights(ids, weights, period) ?: return null
         return CurrentPortfolioPoint(
             weights           = weights,
             expectedReturn    = ret,

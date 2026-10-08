@@ -8,6 +8,10 @@ import {
   AutoGrid, Bar, Btn, Chip, Field, IconBtn, Notice, Panel, PanelRow, Pill, Stat, TerminalPage,
 } from "@/components/terminal";
 import { FrontierChart } from "@/components/analytics/FrontierChart";
+import {
+  PERIOD_PRESETS, appendPeriod, customPeriodError, minusDays, periodLabel, type AnalysisPeriodSel,
+} from "@/components/analytics/analysisPeriod";
+import { kstToday } from "@/components/wallet/insights";
 import { usePaperPortfolio } from "@/hooks/usePaperTrade";
 import { getScreenerQuotes } from "@/services/screener";
 import { saveRebalanceDraft, toDraftWeights } from "@/lib/rebalanceDraft";
@@ -17,6 +21,17 @@ import { saveRebalanceDraft, toDraftWeights } from "@/lib/rebalanceDraft";
 interface FrontierPoint {
   targetReturn: number; expectedReturn: number; expectedRisk: number;
   weights: Record<string, number>;
+}
+/** 실제로 계산에 쓴 기간 — firstDate~lastDate는 모든 종목이 함께 거래된 첫·마지막 날 */
+interface PeriodInfo {
+  period: string; from: string; to: string; firstDate: string; lastDate: string; observations: number;
+}
+interface SamplePoint { expectedReturn: number; expectedRisk: number; sharpe: number | null }
+interface MaxSharpePoint { weights: Record<string, number>; expectedReturn: number; expectedRisk: number; sharpe: number }
+/** GET /api/analytics/portfolio/frontier (ADR-097) */
+interface FrontierResponse {
+  stockIds: number[]; period: PeriodInfo; frontier: FrontierPoint[]; samples: SamplePoint[];
+  maxSharpe: MaxSharpePoint | null; riskFreeRate: number; seed: number; method: string;
 }
 /** 모의투자 보유를 평가금액 비중으로 바꾼 비교점(분석 종목 안에서 합 1). */
 interface CurrentPortfolioPoint {
@@ -32,6 +47,7 @@ interface OptimizationResult {
   currentEqualWeightRisk: number; currentEqualWeightReturn: number;
   suggestion: string;
   current: CurrentPortfolioPoint | null;
+  period: PeriodInfo | null;
 }
 interface HarvestingCandidate {
   stockId: number; symbol: string; name: string; quantity: number;
@@ -74,8 +90,8 @@ const REGIME_META: Record<string, { label: string; tone: "green" | "red" | "mute
 
 function won(n: number) { return Math.round(n).toLocaleString("ko-KR"); }
 function pct(n: number) { return (n * 100).toFixed(2) + "%"; }
-/** 무위험 수익률 0 가정의 단순 샤프(연 수익/연 변동성) */
-function sharpe(ret: number, risk: number) { return risk > 0 ? ret / risk : null; }
+/** 샤프 = (연 수익 − 연 무위험 수익률) / 연 변동성. 무위험 수익률은 서버 설정값(응답의 riskFreeRate) */
+function sharpe(ret: number, risk: number, rf = 0) { return risk > 0 ? (ret - rf) / risk : null; }
 
 function StockTabs({ value, onChange }: { value: number; onChange: (id: number) => void }) {
   return (
@@ -89,12 +105,13 @@ function StockTabs({ value, onChange }: { value: number; onChange: (id: number) 
 
 // ── 1. Portfolio Optimizer — 효율적 프론티어 + 분석 결과 비중 ─────────────────────
 
-function usePortfolioOptimizer(selected: number[]) {
+function usePortfolioOptimizer(selected: number[], period: AnalysisPeriodSel) {
   const opt = useQuery<OptimizationResult>({
-    queryKey: ["analytics", "optimize", selected],
+    queryKey: ["analytics", "optimize", selected, period],
     queryFn: async () => {
       const params = new URLSearchParams();
       selected.forEach(id => params.append("stockIds", String(id)));
+      appendPeriod(params, period);
       // 동일가중과 함께 사용자의 현재(모의투자) 보유 비중도 같은 축에서 비교한다.
       params.set("compareHoldings", "true");
       const res = await authFetch(`/api/analytics/portfolio/optimize?${params}`);
@@ -106,13 +123,15 @@ function usePortfolioOptimizer(selected: number[]) {
     enabled: false,
   });
 
-  const frontier = useQuery<FrontierPoint[]>({
-    queryKey: ["analytics", "frontier", selected],
+  const frontier = useQuery<FrontierResponse>({
+    queryKey: ["analytics", "frontier", selected, period],
     queryFn: async () => {
       const params = new URLSearchParams();
       selected.forEach(id => params.append("stockIds", String(id)));
+      appendPeriod(params, period);
       const res = await authFetch(`/api/analytics/portfolio/frontier?${params}`);
-      if (!res.ok) return [];
+      // 겹치는 거래일 부족·기간 오류는 400 + message — 빈 차트 대신 이유를 보여준다.
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message ?? "위험-수익 분포를 계산하지 못했습니다."); }
       return res.json();
     },
     enabled: false,
@@ -289,7 +308,15 @@ export default function AnalyticsPage() {
   const [selected, setSelected] = useState<number[]>([2, 3, 5, 6]);
   // 보유 종목에서 불러온 종목은 고정 목록(STOCKS)에 없을 수 있다 — 이름을 따로 기억한다.
   const [names, setNames] = useState<Record<number, string>>({});
-  const { opt, frontier } = usePortfolioOptimizer(selected);
+  const [period, setPeriod] = useState<AnalysisPeriodSel>({ kind: "1Y" });
+  const today = kstToday();
+  const [customFrom, setCustomFrom] = useState(() => minusDays(today, 365));
+  const [customTo, setCustomTo] = useState(today);
+  const [customOpen, setCustomOpen] = useState(false);
+  const customError = customOpen ? customPeriodError(customFrom, customTo, today) : null;
+  const { opt, frontier } = usePortfolioOptimizer(selected, period);
+  const fr = frontier.data;
+  const rf = fr?.riskFreeRate ?? 0;
   const { data: paper } = usePaperPortfolio();
   const holdings = (paper?.holdings ?? []).filter(h => h.value > 0);
   const data = opt.data;
@@ -335,9 +362,11 @@ export default function AnalyticsPage() {
       setSending(false);
     }
   };
-  const optSharpe = data ? sharpe(data.expectedReturn, data.expectedRisk) : null;
-  const eqSharpe = data ? sharpe(data.currentEqualWeightReturn, data.currentEqualWeightRisk) : null;
-  const heldSharpe = held ? sharpe(held.expectedReturn, held.expectedRisk) : null;
+  const optSharpe = data ? sharpe(data.expectedReturn, data.expectedRisk, rf) : null;
+  const eqSharpe = data ? sharpe(data.currentEqualWeightReturn, data.currentEqualWeightRisk, rf) : null;
+  const heldSharpe = held ? sharpe(held.expectedReturn, held.expectedRisk, rf) : null;
+  const best = fr?.maxSharpe ?? null;
+  const usedPeriod = fr?.period ?? data?.period ?? null;
 
   return (
     <TerminalPage
@@ -345,11 +374,11 @@ export default function AnalyticsPage() {
       crumb="퀀트랩 · 최적화 도구"
       stats={[
         { label: "선택 종목", value: `${selected.length}개` },
-        { label: "분석 기간", value: "보유 일봉 전체", tone: "text-tm-soft" },
+        { label: "분석 기간", value: usedPeriod ? `${usedPeriod.firstDate} ~ ${usedPeriod.lastDate} · ${usedPeriod.observations}일` : periodLabel(period), tone: "text-tm-soft" },
         held
           ? { label: "현재 보유 샤프", value: heldSharpe == null ? "—" : heldSharpe.toFixed(2), tone: heldSharpe == null ? "text-tm-muted" : "text-dracula-cyan" }
           : { label: "동일가중 샤프", value: eqSharpe == null ? "—" : eqSharpe.toFixed(2), tone: eqSharpe == null ? "text-tm-muted" : "text-dracula-orange" },
-        { label: "최적 샤프", value: optSharpe == null ? "—" : optSharpe.toFixed(2), tone: optSharpe == null ? "text-tm-muted" : "text-dracula-green" },
+        { label: "샤프 최대 (과거 기준)", value: best == null ? "—" : best.sharpe.toFixed(2), tone: best == null ? "text-tm-muted" : "text-dracula-green" },
       ]}
     >
       <PanelRow>
@@ -385,18 +414,61 @@ export default function AnalyticsPage() {
             >
               보유 종목으로
             </Btn>
-            <Btn size="sm" className="h-8" onClick={run} disabled={selected.length < 2 || opt.isFetching}>
-              {opt.isFetching ? "계산 중..." : "최적 비중 계산"}
+            <Btn size="sm" className="h-8" onClick={run} disabled={selected.length < 2 || opt.isFetching || frontier.isFetching}>
+              {opt.isFetching || frontier.isFetching ? "계산 중..." : "분석 실행"}
             </Btn>
           </div>
+          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="분석 기간">
+            <span className="mr-1 text-xs text-tm-muted">분석 기간</span>
+            {PERIOD_PRESETS.map(p => (
+              <Chip key={p.key} active={!customOpen && period.kind === p.key} onClick={() => { setCustomOpen(false); setPeriod({ kind: p.key }); }}>{p.label}</Chip>
+            ))}
+            <Chip active={customOpen} onClick={() => setCustomOpen(true)}>직접 지정</Chip>
+            {customOpen && (
+              <>
+                <input type="date" aria-label="분석 시작일" value={customFrom} max={today} onChange={e => setCustomFrom(e.target.value)}
+                  className="num h-8 rounded-lg border border-tm-line2 bg-tm-inner px-2 text-13 text-dracula-fg" />
+                <span className="text-tm-muted">~</span>
+                <input type="date" aria-label="분석 종료일" value={customTo} max={today} onChange={e => setCustomTo(e.target.value)}
+                  className="num h-8 rounded-lg border border-tm-line2 bg-tm-inner px-2 text-13 text-dracula-fg" />
+                <Btn size="sm" kind="ghost" className="h-8" disabled={customError != null}
+                  onClick={() => setPeriod({ kind: "CUSTOM", from: customFrom, to: customTo })}>적용</Btn>
+              </>
+            )}
+            <span className="text-2xs text-tm-muted">
+              {period.kind === "CUSTOM" ? `적용: ${periodLabel(period)}` : "한국 날짜 기준, 오늘까지"} · 직접 지정은 60일~3년
+            </span>
+          </div>
+          {customError && <span className="text-xs text-[#ff8a8a]">{customError}</span>}
           {selected.length < 2 && <span className="text-xs text-[#ff8a8a]">2개 이상 종목을 선택하세요</span>}
           {opt.error && <Notice tone="danger">{(opt.error as Error).message}</Notice>}
+          {frontier.error && !opt.error && <Notice tone="danger">{(frontier.error as Error).message}</Notice>}
           <FrontierChart
-            points={(frontier.data ?? []).map(f => ({ risk: f.expectedRisk * 100, ret: f.expectedReturn * 100 }))}
-            optimal={data ? { risk: data.expectedRisk * 100, ret: data.expectedReturn * 100 } : undefined}
-            current={data ? { risk: data.currentEqualWeightRisk * 100, ret: data.currentEqualWeightReturn * 100 } : undefined}
-            held={held ? { risk: held.expectedRisk * 100, ret: held.expectedReturn * 100 } : undefined}
+            data={{
+              samples: (fr?.samples ?? []).map(s => ({ risk: s.expectedRisk * 100, ret: s.expectedReturn * 100, sharpe: s.sharpe })),
+              frontier: (fr?.frontier ?? []).map(f => ({ risk: f.expectedRisk * 100, ret: f.expectedReturn * 100 })),
+              maxSharpe: best ? { risk: best.expectedRisk * 100, ret: best.expectedReturn * 100, sharpe: best.sharpe } : undefined,
+              optimal: data ? { risk: data.expectedRisk * 100, ret: data.expectedReturn * 100 } : undefined,
+              equalWeight: data ? { risk: data.currentEqualWeightRisk * 100, ret: data.currentEqualWeightReturn * 100 } : undefined,
+              held: held ? { risk: held.expectedRisk * 100, ret: held.expectedReturn * 100 } : undefined,
+            }}
           />
+          {best && (
+            <div className="flex flex-col gap-1.5 rounded-lg bg-tm-inner p-3 text-xs">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span className="font-semibold text-dracula-green">샤프 비율 최대 지점 (과거 데이터 기준)</span>
+                <span className="num text-tm-soft">샤프 {best.sharpe.toFixed(2)} · 수익 {pct(best.expectedReturn)} · 위험 {pct(best.expectedRisk)}</span>
+              </div>
+              <div className="num flex flex-wrap gap-x-3 gap-y-1 text-tm-muted">
+                {Object.entries(best.weights).filter(([, w]) => w >= 0.005).sort((a, b) => b[1] - a[1]).map(([id, w]) => (
+                  <span key={id}>{labelOf(Number(id))} {(w * 100).toFixed(0)}%</span>
+                ))}
+              </div>
+              <span className="text-2xs text-tm-muted">
+                회색 점은 무작위 롱 온리 포트폴리오 {fr?.samples.length ?? 0}개(고정 시드라 같은 입력이면 같은 결과)입니다. 과거 수익률로 계산한 분석 결과이며 투자 권유가 아닙니다.
+              </span>
+            </div>
+          )}
           {data && !held && (
             <span className="text-2xs text-tm-muted">고른 종목 중 모의투자로 보유한 종목이 없어 현재 비중 비교는 생략했습니다.</span>
           )}
@@ -429,15 +501,15 @@ export default function AnalyticsPage() {
               })}
             </div>
           ) : (
-            <p className="m-0 py-4 text-center text-13 text-tm-muted">최적 비중을 계산하면 종목별 분석 결과 비중이 표시됩니다.</p>
+            <p className="m-0 py-4 text-center text-13 text-tm-muted">분석을 실행하면 종목별 분석 결과 비중이 표시됩니다.</p>
           )}
           {data?.suggestion && <Notice tone="info">{data.suggestion}</Notice>}
-          <Btn full onClick={sendToRebalance} disabled={!data || sending} title={data ? "분석 결과 비중을 리밸런싱 화면에 초안으로 채웁니다 — 저장·실행은 그 화면에서 직접" : "먼저 최적 비중을 계산하세요"}>
+          <Btn full onClick={sendToRebalance} disabled={!data || sending} title={data ? "분석 결과 비중을 리밸런싱 화면에 초안으로 채웁니다 — 저장·실행은 그 화면에서 직접" : "먼저 분석을 실행하세요"}>
             {sending ? "넘기는 중..." : "분석 비중을 리밸런싱 초안으로"}
           </Btn>
           {sendError && <Notice tone="danger">{sendError}</Notice>}
           <span className="text-2xs text-tm-muted">실전 계좌 리밸런싱 화면에 초안으로만 채웁니다. 목표 저장과 주문 실행은 그 화면에서 직접 확인해야 하며, 자동으로 주문하지 않습니다.</span>
-          <span className="text-2xs text-tm-muted">보유 일봉 수익률 기반 평균-분산 최적화(목표 수익 대비 최소 분산). 샤프는 무위험 수익률 0 가정. 추정치이며 보장되지 않습니다.</span>
+          <span className="text-2xs text-tm-muted">선택한 분석 기간에 모든 종목이 함께 거래된 날의 일봉 수익률 기반 평균-분산 최적화(목표 수익 대비 최소 분산). 샤프는 연 무위험 수익률 {(rf * 100).toFixed(2)}% 가정. 추정치이며 보장되지 않습니다.</span>
         </Panel>
       </PanelRow>
 
