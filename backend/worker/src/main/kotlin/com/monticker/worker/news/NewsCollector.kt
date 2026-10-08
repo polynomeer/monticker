@@ -3,6 +3,8 @@ package com.monticker.worker.news
 import com.monticker.worker.common.DistributedLock
 import org.slf4j.LoggerFactory
 import com.monticker.worker.search.SearchIndexEvent
+import com.monticker.worker.newsalert.NewsAlertCandidateEvent
+import com.monticker.worker.newsalert.NewsAlertKind
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.jdbc.core.JdbcTemplate
@@ -108,6 +110,12 @@ class NewsCollector(
                     "publishedAt" to publishedAt.toEpochMilli(),   // api NewsDocument: epoch_millis
                     "sentiment"   to sentiment,
                 )))
+                // ADR-100 — 관심종목 주인에게 알릴 후보. 같은 트랜잭션이라 기사 행과 함께 커밋되거나 함께 사라진다.
+                // 신선도(발행 6시간 이내)·시간당 상한은 커밋 후 팬아웃이 판정한다.
+                events.publishEvent(NewsAlertCandidateEvent(
+                    kind = NewsAlertKind.NEWS, sourceId = inserted, stockId = stockId, title = item.title.take(500),
+                    publishedAtMillis = publishedAt.toEpochMilli(), url = item.link.take(1000), source = item.source.take(100),
+                ))
             }
             inserted
         }

@@ -5,6 +5,9 @@ import com.monticker.worker.common.DistributedLock
 import org.slf4j.LoggerFactory
 import com.monticker.worker.detector.StockEventWriter
 import com.monticker.worker.search.SearchIndexEvent
+import com.monticker.worker.newsalert.NewsAlertCandidateEvent
+import com.monticker.worker.newsalert.NewsAlertKind
+import com.monticker.worker.newsalert.NewsAlertRules
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.jdbc.core.JdbcTemplate
@@ -106,6 +109,13 @@ class DisclosureCollector(
                     stockId = stockId, eventType = "DISCLOSURE_PUBLISHED", title = title, description = description,
                     eventTime = eventTime, importanceScore = importance, sourceType = "DART",
                 )))
+                // ADR-100 — 중요도 기준을 넘는 공시만 관심종목 알림 후보로 낸다(같은 트랜잭션). 접수일이 오늘(KST)인지·상한은 팬아웃이 본다.
+                if (NewsAlertRules.importanceQualifies(NewsAlertKind.DISCLOSURE, importance)) {
+                    events.publishEvent(NewsAlertCandidateEvent(
+                        kind = NewsAlertKind.DISCLOSURE, sourceId = id, stockId = stockId, title = title,
+                        publishedAtMillis = eventTime.toEpochMilli(), importanceScore = importance,
+                    ))
+                }
             }
         }
         return true

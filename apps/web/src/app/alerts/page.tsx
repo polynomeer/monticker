@@ -21,6 +21,7 @@ const FILTERS = [
   { value: "unread", label: "읽지 않음" },
   { value: "price", label: "가격" },
   { value: "event", label: "이벤트" },
+  { value: "news", label: "뉴스·공시" },
   { value: "signal", label: "시그널" },
   { value: "account", label: "계좌" },
 ] as const;
@@ -33,6 +34,8 @@ const STATUS_LABEL: Record<string, string> = {
   SUPPRESSED: "설정으로 보내지 않음", QUIET_HOURS: "방해 금지 시간 — 푸시 안 함",
   // ADR-090 — 시그널 이력: 푸시·이메일은 알림 설정에 따라 따로 나간다(결과를 이 행에 되돌려 쓰지 않는다)
   QUEUED: "알림 설정대로 전달",
+  // ADR-100 — 뉴스·공시가 한 시간에 5건을 넘으면 알림 없이 이력에만 남긴다
+  CAPPED: "시간당 한도 초과 — 알림 없이 이력만",
 };
 
 function kstDate(d: Date) {

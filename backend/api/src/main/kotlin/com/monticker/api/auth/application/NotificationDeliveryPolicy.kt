@@ -48,6 +48,7 @@ object NotificationDeliveryPolicy {
     private fun channels(p: NotificationPreferenceRequest, category: NotificationCategory): Pair<Boolean, Boolean> = when (category) {
         NotificationCategory.PRICE_ALERT -> p.priceAlertPush to p.priceAlertEmail
         NotificationCategory.VOLUME_SURGE -> p.volumeSurgePush to p.volumeSurgeEmail
+        NotificationCategory.NEWS -> p.newsAlertPush to p.newsAlertEmail
         NotificationCategory.QUANT_SIGNAL -> p.quantSignalPush to p.quantSignalEmail
         NotificationCategory.FILLS -> p.fillsPush to p.fillsEmail
         NotificationCategory.STRATEGY_MARKET -> p.strategyMarketNewsPush to p.strategyMarketNewsEmail
