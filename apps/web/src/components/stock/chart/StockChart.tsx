@@ -3,7 +3,7 @@
 import { useMemo }       from "react";
 import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
 import { useReducedMotion } from "@/stores/a11yStore";
-import type { ChartTheme, CandleData, EventMarker, IndicatorKey, OrderLine, DrawingTool, Drawing, SignalMarker, SentimentMarker, TradeMarker, ChartInterval } from "./types";
+import type { ChartTheme, CandleData, EventMarker, IndicatorKey, OrderLine, DrawingTool, Drawing, SignalMarker, SentimentMarker, TradeMarker, ChartInterval, ChartType } from "./types";
 import EChartsAdapter from "./EChartsAdapter";
 
 const ActiveAdapter = EChartsAdapter;
@@ -21,17 +21,26 @@ interface Props {
   sentimentMarkers?: SentimentMarker[];
   /** 거래(체결) 마커 — 매수▲·매도▼, 같은 봉의 여러 체결은 건수와 함께 묶인다 */
   trades?: TradeMarker[];
-  /** candles의 봉 단위(기본 1d). trades를 Asia/Seoul 기준 봉 버킷에 맞출 때 쓴다 */
+  /** candles의 봉 단위. 마커·드로잉을 Asia/Seoul 기준 봉 버킷에 맞출 때 쓴다(없으면 봉 간격으로 추정) */
   interval?: ChartInterval;
+  /** 캔들·라인·영역·하이킨아시(기본 캔들) */
+  chartType?: ChartType;
   activeDrawingTool?: DrawingTool | null;
   drawings?: Drawing[];
   onDrawingsChange?: (drawings: Drawing[]) => void;
+  /** 자석 — 점을 가장 가까운 봉의 시·고·저·종 가격에 붙인다 */
+  magnet?: boolean;
+  /** 잠금 — 드로잉을 옮기거나 지울 수 없다 */
+  drawingsLocked?: boolean;
+  /** 한 번 쓰는 도구(확대)가 끝났을 때 */
+  onDrawingToolDone?: () => void;
 }
 
 export default function StockChart({
   candles, events = [], height = 340, vwapData, onEventClick,
   enabledIndicators, orderLines, onCancelOrderLine, signalMarkers, sentimentMarkers,
-  trades, interval, activeDrawingTool, drawings, onDrawingsChange,
+  trades, interval, chartType, activeDrawingTool, drawings, onDrawingsChange,
+  magnet, drawingsLocked, onDrawingToolDone,
 }: Props) {
   const { chartTheme }    = useThemeStore();
   const ct                = CHART_THEMES[chartTheme] ?? CHART_THEMES.default;
@@ -47,6 +56,7 @@ export default function StockChart({
     grid:      "#34364a",
     upColor:   ct.upColor,
     downColor: ct.downColor,
+    accent:    "#bd93f9", // dracula-purple — 라인·영역 차트 선
   }), [ct.upColor, ct.downColor]);
 
   if (candles.length === 0) {
@@ -75,9 +85,13 @@ export default function StockChart({
       sentimentMarkers={sentimentMarkers}
       trades={trades}
       interval={interval}
+      chartType={chartType}
       activeDrawingTool={activeDrawingTool}
       drawings={drawings}
       onDrawingsChange={onDrawingsChange}
+      magnet={magnet}
+      drawingsLocked={drawingsLocked}
+      onDrawingToolDone={onDrawingToolDone}
       reduceMotion={reduceMotion}
     />
   );

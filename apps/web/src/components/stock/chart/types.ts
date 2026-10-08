@@ -58,7 +58,12 @@ export interface ChartTheme {
   grid: string;
   upColor: string;
   downColor: string;
+  /** 라인·영역 차트 선 색(강조색). 없으면 text */
+  accent?: string;
 }
+
+/** 메인 시리즈 표시 방식 */
+export type ChartType = "candle" | "line" | "area" | "heikin-ashi";
 
 export interface VwapPoint {
   time: number;
@@ -75,13 +80,31 @@ export interface OrderLine {
   label: string;
 }
 
-export type DrawingTool = "TREND_LINE" | "HORIZONTAL_LINE";
+/** 저장되는 드로잉 종류 */
+export type DrawingKind = "TREND_LINE" | "HORIZONTAL_LINE" | "PEN" | "TEXT";
 
-/** 드로잉 좌표는 (시각, 가격) 데이터 좌표로 저장한다 — 줌/팬해도 캔들에 고정되도록. */
+/**
+ * 차트 위 상호작용 도구. 드로잉 종류 + 저장하지 않는 도구:
+ * MEASURE(두 점 사이 가격·%·봉 수, 화면에만 표시), ZOOM(두 점 사이 구간으로 확대, 한 번 쓰면 해제).
+ */
+export type DrawingTool = DrawingKind | "MEASURE" | "ZOOM";
+
+export interface DrawingPoint {
+  /** Unix epoch seconds. 봉 사이 위치(펜)는 이웃 봉 시각을 보간한 값이다 */
+  time: number;
+  price: number;
+}
+
+/**
+ * 드로잉 좌표는 (시각, 가격) 데이터 좌표로 저장한다 — 줌/팬해도 캔들에 고정되고,
+ * 봉 간격을 바꿔도 같은 시각(Asia/Seoul 봉 버킷)에 다시 놓인다.
+ */
 export interface Drawing {
   id: string;
-  tool: DrawingTool;
-  points: Array<{ time: number; price: number }>;
+  tool: DrawingKind;
+  points: DrawingPoint[];
+  /** TEXT 라벨 내용 */
+  text?: string;
 }
 
 export interface ChartAdapterProps {
@@ -102,8 +125,16 @@ export interface ChartAdapterProps {
   orderLines?: OrderLine[];
   /** 거래 마커 — 같은 봉·같은 방향 체결은 건수와 함께 하나로 묶는다 */
   trades?: TradeMarker[];
-  /** candles의 봉 단위. trades를 봉에 맞출 때 쓴다(기본 1d) */
+  /** candles의 봉 단위. 마커·드로잉을 봉에 맞출 때 쓴다(없으면 봉 간격으로 추정) */
   interval?: ChartInterval;
+  /** 메인 시리즈 표시 방식(기본 캔들) */
+  chartType?: ChartType;
+  /** 자석 — 클릭한 점의 가격을 그 봉의 시·고·저·종 중 가장 가까운 값에 붙인다 */
+  magnet?: boolean;
+  /** 잠금 — 기존 드로잉을 옮기거나 지울 수 없다 */
+  drawingsLocked?: boolean;
+  /** 한 번 쓰고 끝나는 도구(ZOOM)가 끝났을 때 — 화면이 도구를 해제한다 */
+  onDrawingToolDone?: () => void;
   onCancelOrderLine?: (orderId: number) => void;
   /** 현재 선택된 드로잉 도구 — null이면 그리기 비활성 (차트는 평소처럼 줌/팬만) */
   activeDrawingTool?: DrawingTool | null;

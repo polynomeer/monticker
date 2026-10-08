@@ -6,7 +6,9 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Icon, IconBtn, Panel, fmtNum } from "@/components/terminal";
 import StockChart from "./chart/StockChart";
-import type { Drawing, DrawingTool, IndicatorKey, OrderLine, SentimentMarker, SignalMarker } from "./chart/types";
+import type { ChartType, DrawingTool, IndicatorKey, OrderLine, SentimentMarker, SignalMarker } from "./chart/types";
+import { toChartInterval } from "./chart/chartTime";
+import { useChartDrawings, useChartPrefs } from "./chart/useChartDrawings";
 import IndicatorChart from "./IndicatorChart";
 import VolumeChart from "./VolumeChart";
 import SummaryPanel from "./SummaryPanel";
@@ -55,6 +57,19 @@ const INDICATORS: { key: IndicatorKey; label: string }[] = [
 
 type SubPane = "none" | "volume" | "rsi" | "macd";
 
+const CHART_TYPES: { key: ChartType; label: string }[] = [
+  { key: "candle", label: "캔들" },
+  { key: "line", label: "라인" },
+  { key: "area", label: "영역" },
+  { key: "heikin-ashi", label: "하이킨아시" },
+];
+
+/** 예전 드로잉 키(종목 id·간격별)를 옮길 때 훑을 간격 */
+const LEGACY_DRAWING_INTERVALS = INTERVALS.map((i) => i.value).filter((v): v is string => v != null);
+
+/** 그린 것을 저장하는 도구 — 숨기기 중에는 쓸 수 없다(보이지 않는 목록에 덧붙이지 않게) */
+const SAVING_TOOLS: ReadonlySet<DrawingTool> = new Set(["TREND_LINE", "HORIZONTAL_LINE", "PEN", "TEXT"]);
+
 type ChartLayer = EventLayer | "quant" | "sentiment";
 
 const LAYERS: { key: ChartLayer; label: string; color: string }[] = [
@@ -65,6 +80,8 @@ const LAYERS: { key: ChartLayer; label: string; color: string }[] = [
   { key: "quant", label: "퀀트 시그널", color: "#50fa7b" },
   { key: "sentiment", label: "감성", color: "#ff79c6" },
 ];
+
+const NO_DRAWINGS: never[] = [];
 
 interface StockSignal { id: number; ruleSetId: string; ruleSetName: string; origin: "OWNED" | "SUBSCRIBED"; direction: "BUY" | "SELL"; signalTime: string; mode: string }
 
@@ -120,6 +137,15 @@ export default function ChartPanel(props: Props) {
   );
 }
 
+type ToolButton = {
+  key: string;
+  icon: Parameters<typeof Icon>[0]["name"];
+  label: string;
+  on?: boolean;
+  /** 없으면 지금 쓸 수 없는 버튼(aria-disabled) */
+  onClick?: () => void;
+};
+
 function ChartBody({ stockId, symbol, stockName, currentPrice, dayChange, dayChangeRate, onTabChange, onEventClick, orderLines, onCancelOrderLine }: Props) {
   const [interval, setInterval] = useState("1d");
   const [enabledIndicators, setEnabledIndicators] = useState<IndicatorKey[]>(["MA5", "MA20"]);
@@ -129,29 +155,31 @@ function ChartBody({ stockId, symbol, stockName, currentPrice, dayChange, dayCha
   const [layers, setLayers] = useState<Record<ChartLayer, boolean>>({ disclosure: true, news: true, volume: true, price: true, quant: false, sentiment: false });
   const { isLoggedIn } = useAuth();
   const [activeDrawingTool, setActiveDrawingTool] = useState<DrawingTool | null>(null);
-  const [drawings, setDrawings] = useState<Drawing[]>([]);
   const [hideDrawings, setHideDrawings] = useState(false);
+  const [locked, setLocked] = useState(false);
+  const [prefs, setPrefs] = useChartPrefs();
+  const [drawings, persistDrawings] = useChartDrawings(symbol, stockId, isLoggedIn, LEGACY_DRAWING_INTERVALS);
+  const [toolFocus, setToolFocus] = useState(0);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [chartBox, height] = useFillHeight(470, 320);
 
   const { candles, events, loading } = useStockChart(stockId, interval);
   const { data: vwapData } = useVwap(stockId);
 
-  // 드로잉은 종목+봉 간격별로 로컬에만 저장한다(서버 동기화 없음) — 차트 분석 메모는 개인 작업 흔적이라
-  // 로그인 여부와 무관하게 남기고 싶을 때가 많다.
-  const drawingsKey = `monticker:chartDrawings:${stockId}:${interval}`;
+  // 드로잉은 사용자·종목별로 이 브라우저에만 저장한다(서버 동기화 없음). (시각, 가격)으로 저장해
+  // 봉 간격을 바꿔도 같은 자리에 다시 놓인다 — chart/drawingStorage.ts
+
+  // Esc — 켜 둔 그리기 도구를 끄고 십자선으로 돌아간다(그리던 점·측정도 버린다)
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(drawingsKey);
-      setDrawings(raw ? JSON.parse(raw) : []);
-    } catch {
-      setDrawings([]);
-    }
-  }, [drawingsKey]);
-  const persistDrawings = useCallback((next: Drawing[]) => {
-    setDrawings(next);
-    try { localStorage.setItem(drawingsKey, JSON.stringify(next)); } catch { /* 저장 실패해도 화면 상태는 유지 */ }
-  }, [drawingsKey]);
+    if (!activeDrawingTool) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setActiveDrawingTool(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeDrawingTool]);
+  const onToolDone = useCallback(() => setActiveDrawingTool(null), []);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -193,20 +221,58 @@ function ChartBody({ stockId, symbol, stockName, currentPrice, dayChange, dayCha
   const up = (dayChange ?? 0) >= 0;
   const toggleIndicator = (k: IndicatorKey) => setEnabledIndicators((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
   const pickTool = (t: DrawingTool) => setActiveDrawingTool((cur) => (cur === t ? null : t));
+  const tool = (key: DrawingTool, icon: ToolButton["icon"], label: string): ToolButton => {
+    const blocked = hideDrawings && SAVING_TOOLS.has(key);
+    return {
+      key, icon,
+      label: blocked ? `${label} — 그리기를 숨긴 동안은 쓸 수 없어요` : `${label} · Esc로 해제`,
+      on: activeDrawingTool === key,
+      onClick: blocked ? undefined : () => pickTool(key),
+    };
+  };
 
-  const tools: { icon: Parameters<typeof Icon>[0]["name"]; label: string; on?: boolean; onClick?: () => void }[] = [
-    { icon: "cross", label: "십자선", on: activeDrawingTool === null, onClick: () => setActiveDrawingTool(null) },
-    { icon: "line", label: "추세선 (두 번 클릭)", on: activeDrawingTool === "TREND_LINE", onClick: () => pickTool("TREND_LINE") },
-    { icon: "hlines", label: "수평선 (한 번 클릭)", on: activeDrawingTool === "HORIZONTAL_LINE", onClick: () => pickTool("HORIZONTAL_LINE") },
-    { icon: "pencil", label: "펜 (준비 중)" },
-    { icon: "text", label: "텍스트 (준비 중)" },
-    { icon: "ruler", label: "측정 (준비 중)" },
-    { icon: "zoom", label: "확대 (준비 중) — 휠/하단 슬라이더로 확대할 수 있어요" },
-    { icon: "magnet", label: "자석 모드 (준비 중)" },
-    { icon: "lock", label: "그리기 잠금 (준비 중)" },
-    { icon: "eye", label: hideDrawings ? "그리기 보이기" : "그리기 숨기기", on: hideDrawings, onClick: () => setHideDrawings((v) => !v) },
-    { icon: "trash", label: "모두 지우기", onClick: drawings.length ? () => persistDrawings([]) : undefined },
+  const tools: ToolButton[] = [
+    { key: "cross", icon: "cross", label: locked ? "십자선" : "십자선 — 그린 것을 끌어 옮기고, 클릭하면 지워요", on: activeDrawingTool === null, onClick: () => setActiveDrawingTool(null) },
+    tool("TREND_LINE", "line", "추세선 (두 번 클릭)"),
+    tool("HORIZONTAL_LINE", "hlines", "수평선 (한 번 클릭)"),
+    tool("PEN", "pencil", "펜 (끌어서 그리기)"),
+    tool("TEXT", "text", "텍스트 (클릭한 자리에 입력)"),
+    tool("MEASURE", "ruler", "측정 (두 점 클릭 — 가격·%·봉 수)"),
+    tool("ZOOM", "zoom", "구간 확대 (두 점 클릭)"),
+    { key: "magnet", icon: "magnet", label: prefs.magnet ? "자석 끄기" : "자석 — 점을 가까운 시·고·저·종 가격에 붙여요", on: prefs.magnet, onClick: () => setPrefs({ magnet: !prefs.magnet }) },
+    { key: "lock", icon: "lock", label: locked ? "그리기 잠금 해제" : "그리기 잠금 — 그린 것을 옮기거나 지우지 않게", on: locked, onClick: () => setLocked((v) => !v) },
+    {
+      key: "eye", icon: "eye", label: hideDrawings ? "그리기 보이기" : "그리기 숨기기", on: hideDrawings,
+      onClick: () => {
+        // 숨기는 동안 저장 도구를 쓰면 보이지 않는 목록에 덧붙게 되므로 도구도 끈다
+        if (!hideDrawings && activeDrawingTool && SAVING_TOOLS.has(activeDrawingTool)) setActiveDrawingTool(null);
+        setHideDrawings((v) => !v);
+      },
+    },
+    {
+      key: "trash", icon: "trash",
+      label: locked ? "모두 지우기 — 잠금을 풀어야 지울 수 있어요" : drawings.length ? `모두 지우기 (${drawings.length}개)` : "모두 지우기 — 그린 것이 없어요",
+      onClick: drawings.length && !locked ? () => persistDrawings([]) : undefined,
+    },
   ];
+
+  // 툴바 키보드 — 위/아래(또는 좌/우) 화살표로 버튼 사이 이동, Home/End로 처음/끝. Tab은 툴바 하나만 거친다.
+  const onToolbarKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const keys: Record<string, (i: number) => number> = {
+      ArrowDown: (i) => (i + 1) % tools.length,
+      ArrowRight: (i) => (i + 1) % tools.length,
+      ArrowUp: (i) => (i - 1 + tools.length) % tools.length,
+      ArrowLeft: (i) => (i - 1 + tools.length) % tools.length,
+      Home: () => 0,
+      End: () => tools.length - 1,
+    };
+    const move = keys[e.key];
+    if (!move) return;
+    e.preventDefault();
+    const next = move(toolFocus);
+    setToolFocus(next);
+    toolbarRef.current?.querySelectorAll<HTMLButtonElement>("button")[next]?.focus();
+  };
 
   return (
     <>
@@ -260,9 +326,21 @@ function ChartBody({ stockId, symbol, stockName, currentPrice, dayChange, dayCha
             </div>
           )}
         </div>
-        <button type="button" disabled title="차트 유형 (준비 중) — 지금은 캔들만 지원" className="flex cursor-not-allowed items-center gap-1.5 text-xs text-tm-soft">
-          <Icon name="candles" size={15} />캔들
-        </button>
+        <div className="flex items-center gap-0.5" role="group" aria-label="차트 유형">
+          <Icon name="candles" size={15} className="mr-1 text-tm-soft" aria-hidden />
+          {CHART_TYPES.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              aria-pressed={prefs.chartType === t.key}
+              onClick={() => setPrefs({ chartType: t.key })}
+              title={t.key === "heikin-ashi" ? "하이킨아시 — 평균을 낸 봉(툴팁은 실제 시세)" : undefined}
+              className={cn("h-7 rounded-md px-2 text-xs", prefs.chartType === t.key ? "bg-tm-raised font-semibold text-dracula-fg" : "text-tm-muted hover:text-dracula-fg")}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
         <div className="ml-auto flex flex-wrap gap-1.5" role="group" aria-label="이벤트 레이어">
           {LAYERS.map((l) => {
             // 퀀트 시그널은 내 전략·구독 전략이라 로그인해야 볼 수 있다
@@ -297,15 +375,25 @@ function ChartBody({ stockId, symbol, stockName, currentPrice, dayChange, dayCha
       </div>
 
       <div className="flex min-h-0 min-w-0 flex-1 gap-1.5">
-        <div className="flex flex-col gap-0.5 border-r border-tm-line pr-1.5" role="toolbar" aria-label="그리기 도구" aria-orientation="vertical">
-          {tools.map((t) => (
+        <div
+          ref={toolbarRef}
+          className="flex flex-col gap-0.5 border-r border-tm-line pr-1.5"
+          role="toolbar"
+          aria-label="그리기 도구"
+          aria-orientation="vertical"
+          onKeyDown={onToolbarKey}
+        >
+          {tools.map((t, i) => (
             <IconBtn
-              key={t.icon}
+              key={t.key}
               name={t.icon}
               label={t.label}
               size={34}
               iconSize={17}
-              aria-pressed={t.onClick ? !!t.on : undefined}
+              tabIndex={i === toolFocus ? 0 : -1}
+              onFocus={() => setToolFocus(i)}
+              // 지우기만 동작 버튼, 나머지는 켜고 끄는 토글
+              aria-pressed={t.key === "trash" ? undefined : !!t.on}
               aria-disabled={t.onClick ? undefined : "true"}
               onClick={t.onClick}
               className={cn(t.on && "bg-tm-raised text-dracula-purple", !t.onClick && "cursor-not-allowed opacity-40 hover:bg-transparent hover:text-tm-muted")}
@@ -346,9 +434,14 @@ function ChartBody({ stockId, symbol, stockName, currentPrice, dayChange, dayCha
               onCancelOrderLine={onCancelOrderLine}
               signalMarkers={signalMarkers}
               sentimentMarkers={sentimentMarkers}
+              interval={toChartInterval(interval)}
+              chartType={prefs.chartType}
               activeDrawingTool={activeDrawingTool}
-              drawings={hideDrawings ? [] : drawings}
+              drawings={hideDrawings ? NO_DRAWINGS : drawings}
               onDrawingsChange={persistDrawings}
+              magnet={prefs.magnet}
+              drawingsLocked={locked}
+              onDrawingToolDone={onToolDone}
             />
           )}
           </div>
