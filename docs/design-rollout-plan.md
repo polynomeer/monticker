@@ -70,7 +70,7 @@
 | 조건 저장 + 저장된 스크린 탭 | 버튼 비활성. 탭은 기존 실시간/급등·급락/외국인·기관 | 저장 스크린 CRUD API와 실행 | P1 | ✅ 사용자당 20개 |
 | 결과 열 거래량 배수·오늘 스파크라인·이벤트, 상단 평균 거래량 배수·이벤트 동반 | `—` | 응답에 거래량 배수·당일 이벤트 추가, 장중 미니 시계열 일괄 API | P1 | ✅ `/api/market/intraday` |
 | 시장 세그먼트 KOSPI/KOSDAQ | 동작하는 전체/국내/해외로 대체 | `ScreenerRepository`에 kospi/kosdaq 구분 추가 | P2 | ✅ `market=kospi`·`kosdaq` — 화이트리스트(`ScreenerCriteria.MARKETS`)와 고정 SQL 조각. 화면은 "국내"를 고르면 국내 전체/코스피/코스닥 하위 세그먼트 |
-| 시가총액 범위 | 기존 대형/중형/소형 구간 | 필요하면 `minCap/maxCap` | P2 | |
+| 시가총액 범위 | 기존 대형/중형/소형 구간 | 필요하면 `minCap/maxCap` | P2 | ✅ `GET /api/screener?minCap=&maxCap=` — 원 단위, 양 끝 포함, 0~1경 검증·바인딩, 구간과 AND. 범위를 걸면 시가총액 없는 종목은 빠지고 화면에 그렇게 표시([ScreenerCriteria](../backend/api/src/main/kotlin/com/monticker/api/screener/domain/ScreenerCriteria.kt), [MarketCapRange](../apps/web/src/components/screener/MarketCapRange.tsx)) |
 
 ### /stocks/[symbol] 트레이딩
 | 항목 | 지금 | 필요한 것 | 우선순위 | 상태 |
@@ -93,7 +93,7 @@
 | 화면 | 항목 | 지금 | 필요한 것 | 우선순위 | 상태 |
 |---|---|---|---|---|---|
 | /stocks/search | 많이 찾는 종목 | 거래대금 상위로 대신 표시 | 검색 로그 집계 API | P2 | |
-| /stocks/search | 전략 검색 | `/api/quant/market` 상위 50개를 클라이언트에서 필터 | 서버 측 전략 검색 | P2 | |
+| /stocks/search | 전략 검색 | `/api/quant/market` 상위 50개를 클라이언트에서 필터 | 서버 측 전략 검색 | P2 | ✅ `GET /api/quant/market/search?q=&page=&size=` — 이름·설명·작성자 닉네임 부분 일치(1~50자), 목록과 같은 공개 범위 조각을 CTE로 재사용. 이름은 Mongo라 공개 전략 ID 안에서만 매칭([StrategyMarketQueries](../backend/api/src/main/kotlin/com/monticker/api/quant/infrastructure/StrategyMarketQueries.kt)) |
 | /compare | 베타(KOSPI) | `—` | KOSPI 지수 일봉 | P1 | ✅ (지수가 모의면 표시) |
 | /compare | 배당수익률 | `—` | 배당 데이터 소스 | P2 | |
 | /compare | 이벤트 수 | 종목당 100건까지만 조회해 "100+" | 이벤트 count API | P2 | ✅ `GET /api/events/counts` — 여러 종목 한 번에, 정확한 건수. 겹침 점·이벤트 후 평균은 여전히 최근 100건 ([ADR-087](decisions/087-event-and-sector-aggregates-at-query-time.md)) |
