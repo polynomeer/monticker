@@ -1,6 +1,8 @@
 package com.monticker.worker.marketdata
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
+import io.micrometer.prometheusmetrics.PrometheusConfig
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import io.mockk.every
 import io.mockk.mockk
 import org.assertj.core.api.Assertions.assertThat
@@ -8,8 +10,10 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.RowMapper
+import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneOffset
 
 class KrxHolidayCalendarTest {
 
@@ -72,5 +76,39 @@ class KrxHolidayCalendarTest {
         // 미커버 해 조회는 메트릭으로 남는다
         MarketSchedule.isKrBusinessDay(LocalDate.of(2030, 3, 4))
         assertThat(registry.get("market_calendar_uncovered_lookups_total").tag("year", "2030").counter().count()).isEqualTo(1.0)
+    }
+
+    @Test
+    fun `coverage counts consecutive covered years from this year`() {
+        val today = LocalDate.of(2026, 11, 2)
+        assertThat(KrxHolidayCalendar(emptyMap(), setOf(2026, 2027)).coverageYearsAhead(today)).isEqualTo(1)
+        assertThat(KrxHolidayCalendar(emptyMap(), setOf(2026, 2028)).coverageYearsAhead(today)).isEqualTo(0)   // 끊긴 해 뒤는 세지 않는다
+        assertThat(KrxHolidayCalendar(emptyMap(), setOf(2025, 2027)).coverageYearsAhead(today)).isEqualTo(-1)
+        assertThat(KrxHolidayCalendar.weekendsOnly().coverageYearsAhead(today)).isEqualTo(-1)
+    }
+
+    @Test
+    fun `worker exposes the same calendar metrics as the api on the prometheus endpoint`() {
+        val jdbc = mockk<JdbcTemplate>()
+        every { jdbc.query(match<String> { it.contains("FROM market_holidays") }, any<RowMapper<Pair<LocalDate, String>>>()) } returns
+            chuseok.map { it.key to it.value }
+        every { jdbc.queryForList(match<String> { it.contains("market_calendar_years") }, Int::class.java) } returns listOf(2026, 2027)
+        val registry = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
+        val loader = KrxHolidayCalendarLoader(jdbc, registry)
+        // 2026-12-31 23:30 KST = 14:30 UTC — 게이지의 "올해"는 KST 기준이다
+        loader.clock = Clock.fixed(Instant.parse("2026-12-31T14:30:00Z"), ZoneOffset.UTC)
+
+        // 기동 전(스냅샷 없음) — 올해도 없다
+        assertThat(registry.get("market_calendar_coverage_years_ahead").gauge().value()).isEqualTo(-1.0)
+
+        loader.load()
+        assertThat(registry.get("market_calendar_coverage_years_ahead").gauge().value()).isEqualTo(1.0)
+        loader.clock = Clock.fixed(Instant.parse("2026-12-31T15:30:00Z"), ZoneOffset.UTC)   // 2027-01-01 00:30 KST
+        assertThat(registry.get("market_calendar_coverage_years_ahead").gauge().value()).isEqualTo(0.0)
+
+        MarketSchedule.isKrBusinessDay(LocalDate.of(2031, 3, 4))
+        val scrape = registry.scrape()
+        assertThat(scrape).contains("market_calendar_coverage_years_ahead 0.0")
+        assertThat(scrape).contains("market_calendar_uncovered_lookups_total{year=\"2031\"} 1.0")
     }
 }

@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
+import java.time.Clock
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -36,6 +37,17 @@ class KrxHolidayCalendar(
         return date !in holidays
     }
 
+    /**
+     * 올해부터 끊김 없이 채워진 해 수 - 1 (api `KrxCalendar.coverageUntil`과 같은 규칙). 0이면 올해만, -1이면 올해도 없음.
+     * `market_calendar_coverage_years_ahead` 게이지 값이다.
+     */
+    fun coverageYearsAhead(today: LocalDate): Int {
+        if (today.year !in coveredYears) return -1
+        var y = today.year
+        while (y + 1 in coveredYears) y++
+        return y - today.year
+    }
+
     fun sameDataAs(other: KrxHolidayCalendar) = holidays == other.holidays && coveredYears == other.coveredYears
 
     val size: Int get() = holidays.size
@@ -52,6 +64,11 @@ class KrxHolidayCalendar(
  * market_holidays를 읽어 [MarketSchedule.krCalendar]에 꽂는다. 기동 시 한 번, 이후 1시간마다.
  * 읽기에 실패하면 이전 스냅샷을 유지한다(처음부터 실패면 주말만 휴장 + 경고).
  *
+ * 메트릭은 api `MarketCalendar`와 이름·의미가 같다 — 알람(infra/monitoring/alert-rules.yml의 MarketCalendar*)이 job별로 본다.
+ *  - `market_calendar_coverage_years_ahead` 게이지: 이 프로세스가 들고 있는 스냅샷 기준([KrxHolidayCalendar.coverageYearsAhead]).
+ *    DB에 행이 있어도 기동 때부터 읽지 못했으면 -1이다 — 그 worker는 지금 공휴일을 영업일로 센다.
+ *  - `market_calendar_uncovered_lookups_total{year}` 카운터: 캘린더에 없는 해를 실제로 물었다(WARN 로그는 해마다 1시간에 1번).
+ *
  * MarketSchedule은 여러 핸들러가 정적으로 부르는 object라, 캘린더를 생성자로 넘기는 대신 프로세스 전역 스냅샷으로 둔다.
  */
 @Component
@@ -59,14 +76,15 @@ class KrxHolidayCalendarLoader(
     private val jdbc: JdbcTemplate,
     private val meterRegistry: MeterRegistry,
 ) {
+    /** 테스트에서 바꾼다(api MarketCalendar와 같은 관례). */
+    internal var clock: Clock = Clock.systemUTC()
+
     private val log = LoggerFactory.getLogger(javaClass)
     private val lastWarnAt = ConcurrentHashMap<Int, Instant>()
 
     init {
         Gauge.builder("market_calendar_coverage_years_ahead", this) { loader ->
-            val year = LocalDate.now(KrxHolidayCalendar.KST).year
-            val years = MarketSchedule.krCalendar.coveredYears
-            if (year !in years) -1.0 else { var y = year; while (y + 1 in years) y++; (y - year).toDouble() }
+            MarketSchedule.krCalendar.coverageYearsAhead(LocalDate.now(loader.clock.withZone(KrxHolidayCalendar.KST))).toDouble()
         }.description("올해부터 끊김 없이 채워진 KRX 휴장일 캘린더 해 수 - 1 (-1: 올해 데이터 없음)").register(meterRegistry)
     }
 
@@ -95,7 +113,7 @@ class KrxHolidayCalendarLoader(
 
     private fun onUncoveredYear(year: Int) {
         meterRegistry.counter("market_calendar_uncovered_lookups_total", "year", year.toString()).increment()
-        val now = Instant.now()
+        val now = clock.instant()
         val last = lastWarnAt[year]
         if (last == null || last.isBefore(now.minusSeconds(3600))) {
             lastWarnAt[year] = now

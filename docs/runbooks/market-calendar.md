@@ -6,17 +6,18 @@
 
 | 알람 | 식 | 뜻 |
 |------|----|----|
-| `MarketCalendarNextYearMissing` | `max(market_calendar_coverage_years_ahead{job="monticker-api"}) <= 0 and on() month() >= 11`, 1h | 11~12월인데 내년 캘린더가 없다. 1월 1일부터 틀린 날짜가 나간다 |
-| `MarketCalendarCurrentYearMissing` | `max(market_calendar_coverage_years_ahead{job="monticker-api"}) < 0`, 15m | 올해 캘린더도 없다. **지금** 공휴일을 영업일로 세고 있다 |
-| `MarketCalendarUncoveredLookup` | 지난 1h `market_calendar_uncovered_lookups_total{year}` 증가 또는 새 `{year}` 시계열 | 캘린더에 없는 해를 실제로 물었다. 틀린 답이 이미 나갔을 수 있다 |
+| `MarketCalendarNextYearMissing` | `min by (job) (market_calendar_coverage_years_ahead{job=~"monticker-api\|monticker-worker.*"}) <= 0 and on() month() >= 11`, 1h | 11~12월인데 내년 캘린더가 없다. 1월 1일부터 틀린 날짜가 나간다 |
+| `MarketCalendarCurrentYearMissing` | `min by (job) (market_calendar_coverage_years_ahead{job=~"monticker-api\|monticker-worker.*"}) < 0`, 15m | 올해 캘린더도 없다. **지금** 공휴일을 영업일로 세고 있다 |
+| `MarketCalendarUncoveredLookup` | 지난 1h `market_calendar_uncovered_lookups_total{job, year}` 증가 또는 새 `{year}` 시계열 | 캘린더에 없는 해를 실제로 물었다. 틀린 답이 이미 나갔을 수 있다 |
 
 게이지 값은 "올해부터 끊김 없이 채운 해 수 − 1"이다. 1이면 내년까지 있고, 0이면 올해만, −1이면 올해도 없다.
-게이지와 카운터는 api(`MarketCalendar`)만 내보낸다. worker(`KrxHolidayCalendar`)도 같은 테이블을 읽지만 메트릭이 없다.
-그래서 worker 쪽 미커버는 WARN 로그로만 보인다.
+게이지와 카운터는 api(`MarketCalendar`)와 worker(`KrxHolidayCalendarLoader`)가 같은 이름·의미로 내보낸다. 값은 각 프로세스가 들고 있는 스냅샷 기준이다.
+알람은 job별로 울린다. api는 정산일을, worker는 장 세션·틱 상태(모의 틱 생성, 지수 일봉)를 계산한다.
+**모든 job이 같이 울리면 데이터 문제**(아래 조치), **한 job만 울리면 그 프로세스가 DB를 읽지 못한 것**이다(1차 확인 2번).
 
 ## 1차 확인
 1. **어느 해가 비었나**: `SELECT year, verified, note FROM market_calendar_years WHERE market='KRX' ORDER BY year;`
-2. **DB 문제가 아니라 데이터 문제인가**: api 로그 `market calendar has no KRX holiday data for year …`.
+2. **DB 문제가 아니라 데이터 문제인가**: 울린 job(api 또는 worker)의 로그 `market calendar has no KRX holiday data for year …`·`market calendar load failed`.
    캘린더를 읽다 실패하면 마지막 스냅샷을 유지한다. 그런데 기동 때부터 읽지 못했다면 빈 캘린더라서 올해도 미커버로 보인다(−1).
    이 경우 `market_calendar_years`에는 행이 있다. 원인은 DB 연결이다. [db-failover.md](db-failover.md)로 간다.
 3. **UncoveredLookup의 `year` 라벨**:
