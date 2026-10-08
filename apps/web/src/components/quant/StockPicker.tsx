@@ -13,7 +13,8 @@ export function StockPicker({
 }: {
   market: string;
   marketCapTier: string;
-  value: number;
+  /** 고른 종목. null(또는 0)이면 아무것도 고르지 않은 상태 */
+  value: number | null;
   onChange: (stockId: number) => void;
   /** 박스 안 위쪽 라벨 — 터미널 Field와 같은 모양 */
   label?: string;
@@ -29,6 +30,7 @@ export function StockPicker({
 
   // 현재 선택된 종목의 표시용 라벨 조회
   useEffect(() => {
+    if (!value) { setSelected(null); return; }
     let cancelled = false;
     getScreenerQuotes([value]).then(items => {
       if (!cancelled) setSelected(items[0] ?? null);
