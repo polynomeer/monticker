@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Chip, EventBadge, Icon, Panel, PanelCol, PanelRow, Pill, Seg, StockCell, TerminalPage, TitleBlock, fmtNum } from "@/components/terminal";
 import { useRecentlyViewedStocks } from "@/hooks/useRecentlyViewedStocks";
 import { cn } from "@/lib/utils";
+import { authFetch } from "@/services/api";
 import { eventMeta, fmtWhen, useQuotes, type Quote } from "./parts";
 
 interface StockResult { id: number; symbol: string; name: string; market: string; sector: string | null; currency: string; }
@@ -49,12 +50,16 @@ function useDebounced<T>(v: T, ms = 200) {
   return d;
 }
 
-/** 검색어별 GET — react-query가 늦게 도착한 이전 검색어 응답을 키로 분리해 최신 결과를 덮어쓰지 않게 한다. */
+/**
+ * 검색어별 GET — react-query가 늦게 도착한 이전 검색어 응답을 키로 분리해 최신 결과를 덮어쓰지 않게 한다.
+ * authFetch — 전략 검색(/api/quant/market/**)은 로그인이 필요한데 토큰은 쿠키가 아니라 헤더로 가서, 일반 fetch로는
+ * 로그인한 사용자도 늘 빈 결과였다. 토큰이 없으면 헤더 없이 보내므로 종목·이벤트 검색(공개)은 그대로다.
+ */
 function useSearch<T>(key: string, url: string | null) {
   return useQuery<T[]>({
     queryKey: ["search", key, url],
     queryFn: async ({ signal }) => {
-      const r = await fetch(url!, { signal });
+      const r = await authFetch(url!, { signal });
       if (!r.ok) return [];
       const j = await r.json();
       return Array.isArray(j) ? j : (j?.items ?? j?.content ?? []);
