@@ -54,4 +54,18 @@ class RealizedPnlCalculatorTest {
         assertThat(r.keys).containsExactly(4L)
         assertThat(r[4]!!.pnl).isEqualByComparingTo("100")
     }
+
+    // ADR-091 — 손절 준수율이 "이 포지션의 손절"을 고르는 구간의 시작
+    @Test
+    fun `positionSince is the time the position last went flat before it was reopened`() {
+        val t = java.time.Instant.parse("2026-10-06T00:00:00Z")
+        fun at(line: PnlTradeLine, sec: Long) = line.copy(tradedAt = t.plusSeconds(sec))
+        val r = RealizedPnlCalculator.compute(listOf(
+            at(buy(1, 2, "2000"), 0), at(sell(2, 1, "900"), 10), at(sell(3, 1, "900"), 20), // 20초에 0이 된다
+            at(buy(4, 1, "1000"), 30), at(sell(5, 1, "800"), 40),
+        ))
+        assertThat(r[2]!!.positionSince).isNull()      // 첫 포지션 — 그 전에 0이 된 적 없음
+        assertThat(r[3]!!.positionSince).isNull()
+        assertThat(r[5]!!.positionSince).isEqualTo(t.plusSeconds(20))
+    }
 }

@@ -444,6 +444,13 @@ CREATE TABLE simulation_trades (
 `(user_id, origin, origin_ref) WHERE origin IS NOT NULL AND origin <> 'MANUAL'`.
 `order_emotion_tags.emotion`은 CHECK 없는 VARCHAR(30)이라 `PLANNED`·`IMPATIENT` 추가에 스키마 변경이 없다(V82가 데이터만 이관).
 
+### orders 접수 시점 호가·시각 (V88 — done)
+
+[ADR-091](decisions/091-wallet-behavior-and-execution-quality-metrics.md): `quote_bid`·`quote_ask NUMERIC(18,4)`, `quote_at TIMESTAMPTZ`,
+`quote_source VARCHAR(20)`, `submitted_at TIMESTAMPTZ` — 모두 nullable. 사가가 진입 시각과 KIS 실시간 최우선 호가(시뮬레이션 호가는
+기록하지 않음)를 남긴다. 슬리피지(체결가 vs 반대편 호가, bp)와 시장가 엔진 지연(첫 체결 − 접수)의 근거이며, NULL 행(V88 이전·호가
+없음)은 집계에서 빠지고 건수만 보고된다. 새 인덱스 없음(`idx_fills_user`로 체결을 고른 뒤 PK 조인).
+
 ### ledger_events
 
 모든 잔고 변화의 append-only 원장. ~~잔고는 이벤트를 replay해서 계산한다.~~ **잔고의 authoritative

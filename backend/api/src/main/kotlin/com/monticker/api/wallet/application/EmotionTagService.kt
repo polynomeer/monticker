@@ -1,5 +1,6 @@
 package com.monticker.api.wallet.application
 
+import com.monticker.api.common.time.KstPeriod
 import com.monticker.api.paper.application.PaperTradeQueryService
 import com.monticker.api.wallet.domain.EmotionTag
 import com.monticker.api.wallet.domain.EmotionType
@@ -9,7 +10,9 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.sql.Timestamp
 import java.time.Instant
+import java.time.LocalDate
 
 data class EmotionTagDto(
     val id: Long,
@@ -24,11 +27,45 @@ data class EmotionStat(
     val emotion: String,
     val count: Int,
     val avgReturnPct: Double?,
+    /** ADR-091 — 구간 안 태그된 거래 중 이 감정의 비중(%) */
+    val sharePct: Double? = null,
 )
 
 data class EmotionAnalysisResponse(
     val stats: List<EmotionStat>,
+    /** ADR-091 — 조회 구간(KST, 양 끝 포함). 전체 기간이면 null */
+    val from: LocalDate? = null,
+    val to: LocalDate? = null,
+    /** 구간 안의 태그된 거래 수(분포의 분모) */
+    val totalCount: Int = 0,
 )
+
+/** 집계 입력 — 태그 1건과 그 거래, 매수라면 그 뒤 같은 종목의 첫 매도가. */
+data class EmotionRow(val emotion: String, val side: String, val price: BigDecimal, val nextSellPrice: BigDecimal?)
+
+object EmotionAnalysis {
+    /**
+     * 감정별 건수·비중(%)과 평균 수익률. 수익률은 **매수 태그만**: (그 뒤 첫 매도가 − 매수가) ÷ 매수가 × 100.
+     * 아직 팔지 않은 매수와 매도 태그는 수익률에서 빠진다(건수에는 들어간다). 건수 내림차순.
+     */
+    fun aggregate(rows: List<EmotionRow>, period: KstPeriod? = null): EmotionAnalysisResponse {
+        val total = rows.size
+        val stats = rows.groupBy { it.emotion }.map { (emotion, rs) ->
+            val returns = rs.mapNotNull { r ->
+                val sell = r.nextSellPrice ?: return@mapNotNull null
+                if (r.side != "BUY" || r.price.signum() <= 0) return@mapNotNull null
+                sell.subtract(r.price).divide(r.price, 6, RoundingMode.HALF_UP).multiply(BigDecimal("100")).toDouble()
+            }
+            EmotionStat(
+                emotion = emotion,
+                count = rs.size,
+                avgReturnPct = if (returns.isNotEmpty()) returns.average() else null,
+                sharePct = rs.size * 100.0 / total,
+            )
+        }.sortedWith(compareByDescending<EmotionStat> { it.count }.thenBy { it.emotion })
+        return EmotionAnalysisResponse(stats, period?.from, period?.to, total)
+    }
+}
 
 @Service
 @Transactional
@@ -65,42 +102,32 @@ class EmotionTagService(
             ?.toDto()
     }
 
+    /**
+     * ADR-091 — 감정별 분포와 평균 수익률. [period]는 **거래 체결 시각** 기준 KST 구간이다(null = 전체 기간, 기존 동작).
+     * 거래·태그·"그 매수 뒤 첫 매도가"를 한 쿼리로 읽는다 — 예전엔 태그마다 거래 조회와 매도가 조회를 따로 했다(N+1).
+     */
     @Transactional(readOnly = true)
-    fun getAnalysis(userId: Long): EmotionAnalysisResponse {
-        val tags = emotionTagRepo.findAllByUserIdOrderByCreatedAtDesc(userId)
-        val grouped = tags.groupBy { it.emotion }
-
-        val stats = grouped.map { (emotion, emotionTags) ->
-            val returns = emotionTags.mapNotNull { tag ->
-                val trade = tradeQueryService.findById(tag.paperTradeId) ?: return@mapNotNull null
-                if (trade.side != "BUY") return@mapNotNull null
-
-                val sellPrice = runCatching {
-                    jdbc.queryForObject(
-                        """SELECT price FROM paper_trades
-                           WHERE user_id = ? AND stock_id = ? AND side = 'SELL'
-                             AND traded_at > ?
-                           ORDER BY traded_at ASC LIMIT 1""",
-                        BigDecimal::class.java,
-                        userId, trade.stockId, trade.tradedAt
-                    )
-                }.getOrNull() ?: return@mapNotNull null
-
-                val returnPct = sellPrice.subtract(trade.price)
-                    .divide(trade.price, 6, RoundingMode.HALF_UP)
-                    .multiply(BigDecimal("100"))
-                    .toDouble()
-                returnPct
-            }
-
-            EmotionStat(
-                emotion = emotion.name,
-                count = emotionTags.size,
-                avgReturnPct = if (returns.isNotEmpty()) returns.average() else null,
-            )
+    fun getAnalysis(userId: Long, period: KstPeriod? = null): EmotionAnalysisResponse {
+        val periodSql = if (period != null) " AND t.traded_at >= ? AND t.traded_at < ?" else ""
+        val args = mutableListOf<Any>(userId)
+        if (period != null) {
+            args += Timestamp.from(period.start)
+            args += Timestamp.from(period.endExclusive)
         }
-
-        return EmotionAnalysisResponse(stats = stats)
+        val rows = jdbc.query(
+            """SELECT et.emotion, t.side, t.price, ns.price AS next_sell_price
+               FROM order_emotion_tags et
+               JOIN paper_trades t ON t.id = et.paper_trade_id AND t.user_id = et.user_id
+               LEFT JOIN LATERAL (
+                   SELECT s.price FROM paper_trades s
+                   WHERE s.user_id = t.user_id AND s.stock_id = t.stock_id AND s.side = 'SELL' AND s.traded_at > t.traded_at
+                   ORDER BY s.traded_at ASC LIMIT 1
+               ) ns ON t.side = 'BUY'
+               WHERE et.user_id = ?$periodSql""",
+            { rs, _ -> EmotionRow(rs.getString("emotion"), rs.getString("side"), rs.getBigDecimal("price"), rs.getBigDecimal("next_sell_price")) },
+            *args.toTypedArray(),
+        )
+        return EmotionAnalysis.aggregate(rows, period)
     }
 
     /**

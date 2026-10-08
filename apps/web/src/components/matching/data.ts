@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
 import { mergeLevels } from "@/components/stock/OrderBook";
+import type { ExecutionQuality } from "@/components/wallet/insights";
 
 export const STOCKS = [
   { id: 2, label: "삼성전자" }, { id: 3, label: "SK하이닉스" },
@@ -66,6 +67,20 @@ export function useMyFills(enabled = true) {
       if (!r.ok) return [];
       return r.json();
     },
+    enabled,
+  });
+}
+
+/** ADR-091 — 내 모의 체결의 평균 슬리피지·엔진 지연(최근 30일, 서버 기본값). */
+export function useExecutionQuality(enabled = true) {
+  return useQuery<ExecutionQuality | null>({
+    queryKey: ["matching", "execution-quality"],
+    queryFn: async () => {
+      const r = await authFetch("/api/matching/execution-quality");
+      if (!r.ok) return null;
+      return r.json();
+    },
+    refetchInterval: 60_000,
     enabled,
   });
 }

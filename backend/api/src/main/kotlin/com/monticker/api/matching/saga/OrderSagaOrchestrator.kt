@@ -1,6 +1,7 @@
 package com.monticker.api.matching.saga
 
 import com.monticker.api.common.aop.Timed
+import com.monticker.api.common.domain.BestQuoteSource
 import com.monticker.api.common.domain.CandleFreshness
 import com.monticker.api.common.domain.LatestClose
 import com.monticker.api.common.domain.Money
@@ -49,6 +50,8 @@ class OrderSagaOrchestrator(
     private val stateMachineService: OrderStateMachineService,
     private val eventPublisher: ApplicationEventPublisher,
     private val jdbc: JdbcTemplate,
+    /** ADR-091 — 접수 시점 최우선 호가(marketdata 구현). 없거나 실패하면 호가 없이 접수한다. */
+    private val bestQuoteSource: BestQuoteSource? = null,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -65,6 +68,8 @@ class OrderSagaOrchestrator(
     @Timed("matching.saga.submit", tags = ["module=saga"])
     @Transactional
     fun execute(userId: Long, req: SubmitOrderRequest): SubmitOrderResponse {
+        // ADR-091 — 엔진 지연의 시작점. 검증·현금 예약 전에 잰다.
+        val submittedAt = Instant.now()
         val saga = sagaRepo.save(OrderSaga(
             userId   = userId,
             stockId  = req.stockId,
@@ -75,7 +80,7 @@ class OrderSagaOrchestrator(
             saga.id, userId, req.stockId, req.side, req.quantity)
 
         return try {
-            val response = runSteps(saga, userId, req)
+            val response = runSteps(saga, userId, req, submittedAt)
             saga.status = SagaStatus.COMPLETED
             saga.currentStep = SagaStep.COMPLETED
             saga.completedAt = Instant.now()
@@ -90,7 +95,7 @@ class OrderSagaOrchestrator(
 
     // ── 정방향 단계 ──────────────────────────────────────────────────────────
 
-    private fun runSteps(saga: OrderSaga, userId: Long, req: SubmitOrderRequest): SubmitOrderResponse {
+    private fun runSteps(saga: OrderSaga, userId: Long, req: SubmitOrderRequest, submittedAt: Instant): SubmitOrderResponse {
         // STEP 1: VALIDATE
         saga.currentStep = SagaStep.VALIDATED
         require(req.quantity > 0) { "수량은 1 이상이어야 합니다" }
@@ -100,6 +105,9 @@ class OrderSagaOrchestrator(
         if (req.orderType == "LIMIT") require(limitPrice != null) { "LIMIT 주문에는 limit_price가 필요합니다" }
         val stockExists = jdbc.queryForObject("SELECT COUNT(*) FROM stocks WHERE id = ?", Long::class.java, req.stockId) ?: 0L
         require(stockExists > 0) { "존재하지 않는 종목: stockId=${req.stockId}" }
+
+        // ADR-091 — 접수 시점 최우선 호가(실시간 호가만). 체결가와 비교해 슬리피지를 낸다. 실패해도 주문은 진행한다.
+        val quote = bestQuoteSource?.let { src -> runCatching { src.bestQuote(req.stockId) }.getOrNull() }
 
         // 오래된 봉(시세 단절·장 마감 후)으로는 즉시 체결하지 않는다(CandleFreshness, ADR-074 Note).
         //  - MARKET: 거부한다. 이 검사는 현금 예약(STEP 2) 앞이라 예약·환불이 생기지 않는다.
@@ -158,6 +166,11 @@ class OrderSagaOrchestrator(
             // ADR-085 — 진입 출처. 미체결 지정가가 나중에 스위퍼로 체결될 때도 이 행에서 읽는다.
             origin    = req.origin.type,
             originRef = req.origin.ref,
+            quoteBid  = quote?.bid,
+            quoteAsk  = quote?.ask,
+            quoteAt   = quote?.quotedAt,
+            quoteSource = quote?.source,
+            submittedAt = submittedAt,
         ))
         saga.orderId = order.id
 

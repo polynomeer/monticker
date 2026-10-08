@@ -8,11 +8,18 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.Instant
 
-/** 실현 손익 계산 입력 — 한 종목의 체결을 시간순으로. */
-data class PnlTradeLine(val id: Long, val stockId: Long, val side: String, val quantity: Int, val amount: BigDecimal)
+/** 실현 손익 계산 입력 — 한 종목의 체결을 시간순으로. [tradedAt]은 포지션 구간([RealizedPnl.positionSince])에만 쓴다. */
+data class PnlTradeLine(
+    val id: Long, val stockId: Long, val side: String, val quantity: Int, val amount: BigDecimal,
+    val tradedAt: Instant? = null,
+)
 
-/** 매도 체결 한 건의 실현 손익. [costBasis] = 그 시점 평균 매수단가 × 매도 수량. */
-data class RealizedPnl(val pnl: BigDecimal, val costBasis: BigDecimal) {
+/**
+ * 매도 체결 한 건의 실현 손익. [costBasis] = 그 시점 평균 매수단가 × 매도 수량.
+ * [positionSince] — ADR-091: 이 매도가 줄인 포지션이 열리기 직전에 보유가 마지막으로 0이 된 체결의 시각.
+ * 처음부터 0이 된 적이 없으면 null(사용자의 첫 체결부터 이어진 포지션). 손절 준수율이 "이 포지션에 정한 손절"을 고를 때 쓴다.
+ */
+data class RealizedPnl(val pnl: BigDecimal, val costBasis: BigDecimal, val positionSince: Instant? = null) {
     val pnlPct: Double?
         get() = if (costBasis.signum() > 0)
             pnl.divide(costBasis, 6, RoundingMode.HALF_UP).multiply(BigDecimal(100)).toDouble() else null
@@ -25,7 +32,7 @@ data class RealizedPnl(val pnl: BigDecimal, val costBasis: BigDecimal) {
  */
 object RealizedPnlCalculator {
     fun compute(lines: List<PnlTradeLine>): Map<Long, RealizedPnl> {
-        data class Pos(var qty: Long = 0, var cost: BigDecimal = BigDecimal.ZERO)
+        data class Pos(var qty: Long = 0, var cost: BigDecimal = BigDecimal.ZERO, var flatAt: Instant? = null)
         val pos = HashMap<Long, Pos>()
         val out = LinkedHashMap<Long, RealizedPnl>()
         for (t in lines) {
@@ -42,9 +49,10 @@ object RealizedPnlCalculator {
             // 보유보다 많이 판 줄(데이터 불일치)은 보유분만큼만 손익으로 본다 — 매도금액도 같은 비율로
             val proceeds = if (q == t.quantity.toLong()) t.amount
                 else t.amount.multiply(BigDecimal(q)).divide(BigDecimal(t.quantity), 4, RoundingMode.HALF_UP)
-            out[t.id] = RealizedPnl(proceeds.subtract(basis).setScale(4, RoundingMode.HALF_UP), basis)
+            out[t.id] = RealizedPnl(proceeds.subtract(basis).setScale(4, RoundingMode.HALF_UP), basis, p.flatAt)
             p.qty -= q
             p.cost = if (p.qty == 0L) BigDecimal.ZERO else (p.cost - basis).max(BigDecimal.ZERO)
+            if (p.qty == 0L) p.flatAt = t.tradedAt
         }
         return out
     }
@@ -119,10 +127,10 @@ class PaperRealizedPnlService(private val jdbc: JdbcTemplate) {
         val untilSql = if (until != null) " AND traded_at <= ?" else ""
         val args = mutableListOf<Any>(userId).apply { addAll(stockIds); until?.let { add(java.sql.Timestamp.from(it)) } }
         return jdbc.query(
-            """SELECT id, stock_id, side, quantity, amount FROM paper_trades
+            """SELECT id, stock_id, side, quantity, amount, traded_at FROM paper_trades
                WHERE user_id = ? AND stock_id IN (${stockIds.joinToString(",") { "?" }})$untilSql
                ORDER BY traded_at, id""",
-            { rs, _ -> PnlTradeLine(rs.getLong("id"), rs.getLong("stock_id"), rs.getString("side"), rs.getInt("quantity"), rs.getBigDecimal("amount")) },
+            { rs, _ -> PnlTradeLine(rs.getLong("id"), rs.getLong("stock_id"), rs.getString("side"), rs.getInt("quantity"), rs.getBigDecimal("amount"), rs.getTimestamp("traded_at").toInstant()) },
             *args.toTypedArray(),
         )
     }

@@ -7,10 +7,25 @@ import { ClobBook } from "@/components/matching/ClobBook";
 import RecentTrades from "@/components/stock/RecentTrades";
 import { OrderForm } from "@/components/matching/OrderForm";
 import { OrdersPanel } from "@/components/matching/OrdersPanel";
-import { STOCKS, useActiveOrders, useMyFills, useOrderbook } from "@/components/matching/data";
+import { STOCKS, useActiveOrders, useExecutionQuality, useMyFills, useOrderbook } from "@/components/matching/data";
+import { LATENCY_DEFINITION, SLIPPAGE_DEFINITION, bpsText, msText, type ExecutionQuality } from "@/components/wallet/insights";
 import { useStockMeta } from "@/components/portfolio/useStockMeta";
 import { fmtTime } from "@/components/portfolio/format";
 import { Panel, PanelCol, PanelRow, TerminalPage, fmtNum, type TopStat } from "@/components/terminal";
+
+function slippageHint(q: ExecutionQuality | null | undefined) {
+  if (!q) return SLIPPAGE_DEFINITION;
+  const parts = [`집계 ${q.slippage.fillCount}건`];
+  if (q.excludedNoQuote > 0) parts.push(`호가 기록 없음 ${q.excludedNoQuote}건 제외`);
+  return `${SLIPPAGE_DEFINITION} (${parts.join(", ")})`;
+}
+
+function latencyHint(q: ExecutionQuality | null | undefined) {
+  if (!q) return LATENCY_DEFINITION;
+  const parts = [`시장가 ${q.latency.orderCount}건`, `평균 ${msText(q.latency.avgMs)}`, `p95 ${msText(q.latency.p95Ms)}`];
+  if (q.latency.excludedNoSubmitTime > 0) parts.push(`접수 시각 기록 없음 ${q.latency.excludedNoSubmitTime}건 제외`);
+  return `${LATENCY_DEFINITION} (${parts.join(", ")})`;
+}
 
 export default function MatchingPage() {
   const [stockId, setStockId] = useState(2);
@@ -22,6 +37,7 @@ export default function MatchingPage() {
   const { data: book, isLoading: bookLoading } = useOrderbook(stockId);
   const { data: orders = [] } = useActiveOrders();
   const { data: fills = [] } = useMyFills();
+  const { data: quality } = useExecutionQuality(isLoggedIn);
 
   const meta = useStockMeta([...orders.map((o) => o.stockId), ...fills.map((f) => f.stockId)]);
   const stockName = (id: number) => STOCKS.find((s) => s.id === id)?.label ?? meta.get(id)?.name ?? `종목 #${id}`;
@@ -34,9 +50,19 @@ export default function MatchingPage() {
     { label: "엔진", value: "가격·시간 우선" },
     { label: "미체결", value: `${orders.length}건` },
     { label: "오늘 체결", value: `${todayFills}건` },
-    // 체결가 vs 주문 시점 최우선 호가 기록이 없어 평균 슬리피지·엔진 지연은 아직 집계하지 않는다
-    { label: "평균 슬리피지", value: "—", tone: "text-tm-muted" },
-    { label: "지연", value: "—", tone: "text-tm-muted" },
+    // ADR-091 — 주문 시점 최우선 호가 대비 체결가(bp, +는 불리)와 시장가 접수 → 체결 시간. 기록이 없으면 "—"
+    {
+      label: "평균 슬리피지",
+      value: bpsText(quality?.slippage.avgBps),
+      tone: quality?.slippage.avgBps == null ? "text-tm-muted" : undefined,
+      hint: slippageHint(quality),
+    },
+    {
+      label: "지연",
+      value: msText(quality?.latency.p50Ms),
+      tone: quality?.latency.p50Ms == null ? "text-tm-muted" : undefined,
+      hint: latencyHint(quality),
+    },
   ];
 
   return (

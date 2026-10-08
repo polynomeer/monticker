@@ -160,77 +160,46 @@ class EmotionTagServiceTest {
         verify(exactly = 0) { emotionTagRepo.save(any()) }
     }
 
+    // ── ADR-091 — 분석 집계는 순수 함수(EmotionAnalysis.aggregate), SQL은 EmotionAnalysisIntegrationTest ──
+
+    private fun row(emotion: String, side: String = "BUY", price: String = "100", nextSell: String? = null) =
+        EmotionRow(emotion, side, BigDecimal(price), nextSell?.let(::BigDecimal))
+
     @Test
-    fun `getAnalysis groups tags by emotion and counts them`() {
-        val tags = listOf(
-            EmotionTag(id = 1L, paperTradeId = 1L, userId = 1L, emotion = EmotionType.FOMO),
-            EmotionTag(id = 2L, paperTradeId = 2L, userId = 1L, emotion = EmotionType.FOMO),
-            EmotionTag(id = 3L, paperTradeId = 3L, userId = 1L, emotion = EmotionType.LONG_TERM),
-        )
-        every { emotionTagRepo.findAllByUserIdOrderByCreatedAtDesc(1L) } returns tags
-        every { tradeQueryService.findById(any()) } returns null
+    fun `aggregate groups tags by emotion, counts them and gives each a share of the total`() {
+        val result = EmotionAnalysis.aggregate(listOf(row("FOMO"), row("FOMO"), row("LONG_TERM"), row("PLANNED")))
 
-        val result = service.getAnalysis(1L)
-
-        val fomoStat = result.stats.first { it.emotion == "FOMO" }
-        val longTermStat = result.stats.first { it.emotion == "LONG_TERM" }
-        assertThat(fomoStat.count).isEqualTo(2)
-        assertThat(longTermStat.count).isEqualTo(1)
+        assertThat(result.totalCount).isEqualTo(4)
+        assertThat(result.stats.map { it.emotion }).containsExactly("FOMO", "LONG_TERM", "PLANNED") // 건수 내림차순, 같으면 이름순
+        assertThat(result.stats.first().count).isEqualTo(2)
+        assertThat(result.stats.first().sharePct).isEqualTo(50.0)
+        assertThat(result.stats.sumOf { it.sharePct!! }).isCloseTo(100.0, org.assertj.core.api.Assertions.within(1e-9))
     }
 
     @Test
-    fun `getAnalysis computes average return for emotions whose buy trades were later sold`() {
-        val buyTrade = PaperTradeSummary(id = 1L, userId = 1L, stockId = 100L, side = "BUY", quantity = 10, price = BigDecimal("100"), amount = BigDecimal("1000"))
-        val tag = EmotionTag(id = 1L, paperTradeId = 1L, userId = 1L, emotion = EmotionType.CONFIDENT)
-        every { emotionTagRepo.findAllByUserIdOrderByCreatedAtDesc(1L) } returns listOf(tag)
-        every { tradeQueryService.findById(1L) } returns buyTrade
-        every {
-            jdbc.queryForObject(match<String> { it.contains("side = 'SELL'") }, BigDecimal::class.java, 1L, 100L, buyTrade.tradedAt)
-        } returns BigDecimal("110")
-
-        val result = service.getAnalysis(1L)
-
-        val confidentStat = result.stats.first { it.emotion == "CONFIDENT" }
-        // (110 - 100) / 100 * 100 = 10%
-        assertThat(confidentStat.avgReturnPct).isNotNull()
-        assertThat(confidentStat.avgReturnPct!!).isCloseTo(10.0, org.assertj.core.api.Assertions.within(0.0001))
+    fun `aggregate averages the return of buy tags that were later sold`() {
+        val result = EmotionAnalysis.aggregate(listOf(row("CONFIDENT", nextSell = "110"), row("CONFIDENT", nextSell = "90")))
+        // (+10% + −10%) / 2 = 0
+        assertThat(result.stats.single().avgReturnPct!!).isCloseTo(0.0, org.assertj.core.api.Assertions.within(1e-9))
+        assertThat(EmotionAnalysis.aggregate(listOf(row("CONFIDENT", nextSell = "110"))).stats.single().avgReturnPct!!)
+            .isCloseTo(10.0, org.assertj.core.api.Assertions.within(1e-9))
     }
 
     @Test
-    fun `getAnalysis leaves avgReturnPct null when the buy trade has not yet been sold`() {
-        val buyTrade = PaperTradeSummary(id = 1L, userId = 1L, stockId = 100L, side = "BUY", quantity = 10, price = BigDecimal("100"), amount = BigDecimal("1000"))
-        val tag = EmotionTag(id = 1L, paperTradeId = 1L, userId = 1L, emotion = EmotionType.CONFIDENT)
-        every { emotionTagRepo.findAllByUserIdOrderByCreatedAtDesc(1L) } returns listOf(tag)
-        every { tradeQueryService.findById(1L) } returns buyTrade
-        every {
-            jdbc.queryForObject(any<String>(), BigDecimal::class.java, any(), any(), any())
-        } throws org.springframework.dao.EmptyResultDataAccessException(1)
-
-        val result = service.getAnalysis(1L)
-
-        val confidentStat = result.stats.first { it.emotion == "CONFIDENT" }
-        assertThat(confidentStat.avgReturnPct).isNull()
+    fun `aggregate leaves avgReturnPct null for unsold buys and for sell tags`() {
+        val result = EmotionAnalysis.aggregate(listOf(row("CONFIDENT"), row("REBALANCING", side = "SELL", nextSell = "120")))
+        assertThat(result.stats.first { it.emotion == "CONFIDENT" }.avgReturnPct).isNull()
+        assertThat(result.stats.first { it.emotion == "REBALANCING" }.avgReturnPct).isNull()
+        assertThat(result.stats.first { it.emotion == "REBALANCING" }.count).isEqualTo(1)
     }
 
     @Test
-    fun `getAnalysis ignores tags attached to SELL trades when computing returns`() {
-        val sellTrade = PaperTradeSummary(id = 1L, userId = 1L, stockId = 100L, side = "SELL", quantity = 10, price = BigDecimal("100"), amount = BigDecimal("1000"))
-        val tag = EmotionTag(id = 1L, paperTradeId = 1L, userId = 1L, emotion = EmotionType.REBALANCING)
-        every { emotionTagRepo.findAllByUserIdOrderByCreatedAtDesc(1L) } returns listOf(tag)
-        every { tradeQueryService.findById(1L) } returns sellTrade
-
-        val result = service.getAnalysis(1L)
-
-        val stat = result.stats.first { it.emotion == "REBALANCING" }
-        assertThat(stat.avgReturnPct).isNull()
-    }
-
-    @Test
-    fun `getAnalysis returns an empty stats list when the user has no tags`() {
-        every { emotionTagRepo.findAllByUserIdOrderByCreatedAtDesc(1L) } returns emptyList()
-
-        val result = service.getAnalysis(1L)
-
+    fun `aggregate of no tags is empty with a zero total and echoes the period`() {
+        val period = com.monticker.api.common.time.KstPeriod(java.time.LocalDate.of(2026, 10, 5), java.time.LocalDate.of(2026, 10, 11))
+        val result = EmotionAnalysis.aggregate(emptyList(), period)
         assertThat(result.stats).isEmpty()
+        assertThat(result.totalCount).isZero()
+        assertThat(result.from).isEqualTo(period.from)
+        assertThat(result.to).isEqualTo(period.to)
     }
 }

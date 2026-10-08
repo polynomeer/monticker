@@ -10,6 +10,8 @@ import WalletLedger, { type LedgerFilter } from "@/components/wallet/WalletLedge
 import { ReceiptCard, type Receipt } from "@/components/wallet/ReceiptCard";
 import { useRiskExposure } from "@/components/risk/useRiskExposure";
 import { reconciliationLabel, useReconciliation } from "@/components/wallet/useReconciliation";
+import { ScoreDetailGrid } from "@/components/wallet/ScoreDetailGrid";
+import type { ScoreDetails } from "@/components/wallet/insights";
 import { EmptyNote, LoginRequired, Skeleton } from "@/components/portfolio/PaperStates";
 import {
   AutoGrid, Bar, BtnLink, Panel, PanelCol, PanelRow, Seg, TerminalPage, Tile, dirClass, fmtNum, fmtPct, fmtSigned, type TopStat,
@@ -20,6 +22,8 @@ interface BehaviorScore {
   survivalScore: number;
   feedback: string[];
   reliabilityNotes: Record<string, unknown>;
+  /** ADR-091 — 계획·손절 준수율과 지난주 대비(KST 주). 예전 서버 응답에는 없다 */
+  details?: ScoreDetails | null;
 }
 
 const LEDGER_SEG = [
@@ -208,6 +212,7 @@ export default function WalletPage() {
                     </Tile>
                   ))}
                 </AutoGrid>
+                <ScoreDetailGrid details={score.details} />
                 {score.feedback.length > 0 && (
                   <ul className="m-0 flex list-disc flex-col gap-1 pl-4 text-xs text-tm-soft">
                     {score.feedback.map((fb, i) => <li key={i}>{fb}</li>)}
