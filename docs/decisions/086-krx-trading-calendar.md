@@ -116,3 +116,10 @@ market_calendar_years(market, year, verified, note)    "이 해의 휴장일을 
 - 해외 주식 실거래를 열 때(NYSE·NASDAQ 캘린더를 같은 테이블의 `market`으로).
 - 관리자 콘솔과 권한 모델이 생겨 운영자가 DB 접근 없이 임시공휴일을 넣어야 할 때.
 - KRX가 휴장일을 기계가 읽을 수 있는 형태로 안정적으로 제공하면(자동 대조 잡).
+
+## Notes
+
+- 2026-10 — worker 관측성: worker `KrxHolidayCalendarLoader`도 api와 같은 이름·의미로 `market_calendar_coverage_years_ahead`(게이지, 이 프로세스의 스냅샷 기준)와
+  `market_calendar_uncovered_lookups_total{year}`(카운터)를 내보낸다(커버리지 규칙은 `KrxHolidayCalendar.coverageYearsAhead`, 테스트가 Prometheus 노출 이름까지 본다).
+  알람 `MarketCalendarNextYearMissing`·`MarketCalendarCurrentYearMissing`은 `job=~"monticker-api|monticker-worker.*"`를 job별 `min`으로 보고,
+  `MarketCalendarUncoveredLookup`은 `{job, year}`로 나뉜다. 한 job만 울리면 그 프로세스가 DB를 읽지 못한 것이다([runbook](../runbooks/market-calendar.md)).

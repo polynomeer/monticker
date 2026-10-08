@@ -444,6 +444,23 @@ CREATE TABLE simulation_trades (
 `(user_id, origin, origin_ref) WHERE origin IS NOT NULL AND origin <> 'MANUAL'`.
 `order_emotion_tags.emotion`은 CHECK 없는 VARCHAR(30)이라 `PLANNED`·`IMPATIENT` 추가에 스키마 변경이 없다(V82가 데이터만 이관).
 
+### paper_trades 종목·시각 인덱스 (V98 — done, 중복 인덱스 정리는 후속)
+
+`GET /api/paper/history?stockId&from&to`(PR #177)는 `user_id = ? AND stock_id = ? [AND traded_at 범위] ORDER BY traded_at DESC, id DESC`이다.
+V11·V25 인덱스로는 사용자 전체 구간이나 그 종목 전체를 읽고 정렬했다. V98이 `idx_paper_trades_user_stock_traded (user_id, stock_id, traded_at DESC, id DESC)`를
+`CREATE INDEX CONCURRENTLY`(단일 문장, 트랜잭션 밖 — V84와 같은 규칙)로 만든다. 감정 태그의 다음 매도가(`LATERAL … LIMIT 1`)도 이 인덱스를 탄다.
+근거: `PaperTradesIndexPlanIntegrationTest`(V97·V98·정리 후 세 상태의 EXPLAIN).
+주의: 종목별 최근 매수 출처(`latestEntryOrigins`, `DISTINCT ON (stock_id) … stock_id IN (…)`)는 TimescaleDB SkipScan이 이 인덱스를 고르면서
+`stock_id IN`을 필터로 돌려 사용자 범위를 읽는다(합성 데이터 2만 건에서 버퍼 1,840 → 5,901, 실행 4.5ms → 6.1ms). 종목별 `LATERAL … LIMIT 1`로
+쓰면 종목마다 한 행만 읽는다 — 후속 쿼리 정리 대상.
+
+정리 대상인 중복 인덱스 두 개는 아직 남아 있다. CONCURRENTLY 마이그레이션은 파일 하나에 한 문장이라 아래 두 파일로 따로 낸다.
+- `idx_paper_trades_user (user_id, traded_at DESC)`(V11): `idx_paper_trades_user_traded`(V25)와 컬럼·순서가 같다.
+  `-- flyway:executeInTransaction=false` + `DROP INDEX CONCURRENTLY IF EXISTS idx_paper_trades_user;`
+- `idx_paper_trades_stock (user_id, stock_id)`(V11): V98 인덱스의 앞머리라 대체된다. 지우면 사용자 보유 집계·매수 평균가·실현손익 라인이
+  V98 인덱스나 `idx_paper_trades_user_traded`로 옮겨 가고, 예상 비용은 최대 7% 오른다(Seq Scan으로 떨어지는 쿼리 없음).
+  `-- flyway:executeInTransaction=false` + `DROP INDEX CONCURRENTLY IF EXISTS idx_paper_trades_stock;`
+
 ### orders 접수 시점 호가·시각 (V88 — done)
 
 [ADR-091](decisions/091-wallet-behavior-and-execution-quality-metrics.md): `quote_bid`·`quote_ask NUMERIC(18,4)`, `quote_at TIMESTAMPTZ`,
@@ -1102,7 +1119,7 @@ stocks
 | `orders` | V15 | ✅ |
 | `paper_accounts` | V11 (+V86 `initial_capital`) | ✅ |
 | `paper_settlements` | V27 | — |
-| `paper_trades` | V11 | — |
+| `paper_trades` | V11 (+V44 `fill_id`, +V81 `origin`, +V98 종목·시각 인덱스) | — |
 | `payment_records` | V27 | — |
 | `portfolio_optimizations` | V16 | ✅ |
 | `portfolio_positions` | V21 | ✅ |
