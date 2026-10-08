@@ -170,4 +170,35 @@ class UserNotificationDispatcherTest {
         verify(exactly = 0) { push.send(any()) }
         verify(exactly = 0) { mail.send(any<SimpleMailMessage>()) }
     }
+
+    // ── ADR-093 방해 금지 시간 ─────────────────────────────────────────────
+
+    /** 지금(KST)을 가운데 둔 2시간 방해 금지 — 실행 시각과 무관하게 구간 안이다. */
+    private fun quietNow() = java.time.LocalTime.now(java.time.ZoneId.of("Asia/Seoul")).withSecond(0).withNano(0).let {
+        NotificationPreference(quietHoursEnabled = true, quietHoursStart = it.minusHours(1), quietHoursEnd = it.plusHours(1))
+    }
+
+    @Test
+    fun `끌 수 없는 알림은 방해 금지 시간에도 즉시 푸시한다 - 설정을 읽지도 않는다`() {
+        every { prefs.forUser(7L) } returns quietNow()
+        firstDelivery(); tokens("tok-a")
+        every { push.send(any()) } returns listOf(PushResult("tok-a", "ok", null))
+
+        dispatcher.dispatch(msg.copy(category = "ORDER_OUTCOME"))
+        dispatcher.dispatch(msg.copy(category = "RISK_WARNING"))
+
+        verify(exactly = 2) { push.send(any()) }
+        verify(exactly = 0) { prefs.forUser(any()) }
+    }
+
+    @Test
+    fun `끌 수 있는 알림은 방해 금지 시간에 푸시하지 않고 대체 이메일도 보내지 않는다`() {
+        every { prefs.forUser(7L) } returns quietNow()
+
+        dispatcher.dispatch(msg.copy(category = "FILLS"))
+
+        verify(exactly = 0) { push.send(any()) }
+        verify(exactly = 0) { mail.send(any<SimpleMailMessage>()) }
+        verify(exactly = 0) { ops.setIfAbsent(any(), any(), any<java.time.Duration>()) }
+    }
 }
