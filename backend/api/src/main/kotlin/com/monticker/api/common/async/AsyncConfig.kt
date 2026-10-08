@@ -91,6 +91,23 @@ class AsyncConfig : AsyncConfigurer {
         initialize()
     }
 
+    /**
+     * ADR-101 주간 행동 리포트 — 실행 1개, 대기열 없음. 이 파드에서 이미 돌고 있으면 새 트리거는 버린다(DiscardPolicy).
+     * 스케줄러 스레드(기본 1개, 모든 @Scheduled 공유)를 최대 20분 붙잡지 않게 여기로 넘긴다.
+     * 종료 시 30초 기다린다 — 잡은 종료 신호를 받으면 다음 사용자로 넘어가지 않는다.
+     */
+    @Bean("weeklyReportExecutor")
+    fun weeklyReportExecutor(): Executor = ThreadPoolTaskExecutor().apply {
+        corePoolSize    = 1
+        maxPoolSize     = 1
+        queueCapacity   = 0
+        setThreadNamePrefix("weekly-report-")
+        setRejectedExecutionHandler { _, _ -> log.info("[WeeklyReport] 이전 실행이 아직 진행 중 — 이번 트리거는 건너뜀") }
+        setWaitForTasksToCompleteOnShutdown(true)
+        setAwaitTerminationSeconds(30)
+        initialize()
+    }
+
     @Bean("moduleEventExecutor")
     fun moduleEventExecutor(): ThreadPoolTaskExecutor = ThreadPoolTaskExecutor().apply {
         corePoolSize    = 4

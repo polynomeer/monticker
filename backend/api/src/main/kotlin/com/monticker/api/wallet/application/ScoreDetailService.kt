@@ -101,9 +101,15 @@ class ScoreDetailService(
         val origin: String?, val originRef: Long?, val emotion: String?,
     )
 
-    fun weekly(userId: Long): ScoreDetails {
-        val now = clock.instant()
-        val thisWeek = KstPeriod.weekOf(KstPeriod.today(now))
+    /** 이번 주(월요일 00:00 KST ~ 지금)와 지난주 — /wallet 점수 카드. */
+    fun weekly(userId: Long): ScoreDetails = forWeek(userId, KstPeriod.weekOf(KstPeriod.today(clock.instant())))
+
+    /**
+     * [week]가 속한 KST 주(월~일)를 "이번 주", 그 직전 주를 "지난주"로 같은 정의로 계산한다.
+     * 주간 행동 리포트(ADR-101)가 끝난 주를 기준으로 부른다 — 점수 카드와 정의가 하나다.
+     */
+    fun forWeek(userId: Long, week: KstPeriod): ScoreDetails {
+        val thisWeek = KstPeriod.weekOf(week.from)
         val lastWeek = KstPeriod.weekOf(thisWeek.from.minusDays(1))
         val rangeStart = lastWeek.start
         val rangeEnd = thisWeek.endExclusive
