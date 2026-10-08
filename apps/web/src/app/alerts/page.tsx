@@ -10,7 +10,7 @@ import {
 } from "@/components/terminal";
 import { useIsLoggedIn, useQuotes } from "@/components/home/data";
 import {
-  describeRule, ruleMeta, useAlertHistory, useAlertMutations, useAlertRules, useAlertStats, type AlertCategory,
+  describeRule, matchesFilter, ruleMeta, useAlertHistory, useAlertMutations, useAlertRules, useAlertStats,
 } from "@/components/alerts/data";
 
 const FILTERS = [
@@ -26,6 +26,8 @@ type Filter = (typeof FILTERS)[number]["value"];
 const STATUS_LABEL: Record<string, string> = {
   SENT: "발송됨", FAILED: "발송 실패", PENDING: "발송 대기", EMAIL_FALLBACK: "이메일로 발송",
   SUPPRESSED: "설정으로 보내지 않음", QUIET_HOURS: "방해 금지 시간 — 푸시 안 함",
+  // ADR-090 — 시그널 이력: 푸시·이메일은 알림 설정에 따라 따로 나간다(결과를 이 행에 되돌려 쓰지 않는다)
+  QUEUED: "알림 설정대로 전달",
 };
 
 function kstDate(d: Date) {
@@ -57,12 +59,7 @@ export default function AlertsPage() {
   const quotes = useQuotes(stockIds, "alerts");
   const stockName = (id: number | null) => (id == null ? "관심종목 전체" : quotes.get(id)?.name ?? `종목 #${id}`);
 
-  const shown = alerts.filter((a) => {
-    if (filter === "all") return true;
-    if (filter === "unread") return !a.readAt;
-    if (filter === "signal") return false; // 퀀트 시그널 알림은 아직 알림 이력에 쌓이지 않는다
-    return ruleMeta(a.ruleType).category === (filter as AlertCategory);
-  });
+  const shown = alerts.filter((a) => matchesFilter(a, filter));
 
   const todayKey = kstDate(new Date());
   const todayCount = stats?.recentFires.find((d) => d.date === todayKey)?.count ?? (stats ? 0 : null);
@@ -115,7 +112,7 @@ export default function AlertsPage() {
           <div className="flex flex-col items-center gap-1.5 px-4 py-16 text-center">
             <span className="text-sm font-semibold text-tm-soft">알림 이력이 없습니다</span>
             <span className="text-xs text-tm-muted">
-              {filter === "signal" ? "퀀트 시그널 알림은 준비 중입니다." : filter === "unread" ? "최근 알림을 모두 읽었습니다." : "종목 상세 페이지에서 가격 알림을 설정해보세요."}
+              {filter === "signal" ? "내 전략·구독 전략에서 포워드 테스트 신호가 나면 여기 쌓입니다." : filter === "unread" ? "최근 알림을 모두 읽었습니다." : "종목 상세 페이지에서 가격 알림을 설정해보세요."}
             </span>
           </div>
         ) : (

@@ -14,7 +14,8 @@ export interface AlertStats {
 /** GET /api/alerts/history/search 응답(AlertHistoryResponse) */
 export interface AlertHistory {
   id: number;
-  ruleId: number;
+  /** 규칙 없이 생긴 이력(퀀트 시그널, ADR-090)은 null */
+  ruleId: number | null;
   stockId: number | null;
   ruleType: string;
   message: string;
@@ -119,7 +120,7 @@ export function useAlertMutations() {
 }
 
 /** 알림 종류 → 시안의 원형 글자 배지·분류 탭 */
-export type AlertCategory = "price" | "event" | "account";
+export type AlertCategory = "price" | "event" | "signal" | "account";
 
 export const RULE_META: Record<string, { letter: string; color: string; tag: string; category: AlertCategory }> = {
   PRICE_ABOVE:          { letter: "P", color: "#f1fa8c", tag: "가격", category: "price" },
@@ -132,10 +133,21 @@ export const RULE_META: Record<string, { letter: string; color: string; tag: str
   NEWS_PUBLISHED:       { letter: "N", color: "#8be9fd", tag: "뉴스", category: "event" },
   DISCLOSURE_PUBLISHED: { letter: "D", color: "#ffb86c", tag: "공시", category: "event" },
   HOLDING_DROP:         { letter: "H", color: "#ff8a8a", tag: "보유 종목", category: "account" },
+  // ADR-090 — 내 전략·구독 전략의 포워드 테스트 신호(규칙 없이 서버가 적재)
+  QUANT_SIGNAL:         { letter: "Q", color: "#50fa7b", tag: "시그널", category: "signal" },
 };
 
 export function ruleMeta(type: string) {
   return RULE_META[type] ?? { letter: "?", color: "#c3c8e2", tag: type, category: "event" as AlertCategory };
+}
+
+export type AlertFilter = "all" | "unread" | AlertCategory;
+
+/** 알림 이력 탭 필터 */
+export function matchesFilter(a: Pick<AlertHistory, "ruleType" | "readAt">, filter: AlertFilter) {
+  if (filter === "all") return true;
+  if (filter === "unread") return !a.readAt;
+  return ruleMeta(a.ruleType).category === filter;
 }
 
 /** 규칙 조건을 사람이 읽는 문장으로 */

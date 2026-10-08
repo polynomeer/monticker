@@ -8,6 +8,7 @@ import { authFetch } from "@/services/api";
 import { BtnLink, Icon, Notice, SelectBox, TerminalPage } from "@/components/terminal";
 import { RuleSetCard } from "@/components/quant/RuleSetCard";
 import { SegOpts } from "@/components/quant/parts";
+import { countStat, useQuantSignalSummary } from "@/components/quant/signalSummary";
 
 type Filter = "ALL" | "LIVE" | "RUNNING" | "BACKTESTED" | "DRAFT";
 type Sort = "updated" | "created" | "name";
@@ -34,6 +35,9 @@ export default function QuantLabPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["quant", "rulesets"] }),
   });
 
+  // 실패하면 지어낸 0 대신 `—`(isError면 data가 없다)
+  const { data: signalSummary } = useQuantSignalSummary();
+
   const count = (s: string) => ruleSets.filter((r) => r.status === s).length;
   const running = count("RUNNING");
   const backtested = count("BACKTESTED");
@@ -58,8 +62,8 @@ export default function QuantLabPage() {
         // 실전 자동 운용은 아직 없다 — 포워드 테스트와 구분해서 비워 둔다.
         { label: "운용 중", value: "—", tone: "text-tm-muted" },
         { label: "포워드 테스트", value: `${running}개`, tone: "text-dracula-purple" },
-        { label: "오늘 신호", value: "—", tone: "text-tm-muted" },
-        { label: "구독 중", value: "—", tone: "text-tm-muted" },
+        { label: "오늘 신호", value: countStat(signalSummary?.todaySignals, "건"), tone: signalSummary ? "text-dracula-green" : "text-tm-muted" },
+        { label: "구독 중", value: countStat(signalSummary?.activeSubscriptions, "개"), tone: signalSummary ? undefined : "text-tm-muted" },
       ]}
     >
       <div className="flex flex-col gap-2.5 p-1.5">
