@@ -14,6 +14,10 @@ import java.time.Duration
  *
  * event_publication 테이블에서 completion_date IS NULL인 행이 대상이다.
  * 1분 이상 미완료된 이벤트만 재전송해 정상 처리 중인 이벤트와 구분한다.
+ *
+ * ADR-094 — 이 테이블은 **api 전용**이다. Modulith는 미완료 행을 전부 엔티티로 읽어 이벤트 클래스를 해석하므로,
+ * 이 프로세스에 없는 클래스(예: worker의 SearchIndexEvent)가 한 행이라도 있으면 재전송 전체가 실패한다.
+ * worker는 worker_outbox.event_publication을 쓴다(V91).
  */
 @Component
 class OutboxResubmissionConfig(
