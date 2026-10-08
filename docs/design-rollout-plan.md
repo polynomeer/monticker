@@ -106,7 +106,7 @@
 | /alerts | 규칙 켜기/끄기 토글 | 켜짐 상태로 비활성 표시 | 규칙 재활성화 API(지금은 DELETE 비활성화만 있음) | P1 | ✅ |
 | /alerts | 시그널 탭 | 필터는 동작하지만 항상 비어 있음 | 퀀트 시그널을 알림 이력에 적재 | P2 | |
 | /alerts | 새 알림 규칙 | 종목 검색으로 이동 | 알림 화면에서 바로 만드는 폼(기존 `POST /api/alerts/rules`) | P2 | ✅ 알림 규칙 패널 안 폼 — StockPicker 종목 검색, 서버 필수 조건 + 범위 검사, 400·429 등 서버 오류 표시 |
-| /alerts | 전달 채널 | `—` | 알림 채널 설정 조회 API | P2 | |
+| /alerts | 전달 채널 | `—` | 알림 채널 설정 조회 API | P2 | ✅ [ADR-093](decisions/093-notification-quiet-hours-and-delivery-channels.md) — `GET /api/users/me/notification-preferences/channels`: 종류별 푸시·이메일·대체 이메일·이력, 끌 수 없는 종류는 방해 금지 시간에도 즉시. worker 발송 정책과 같은 사례표로 테스트. 알림 생성은 없는·비활성 종목을 400으로 거부 |
 
 ## 3. 모의투자 · 지갑
 
@@ -196,7 +196,7 @@
 | /onboarding | 시작 자금 3,000만원·1억원 | 비활성(1,000만원 고정) | 모의 계좌 생성 시 초기 자금 파라미터 | P2 | ✅ `POST /api/paper/account` 처음 생성 때만, 화이트리스트 3종, 대사·초기화가 계좌별 시작 자금 사용 [ADR-089](decisions/089-paper-initial-capital-and-user-preferences.md) |
 | /onboarding | 3단계 관심종목 고르기 | 검색 화면 링크 | 인기 종목 추천 + 일괄 추가(기존 watchlist API) | P2 | ✅ 거래대금 상위 12종목(라벨로 밝힘) + 다중 선택 담기. 일괄 API가 없어 단건 순차·부분 실패 보고·이미 담긴 종목 생략 — [watchlistBulk.ts](../apps/web/src/lib/watchlistBulk.ts) |
 | /subscription | 연간 결제, 카드 변경 | 연간 비활성. 카드는 등록/해지만 | 연간 요금제, 빌링키 교체 API | P2 | |
-| /settings/notifications | 카카오 알림톡, 방해 금지 시간 | 비활성 | 비즈메시지 연동, quiet-hours 필드와 발송 필터 | P2 | |
+| /settings/notifications | 카카오 알림톡, 방해 금지 시간 | 비활성 | 비즈메시지 연동, quiet-hours 필드와 발송 필터 | P2 | 부분 ✅ 방해 금지 시간 [ADR-093](decisions/093-notification-quiet-hours-and-delivery-channels.md) — V90, KST·자정 넘김, 끌 수 있는 알림의 푸시만 보내지 않음(미루지 않음), 이메일·이력은 그대로, 리스크·‘결과 확인 중’·조건부 주문 실패는 즉시. 카카오 알림톡은 외부 연동 필요 — 비활성 유지 |
 | /login | `?error=oauth2` 메시지 | 표시 안 함(이전부터) | 쿼리 오류 메시지 표시와 테스트 목 확장 | P2 | ✅ 아는 코드만 고정 문구(원문 미표시), `useSearchParams` 목 추가 — [loginError.ts](../apps/web/src/lib/loginError.ts) |
 
 ---
