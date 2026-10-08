@@ -6,7 +6,8 @@ import java.time.ZoneId
 
 /**
  * ADR-082 — 알림 종류. api `NotificationCategory`(notify.user 와이어)의 상위집합이다: PRICE_ALERT·VOLUME_SURGE는 worker 자체 경로
- * (알림 규칙 `AlertDispatcher`, 관심종목 이벤트 `StockEventWriter`)가 쓴다.
+ * (알림 규칙 `AlertDispatcher`, 관심종목 이벤트 `StockEventWriter`)가 쓴다. NEWS는 관심종목 뉴스·공시 팬아웃(ADR-100,
+ * `news.NewsAlertFanout`)이 쓰며 와이어(notify.user)를 거치지 않고 같은 JVM에서 발송한다.
  */
 enum class NotificationCategory(val alwaysOn: Boolean = false) {
     ORDER_OUTCOME(alwaysOn = true),
@@ -17,6 +18,7 @@ enum class NotificationCategory(val alwaysOn: Boolean = false) {
     STRATEGY_MARKET,
     PRICE_ALERT,
     VOLUME_SURGE,
+    NEWS,
     ;
 
     companion object {
@@ -67,6 +69,7 @@ data class NotificationPreference(
     fun channels(category: NotificationCategory): Pair<Boolean, Boolean> = when (category) {
         NotificationCategory.PRICE_ALERT -> priceAlertPush to priceAlertEmail
         NotificationCategory.VOLUME_SURGE -> volumeSurgePush to volumeSurgeEmail
+        NotificationCategory.NEWS -> newsAlertPush to newsAlertEmail
         NotificationCategory.QUANT_SIGNAL -> quantSignalPush to quantSignalEmail
         NotificationCategory.FILLS -> fillsPush to fillsEmail
         NotificationCategory.STRATEGY_MARKET -> strategyMarketNewsPush to strategyMarketNewsEmail

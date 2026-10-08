@@ -1,5 +1,8 @@
 package com.monticker.worker.outbox
 
+import com.monticker.worker.newsalert.NewsAlertCandidateEvent
+import com.monticker.worker.newsalert.NewsAlertKind
+import com.monticker.worker.newsalert.NewsAlertNotifyEvent
 import com.monticker.worker.search.SearchIndexEvent
 import com.monticker.worker.support.PostgresIntegrationTest
 import io.micrometer.core.instrument.MeterRegistry
@@ -42,7 +45,7 @@ class WorkerOutboxIsolationIntegrationTest : PostgresIntegrationTest() {
     @ImportOutboxAutoConfiguration
     @Import(
         OutboxResubmissionConfig::class, LegacyOutboxDrain::class, OutboxCompletedCleanup::class,
-        WorkerOutboxSchemaGuard::class, FlakySearchIndexListener::class,
+        WorkerOutboxSchemaGuard::class, FlakySearchIndexListener::class, FlakyNewsAlertListener::class,
     )
     class OutboxTestApp {
         @Bean fun meterRegistry(): MeterRegistry = SimpleMeterRegistry()
@@ -58,6 +61,26 @@ class WorkerOutboxIsolationIntegrationTest : PostgresIntegrationTest() {
         fun on(event: SearchIndexEvent) {
             received += event
             if (failuresLeft.getAndDecrement() > 0) throw IllegalStateException("Kafka down (simulated)")
+        }
+    }
+
+    /** ADR-100 — 뉴스 알림 내부 이벤트가 발행 기록(JSON)을 거쳐 재전송될 때 그대로 되살아나는지 본다 */
+    @Component
+    class FlakyNewsAlertListener {
+        val failuresLeft = AtomicInteger(0)
+        val candidates = CopyOnWriteArrayList<NewsAlertCandidateEvent>()
+        val notifies = CopyOnWriteArrayList<NewsAlertNotifyEvent>()
+
+        @TransactionalEventListener
+        fun on(event: NewsAlertCandidateEvent) {
+            candidates += event
+            if (failuresLeft.getAndDecrement() > 0) throw IllegalStateException("fan-out failed (simulated)")
+        }
+
+        @TransactionalEventListener
+        fun on(event: NewsAlertNotifyEvent) {
+            notifies += event
+            if (failuresLeft.getAndDecrement() > 0) throw IllegalStateException("delivery failed (simulated)")
         }
     }
 
@@ -88,7 +111,12 @@ class WorkerOutboxIsolationIntegrationTest : PostgresIntegrationTest() {
         jdbcTemplate.update("DELETE FROM worker_outbox.event_publication")
         listener.received.clear()
         listener.failuresLeft.set(0)
+        newsListener.candidates.clear()
+        newsListener.notifies.clear()
+        newsListener.failuresLeft.set(0)
     }
+
+    private val newsListener get() = context.getBean(FlakyNewsAlertListener::class.java)
 
     private fun event() = SearchIndexEvent.index("news", UUID.randomUUID().toString(), mapOf("title" to "삼성전자 공시"))
 
@@ -160,6 +188,29 @@ class WorkerOutboxIsolationIntegrationTest : PostgresIntegrationTest() {
         // 1분 미만(구버전 worker가 지금 완료 표시할 수 있는 행)과 api 행은 남는다
         assertThat(jdbcTemplate.queryForList("SELECT id FROM public.event_publication", UUID::class.java))
             .containsExactlyInAnyOrder(fresh, apiRow)
+    }
+
+    @Test
+    fun `news alert events survive a failed first delivery and come back intact on resubmission`() {
+        val candidate = NewsAlertCandidateEvent(
+            kind = NewsAlertKind.DISCLOSURE, sourceId = 7L, stockId = 3L, title = "[공시] 합병 결정",
+            publishedAtMillis = 1_760_000_000_000L, importanceScore = 90,
+        )
+        val notify = NewsAlertNotifyEvent(
+            userId = 11L, historyId = 99L, title = "삼성전자 새 공시", body = "[공시] 합병 결정", dedupKey = "disclosure:7:u11",
+            data = mapOf("type" to "NEWS", "kind" to "DISCLOSURE"),
+        )
+        newsListener.failuresLeft.set(2)
+        runCatching { tx.executeWithoutResult { publisher.publishEvent(candidate); publisher.publishEvent(notify) } }
+        jdbcTemplate.update("UPDATE worker_outbox.event_publication SET publication_date = now() - INTERVAL '2 minutes'")
+        assertThat(count("SELECT count(*) FROM worker_outbox.event_publication WHERE completion_date IS NULL")).isEqualTo(2)
+
+        context.getBean(OutboxResubmissionConfig::class.java).resubmit()
+
+        assertThat(newsListener.candidates).containsExactly(candidate, candidate)
+        assertThat(newsListener.notifies).containsExactly(notify, notify)
+        assertThat(newsListener.notifies.last().toMessage().category).isEqualTo("NEWS")
+        assertThat(count("SELECT count(*) FROM worker_outbox.event_publication WHERE completion_date IS NULL")).isZero()
     }
 
     @Test

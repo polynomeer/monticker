@@ -88,7 +88,7 @@ class NewsCollectorTest {
     fun `collectForStock persists a single item and registers it in the bloom filter`() {
         every { bloomFilter.mightContain("https://news.com/new") } returns false
         stubInsertReturning(77L)
-        val published = slot<Any>()
+        val published = mutableListOf<Any>()
         every { events.publishEvent(capture(published)) } returns Unit
 
         val saved = collector.collectForStock(
@@ -105,11 +105,15 @@ class NewsCollectorTest {
         assertThatSaved(saved)
         verify { bloomFilter.put("https://news.com/new") }
         // ADR-042: ES를 직접 쓰지 않고 완성된 문서를 색인 이벤트로 발행한다 (RETURNING id가 문서 id)
-        val ev = published.captured as com.monticker.worker.search.SearchIndexEvent
+        val ev = published.filterIsInstance<com.monticker.worker.search.SearchIndexEvent>().single()
         org.assertj.core.api.Assertions.assertThat(ev.index).isEqualTo("news_articles")
         org.assertj.core.api.Assertions.assertThat(ev.docId).isEqualTo("77")
         org.assertj.core.api.Assertions.assertThat(ev.payload!!["title"]).isEqualTo("새 뉴스")
         org.assertj.core.api.Assertions.assertThat(ev.payload!!["publishedAt"]).isInstanceOf(java.lang.Long::class.java)
+        // ADR-100: 같은 트랜잭션에서 관심종목 알림 후보도 낸다(키 = news:{id})
+        val candidate = published.filterIsInstance<com.monticker.worker.newsalert.NewsAlertCandidateEvent>().single()
+        org.assertj.core.api.Assertions.assertThat(candidate.historyKey()).isEqualTo("news:77")
+        org.assertj.core.api.Assertions.assertThat(candidate.stockId).isEqualTo(1L)
     }
 
     @Test

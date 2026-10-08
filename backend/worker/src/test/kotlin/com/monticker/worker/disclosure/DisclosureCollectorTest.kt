@@ -105,4 +105,26 @@ class DisclosureCollectorTest {
             )
         }
     }
+
+    // ADR-100 — 중요도 70 이상 공시만 관심종목 알림 후보가 된다
+    @Test
+    fun `publishes a news alert candidate only for disclosures at or above the importance threshold`() {
+        every { dartClient.isConfigured } returns true
+        every { dartClient.fetchRecent(days = 1) } returns listOf(
+            DartDisclosure("20240103000001", "삼성전자", "005930", "분기보고서", "20240103"),        // 70 → 후보
+            DartDisclosure("20240103000002", "삼성전자", "005930", "임원ㆍ주요주주특정증권등소유상황보고서", "20240103"), // 60 → 아님
+        )
+        stubStockIds("005930" to 1L)
+        every { jdbc.queryForObject(any<String>(), eq(Int::class.java), *anyVararg()) } returns 0
+        every { jdbc.query(match<String> { it.contains("INSERT INTO stock_events") }, any<RowMapper<Long>>(), *anyVararg()) } returnsMany
+            listOf(listOf(301L), listOf(302L))
+
+        collector.collect()
+
+        verify(exactly = 1) { events.publishEvent(match<Any> { it is com.monticker.worker.newsalert.NewsAlertCandidateEvent }) }
+        verify { events.publishEvent(match<Any> {
+            it is com.monticker.worker.newsalert.NewsAlertCandidateEvent && it.sourceId == 301L && it.importanceScore == 70 &&
+                it.historyKey() == "disclosure:301"
+        }) }
+    }
 }
