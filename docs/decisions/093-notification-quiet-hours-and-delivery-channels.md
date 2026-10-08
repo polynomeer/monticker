@@ -66,7 +66,7 @@ Accepted
 - 기기가 없는 웹 사용자는 방해 금지 시간에 "푸시 대체 이메일"도 받지 않는다. 대체 이메일은 닿지 않은 푸시를 위한 것이고, 일부러 보내지 않은
   푸시를 위한 것이 아니기 때문이다.
 - 방해 금지 시간은 KST 고정이다. 해외 거주 사용자의 현지 시간대는 지원하지 않는다.
-- 퀀트 시그널의 알림 이력 적재(별도 작업)가 들어오면 표와 api `NotificationCategory`의 `QUANT_SIGNAL.inApp`을 true로 바꾼다.
+- 퀀트 시그널의 알림 이력 적재(ADR-090)와 함께 표와 api `NotificationCategory`의 `QUANT_SIGNAL.inApp`을 true로 바꿨다.
 
 ## Revisit When
 
