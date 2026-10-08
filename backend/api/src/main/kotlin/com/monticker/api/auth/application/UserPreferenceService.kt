@@ -18,11 +18,17 @@ data class UserPreferences(
     val usageStyle: UsageStyle? = null,
     /** 저장한 적이 없으면 null(기본값). */
     val updatedAt: Instant? = null,
+    /**
+     * ADR-099 — 홈·알림 화면에서 관심 분야를 앞에 두는 정렬("관심 분야 순")을 쓸지. 기본 true.
+     * 관심 분야가 비어 있으면 화면이 무시한다. 정보를 숨기거나 발송량을 바꾸지 않는다.
+     */
+    val interestOrdering: Boolean = true,
 )
 
 /**
- * ADR-089 — 관심 분야·사용 방식 저장/조회. 지금은 **저장·조회만** 한다 — 홈·알림 우선순위 반영은 후속 작업이다
- * (docs/design-rollout-plan.md §6). 사용자는 토큰의 userId로만 정해진다(요청 본문·경로에 userId가 없다).
+ * ADR-089 — 관심 분야·사용 방식 저장/조회. ADR-099 — 화면(홈 섹터 히트맵·이벤트 피드, 알림 이력)은 관심 분야를
+ * **정렬·강조 신호로만** 쓴다(분야→업종 매핑은 웹 `lib/interestSectors.ts`). 서버는 저장·조회와 "관심 분야 순" 스위치만 갖는다 —
+ * 푸시 발송·방해 금지 시간·전달 정책은 이 값을 읽지 않는다. 사용자는 토큰의 userId로만 정해진다(요청 본문·경로에 userId가 없다).
  */
 @Service
 class UserPreferenceService(private val jdbc: JdbcTemplate) {
@@ -50,7 +56,7 @@ class UserPreferenceService(private val jdbc: JdbcTemplate) {
     @Transactional(readOnly = true)
     fun get(userId: Long): UserPreferences =
         jdbc.query(
-            "SELECT interest_sectors, usage_style, updated_at FROM user_preferences WHERE user_id = ?",
+            "SELECT interest_sectors, usage_style, updated_at, interest_ordering FROM user_preferences WHERE user_id = ?",
             { rs, _ ->
                 @Suppress("UNCHECKED_CAST")
                 val arr = (rs.getArray("interest_sectors")?.array as? Array<Any?>).orEmpty()
@@ -59,6 +65,7 @@ class UserPreferenceService(private val jdbc: JdbcTemplate) {
                     interestSectors = arr.mapNotNull { v -> InterestSector.entries.firstOrNull { it.name == v } },
                     usageStyle = rs.getString("usage_style")?.let { v -> UsageStyle.entries.firstOrNull { it.name == v } },
                     updatedAt = rs.getTimestamp("updated_at")?.toInstant(),
+                    interestOrdering = rs.getBoolean("interest_ordering"),
                 )
             },
             userId,
@@ -80,6 +87,23 @@ class UserPreferenceService(private val jdbc: JdbcTemplate) {
                 setString(3, style?.name)
             }
         }
+        return get(userId)
+    }
+
+    /**
+     * ADR-099 — "관심 분야 순" 스위치만 바꾼다. 관심 분야·사용 방식은 건드리지 않는다(행이 없으면 빈 선택으로 만든다).
+     * PUT(관심 분야 저장)은 이 컬럼을 덮어쓰지 않으므로 설정 화면에서 분야를 다시 저장해도 스위치가 유지된다.
+     */
+    @Transactional
+    fun setInterestOrdering(userId: Long, enabled: Boolean): UserPreferences {
+        jdbc.update(
+            """
+            INSERT INTO user_preferences (user_id, interest_ordering, updated_at)
+            VALUES (?, ?, now())
+            ON CONFLICT (user_id) DO UPDATE SET interest_ordering = EXCLUDED.interest_ordering, updated_at = now()
+            """.trimIndent(),
+            userId, enabled,
+        )
         return get(userId)
     }
 }

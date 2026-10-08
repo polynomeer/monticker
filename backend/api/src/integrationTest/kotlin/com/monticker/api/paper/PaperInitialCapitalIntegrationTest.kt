@@ -106,6 +106,29 @@ class PaperInitialCapitalIntegrationTest : PostgresIntegrationTest() {
     }
 
     @Test
+    fun `interest ordering defaults to true, survives a preferences save and can be set before any save`() {
+        val userId = newUser()
+        assertThat(preferences.get(userId).interestOrdering).isTrue()
+
+        // 행이 없을 때 스위치만 끄면 빈 선택으로 행을 만든다
+        val off = preferences.setInterestOrdering(userId, false)
+        assertThat(off.interestOrdering).isFalse()
+        assertThat(off.interestSectors).isEmpty()
+
+        // 관심 분야를 다시 저장해도(PUT) 스위치는 그대로
+        preferences.save(userId, listOf(InterestSector.BIO), UsageStyle.OBSERVE)
+        val saved = preferences.get(userId)
+        assertThat(saved.interestOrdering).isFalse()
+        assertThat(saved.interestSectors).containsExactly(InterestSector.BIO)
+
+        // 스위치를 켜도 관심 분야는 그대로
+        val on = preferences.setInterestOrdering(userId, true)
+        assertThat(on.interestOrdering).isTrue()
+        assertThat(on.interestSectors).containsExactly(InterestSector.BIO)
+        assertThat(on.usageStyle).isEqualTo(UsageStyle.OBSERVE)
+    }
+
+    @Test
     fun `preference check constraints reject values outside the whitelist`() {
         val userId = newUser()
         assertThatThrownBy {

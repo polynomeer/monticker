@@ -16,6 +16,9 @@ data class UserPreferenceRequest(
     val usageStyle: String? = null,
 )
 
+/** ADR-099 — "관심 분야 순" 스위치만 바꾼다. 빠지면 400(무엇을 바꾸려는지 모르는 요청). */
+data class UserPreferencePatchRequest(val interestOrdering: Boolean? = null)
+
 /** ADR-089 — 온보딩 관심 분야·사용 방식. 대상 사용자는 인증 토큰으로만 정한다. */
 @RestController
 @RequestMapping("/api/users/me/preferences")
@@ -30,5 +33,12 @@ class UserPreferenceController(private val preferences: UserPreferenceService) {
     fun put(@AuthenticationPrincipal userId: Long, @RequestBody body: UserPreferenceRequest): ResponseEntity<UserPreferences> {
         val (sectors, style) = UserPreferenceService.parse(body.interestSectors, body.usageStyle)
         return ResponseEntity.ok(preferences.save(userId, sectors, style))
+    }
+
+    @PatchMapping
+    @RateLimited(limit = 30, windowSec = 60, keyPrefix = "users.preferences")
+    fun patch(@AuthenticationPrincipal userId: Long, @RequestBody body: UserPreferencePatchRequest): ResponseEntity<UserPreferences> {
+        val enabled = requireNotNull(body.interestOrdering) { "interestOrdering(true/false)이 필요합니다" }
+        return ResponseEntity.ok(preferences.setInterestOrdering(userId, enabled))
     }
 }
