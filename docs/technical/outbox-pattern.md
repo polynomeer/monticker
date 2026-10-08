@@ -81,6 +81,11 @@ CREATE TABLE event_publication (
 );
 ```
 
+이 테이블은 **api 전용**이다. worker는 같은 구조의 `worker_outbox.event_publication`(V91)을 Modulith JDBC 레지스트리로 쓴다
+([ADR-094](../decisions/094-separate-outbox-tables-per-app.md)). 재전송은 미완료 행의 `event_type`을 클래스로 해석한다.
+두 앱이 한 테이블을 쓰면 상대 앱의 클래스 하나 때문에 재전송 전체가 실패한다(2026-10-08 실측, 알림 유실).
+완료 행은 `OutboxCompletedCleanup`이 7일 뒤 지운다.
+
 ---
 
 ## 재처리 — OutboxResubmissionConfig
