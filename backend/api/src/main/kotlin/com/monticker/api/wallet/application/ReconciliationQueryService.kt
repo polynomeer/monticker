@@ -42,6 +42,10 @@ class ReconciliationQueryService(private val jdbc: JdbcTemplate) {
     @Transactional(readOnly = true)
     fun summary(userId: Long, windowDays: Int = 90): ReconciliationSummary {
         val days = windowDays.coerceIn(1, 365)
+        // ADR-089 — 스냅샷엔 초기 지급이 없다. 시작 자금은 계좌 생성 뒤 바뀌지 않으므로(updatable=false) 지금 값으로 다시 계산한다.
+        val initialCapital = jdbc.query(
+            "SELECT initial_capital FROM paper_accounts WHERE user_id = ?", { rs, _ -> rs.getBigDecimal("initial_capital") }, userId,
+        ).firstOrNull() ?: LedgerReconciliationService.INITIAL_BALANCE
         val since = LedgerReconciliationService.ZONE.let { LocalDate.now(it).minusDays(days.toLong() - 1) }
         val mapper = { rs: java.sql.ResultSet, _: Int ->
             val cash = rs.getBigDecimal("account_cash")
@@ -50,7 +54,7 @@ class ReconciliationQueryService(private val jdbc: JdbcTemplate) {
             ReconciliationDay(
                 asOfDate = rs.getDate("as_of_date").toLocalDate(),
                 accountCash = cash, reservedCash = reserved, ledgerSum = ledger,
-                drift = (cash + reserved) - (LedgerReconciliationService.INITIAL_BALANCE + ledger),
+                drift = (cash + reserved) - (initialCapital + ledger),
                 mismatch = rs.getBoolean("mismatch"),
                 checkedAt = rs.getTimestamp("created_at").toInstant(),
             )

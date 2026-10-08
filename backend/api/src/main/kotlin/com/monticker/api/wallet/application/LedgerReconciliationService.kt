@@ -34,9 +34,10 @@ data class ReconciliationResult(
 /**
  * ADR-043 §2·§3 — 컬럼 잔고(paper_accounts.cash)와 append-only 원장의 일일 대사.
  *
- * 불변식: `cash + reserved = INITIAL_BALANCE + Σ ledger.amount[CASH_EVENT_TYPES]`
+ * 불변식: `cash + reserved = initial_capital + Σ ledger.amount[CASH_EVENT_TYPES]`
  *
- * - INITIAL_BALANCE: 계정 생성 시 지급되는 1,000만 원은 원장에 DEPOSIT으로 기록되지 않는다 — 상수로 더한다.
+ * - initial_capital: 계정 생성 시 지급되는 시작 자금은 원장에 DEPOSIT으로 기록되지 않는다 — 계좌 행의 값(ADR-089,
+ *   1,000만·3,000만·1억 중 하나, 기존 계좌는 1,000만)을 더한다. 계좌 행이 없으면 1,000만(INITIAL_BALANCE).
  * - reserved: 미체결 BUY 주문의 limit_price × 잔량. OrderSagaOrchestrator.reserveCash가 제출 시점에
  *   cash에서 미리 빼지만 원장에는 아무것도 쓰지 않는다(예약은 실현된 이동이 아니다). 그래서 잔고 쪽에 되돌려 더한다.
  * - CASH_EVENT_TYPES: 현금 컬럼에 실제로 반영되는 이벤트만. SUBSCRIPTION_PAYMENT(PG 결제)·CREATOR_*(정산 계좌)·
@@ -114,15 +115,17 @@ class LedgerReconciliationService(
         val lastEventId = (delta["last_id"] as Number).toLong()
 
         // 계정 행이 없으면 아직 아무 거래도 없는 것 — PaperAccountQueryService와 같은 해석(초기 잔고).
-        val accountCash = jdbc.query(
-            "SELECT cash FROM paper_accounts WHERE user_id = ?", { rs, _ -> rs.getBigDecimal("cash") }, userId,
-        ).firstOrNull() ?: INITIAL_BALANCE
+        // ADR-089 — 초기 지급은 계좌마다 고른 시작 자금(initial_capital)이다. 기존 계좌는 V86 DEFAULT로 1,000만.
+        val (accountCash, initialCapital) = jdbc.query(
+            "SELECT cash, initial_capital FROM paper_accounts WHERE user_id = ?",
+            { rs, _ -> rs.getBigDecimal("cash") to rs.getBigDecimal("initial_capital") }, userId,
+        ).firstOrNull() ?: (INITIAL_BALANCE to INITIAL_BALANCE)
         val reservedCash = jdbc.queryForObject(RESERVED_CASH_SQL, BigDecimal::class.java, userId) ?: BigDecimal.ZERO
 
         val result = ReconciliationResult(
             userId = userId, asOfDate = asOf, ledgerSum = ledgerSum,
             accountCash = accountCash, reservedCash = reservedCash, lastEventId = lastEventId,
-            drift = (accountCash + reservedCash) - (INITIAL_BALANCE + ledgerSum),
+            drift = (accountCash + reservedCash) - (initialCapital + ledgerSum),
         )
 
         jdbc.update(

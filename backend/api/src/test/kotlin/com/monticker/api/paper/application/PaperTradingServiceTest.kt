@@ -112,6 +112,28 @@ class PaperTradingServiceTest {
         org.assertj.core.api.Assertions.assertThat(event.newCash).isEqualByComparingTo("10000000")
     }
 
+    // ADR-089 — 시작 자금을 고른 계좌는 그 금액으로 초기화된다(1,000만으로 떨어지지 않는다). 원장 이벤트는 그대로 남는다.
+    @Test
+    fun `reset restores the account's own initial capital`() {
+        val account = PaperAccount(
+            userId = 7L,
+            initialCapital = com.monticker.api.common.domain.Money.of("100000000"),
+            cash = com.monticker.api.common.domain.Money.of("2500000"),
+        )
+        every { accountRepo.findByUserId(7L) } returns Optional.of(account)
+        every { accountRepo.save(any()) } answers { firstArg() }
+        every { jdbc.queryForObject(match<String> { it.contains("FROM orders") }, Long::class.java, 7L) } returns 0L
+        every { jdbc.update(any<String>(), 7L) } returns 0
+        val published = mutableListOf<Any>()
+        every { eventPublisher.publishEvent(capture(published)) } returns Unit
+
+        service.reset(7L)
+
+        org.assertj.core.api.Assertions.assertThat(account.cash.amount).isEqualByComparingTo("100000000")
+        val event = published.filterIsInstance<PaperAccountResetEvent>().single()
+        org.assertj.core.api.Assertions.assertThat(event.newCash).isEqualByComparingTo("100000000")
+    }
+
     // 예약금이 cash에서 빠진 채 초기화하면 나중의 취소 환불이 1,000만 위에 얹힌다 — 돈이 생긴다.
     @Test
     fun `reset refuses while the user has open orders, touching neither the account nor the trades`() {
