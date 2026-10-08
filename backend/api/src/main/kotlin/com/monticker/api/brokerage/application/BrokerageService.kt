@@ -7,6 +7,7 @@ import com.monticker.api.common.consent.ConsentSource
 import jakarta.persistence.EntityManager
 import jakarta.persistence.PersistenceContext
 import com.monticker.api.brokerage.domain.BrokerageAccount
+import com.monticker.api.brokerage.domain.BrokerageFeeModel
 import com.monticker.api.brokerage.domain.BrokerageOrder
 import com.monticker.api.brokerage.domain.BrokerageOrderStatus
 import com.monticker.api.brokerage.domain.BrokerageProvider
@@ -819,8 +820,8 @@ class BrokerageService(
         // 체결 수량 기준 — 부분 체결 후 잔량이 취소되면 FILLED지만 filledQty < quantity다(2026-10 리뷰).
         val qty      = order.filledQty.takeIf { it > 0 } ?: order.quantity
         val gross    = fillPrice.multiply(BigDecimal(qty))
-        val fee      = gross.multiply(BigDecimal("0.00015")).setScale(0, java.math.RoundingMode.UP)
-        val tax      = if (order.side == OrderSide.SELL) gross.multiply(BigDecimal("0.0018")).setScale(0, java.math.RoundingMode.UP) else BigDecimal.ZERO
+        val fee      = BrokerageFeeModel.fee(gross)
+        val tax      = BrokerageFeeModel.tax(order.side, gross)
         val net      = if (order.side == OrderSide.BUY) gross.add(fee) else gross.subtract(fee).subtract(tax)
         // ADR-086 — KRX 거래일 캘린더로 T+2(공휴일·연말 휴장일 건너뜀), 기준일은 KST
         val settle   = calendar.settlementDate(order.filledAt ?: Instant.now())

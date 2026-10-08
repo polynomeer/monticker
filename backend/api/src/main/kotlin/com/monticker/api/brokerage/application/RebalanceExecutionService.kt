@@ -1,5 +1,6 @@
 package com.monticker.api.brokerage.application
 
+import com.monticker.api.brokerage.domain.BrokerageFeeModel
 import com.monticker.api.brokerage.domain.OrderSide
 import com.monticker.api.brokerage.domain.RebalanceExecution
 import com.monticker.api.brokerage.domain.RebalanceExecutionLeg
@@ -20,6 +21,14 @@ import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.math.RoundingMode
 
+/** leg 가격의 출처. 실행은 시장가라 이 값으로 주문하지 않는다 — 미리보기 추정에만 쓴다. */
+enum class LegPriceSource {
+    /** 증권사 잔고 응답의 현재가(보유 종목) */
+    BROKER_BALANCE,
+    /** 최근 1분봉 종가(보유하지 않은 신규 매수 종목) */
+    LAST_CANDLE,
+}
+
 data class RebalanceLegPlan(
     val stockId: Long,
     val symbol: String,
@@ -28,12 +37,33 @@ data class RebalanceLegPlan(
     val currentWeight: BigDecimal,
     val diffPct: BigDecimal,
     val quantity: Int,
-)
+    /** 수량을 계산한 가격. 실행(시장가 주문)에는 쓰지 않는다. */
+    val price: BigDecimal = BigDecimal.ZERO,
+    val priceSource: LegPriceSource = LegPriceSource.LAST_CANDLE,
+) {
+    /** 예상 체결 금액(가격 × 수량) — 견적이 아니다. */
+    val estimatedAmount: BigDecimal get() = price.multiply(BigDecimal(quantity))
+    val estimatedFee: BigDecimal get() = BrokerageFeeModel.fee(estimatedAmount)
+    val estimatedTax: BigDecimal get() = BrokerageFeeModel.tax(side, estimatedAmount)
+}
 
 data class RebalancePreview(
     val totalValue: BigDecimal,
     val legs: List<RebalanceLegPlan>,
-)
+) {
+    /** 예상 거래비용 = 모든 leg의 수수료 + 매도 거래세. 정산과 같은 식([BrokerageFeeModel]), 미리보기 가격 기준. */
+    val estimatedFee: BigDecimal get() = legs.fold(BigDecimal.ZERO) { a, l -> a + l.estimatedFee }
+    val estimatedTax: BigDecimal get() = legs.fold(BigDecimal.ZERO) { a, l -> a + l.estimatedTax }
+    val estimatedCost: BigDecimal get() = estimatedFee + estimatedTax
+    /** 매수 leg 예상 금액 합(수수료 제외). 이 중 보유하지 않은 종목 매수가 [estimatedNewBuyAmount]. */
+    val estimatedBuyAmount: BigDecimal get() = sumOf(OrderSide.BUY)
+    val estimatedSellAmount: BigDecimal get() = sumOf(OrderSide.SELL)
+    val estimatedNewBuyAmount: BigDecimal get() = legs
+        .filter { it.side == OrderSide.BUY && it.priceSource == LegPriceSource.LAST_CANDLE }
+        .fold(BigDecimal.ZERO) { a, l -> a + l.estimatedAmount }
+
+    private fun sumOf(side: OrderSide) = legs.filter { it.side == side }.fold(BigDecimal.ZERO) { a, l -> a + l.estimatedAmount }
+}
 
 /**
  * ADR-034 — diff 계산 + 실행. preview()/execute() 둘 다 매번 최신 잔고·가격으로 diff를
@@ -164,6 +194,7 @@ class RebalanceExecutionService(
             if (diffPct.abs() < thresholdFraction) return@mapNotNull null
 
             val side = if (diffPct > BigDecimal.ZERO) OrderSide.BUY else OrderSide.SELL
+            val priceSource = if (holding != null) LegPriceSource.BROKER_BALANCE else LegPriceSource.LAST_CANDLE
             val price = holding?.currentPrice ?: currentPrice(symbol) ?: return@mapNotNull null
             if (price <= BigDecimal.ZERO) return@mapNotNull null
 
@@ -177,7 +208,7 @@ class RebalanceExecutionService(
             if (quantity <= 0) return@mapNotNull null
 
             val stockId = resolveStockId(symbol) ?: return@mapNotNull null
-            RebalanceLegPlan(stockId, symbol, side, targetWeight, currentWeight, diffPct, quantity)
+            RebalanceLegPlan(stockId, symbol, side, targetWeight, currentWeight, diffPct, quantity, price, priceSource)
         }
 
         return RebalancePreview(totalValue, legs)
