@@ -42,6 +42,7 @@ class WatchRuleExecutor(
     registry: MeterRegistry,
     private val guards: WatchRuleGuards,
     private val signalAccess: StrategySignalAccess,
+    private val planner: WatchRuleOrderPlanner,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -49,9 +50,12 @@ class WatchRuleExecutor(
     private val executed = registry.counter("watch_rule_executions_total", "status", "executed")
     private val rejected = registry.counter("watch_rule_executions_total", "status", "rejected")
     private val skipped = registry.counter("watch_rule_executions_total", "status", "skipped")
+    private val placedCounter = registry.counter("watch_rule_executions_total", "status", "placed")
 
     /** 발동 원인 — 탐지 이벤트 또는 퀀트 신호(ADR-077). 기록·멱등 키가 원인별로 갈린다. */
     private data class Trigger(
+        /** 발동 종목 — 그룹 규칙(ADR-095)은 규칙에 종목이 없으므로 원인의 종목을 쓴다. */
+        val stockId: Long,
         val stockEventId: Long?,
         val quantSignalId: Long?,
         val importanceScore: Int?,
@@ -63,16 +67,17 @@ class WatchRuleExecutor(
 
     /** ADR-077 — 포워드 테스트 신호. 이 종목·이 전략·이 방향의 활성 규칙만 발동한다. */
     fun onQuantSignal(event: QuantSignalEmittedEvent) {
-        val rules = ruleRepo.findAllByStockIdAndEventTypeAndRuleSetIdAndIsActiveTrue(event.stockId, WatchRule.QUANT_SIGNAL, event.ruleSetId)
+        val rules = ruleRepo.findActiveForSignal(event.stockId, event.ruleSetId)
             .filter { it.signalDirection == event.direction }
-        runAll(rules, Trigger(stockEventId = null, quantSignalId = event.signalId, importanceScore = null, time = event.signalTime))
+        runAll(rules, Trigger(stockId = event.stockId, stockEventId = null, quantSignalId = event.signalId, importanceScore = null, time = event.signalTime))
     }
 
     fun onEvent(event: StockEventDetectedEvent) {
-        val rules = ruleRepo.findAllByStockIdAndEventTypeAndIsActiveTrue(event.stockId, event.eventType)
+        // 종목 규칙 + 지금 이 종목이 든 내 관심종목 그룹 규칙(ADR-095). 그룹 구성은 평가 시점 기준이다.
+        val rules = ruleRepo.findActiveForEvent(event.stockId, event.eventType)
         // eventTimeMillis가 빠진 와이어(기본값 0)는 수신 시각으로 — 복합 조건 창이 1970년을 보지 않게.
         val time = if (event.eventTimeMillis > 0) Instant.ofEpochMilli(event.eventTimeMillis) else Instant.now()
-        runAll(rules, Trigger(event.eventId, null, event.importanceScore, time))
+        runAll(rules, Trigger(event.stockId, event.eventId, null, event.importanceScore, time))
     }
 
     private fun runAll(rules: List<WatchRule>, trigger: Trigger) {
@@ -115,7 +120,7 @@ class WatchRuleExecutor(
         // ADR-077 복합 조건 — 주 원인 앞 창 안에 동반 이벤트가 모두 있었는가.
         val required = rule.requiredTypes()
         if (required.isNotEmpty()) {
-            val missing = guards.missingRequiredEvents(rule.stockId, required, trigger.time, rule.conditionWindowSec ?: DEFAULT_WINDOW_SEC)
+            val missing = guards.missingRequiredEvents(trigger.stockId, required, trigger.time, rule.conditionWindowSec ?: DEFAULT_WINDOW_SEC)
             if (missing.isNotEmpty()) {
                 record(rule, trigger, WatchRuleExecutionStatus.SKIPPED,
                     reason = "복합 조건 미충족: ${missing.joinToString()} 없음 (${(rule.conditionWindowSec ?: DEFAULT_WINDOW_SEC) / 60}분 내)")
@@ -125,6 +130,8 @@ class WatchRuleExecutor(
 
         // 쿨다운 + 하루 최대 발동(ADR-077) — 규칙 행을 잠근 한 트랜잭션에서 판정하고 발동을 기록한다(WatchRuleGuards).
         // 같은 규칙에 서로 다른 이벤트가 동시에 와도 하나만 여기를 통과한다. 주문이 나가지 않으면 돌려준다.
+        // ADR-095 — 그룹 규칙도 **규칙 단위**다: 그룹 안 서로 다른 종목의 이벤트가 동시에 와도 쿨다운 안에서는 하나만 발동하고,
+        // 하루 한도도 그룹 전체에 대한 횟수다(종목별 쿨다운이 아니다).
         val claim = when (val c = guards.claimFiring(rule.id)) {
             is FiringClaim.Claimed -> c
             is FiringClaim.InCooldown -> {
@@ -141,20 +148,52 @@ class WatchRuleExecutor(
             }
         }
 
-        var filled = false
+        var placed = false
         try {
-            val result = orderSubmitter.submitMarket(
-                userId = rule.userId,
-                stockId = rule.stockId,
-                side = rule.side.name,
-                quantity = rule.quantity,
-                origin = OrderOrigin.watchRule(rule.id),   // ADR-085
-                idempotencyKey = trigger.key(rule.id),
-            )
-            filled = true
-            record(rule, trigger, WatchRuleExecutionStatus.EXECUTED,
-                orderId = result.orderId, fillPrice = result.fillPrice, quantity = result.quantity)
-            log.info("watch rule 발동 ruleId={} {} orderId={}", rule.id, trigger, result.orderId)
+            // ADR-095 — 수량·지정가는 발동권을 잡은 뒤 발동 시점 값으로 정한다. 0주 등으로 건너뛰면 finally가 발동권을 돌려준다.
+            val plan = when (val p = planner.plan(rule, trigger.stockId)) {
+                is OrderPlan.Ready -> p
+                is OrderPlan.Skip -> {
+                    record(rule, trigger, WatchRuleExecutionStatus.SKIPPED, reason = p.reason)
+                    return
+                }
+            }
+            if (plan.limitPrice == null) {
+                val result = orderSubmitter.submitMarket(
+                    userId = rule.userId,
+                    stockId = trigger.stockId,
+                    side = rule.side.name,
+                    quantity = plan.quantity,
+                    origin = OrderOrigin.watchRule(rule.id),   // ADR-085
+                    idempotencyKey = trigger.key(rule.id),
+                )
+                placed = true
+                record(rule, trigger, WatchRuleExecutionStatus.EXECUTED,
+                    orderId = result.orderId, fillPrice = result.fillPrice, quantity = result.quantity)
+                log.info("watch rule 발동 ruleId={} {} orderId={}", rule.id, trigger, result.orderId)
+            } else {
+                // ADR-095 — 지정가는 ADR-074 경로 그대로: 교차하면 즉시 체결, 아니면 미체결(예약·스위퍼·신선도).
+                val result = orderSubmitter.submitLimit(
+                    userId = rule.userId,
+                    stockId = trigger.stockId,
+                    side = rule.side.name,
+                    quantity = plan.quantity,
+                    limitPrice = plan.limitPrice,
+                    origin = OrderOrigin.watchRule(rule.id),
+                    idempotencyKey = trigger.key(rule.id),
+                )
+                placed = true
+                val fill = result.fill
+                if (fill != null) {
+                    record(rule, trigger, WatchRuleExecutionStatus.EXECUTED,
+                        orderId = result.orderId, fillPrice = fill.fillPrice, quantity = fill.quantity, limitPrice = result.limitPrice)
+                } else {
+                    record(rule, trigger, WatchRuleExecutionStatus.PLACED,
+                        orderId = result.orderId, quantity = result.quantity, limitPrice = result.limitPrice,
+                        reason = "지정가 ${result.limitPrice.stripTrailingZeros().toPlainString()} 접수 — 미체결")
+                }
+                log.info("watch rule 지정가 발동 ruleId={} {} orderId={} status={}", rule.id, trigger, result.orderId, result.status)
+            }
         } catch (e: RiskLimitException) {
             record(rule, trigger, WatchRuleExecutionStatus.REJECTED, reason = "리스크 한도: ${e.message}")
         } catch (e: IllegalArgumentException) {
@@ -164,9 +203,10 @@ class WatchRuleExecutor(
             // 현재가 없음·시장가 미체결 등. 사용자 잘못이 아니지만 이 이벤트로는 체결되지 않았다.
             record(rule, trigger, WatchRuleExecutionStatus.REJECTED, reason = e.message ?: "주문 실패")
         } finally {
-            // 체결되지 않았으면(거부·인프라 예외 모두) 슬롯과 쿨다운을 돌려준다. 그 외(DB·네트워크 등 인프라 예외)는
-            // 삼키지 않는다 — 호출자를 거쳐 컨슈머 재시도로 간다. 재시도해도 멱등 키 덕에 중복 체결은 없다.
-            if (!filled) runCatching { guards.releaseFiring(claim) }
+            // 주문이 나가지 않았으면(건너뜀·거부·인프라 예외 모두) 슬롯과 쿨다운을 돌려준다. 지정가가 접수됐으면(미체결이라도)
+            // 발동으로 센다 — 예약금이 잡힌 주문이 있다. 인프라 예외는 삼키지 않는다 — 호출자를 거쳐 컨슈머 재시도로 간다.
+            // 재시도해도 멱등 키 덕에 중복 주문은 없다.
+            if (!placed) runCatching { guards.releaseFiring(claim) }
                 .onFailure { log.warn("watch rule 발동권 반환 실패 ruleId={} — 오늘 한도가 1 적고 쿨다운이 이어진다(안전한 방향)", rule.id) }
         }
     }
@@ -179,6 +219,7 @@ class WatchRuleExecutor(
         fillPrice: java.math.BigDecimal? = null,
         quantity: Int? = null,
         reason: String? = null,
+        limitPrice: java.math.BigDecimal? = null,
     ) {
         try {
             execRepo.save(
@@ -187,6 +228,8 @@ class WatchRuleExecutor(
                     userId = rule.userId,
                     stockEventId = trigger.stockEventId,
                     quantSignalId = trigger.quantSignalId,
+                    stockId = trigger.stockId,
+                    limitPrice = limitPrice,
                     status = status,
                     orderId = orderId,
                     fillPrice = fillPrice,
@@ -201,6 +244,7 @@ class WatchRuleExecutor(
         }
         when (status) {
             WatchRuleExecutionStatus.EXECUTED -> executed
+            WatchRuleExecutionStatus.PLACED -> placedCounter
             WatchRuleExecutionStatus.REJECTED -> rejected
             WatchRuleExecutionStatus.SKIPPED -> skipped
         }.increment()

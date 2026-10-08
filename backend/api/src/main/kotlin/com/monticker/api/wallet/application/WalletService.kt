@@ -1,6 +1,7 @@
 package com.monticker.api.wallet.application
 
 import com.monticker.api.paper.application.PaperAccountQueryService
+import com.monticker.api.wallet.equity.PaperEquityQuery
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -29,7 +30,11 @@ class WalletService(
     private val accountQueryService: PaperAccountQueryService,
     private val ledgerService: LedgerService,
     private val jdbc: JdbcTemplate,
-) {
+) : PaperEquityQuery {
+
+    /** ADR-095 — [getWalletMap]의 totalAssets와 같은 정의(원장 조회 없이). */
+    override fun paperEquity(userId: Long): BigDecimal =
+        accountQueryService.getCashBalance(userId).amount + calcReservedCash(userId) + calcHoldingsValue(userId)
 
     fun getWalletMap(userId: Long): WalletMapResponse {
         val cash = accountQueryService.getCashBalance(userId)

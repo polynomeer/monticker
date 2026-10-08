@@ -21,7 +21,8 @@ class WatchRuleServiceTest {
     private val jdbc = mockk<JdbcTemplate>()
     private val access = mockk<StrategySignalAccess>()
     private val guards = mockk<WatchRuleGuards>(relaxed = true)
-    private val service = WatchRuleService(ruleRepo, execRepo, jdbc, access, guards)
+    private val targets = mockk<WatchRuleTargets>()
+    private val service = WatchRuleService(ruleRepo, execRepo, jdbc, access, guards, targets)
 
     init {
         every { jdbc.queryForObject(any<String>(), Boolean::class.java, any()) } returns true
@@ -96,5 +97,77 @@ class WatchRuleServiceTest {
         assertThat(others).isInstanceOf(NoSuchElementException::class.java)
         assertThat(others!!.message).isEqualTo(missing!!.message)
         verify(exactly = 0) { ruleRepo.delete(any()) }
+    }
+
+    // ── ADR-095 ──────────────────────────────────────────────────────────
+
+    // 남의 그룹은 없는 그룹과 같은 404(security-review H6) — 메시지도 같다.
+    @Test
+    fun `a group rule on someone else's group is indistinguishable from a missing group`() {
+        every { targets.ownsGroup(1L, 77L) } returns false
+        every { targets.ownsGroup(1L, 78L) } returns false
+        val others = runCatching { service.create(1L, null, "VOLUME_SURGE", "BUY", 1, 0, 0, targetType = "GROUP", targetGroupId = 77L) }.exceptionOrNull()
+        val missing = runCatching { service.create(1L, null, "VOLUME_SURGE", "BUY", 1, 0, 0, targetType = "GROUP", targetGroupId = 78L) }.exceptionOrNull()
+        assertThat(others).isInstanceOf(NoSuchElementException::class.java)
+        assertThat(missing).isInstanceOf(NoSuchElementException::class.java)
+        assertThat(others!!.message!!.replace("77", "")).isEqualTo(missing!!.message!!.replace("78", ""))
+        verify(exactly = 0) { ruleRepo.save(any()) }
+    }
+
+    @Test
+    fun `a group rule on my group stores the group and no stock`() {
+        every { targets.ownsGroup(1L, 77L) } returns true
+        val r = service.create(1L, null, "VOLUME_SURGE", "BUY", null, 0, 0, targetType = "group", targetGroupId = 77L,
+            sizeType = "EQUITY_PCT", equityPct = java.math.BigDecimal("5"))
+        assertThat(r.targetGroupId).isEqualTo(77L)
+        assertThat(r.stockId).isNull()
+        assertThat(r.quantity).isNull()
+        assertThat(r.equityPct).isEqualByComparingTo("5")
+    }
+
+    @Test
+    fun `targets must be exclusive - a stock rule without a stock or a group rule with a stock is rejected`() {
+        assertThatThrownBy { service.create(1L, null, "VOLUME_SURGE", "BUY", 1, 0, 0) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+        assertThatThrownBy { service.create(1L, 5L, "VOLUME_SURGE", "BUY", 1, 0, 0, targetType = "GROUP", targetGroupId = 77L) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+    }
+
+    @Test
+    fun `limit offsets are bounded to plus or minus 1000 bps and only for limit rules`() {
+        assertThatThrownBy { service.create(1L, 5L, "VOLUME_SURGE", "BUY", 1, 0, 0, orderType = "LIMIT", limitOffsetBps = 1001) }
+            .isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("오프셋")
+        assertThatThrownBy { service.create(1L, 5L, "VOLUME_SURGE", "BUY", 1, 0, 0, orderType = "LIMIT", limitOffsetBps = -1001) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+        assertThatThrownBy { service.create(1L, 5L, "VOLUME_SURGE", "BUY", 1, 0, 0, orderType = "LIMIT") }
+            .isInstanceOf(IllegalArgumentException::class.java)
+        assertThatThrownBy { service.create(1L, 5L, "VOLUME_SURGE", "BUY", 1, 0, 0, limitOffsetBps = 10) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+        val ok = service.create(1L, 5L, "VOLUME_SURGE", "BUY", 1, 0, 0, orderType = "LIMIT", limitOffsetBps = -1000)
+        assertThat(ok.limitOffsetBps).isEqualTo(-1000)
+    }
+
+    @Test
+    fun `equity percent is bounded to 1 to 25 and excludes a share quantity`() {
+        listOf("0.99", "25.01", "0").forEach { pct ->
+            assertThatThrownBy {
+                service.create(1L, 5L, "VOLUME_SURGE", "BUY", null, 0, 0, sizeType = "EQUITY_PCT", equityPct = java.math.BigDecimal(pct))
+            }.isInstanceOf(IllegalArgumentException::class.java)
+        }
+        assertThatThrownBy {
+            service.create(1L, 5L, "VOLUME_SURGE", "BUY", 3, 0, 0, sizeType = "EQUITY_PCT", equityPct = java.math.BigDecimal("5"))
+        }.isInstanceOf(IllegalArgumentException::class.java)
+        assertThatThrownBy { service.create(1L, 5L, "VOLUME_SURGE", "BUY", null, 0, 0) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+    }
+
+    @Test
+    fun `a group rule whose group was deleted cannot be switched back on`() {
+        val rule = WatchRule(id = 9L, userId = 1L, stockId = null, eventType = "VOLUME_SURGE", side = WatchRuleSide.BUY, quantity = 1,
+            isActive = false, targetType = com.monticker.api.watchrule.domain.WatchRuleTargetType.GROUP, targetGroupId = 77L)
+        every { ruleRepo.findById(9L) } returns Optional.of(rule)
+        every { targets.ownsGroup(1L, 77L) } returns false
+        assertThatThrownBy { service.update(1L, 9L, null, null, null, true) }
+            .isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("삭제")
     }
 }

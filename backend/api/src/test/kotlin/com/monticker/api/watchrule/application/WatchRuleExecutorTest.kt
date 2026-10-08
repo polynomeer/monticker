@@ -36,6 +36,7 @@ class WatchRuleExecutorTest {
     private val submitter = mockk<OrderSubmitter>()
     private val guards = mockk<WatchRuleGuards>(relaxed = true)
     private val signalAccess = mockk<com.monticker.api.quant.application.StrategySignalAccess>()
+    private val planner = mockk<WatchRuleOrderPlanner>()
     private lateinit var executor: WatchRuleExecutor
 
     private val userId = 7L
@@ -44,8 +45,10 @@ class WatchRuleExecutorTest {
 
     @BeforeEach
     fun setUp() {
-        executor = WatchRuleExecutor(ruleRepo, execRepo, submitter, SimpleMeterRegistry(), guards, signalAccess)
+        executor = WatchRuleExecutor(ruleRepo, execRepo, submitter, SimpleMeterRegistry(), guards, signalAccess, planner)
         every { guards.claimFiring(any()) } answers { claimed(firstArg()) }
+        // 시장가 + 주 수(기존 규칙)의 계획 — 실제 플래너와 같다(시세·평가자산을 읽지 않는다).
+        every { planner.plan(any(), any()) } answers { OrderPlan.Ready(firstArg<WatchRule>().quantity!!, null) }
         every { guards.missingRequiredEvents(any(), any(), any(), any()) } returns emptyList()
         every { execRepo.existsByWatchRuleIdAndStockEventId(any(), any()) } returns false
         // relaxed 목의 제네릭 save()는 Object를 돌려줘 캐스트가 터진다. 예전엔 onEvent가 그 예외까지 삼켜
@@ -78,7 +81,7 @@ class WatchRuleExecutorTest {
     )
 
     private fun givenRules(vararg rules: WatchRule) {
-        every { ruleRepo.findAllByStockIdAndEventTypeAndIsActiveTrue(stockId, "VOLUME_SURGE") } returns rules.toList()
+        every { ruleRepo.findActiveForEvent(stockId, "VOLUME_SURGE") } returns rules.toList()
     }
 
     private fun savedExecution(): WatchRuleExecution {
@@ -378,7 +381,7 @@ class WatchRuleExecutorTest {
 
     @Test
     fun `a strategy signal fires its rule with a signal idempotency key and records the signal`() {
-        every { ruleRepo.findAllByStockIdAndEventTypeAndRuleSetIdAndIsActiveTrue(stockId, WatchRule.QUANT_SIGNAL, "rs1") } returns listOf(signalRule())
+        every { ruleRepo.findActiveForSignal(stockId, "rs1") } returns listOf(signalRule())
         every { execRepo.existsByWatchRuleIdAndQuantSignalId(5L, 77L) } returns false
         every { signalAccess.canAccess(userId, "rs1") } returns true
         every { submitter.submitMarket(userId, stockId, "BUY", 3, OrderOrigin.watchRule(5L), "WR:5:Q77") } returns fill()
@@ -393,7 +396,7 @@ class WatchRuleExecutorTest {
 
     @Test
     fun `a signal in the other direction does not fire`() {
-        every { ruleRepo.findAllByStockIdAndEventTypeAndRuleSetIdAndIsActiveTrue(stockId, WatchRule.QUANT_SIGNAL, "rs1") } returns listOf(signalRule("SELL"))
+        every { ruleRepo.findActiveForSignal(stockId, "rs1") } returns listOf(signalRule("SELL"))
 
         executor.onQuantSignal(signal())
 
@@ -404,7 +407,7 @@ class WatchRuleExecutorTest {
     // ADR-035 — 구독을 끊은 전략의 신호로는 주문하지 않는다.
     @Test
     fun `a strategy signal the user can no longer see is skipped`() {
-        every { ruleRepo.findAllByStockIdAndEventTypeAndRuleSetIdAndIsActiveTrue(stockId, WatchRule.QUANT_SIGNAL, "rs1") } returns listOf(signalRule())
+        every { ruleRepo.findActiveForSignal(stockId, "rs1") } returns listOf(signalRule())
         every { execRepo.existsByWatchRuleIdAndQuantSignalId(5L, 77L) } returns false
         every { signalAccess.canAccess(userId, "rs1") } returns false
 
@@ -412,5 +415,97 @@ class WatchRuleExecutorTest {
 
         verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any(), any()) }
         assertThat(savedExecution().status).isEqualTo(WatchRuleExecutionStatus.SKIPPED)
+    }
+
+    // ── ADR-095 — 그룹 대상·지정가·계좌 % ─────────────────────────────────
+
+    private fun groupRule(
+        id: Long = 20L,
+        orderType: com.monticker.api.watchrule.domain.WatchRuleOrderType = com.monticker.api.watchrule.domain.WatchRuleOrderType.MARKET,
+        offset: Int? = null,
+    ) = WatchRule(
+        id = id, userId = userId, stockId = null, eventType = "VOLUME_SURGE", side = WatchRuleSide.BUY, quantity = 4,
+        targetType = com.monticker.api.watchrule.domain.WatchRuleTargetType.GROUP, targetGroupId = 55L,
+        orderType = orderType, limitOffsetBps = offset,
+    )
+
+    @Test
+    fun `a group rule orders the stock of the triggering event and records it`() {
+        givenRules(groupRule())
+        every { submitter.submitMarket(userId, stockId, "BUY", 4, OrderOrigin.watchRule(20L), "WR:20:$eventId") } returns fill()
+
+        executor.onEvent(event())
+
+        verify { planner.plan(any(), stockId) }
+        verify { guards.claimFiring(20L) }   // 쿨다운·하루 한도는 규칙 단위
+        val e = savedExecution()
+        assertThat(e.status).isEqualTo(WatchRuleExecutionStatus.EXECUTED)
+        assertThat(e.stockId).isEqualTo(stockId)
+    }
+
+    @Test
+    fun `a group rule's compound condition is checked against the triggering stock`() {
+        givenRules(WatchRule(
+            id = 21L, userId = userId, stockId = null, eventType = "VOLUME_SURGE", side = WatchRuleSide.BUY, quantity = 1,
+            requiredEventTypes = "PRICE_SPIKE", conditionWindowSec = 600,
+            targetType = com.monticker.api.watchrule.domain.WatchRuleTargetType.GROUP, targetGroupId = 55L,
+        ))
+        every { guards.missingRequiredEvents(stockId, listOf("PRICE_SPIKE"), any(), 600) } returns listOf("PRICE_SPIKE")
+
+        executor.onEvent(event())
+
+        verify(exactly = 0) { guards.claimFiring(any()) }
+        assertThat(savedExecution().reason).contains("복합 조건")
+    }
+
+    @Test
+    fun `a limit plan that does not cross is recorded as PLACED and keeps the claim`() {
+        givenRules(groupRule(orderType = com.monticker.api.watchrule.domain.WatchRuleOrderType.LIMIT, offset = -100))
+        every { planner.plan(any(), stockId) } returns OrderPlan.Ready(4, BigDecimal("990"))
+        every { submitter.submitLimit(userId, stockId, "BUY", 4, BigDecimal("990"), OrderOrigin.watchRule(20L), "WR:20:$eventId") } returns
+            com.monticker.api.matching.submit.LimitOrderResult(
+                orderId = 950L, stockId = stockId, side = "BUY", quantity = 4, limitPrice = BigDecimal("990"), status = "PENDING", fill = null,
+            )
+
+        executor.onEvent(event())
+
+        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { guards.releaseFiring(any()) }
+        val e = savedExecution()
+        assertThat(e.status).isEqualTo(WatchRuleExecutionStatus.PLACED)
+        assertThat(e.orderId).isEqualTo(950L)
+        assertThat(e.limitPrice).isEqualByComparingTo("990")
+    }
+
+    @Test
+    fun `a limit plan that crosses immediately is recorded as EXECUTED with the fill`() {
+        givenRules(groupRule(orderType = com.monticker.api.watchrule.domain.WatchRuleOrderType.LIMIT, offset = 100))
+        every { planner.plan(any(), stockId) } returns OrderPlan.Ready(4, BigDecimal("1010"))
+        every { submitter.submitLimit(any(), any(), any(), any(), any(), any(), any()) } returns
+            com.monticker.api.matching.submit.LimitOrderResult(
+                orderId = 951L, stockId = stockId, side = "BUY", quantity = 4, limitPrice = BigDecimal("1010"), status = "FILLED", fill = fill(951L),
+            )
+
+        executor.onEvent(event())
+
+        val e = savedExecution()
+        assertThat(e.status).isEqualTo(WatchRuleExecutionStatus.EXECUTED)
+        assertThat(e.fillPrice).isEqualByComparingTo("1000")
+    }
+
+    // 계좌 %가 0주로 내려가면 주문하지 않고, 발동권을 돌려준다(ADR-077 — 쿨다운은 체결된 발동만 센다).
+    @Test
+    fun `a plan that rounds to zero shares is skipped and the claim is released`() {
+        givenRules(rule())
+        every { planner.plan(any(), stockId) } returns OrderPlan.Skip("0주 — 주문하지 않음")
+
+        executor.onEvent(event())
+
+        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { submitter.submitLimit(any(), any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 1) { guards.releaseFiring(claimed(1L)) }
+        val e = savedExecution()
+        assertThat(e.status).isEqualTo(WatchRuleExecutionStatus.SKIPPED)
+        assertThat(e.reason).contains("0주")
     }
 }

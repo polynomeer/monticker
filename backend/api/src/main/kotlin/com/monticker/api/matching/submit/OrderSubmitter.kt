@@ -33,6 +33,11 @@ interface OrderSubmitter {
         limitPrice: BigDecimal,
         /** ADR-085 — 진입 출처. 지정가가 나중에 스위퍼로 체결돼도 주문 행에 남은 이 값이 체결로 이어진다. */
         origin: OrderOrigin,
+        /**
+         * ADR-095 — 서버 내부 경로(Watch Rule 지정가)의 중복 방지 키. [submitMarket]과 같은 의미다 — 같은 키로 다시 부르면
+         * 새 주문 없이 첫 주문의 현재 상태(미체결이면 PENDING, 체결됐으면 체결)를 돌려준다. 화면 주문은 null.
+         */
+        idempotencyKey: String? = null,
     ): LimitOrderResult
 }
 

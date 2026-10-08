@@ -31,7 +31,8 @@ class WatchRuleController(private val service: WatchRuleService) {
         val rules = service.list(userId())
         val today = service.todayCounts(rules)
         val names = rules.mapNotNull { it.ruleSetId }.distinct().associateWith { service.strategyName(it) }
-        return ResponseEntity.ok(rules.map { WatchRuleResponse.from(it, today[it.id] ?: 0, it.ruleSetId?.let(names::get)) })
+        val groups = service.groupNames(userId(), rules)
+        return ResponseEntity.ok(rules.map { WatchRuleResponse.from(it, today[it.id] ?: 0, it.ruleSetId?.let(names::get), groups) })
     }
 
     @PostMapping
@@ -51,8 +52,14 @@ class WatchRuleController(private val service: WatchRuleService) {
                     requiredEventTypes = req.requiredEventTypes ?: emptyList(),
                     conditionWindowSec = req.conditionWindowSec,
                     dailyLimit = req.dailyLimit,
+                    targetType = req.targetType ?: "STOCK",
+                    targetGroupId = req.targetGroupId,
+                    orderType = req.orderType ?: "MARKET",
+                    limitOffsetBps = req.limitOffsetBps,
+                    sizeType = req.sizeType ?: "SHARES",
+                    equityPct = req.equityPct,
                 )
-        return ResponseEntity.ok(WatchRuleResponse.from(rule, 0, service.strategyName(rule.ruleSetId)))
+        return ResponseEntity.ok(WatchRuleResponse.from(rule, 0, service.strategyName(rule.ruleSetId), service.groupNames(userId(), listOf(rule))))
     }
 
     @PatchMapping("/{ruleId}")
@@ -60,8 +67,13 @@ class WatchRuleController(private val service: WatchRuleService) {
         @PathVariable ruleId: Long,
         @Valid @RequestBody req: UpdateWatchRuleRequest,
     ): ResponseEntity<WatchRuleResponse> {
-        val rule = service.update(userId(), ruleId, req.quantity, req.minImportanceScore, req.cooldownSec, req.isActive, req.name, req.dailyLimit)
-        return ResponseEntity.ok(WatchRuleResponse.from(rule, service.todayCounts(listOf(rule))[rule.id] ?: 0, service.strategyName(rule.ruleSetId)))
+        val rule = service.update(
+            userId(), ruleId, req.quantity, req.minImportanceScore, req.cooldownSec, req.isActive, req.name, req.dailyLimit,
+            req.limitOffsetBps, req.equityPct,
+        )
+        return ResponseEntity.ok(WatchRuleResponse.from(
+            rule, service.todayCounts(listOf(rule))[rule.id] ?: 0, service.strategyName(rule.ruleSetId), service.groupNames(userId(), listOf(rule)),
+        ))
     }
 
     @DeleteMapping("/{ruleId}")
@@ -81,10 +93,12 @@ class WatchRuleController(private val service: WatchRuleService) {
 }
 
 data class CreateWatchRuleRequest(
-    @field:Positive val stockId: Long,
+    /** 대상이 종목(STOCK)일 때 필수. 그룹 규칙이면 비운다. */
+    @field:Positive val stockId: Long? = null,
     @field:NotBlank val eventType: String,
     @field:NotBlank val side: String,
-    @field:Positive val quantity: Int,
+    /** 수량 기준이 주 수(SHARES)일 때 필수. 계좌 %(EQUITY_PCT)면 비운다. */
+    @field:Positive val quantity: Int? = null,
     val minImportanceScore: Int? = null,
     val cooldownSec: Int? = null,
     /** ADR-077 */
@@ -97,6 +111,15 @@ data class CreateWatchRuleRequest(
     val conditionWindowSec: Int? = null,
     /** 하루(KST) 최대 체결 횟수. 없으면 제한 없음 */
     val dailyLimit: Int? = null,
+    /** ADR-095 — STOCK(기본) | GROUP. GROUP이면 targetGroupId(내 관심종목 그룹) 필수 */
+    val targetType: String? = null,
+    val targetGroupId: Long? = null,
+    /** ADR-095 — MARKET(기본) | LIMIT. LIMIT이면 발동 가격 대비 오프셋 limitOffsetBps(±1000) 필수 */
+    val orderType: String? = null,
+    val limitOffsetBps: Int? = null,
+    /** ADR-095 — SHARES(기본) | EQUITY_PCT. EQUITY_PCT면 equityPct(1~25) 필수 */
+    val sizeType: String? = null,
+    val equityPct: BigDecimal? = null,
 )
 
 data class UpdateWatchRuleRequest(
@@ -108,14 +131,20 @@ data class UpdateWatchRuleRequest(
     val name: String? = null,
     /** 0이면 제한 해제 */
     val dailyLimit: Int? = null,
+    /** ADR-095 — 지정가 규칙의 오프셋(bp) */
+    val limitOffsetBps: Int? = null,
+    /** ADR-095 — 계좌 % 규칙의 비율 */
+    val equityPct: BigDecimal? = null,
 )
 
 data class WatchRuleResponse(
     val id: Long,
-    val stockId: Long,
+    /** 그룹 규칙이면 null */
+    val stockId: Long?,
     val eventType: String,
     val side: String,
-    val quantity: Int,
+    /** 계좌 % 규칙이면 null */
+    val quantity: Int?,
     val minImportanceScore: Int,
     val cooldownSec: Int,
     val isActive: Boolean,
@@ -129,15 +158,30 @@ data class WatchRuleResponse(
     val dailyLimit: Int? = null,
     /** 오늘(KST) 체결 수 — 서버가 한도를 집행하는 카운터 */
     val todayExecutions: Int = 0,
+    /** ADR-095 */
+    val targetType: String = "STOCK",
+    val targetGroupId: Long? = null,
+    /** 그룹 이름. 그룹이 지워졌으면 null이고 [targetGroupMissing]이 true다. */
+    val targetGroupName: String? = null,
+    val targetGroupMissing: Boolean = false,
+    val orderType: String = "MARKET",
+    val limitOffsetBps: Int? = null,
+    val sizeType: String = "SHARES",
+    val equityPct: BigDecimal? = null,
 ) {
     companion object {
-        fun from(r: WatchRule, todayExecutions: Int = 0, ruleSetName: String? = null) = WatchRuleResponse(
+        fun from(r: WatchRule, todayExecutions: Int = 0, ruleSetName: String? = null, groupNames: Map<Long, String> = emptyMap()) = WatchRuleResponse(
             id = r.id, stockId = r.stockId, eventType = r.eventType, side = r.side.name,
             quantity = r.quantity, minImportanceScore = r.minImportanceScore,
             cooldownSec = r.cooldownSec, isActive = r.isActive, createdAt = r.createdAt,
             name = r.name, ruleSetId = r.ruleSetId, ruleSetName = ruleSetName, signalDirection = r.signalDirection,
             requiredEventTypes = r.requiredTypes(), conditionWindowSec = r.conditionWindowSec,
             dailyLimit = r.dailyLimit, todayExecutions = todayExecutions,
+            targetType = r.targetType.name, targetGroupId = r.targetGroupId,
+            targetGroupName = r.targetGroupId?.let(groupNames::get),
+            targetGroupMissing = r.targetGroupId != null && r.targetGroupId !in groupNames,
+            orderType = r.orderType.name, limitOffsetBps = r.limitOffsetBps,
+            sizeType = r.sizeType.name, equityPct = r.equityPct,
         )
     }
 }
@@ -153,12 +197,16 @@ data class WatchRuleExecutionResponse(
     val quantity: Int?,
     val reason: String?,
     val createdAt: Instant,
+    /** ADR-095 — 발동 종목(그룹 규칙은 발동마다 다르다) */
+    val stockId: Long? = null,
+    /** ADR-095 — 지정가 발동의 지정가 */
+    val limitPrice: BigDecimal? = null,
 ) {
     companion object {
         fun from(e: WatchRuleExecution) = WatchRuleExecutionResponse(
             id = e.id, watchRuleId = e.watchRuleId, stockEventId = e.stockEventId, quantSignalId = e.quantSignalId, status = e.status.name,
             orderId = e.orderId, fillPrice = e.fillPrice, quantity = e.quantity, reason = e.reason,
-            createdAt = e.createdAt,
+            createdAt = e.createdAt, stockId = e.stockId, limitPrice = e.limitPrice,
         )
     }
 }

@@ -117,6 +117,37 @@ class MatchingServiceTest {
         verify(exactly = 0) { orderRepo.findByIdempotencyKey(any()) }
     }
 
+    // ADR-095 — Watch Rule 지정가의 멱등 재제출: 미체결 첫 주문을 그대로 돌려주고 새 주문·예약을 만들지 않는다.
+    @Test
+    fun `submitLimit with a seen idempotency key returns the pending first order without a new one`() {
+        val key = "WR:9:44"
+        every { orderRepo.findByIdempotencyKey(key) } returns Order(
+            id = 60L, userId = userId, stockId = stockId, side = OrderSide.BUY, orderType = OrderType.LIMIT,
+            quantity = 3, limitPrice = Price.of("990"), status = OrderStatus.PENDING, idempotencyKey = key,
+        )
+        every { fillQueryService.findByOrderId(60L, userId) } returns emptyList()
+
+        val result = service.submitLimit(userId, stockId, "BUY", 3, java.math.BigDecimal("990"), OrderOrigin.watchRule(9L), key)
+
+        assertThat(result.orderId).isEqualTo(60L)
+        assertThat(result.status).isEqualTo("PENDING")
+        assertThat(result.fill).isNull()
+        verify(exactly = 0) { sagaOrchestrator.execute(any(), any()) }
+    }
+
+    @Test
+    fun `submitLimit with an unseen key passes it to the saga`() {
+        val key = "WR:9:45"
+        every { orderRepo.findByIdempotencyKey(key) } returns null
+        every { sagaOrchestrator.execute(userId, any()) } returns SubmitOrderResponse(
+            order = orderDto(61L).copy(orderType = "LIMIT", status = "PENDING", filledQty = 0), fills = emptyList(), message = "접수",
+        )
+
+        service.submitLimit(userId, stockId, "BUY", 3, java.math.BigDecimal("990"), OrderOrigin.watchRule(9L), key)
+
+        verify { sagaOrchestrator.execute(userId, match { it.idempotencyKey == key && it.orderType == "LIMIT" }) }
+    }
+
     @Test
     fun `cancelOrder succeeds for a user's own pending order`() {
         val order = Order(

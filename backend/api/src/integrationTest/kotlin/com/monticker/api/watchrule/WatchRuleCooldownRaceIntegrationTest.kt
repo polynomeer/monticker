@@ -8,6 +8,7 @@ import com.monticker.api.support.PostgresIntegrationTest
 import com.monticker.api.watchrule.application.FiringClaim
 import com.monticker.api.watchrule.application.WatchRuleExecutor
 import com.monticker.api.watchrule.application.WatchRuleGuards
+import com.monticker.api.watchrule.application.WatchRuleOrderPlanner
 import com.monticker.api.watchrule.domain.WatchRule
 import com.monticker.api.watchrule.domain.WatchRuleExecution
 import com.monticker.api.watchrule.domain.WatchRuleExecutionStatus
@@ -159,7 +160,7 @@ class WatchRuleCooldownRaceIntegrationTest : PostgresIntegrationTest() {
             side = WatchRuleSide.BUY, quantity = 10, cooldownSec = 600)
 
         val ruleRepo = mockk<WatchRuleRepository> {
-            every { findAllByStockIdAndEventTypeAndIsActiveTrue(stockId, "VOLUME_SURGE") } returns listOf(rule)
+            every { findActiveForEvent(stockId, "VOLUME_SURGE") } returns listOf(rule)
         }
         val recorded = Collections.synchronizedList(mutableListOf<WatchRuleExecution>())
         val execRepo = mockk<WatchRuleExecutionRepository> {
@@ -173,10 +174,10 @@ class WatchRuleCooldownRaceIntegrationTest : PostgresIntegrationTest() {
                 Thread.sleep(50)
                 return MarketOrderResult(id, id, stockId, side, quantity, BigDecimal("1000"), BigDecimal("10000"), Instant.now())
             }
-            override fun submitLimit(userId: Long, stockId: Long, side: String, quantity: Int, limitPrice: BigDecimal, origin: OrderOrigin) =
+            override fun submitLimit(userId: Long, stockId: Long, side: String, quantity: Int, limitPrice: BigDecimal, origin: OrderOrigin, idempotencyKey: String?) =
                 throw UnsupportedOperationException()
         }
-        val executor = WatchRuleExecutor(ruleRepo, execRepo, submitter, SimpleMeterRegistry(), guards, mockk<StrategySignalAccess>())
+        val executor = WatchRuleExecutor(ruleRepo, execRepo, submitter, SimpleMeterRegistry(), guards, mockk<StrategySignalAccess>(), WatchRuleOrderPlanner(mockk(), mockk()))
         val base = System.nanoTime()
 
         race(10) { i ->
