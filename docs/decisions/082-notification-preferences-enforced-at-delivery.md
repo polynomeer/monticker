@@ -3,6 +3,8 @@
 ## Status
 Accepted
 
+> 2026-10 보완: 포워드 테스트 신호 알림(`QUANT_SIGNAL`)의 발행 위치와 대상은 [ADR-090](090-quant-signal-alert-history-fanout.md)에서 바뀌었다 — `ForwardTestService`가 주인에게 직접 내던 명령을 alert 모듈 팬아웃이 주인·구독자 각자에게 이력과 함께 낸다. 발송 시 설정을 적용한다는 이 ADR의 결정은 그대로다.
+
 [ADR-065](065-user-notifications-from-api.md)(api 사용자 알림 경로)의 Consequences "사용자 알림 설정을 보지 않는다 — 설정을 존중해야 하는
 알림 종류가 생기면 명령에 분류를 더한다"를 이행한다. ADR-065의 결정(아웃박스 → `notify.user` → worker)은 그대로다.
 

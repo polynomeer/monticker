@@ -104,7 +104,7 @@
 | /watchlist | 52주 최고/최저 | 1년 일봉으로 계산. 데이터가 300일 미만이면 `—` | 종목 기본정보에 52주 고저 추가 | P2 | ✅ 관심종목 응답 `range52w` — candles_1d, KST 오늘-52주 자정부터 한 쿼리로 일괄. 52주를 다 덮지 못하면 있는 기간의 고저와 실제 기간을 표시 |
 | /alerts | 읽지 않음 표시·탭·"모두 읽음", 상단 "읽지 않음" | 탭에서 제외, 비활성, `—` | `alert_histories.read_at`과 읽음 처리 API | P1 | ✅ [ADR-073](decisions/073-alert-read-state-and-rule-pause.md) |
 | /alerts | 규칙 켜기/끄기 토글 | 켜짐 상태로 비활성 표시 | 규칙 재활성화 API(지금은 DELETE 비활성화만 있음) | P1 | ✅ |
-| /alerts | 시그널 탭 | 필터는 동작하지만 항상 비어 있음 | 퀀트 시그널을 알림 이력에 적재 | P2 | |
+| /alerts | 시그널 탭 | 필터는 동작하지만 항상 비어 있음 | 퀀트 시그널을 알림 이력에 적재 | P2 | ✅ [ADR-090](decisions/090-quant-signal-alert-history-fanout.md) — 신호 커밋 후 alert 모듈이 주인·구독자(ADR-035) 각자의 이력에 적재(사용자·신호 유니크, 재전달 멱등). 푸시·이메일은 같은 트랜잭션의 `notify.user` 명령으로, 알림 설정 "퀀트 시그널"을 따른다. 이전 신호 백필 없음 |
 | /alerts | 새 알림 규칙 | 종목 검색으로 이동 | 알림 화면에서 바로 만드는 폼(기존 `POST /api/alerts/rules`) | P2 | ✅ 알림 규칙 패널 안 폼 — StockPicker 종목 검색, 서버 필수 조건 + 범위 검사, 400·429 등 서버 오류 표시 |
 | /alerts | 전달 채널 | `—` | 알림 채널 설정 조회 API | P2 | ✅ [ADR-093](decisions/093-notification-quiet-hours-and-delivery-channels.md) — `GET /api/users/me/notification-preferences/channels`: 종류별 푸시·이메일·대체 이메일·이력, 끌 수 없는 종류는 방해 금지 시간에도 즉시. worker 발송 정책과 같은 사례표로 테스트. 알림 생성은 없는·비활성 종목을 400으로 거부 |
 
@@ -156,7 +156,7 @@
 | /quant-lab/market | 유료 구독 | 비활성(기존과 동일) | PG 결제 연동([ADR-035](decisions/035-strategy-market-signal-access-control.md)) | P1 | 보류 — 서버가 유료 구독을 거부하도록 막음, 법무 결정 필요 ([ADR-080](decisions/080-paid-strategy-subscription-closed.md)) |
 | /quant-lab/earnings | 월별 수익 차트, 이번 달, 활성 구독자, 전략별 지표 | `—`, "전략 #id" | 월 단위·전략별 집계 API(`summary.byStrategy`에 이름·지표) | P1 | ✅ (이탈률은 이력 없음) |
 | /quant-lab | "운용 중"(실전 자동 운용) | 비활성 | 실전 자동 운용 상태와 실행 경로. ADR 필요, 실주문 검증 선행 | P2 | |
-| /quant-lab | 상단 오늘 신호·구독 중 | `—` | 사용자별 집계 | P2 | |
+| /quant-lab | 상단 오늘 신호·구독 중 | `—` | 사용자별 집계 | P2 | ✅ `GET /api/quant/signals/summary` — 오늘(KST 달력일) 내 전략·구독 전략 신호 수, 구독 중인 마켓 전략 수. 실패하면 `—` ([ADR-090](decisions/090-quant-signal-alert-history-fanout.md)) |
 | /quant-lab/builder | 블록 드래그앤드롭 | 클릭으로 추가 | 프론트 DnD | P2 | ✅ [552db045](https://github.com/polynomeer/monticker/commit/552db045) 네이티브 HTML5 DnD(새 의존성 없음) — 블록을 매수·매도 목록 원하는 자리에 놓기, 손잡이로 순서 변경, 키보드용 위·아래 버튼, 클릭 추가 유지 |
 | /quant-lab/builder | 사이징 변동성 역가중·켈리 1/2, 최대 동시 보유 | 비활성 | 엔진 사이징 확장과 다종목 동시 보유 | P2 | |
 | /quant-lab/builder | 유니버스 칩(KOSPI 200·거래대금·관리종목 제외), 일치 종목 수 | 시장·시총만 동작 | `universeJson` 확장, 일치 수 카운트 API | P2 | |

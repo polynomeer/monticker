@@ -5,7 +5,7 @@
     { "name": "CONDITIONAL_ORDER", "alwaysOn": true,  "inApp": false },
     { "name": "RISK_WARNING",      "alwaysOn": true,  "inApp": false },
     { "name": "FILLS",             "alwaysOn": false, "inApp": false },
-    { "name": "QUANT_SIGNAL",      "alwaysOn": false, "inApp": false },
+    { "name": "QUANT_SIGNAL",      "alwaysOn": false, "inApp": true },
     { "name": "STRATEGY_MARKET",   "alwaysOn": false, "inApp": false },
     { "name": "PRICE_ALERT",       "alwaysOn": false, "inApp": true },
     { "name": "VOLUME_SURGE",      "alwaysOn": false, "inApp": true }

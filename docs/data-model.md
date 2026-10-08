@@ -257,14 +257,25 @@ CREATE TABLE alert_rules (
 
 CREATE TABLE alert_histories (
     id              BIGSERIAL PRIMARY KEY,
-    rule_id         BIGINT      NOT NULL REFERENCES alert_rules(id),
+    rule_id         BIGINT      REFERENCES alert_rules(id), -- V87: 규칙 없이 생긴 이력은 NULL
+    user_id         BIGINT      REFERENCES users(id),       -- V87: 규칙 없는 이력의 주인(ADR-090)
+    category        VARCHAR(30),                            -- V87: 규칙 없는 이력의 종류(예: QUANT_SIGNAL)
+    dedup_key       VARCHAR(120),                           -- V87: 사건 키(예: quant-signal:{quant_signals.id})
     stock_id        BIGINT      REFERENCES stocks(id),
     triggered_at    TIMESTAMPTZ NOT NULL,
     message         TEXT        NOT NULL,
     payload_json    JSONB,
-    delivery_status VARCHAR(20) NOT NULL DEFAULT 'PENDING' -- PENDING | SENT | FAILED
+    delivery_status VARCHAR(20) NOT NULL DEFAULT 'PENDING', -- PENDING | SENT | FAILED | SUPPRESSED | EMAIL_FALLBACK | QUEUED(ADR-090)
+    read_at         TIMESTAMPTZ,                            -- V64(ADR-073)
+    CONSTRAINT chk_alert_histories_owner CHECK (            -- 주인은 rule_id 또는 user_id 중 정확히 하나
+        (rule_id IS NOT NULL AND user_id IS NULL AND category IS NULL AND dedup_key IS NULL)
+        OR (rule_id IS NULL AND user_id IS NOT NULL AND category IS NOT NULL AND dedup_key IS NOT NULL))
 );
+CREATE UNIQUE INDEX uq_alert_histories_user_dedup ON alert_histories (user_id, dedup_key) WHERE user_id IS NOT NULL;
 ```
+
+이력의 소유 판정은 `ah.user_id = ? OR ah.rule_id IN (SELECT id FROM alert_rules WHERE user_id = ?)`이다
+([ADR-090](decisions/090-quant-signal-alert-history-fanout.md)). `JOIN alert_rules`만 쓰면 퀀트 시그널 이력이 빠진다.
 
 ---
 

@@ -17,7 +17,9 @@ class AlertHistoryIndexer(
     private val jdbc: JdbcTemplate,
     private val searchRepository: AlertHistorySearchRepository,
 ) : SearchReindexer {
-    override val index = "alert_histories"
+    companion object { const val INDEX = "alert_histories" }
+
+    override val index = INDEX
     override val documentClass: Class<*> = AlertHistoryDocument::class.java
 
     private val log = LoggerFactory.getLogger(javaClass)
@@ -32,16 +34,16 @@ class AlertHistoryIndexer(
         jdbc.query(
             """
             SELECT ah.id, ah.rule_id, ah.stock_id, ah.triggered_at, ah.message, ah.delivery_status,
-                   ar.user_id, ar.rule_type
+                   COALESCE(ar.user_id, ah.user_id) AS user_id, COALESCE(ar.rule_type, ah.category) AS rule_type
             FROM alert_histories ah
-            JOIN alert_rules ar ON ar.id = ah.rule_id
+            LEFT JOIN alert_rules ar ON ar.id = ah.rule_id   -- ADR-090: 규칙 없는 행(user_id·category)도 함께
             ORDER BY ah.triggered_at DESC
             LIMIT ?
             """,
             { rs, _ ->
                 AlertHistoryDocument(
                     id             = rs.getLong("id").toString(),
-                    ruleId         = rs.getLong("rule_id"),
+                    ruleId         = rs.getLong("rule_id").takeIf { !rs.wasNull() },
                     userId         = rs.getLong("user_id"),
                     stockId        = rs.getLong("stock_id").takeIf { it != 0L },
                     ruleType       = rs.getString("rule_type"),

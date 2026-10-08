@@ -17,8 +17,8 @@ enum class NotificationCategory(val alwaysOn: Boolean = false, val inApp: Boolea
     RISK_WARNING(alwaysOn = true),
     /** 실거래 체결·정산 완료. */
     FILLS,
-    /** 내 포워드 테스트 매수·매도 신호. */
-    QUANT_SIGNAL,
+    /** 내 룰셋·구독 전략의 포워드 테스트 매수·매도 신호 — 주인·구독자 알림 이력에도 남는다(ADR-090). */
+    QUANT_SIGNAL(inApp = true),
     /** 전략 마켓 소식(광고성) — MARKETING 동의도 있어야 한다(ADR-068). 발행 전에 ConsentService.isAgreed로도 확인할 것. */
     STRATEGY_MARKET,
     /**

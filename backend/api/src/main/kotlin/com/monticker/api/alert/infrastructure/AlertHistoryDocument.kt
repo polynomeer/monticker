@@ -9,8 +9,9 @@ import java.time.Instant
 data class AlertHistoryDocument(
     @Id val id: String,
 
+    /** ADR-090 — 규칙 없이 생긴 이력(퀀트 시그널 등)은 null */
     @Field(type = FieldType.Long)
-    val ruleId: Long,
+    val ruleId: Long?,
 
     @Field(type = FieldType.Long)
     val userId: Long,

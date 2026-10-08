@@ -155,7 +155,7 @@ class AlertServiceTest {
 
     @Test
     fun `markRead of someone else's history is not found`() {
-        every { jdbc.update(match<String> { it.contains("UPDATE alert_histories") }, 9L, 1L) } returns 0
+        every { jdbc.update(match<String> { it.contains("UPDATE alert_histories") }, 9L, 1L, 1L) } returns 0
         every { jdbc.query(match<String> { it.contains("SELECT ah.id, ah.read_at") }, any<org.springframework.jdbc.core.RowMapper<Pair<Long, java.time.Instant?>>>(), *anyVararg()) } returns emptyList()
 
         assertThatThrownBy { service.markRead(1L, 9L) }.isInstanceOf(NoSuchElementException::class.java)
@@ -163,7 +163,7 @@ class AlertServiceTest {
 
     @Test
     fun `markRead of an already read history is idempotent`() {
-        every { jdbc.update(match<String> { it.contains("UPDATE alert_histories") }, 9L, 1L) } returns 0
+        every { jdbc.update(match<String> { it.contains("UPDATE alert_histories") }, 9L, 1L, 1L) } returns 0
         every { jdbc.query(match<String> { it.contains("SELECT ah.id, ah.read_at") }, any<org.springframework.jdbc.core.RowMapper<Pair<Long, java.time.Instant?>>>(), *anyVararg()) } returns
             listOf(9L to java.time.Instant.now())
 

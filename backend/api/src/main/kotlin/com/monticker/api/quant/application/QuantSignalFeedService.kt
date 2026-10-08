@@ -1,5 +1,6 @@
 package com.monticker.api.quant.application
 
+import com.monticker.api.common.calendar.KrxCalendar
 import com.monticker.api.quant.infrastructure.RuleSetRepository
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
@@ -83,6 +84,33 @@ class QuantSignalFeedService(
     }
 
     /**
+     * 퀀트랩 상단 "오늘 신호"·"구독 중"(design-rollout-plan §/quant-lab). 오늘은 KST 달력일 — 경계를 여기서 Instant로
+     * 계산해 바인딩한다(서버·DB 타임존과 무관). 신호는 [feed]와 같은 접근 규칙(내 룰셋 + 구독 전략)으로 센다.
+     */
+    fun summary(userId: Long, now: Instant = Instant.now()): QuantSignalSummary {
+        val today = now.atZone(KrxCalendar.ZONE).toLocalDate()
+        val from = today.atStartOfDay(KrxCalendar.ZONE).toInstant()
+        val to = today.plusDays(1).atStartOfDay(KrxCalendar.ZONE).toInstant()
+        val ids = accessibleRuleSets(userId).keys.toList()
+        val todaySignals = if (ids.isEmpty()) 0 else {
+            val placeholders = ids.joinToString(",") { "?" }
+            jdbc.queryForObject(
+                "SELECT COUNT(*) FROM quant_signals WHERE rule_set_id IN ($placeholders) AND signal_time >= ? AND signal_time < ?",
+                Int::class.java, *(ids + Timestamp.from(from) + Timestamp.from(to)).toTypedArray(),
+            ) ?: 0
+        }
+        val subscriptions = jdbc.queryForObject(
+            """
+            SELECT COUNT(*) FROM strategy_subscriptions ss
+            JOIN strategy_market sm ON sm.id = ss.market_id
+            WHERE ss.user_id = ?
+            """.trimIndent(),
+            Int::class.java, userId,
+        ) ?: 0
+        return QuantSignalSummary(todaySignals = todaySignals, activeSubscriptions = subscriptions, date = today.toString())
+    }
+
+    /**
      * [since] 이후 내가 볼 수 있는 룰셋에서 신호가 난 종목 id. 스크리너 "퀀트 시그널 발생" 필터용 —
      * 남의 비공개 룰셋·구독하지 않은 유료 전략의 신호 존재 여부가 새지 않게 같은 접근 규칙을 쓴다.
      */
@@ -109,4 +137,14 @@ data class QuantSignalFeedItem(
     /** BUY | SELL */
     val direction: String,
     val signalTime: Instant,
+)
+
+/** GET /api/quant/signals/summary */
+data class QuantSignalSummary(
+    /** 오늘(KST) 내 룰셋·구독 전략에서 난 신호 수 */
+    val todaySignals: Int,
+    /** 지금 구독 중인 마켓 전략 수 */
+    val activeSubscriptions: Int,
+    /** 집계 기준 KST 날짜(YYYY-MM-DD) */
+    val date: String,
 )
