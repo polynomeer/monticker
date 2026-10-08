@@ -142,6 +142,51 @@ export interface DepthAdapterComponent {
   (props: DepthAdapterProps): React.ReactElement | null;
 }
 
+// ── 위험-수익 산점도(효율적 프론티어) ────────────────────────
+/** 연 변동성(risk)·연 수익률(ret), 둘 다 % 단위 */
+export interface RiskReturnPoint {
+  risk: number;
+  ret: number;
+}
+
+export interface FrontierChartData {
+  /** 무작위 롱 온리 포트폴리오 표본 — 샤프가 정의되지 않으면 null */
+  samples: Array<RiskReturnPoint & { sharpe: number | null }>;
+  /** 효율적 프론티어(목표수익별 최소분산) 점 */
+  frontier: RiskReturnPoint[];
+  /** 샤프 비율 최대 지점(과거 데이터 기준) */
+  maxSharpe?: RiskReturnPoint & { sharpe: number };
+  /** 목표수익 최소분산 분석 결과 비중 */
+  optimal?: RiskReturnPoint;
+  /** 동일가중 */
+  equalWeight?: RiskReturnPoint;
+  /** 사용자의 현재(모의투자) 보유 비중 */
+  held?: RiskReturnPoint;
+}
+
+export interface FrontierChartTheme {
+  bg: string;
+  text: string;
+  grid: string;
+  sample: string;
+  frontier: string;
+  maxSharpe: string;
+  optimal: string;
+  equalWeight: string;
+  held: string;
+}
+
+export interface FrontierAdapterProps {
+  data: FrontierChartData;
+  height?: number;
+  theme: FrontierChartTheme;
+  reduceMotion?: boolean;
+}
+
+export interface FrontierAdapterComponent {
+  (props: FrontierAdapterProps): React.ReactElement | null;
+}
+
 // ── 어댑터 구현체가 준수해야 할 인터페이스 ───────────────────
 export interface ChartAdapterComponent {
   (props: ChartAdapterProps): React.ReactElement | null;
