@@ -10,7 +10,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import type { ChartAdapterProps, CandleData, IndicatorKey, Drawing, DrawingPoint, SignalMarker, SentimentMarker, TradeMarker, ChartInterval } from "./types";
 import { aggregateTradeMarkers, describeTradeGroup, tradeMarkPoints, tradeTimesKst } from "./tradeMarkers";
 import { candleIndexAt, fmtCandleLabel, fractionalIndexAt, inferInterval, isIntraday, timeAtIndex } from "./chartTime";
-import { decimate, formatMeasure, heikinAshi, isDrawingMeaningful, magnetSnap, measure, shiftPoints, zoomWindow, type IndexedPoint } from "./drawingGeometry";
+import { decimate, estimateLabelWidth, formatMeasure, heikinAshi, isDrawingMeaningful, magnetSnap, measure, placeLabel, shiftPoints, zoomWindow, type IndexedPoint } from "./drawingGeometry";
 import { DRAWING_LIMITS } from "./drawingStorage";
 
 let echartsPromise: Promise<typeof import("echarts")> | null = null;
@@ -581,8 +581,11 @@ export default function EChartsAdapter({
               cur.onDrawingsChange?.(cur.drawings.filter(x => x.id !== d.id));
             }
           : undefined,
-        ondragstart: () => { draggedAtRef.current = Date.now(); },
+        // zrender는 draggable 요소를 누르기만 해도(mousedown) dragstart를, 떼면 dragend를 보낸다 — 움직이지
+        // 않은 클릭에도 오므로 "방금 끌었다"는 실제로 옮겨졌을 때만 기록한다. 그렇지 않으면 뒤따르는
+        // click이 항상 무시돼 클릭으로 지우기가 동작하지 않는다.
         ondragend(this: { x: number; y: number }) {
+          if (!this.x && !this.y) return;
           draggedAtRef.current = Date.now();
           moveDrawing(d.id, this.x, this.y);
         },
@@ -629,12 +632,15 @@ export default function EChartsAdapter({
       const [xb, yb] = ptPx(m.b);
       const r = measure(m.a, m.b);
       const color = r.priceDiff >= 0 ? theme.upColor : theme.downColor;
+      const text = formatMeasure(r);
+      // 마지막 봉 근처까지 재면 라벨이 오른쪽 가격축 밖으로 잘린다 — 넘치면 점 왼쪽으로 넘긴다
+      const label = placeLabel(xb, yb, estimateLabelWidth(text, 11, 12), 11 + 6, chart.getWidth(), height);
       elements.push(
         { type: "rect", silent: true, z: 51, shape: { x: Math.min(xa, xb), y: Math.min(ya, yb), width: Math.abs(xb - xa), height: Math.abs(yb - ya) }, style: { fill: `${color}26`, stroke: color, lineWidth: 1 } },
         { type: "line", silent: true, z: 51, shape: { x1: xa, y1: ya, x2: xb, y2: yb }, style: { stroke: color, lineWidth: 1, lineDash: [3, 3] } },
         {
           type: "text", silent: true, z: 52,
-          style: { text: formatMeasure(r), x: xb + 6, y: yb, fill: theme.bg, font: "bold 11px Pretendard, sans-serif", backgroundColor: color, padding: [3, 6], borderRadius: 3, verticalAlign: "middle" },
+          style: { text, x: label.x, y: label.y, align: label.align, fill: theme.bg, font: "bold 11px Pretendard, sans-serif", backgroundColor: color, padding: [3, 6], borderRadius: 3, verticalAlign: "middle" },
         },
       );
     }
@@ -643,8 +649,14 @@ export default function EChartsAdapter({
       elements.push({ type: "polyline", silent: true, z: 51, shape: { points: pen.points.map(toPx) }, style: { stroke: DRAW_COLORS.pen, lineWidth: 2, fill: null } });
     }
 
-    // 그룹을 통째로 교체한다 — merge면 지운 드로잉이 화면에 남는다.
-    chart.setOption({ graphic: { elements: [{ id: DRAWINGS_GROUP, type: "group", $action: "replace", children: elements }] } } as never);
+    // graphic 컴포넌트를 통째로 갈아 끼운다(replaceMerge) — merge면 지운 드로잉이 화면에 남는다.
+    // 그룹에 `$action: "replace"`를 쓰면 안 된다: ECharts 6에서 같은 그룹을 다시 replace할 때 글자가 바뀐
+    // text 요소는 화면(zrender)에서 빠진다 — 옵션에는 남아 있는데, 마우스를 따라 바뀌는 측정 미리보기 라벨과
+    // 두 번째 측정 결과 라벨이 보이지 않았다(e2e chart-drawing.spec.ts에서 실제 캔버스로 확인).
+    chart.setOption(
+      { graphic: { elements: [{ id: DRAWINGS_GROUP, type: "group", children: elements }] } } as never,
+      { replaceMerge: ["graphic"] },
+    );
   }, [theme, height]);
 
   useEffect(() => {
@@ -662,6 +674,9 @@ export default function EChartsAdapter({
         height,
       });
       chartRef.current = chart;
+      // e2e(Playwright)가 캔버스 속 상태(줌 구간·드로잉·마커)를 읽고 정확한 픽셀을 계산할 수 있게
+      // 인스턴스를 컨테이너 DOM 노드에만 붙여 둔다(전역 노출 없음, 화면·동작 영향 없음).
+      (containerRef.current as HTMLDivElement & { __mtChart?: EChart }).__mtChart = chart;
 
       const opt = buildOption();
       if (opt) chart.setOption(opt as Parameters<typeof chart.setOption>[0]);
@@ -831,6 +846,7 @@ export default function EChartsAdapter({
     <div className="relative w-full" style={{ height }}>
       <div
         ref={containerRef}
+        data-testid="stock-chart"
         className="w-full rounded-lg overflow-hidden border border-gray-200 dark:border-dracula-line"
         style={{ height, cursor: activeDrawingTool ? "crosshair" : undefined }}
       />

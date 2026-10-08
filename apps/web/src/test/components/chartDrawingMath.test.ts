@@ -3,7 +3,7 @@ import {
   candleIndexAt, fmtCandleLabel, fractionalIndexAt, inferInterval, timeAtIndex, toChartInterval,
 } from "@/components/stock/chart/chartTime";
 import {
-  decimate, formatMeasure, heikinAshi, isDrawingMeaningful, magnetSnap, measure, shiftPoints, zoomWindow,
+  decimate, estimateLabelWidth, formatMeasure, heikinAshi, isDrawingMeaningful, magnetSnap, measure, placeLabel, shiftPoints, zoomWindow,
 } from "@/components/stock/chart/drawingGeometry";
 import { kstDateToEpoch } from "@/components/stock/chart/tradeMarkers";
 
@@ -132,5 +132,23 @@ describe("drawingGeometry", () => {
     const toTime = (i: number) => timeAtIndex(dailyBars, i, "1d");
     const moved = shiftPoints([{ time: dailyBars[0], price: 100 }], toIndex, toTime, 2, (p) => p + 5);
     expect(moved).toEqual([{ time: dailyBars[2], price: 105 }]);
+  });
+});
+
+describe("측정 라벨 위치", () => {
+  it("한글은 글자 크기, 숫자·기호는 약 0.6배로 폭을 어림한다", () => {
+    expect(estimateLabelWidth("12봉", 10)).toBe(22);
+    expect(estimateLabelWidth("12봉", 10, 12)).toBe(34);
+  });
+
+  it("기본은 점 오른쪽, 차트 폭을 넘으면 점 왼쪽(오른쪽 정렬)으로 넘긴다", () => {
+    expect(placeLabel(100, 50, 120, 17, 800, 400)).toEqual({ x: 106, y: 50, align: "left" });
+    // 마지막 봉(가격축 바로 왼쪽)까지 잰 경우 — 오른쪽으로 그리면 800을 넘는다
+    expect(placeLabel(753, 50, 120, 17, 800, 400)).toEqual({ x: 747, y: 50, align: "right" });
+  });
+
+  it("양쪽 다 모자라면 왼쪽 끝부터, y는 차트 안으로 자른다", () => {
+    expect(placeLabel(50, -20, 300, 20, 200, 400)).toEqual({ x: 0, y: 10, align: "left" });
+    expect(placeLabel(50, 999, 40, 20, 200, 400)).toEqual({ x: 56, y: 390, align: "left" });
   });
 });

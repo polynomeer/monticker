@@ -35,7 +35,7 @@ const minuteCandles: CandleData[] = [
 type Opt = {
   series?: Array<{ name: string; type: string; data: unknown[]; areaStyle?: unknown; markPoint?: { data: Array<{ coord: [number, number]; eventId?: number }> } }>;
   xAxis?: Array<{ data: string[] }>;
-  graphic?: { elements: Array<{ id: string; $action: string; children: Array<Record<string, unknown>> }> };
+  graphic?: { elements: Array<{ id: string; $action?: string; children: Array<Record<string, unknown>> }> };
   dataZoom?: Array<Record<string, unknown>>;
 };
 const fullOption = () => setOption.mock.calls.map((c) => c[0] as Opt).filter((o) => Array.isArray(o.series)).at(-1)!;
@@ -93,7 +93,10 @@ describe("EChartsAdapter — 드로잉", () => {
     render(<EChartsAdapter candles={minuteCandles} theme={theme} interval="1m" drawings={drawings} />);
     await waitFor(() => expect(lastGraphic()).toBeTruthy());
     const g = lastGraphic();
-    expect(g.$action).toBe("replace");
+    // graphic 컴포넌트를 통째로 갈아 끼운다 — 그룹 $action: "replace"는 ECharts 6에서 글자가 바뀐 text를 화면에서 빠뜨린다
+    expect(g.$action).toBeUndefined();
+    const graphicCall = setOption.mock.calls.filter((c) => (c[0] as Opt).graphic).at(-1)!;
+    expect(graphicCall[1]).toEqual({ replaceMerge: ["graphic"] });
     const byId = Object.fromEntries(g.children.map((c) => [c.id, c]));
     expect(byId.tl.shape).toEqual({ x1: 108, y1: 400, x2: 128, y2: 380 });
     expect(byId.hl.shape).toEqual({ x1: 48, y1: 350, x2: 800 - 82, y2: 350 });
@@ -122,6 +125,30 @@ describe("EChartsAdapter — 드로잉", () => {
     const el = lastGraphic().children[0];
     expect(el.draggable).toBe(false);
     expect(el.onclick).toBeUndefined();
+  });
+
+  it("클릭(제자리 누름·뗌)하면 지우고, 실제로 끈 뒤의 클릭은 지우지 않고 옮긴다", async () => {
+    const drawings: Drawing[] = [{ id: "hl", tool: "HORIZONTAL_LINE", points: [{ time: 0, price: 150 }] }];
+    const onChange = vi.fn();
+    render(<EChartsAdapter candles={minuteCandles} theme={theme} interval="1m" drawings={drawings} onDrawingsChange={onChange} />);
+    await waitFor(() => expect(lastGraphic()).toBeTruthy());
+    type Handlers = { ondragstart?: () => void; ondragend: (this: { x: number; y: number }) => void; onclick: () => void };
+    const el = lastGraphic().children[0] as unknown as Handlers;
+
+    // zrender: draggable 요소는 움직이지 않아도 mousedown에 dragstart, mouseup에 dragend(x=y=0) → click 순서
+    el.ondragstart?.();
+    el.ondragend.call({ x: 0, y: 0 });
+    el.onclick();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0]).toEqual([]);
+
+    // 실제로 끌면(dy=-20px → 가격 +20) 옮기고, 이어지는 click은 무시한다
+    onChange.mockClear();
+    el.ondragstart?.();
+    el.ondragend.call({ x: 0, y: -20 });
+    el.onclick();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect((onChange.mock.calls[0][0] as Drawing[])[0].points[0].price).toBe(170);
   });
 
   it("수평선 — 자석이면 가장 가까운 OHLC 가격에 붙는다", async () => {
@@ -157,6 +184,7 @@ describe("EChartsAdapter — 드로잉", () => {
     expect(onChange).not.toHaveBeenCalled();
     const label = lastGraphic().children.find((c) => typeof (c.style as { text?: string })?.text === "string");
     expect((label!.style as { text: string }).text).toBe("+10 (+10.00%) · 5봉");
+    expect(label!.style).toMatchObject({ x: 48 + 7 * 10 + 6, align: "left" });
   });
 
   it("구간 확대 — 두 점 사이로 dataZoom 후 도구 해제", async () => {
