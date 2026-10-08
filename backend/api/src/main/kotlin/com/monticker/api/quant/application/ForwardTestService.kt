@@ -12,8 +12,6 @@ import com.monticker.api.quant.infrastructure.QuantSignalRepository
 import com.monticker.api.quant.infrastructure.RuleSetRepository
 import com.monticker.api.quant.events.QuantSignalEmittedEvent
 import org.slf4j.LoggerFactory
-import com.monticker.api.common.notification.NotificationCategory
-import com.monticker.api.common.notification.UserNotificationCommand
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.stereotype.Service
@@ -178,19 +176,10 @@ class ForwardTestService(
             events.publishEvent(QuantSignalEmittedEvent(
                 signalId = saved.id, ruleSetId = saved.ruleSetId, stockId = saved.stockId,
                 direction = saved.direction.name, signalTime = saved.signalTime,
+                price = price, evalDate = asOfDate,
             ))
-            // ADR-082 — 룰셋 주인에게 알린다(알림 설정 "퀀트 시그널"). 이 트랜잭션이 커밋돼야 나간다. 하루·방향당 한 번.
-            events.publishEvent(
-                UserNotificationCommand(
-                    userId = doc.userId,
-                    category = NotificationCategory.QUANT_SIGNAL,
-                    title = "${doc.name} ${if (signal == SignalDirection.BUY) "매수" else "매도"} 신호",
-                    body = "포워드 테스트에서 ${if (signal == SignalDirection.BUY) "매수" else "매도"} 신호가 났습니다(종가 ${"%,.0f".format(price)}원, $asOfDate). " +
-                        "모의 신호이며 실제 주문은 나가지 않았습니다.",
-                    dedupKey = "quant-signal:${ft.id}:$asOfDate:${signal.name}",
-                    data = mapOf("type" to "QUANT_SIGNAL", "ruleSetId" to ft.ruleSetId, "stockId" to ft.stockId, "direction" to signal.name),
-                ),
-            )
+            // ADR-090 — 알림(룰셋 주인 + 구독자)은 이 이벤트를 받은 alert 모듈이 이력과 함께 보낸다(QuantSignalAlertFanout).
+            // 예전엔 여기서 주인에게만 UserNotificationCommand를 직접 발행했다(ADR-082).
             messagingTemplate.convertAndSend(
                 "/topic/rulesets/${ft.ruleSetId}/signals",
                 mapOf(
