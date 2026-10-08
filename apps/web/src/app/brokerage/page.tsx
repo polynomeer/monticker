@@ -17,7 +17,9 @@ import {
 import { SettlementsTable } from "@/components/brokerage/SettlementsTable";
 import { brokerageProviderLabel } from "@/lib/brokerageProvider";
 import { exportBrokerageCsv, holdingsTable, settlementsTable, timelineTable, type OrderTimelineEntry } from "@/components/brokerage/exportCsv";
-import type { BrokerageHolding } from "@monticker/types";
+import { BROKER_ERROR_LABEL, BROKER_OPERATION_LABEL, SLOW_LATENCY_MS, agoText, fmtLatency } from "@/lib/brokerApiHealth";
+import { cn } from "@/lib/utils";
+import type { BrokerageAccountResponse, BrokerageHolding } from "@monticker/types";
 
 type TimelineEntry = OrderTimelineEntry;
 
@@ -159,6 +161,7 @@ export default function BrokerageDashboardPage() {
             <span className="text-2xs text-tm-muted">
               잔고는 증권사 API에서 조회합니다{updatedAt && !balanceError ? ` · 마지막 갱신 ${updatedAt}` : ""}
             </span>
+            <ApiHealthLine health={account.apiHealth} />
           </Panel>
 
           <Panel tabs={["바로가기"]} actions={[]} closable={false}>
@@ -240,5 +243,23 @@ export default function BrokerageDashboardPage() {
       </PanelRow>
       <p className="py-2 text-center text-xs text-tm-muted">실제 자금이 이동하는 실전투자 계좌입니다. 투자에 대한 책임은 본인에게 있습니다.</p>
     </TerminalPage>
+  );
+}
+
+/** 증권사 API 지연·마지막 오류 — 서버가 관측한 마지막 호출 한 번. 오류는 고정 코드의 문구만(원문 메시지 없음). */
+function ApiHealthLine({ health }: { health: BrokerageAccountResponse["apiHealth"] }) {
+  if (!health) return <span className="text-2xs text-tm-muted">증권사 API 응답 시간: —</span>;
+  return (
+    <span className="flex flex-wrap gap-x-2 text-2xs text-tm-muted">
+      <span>
+        증권사 API 마지막 응답 <span className={cn("num", health.lastLatencyMs >= SLOW_LATENCY_MS && "text-dracula-orange")}>{fmtLatency(health.lastLatencyMs)}</span>
+        {" "}({BROKER_OPERATION_LABEL[health.lastOperation] ?? health.lastOperation}, {agoText(health.lastCallAt)})
+      </span>
+      {health.lastErrorCode && health.lastErrorAt && (
+        <span className="text-dracula-orange">
+          마지막 오류: {BROKER_ERROR_LABEL[health.lastErrorCode] ?? health.lastErrorCode} ({agoText(health.lastErrorAt)})
+        </span>
+      )}
+    </span>
   );
 }

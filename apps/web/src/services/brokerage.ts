@@ -4,7 +4,10 @@ import type {
   BrokerageBalanceResponse,
   BrokerageOrderResponse,
   BrokerageSettlementResponse,
+  ConditionalOrderQuote,
   ConditionalOrderResponse,
+  ConditionalOrderStatsResponse,
+  ConditionalTriggerPage,
   ConnectBrokerageRequest,
   CreateConditionalOrderRequest,
   CreateOcoOrderRequest,
@@ -139,6 +142,27 @@ export async function createOcoOrder(req: CreateOcoOrderRequest): Promise<Condit
 
 export async function getConditionalOrders(page: number, size = 20): Promise<PageResponse<ConditionalOrderResponse>> {
   const res = await authFetch(`/api/brokerage/conditional-orders?page=${page}&size=${size}`);
+  await throwIfNotOk(res);
+  return res.json();
+}
+
+/** 상태별 건수·이번 달(KST) 발동 건수 — 화면 페이지가 아니라 전체 기준. */
+export async function getConditionalOrderStats(): Promise<ConditionalOrderStatsResponse> {
+  const res = await authFetch("/api/brokerage/conditional-orders/stats");
+  await throwIfNotOk(res);
+  return res.json();
+}
+
+/** 발동 기록(최신순) + 발동이 낸 증권사 주문의 현재 상태. */
+export async function getConditionalTriggers(page: number, size = 20): Promise<ConditionalTriggerPage> {
+  const res = await authFetch(`/api/brokerage/conditional-orders/triggers?page=${page}&size=${size}`);
+  await throwIfNotOk(res);
+  return res.json();
+}
+
+/** 감시 중인 종목의 최근가 — 한 번의 요청으로. */
+export async function getConditionalOrderQuotes(): Promise<ConditionalOrderQuote[]> {
+  const res = await authFetch("/api/brokerage/conditional-orders/quotes");
   await throwIfNotOk(res);
   return res.json();
 }

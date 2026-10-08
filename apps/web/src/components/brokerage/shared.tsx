@@ -3,6 +3,7 @@
 // 실전투자(브로커리지) 화면들이 같이 쓰는 조각 — 실계좌 경고, 로그인/미연동 안내, 종목 검색,
 // 계좌번호 마스킹, 상태 표기. 실거래 화면이라 숫자를 지어내지 않는다: 모르는 값은 "—".
 import { useEffect, useState, type ReactNode } from "react";
+import { latencyStat } from "@/lib/brokerApiHealth";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
 import type { BrokerageAccountResponse, BrokerageBalanceResponse, BrokerageOrderStatus, RebalanceExecutionResponse } from "@monticker/types";
@@ -191,7 +192,7 @@ export function fmtDateTime(iso: string) {
   return `${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-/** 상단 바 스트립 — 계좌/잔고에서 온 값만. 지연시간(ms) 같은 측정값은 없으므로 상태만 표시한다. */
+/** 상단 바 스트립 — 계좌/잔고에서 온 값과, 서버가 관측한 마지막 증권사 호출 지연(account.apiHealth). */
 export function brokerageStats(account: BrokerageAccountResponse | null | undefined, balance: BrokerageBalanceResponse | null | undefined, balanceError: boolean): TopStat[] {
   return [
     { label: "연동 증권사", value: account ? brokerageProviderLabel(account.provider) : "—" },
@@ -199,6 +200,7 @@ export function brokerageStats(account: BrokerageAccountResponse | null | undefi
     { label: "가용 현금", value: balanceError ? "조회 불가" : won(balance?.cash), tone: balanceError ? "text-dracula-orange" : undefined },
     { label: "총 평가금액", value: balanceError ? "조회 불가" : won(balance?.totalEvaluated), tone: balanceError ? "text-dracula-orange" : undefined },
     apiStat(account),
+    latencyStat(account?.apiHealth),
   ];
 }
 

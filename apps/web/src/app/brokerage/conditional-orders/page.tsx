@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { getAccessToken } from "@/services/auth";
-import { useBrokerageAccount, useConditionalOrders, useCreateConditionalOrder, useCreateOcoOrder } from "@/hooks/useBrokerage";
+import {
+  useBrokerageAccount, useConditionalOrderQuotes, useConditionalOrderStats, useConditionalOrders, useConditionalTriggers,
+  useCreateConditionalOrder, useCreateOcoOrder,
+} from "@/hooks/useBrokerage";
 import { useToast } from "@/hooks/useToast";
 import { ApiError } from "@/services/brokerage";
 import {
-  Bar, Btn, BuySell, DataTable, Field, Icon, Notice, Panel, PanelCol, PanelRow, Pill, PreviewTag, Seg, SelectBox, StockCell, TerminalPage,
+  Bar, Btn, BuySell, DataTable, Field, Icon, Notice, Panel, PanelCol, PanelRow, Pill, Seg, SelectBox, StockCell, TerminalPage,
   fmtNum, type Column,
 } from "@/components/terminal";
 import {
@@ -14,10 +17,13 @@ import {
 } from "@/components/brokerage/ConditionalOrderRow";
 import { TradingHaltBanner } from "@/components/brokerage/TradingHaltBanner";
 import {
-  LiveNotice, LoginRequired, NoAccount, PagerButtons, SelectedStock, SkeletonRows, StockSearchBox, fmtDateTime, sideLabel,
-  useSymbolQuotes, type StockHit,
+  LiveNotice, LoginRequired, NoAccount, ORDER_STATUS, PagerButtons, SelectedStock, SkeletonRows, StockSearchBox, fmtDateTime, sideLabel,
+  type StockHit,
 } from "@/components/brokerage/shared";
-import type { BrokerageOrderSide, BrokerageOrderType, ConditionalOrderResponse, ConditionalTriggerType } from "@monticker/types";
+import { DEFAULT_VALID_DAYS, VALID_DAYS_OPTIONS, lastValidDateLabel } from "@/lib/conditionalValidity";
+import type {
+  BrokerageOrderSide, BrokerageOrderType, ConditionalOrderQuote, ConditionalOrderResponse, ConditionalTriggerEvent, ConditionalTriggerType,
+} from "@monticker/types";
 
 // V-L7 — 주문 폼에 수량 상한이 전혀 없어 1e9 같은 값이 클라 검사를 그대로 통과했다.
 const MAX_ORDER_QUANTITY = 1_000_000;
@@ -28,8 +34,6 @@ const TRIGGER_OPTIONS: { value: ConditionalTriggerType; label: string }[] = [
   { value: "TAKE_PROFIT", label: "익절 (이상 발동)" },
   { value: "PRICE_BELOW", label: "하락 (이하 발동)" },
 ];
-
-const DAY = 86_400_000;
 
 export default function ConditionalOrderPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -46,6 +50,9 @@ export default function ConditionalOrderPage() {
   const [takeProfitPrice, setTakeProfitPrice] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
+  const [validDays, setValidDays] = useState<number>(DEFAULT_VALID_DAYS);
+  const [logTab, setLogTab] = useState<"triggers" | "closed">("triggers");
+  const [triggerPage, setTriggerPage] = useState(0);
 
   useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
 
@@ -58,8 +65,13 @@ export default function ConditionalOrderPage() {
 
   const orders = ordersData?.content ?? [];
   const active = orders.filter(o => o.status === "ACTIVE");
-  const history = orders.filter(o => o.status !== "ACTIVE");
-  const quotes = useSymbolQuotes(active.map(o => o.symbol), true);
+  // 발동하지 않고 끝난 것(해지·만료). 발동한 것은 서버 발동 기록(전체 기준)에서 본다.
+  const closed = orders.filter(o => o.status !== "ACTIVE" && !o.triggeredAt);
+  // 감시 중인 종목 시세를 한 번에(종목마다 검색+시세 두 번씩 부르던 것을 대체). 종목은 서버가 내 ACTIVE 주문에서 정한다.
+  const { data: quoteList } = useConditionalOrderQuotes(!!account);
+  const quotes = new Map<string, ConditionalOrderQuote>((quoteList ?? []).map(q => [q.symbol, q]));
+  const { data: stats } = useConditionalOrderStats(!!account);
+  const triggersQuery = useConditionalTriggers(triggerPage, !!account);
 
   const selectStock = async (hit: StockHit) => {
     setStock(hit);
@@ -98,6 +110,7 @@ export default function ConditionalOrderPage() {
           orderType,
           limitPrice: orderType === "LIMIT" ? Number(limitPrice) : undefined,
         },
+        validDays,
       });
       toast({ type: "success", title: "등록 완료", message: "조건부 주문이 등록되었습니다." });
       setTriggerPrice("");
@@ -119,6 +132,7 @@ export default function ConditionalOrderPage() {
           { triggerType: "STOP_LOSS", triggerPrice: Number(stopLossPrice), orderType: "MARKET" },
           { triggerType: "TAKE_PROFIT", triggerPrice: Number(takeProfitPrice), orderType: "MARKET" },
         ],
+        validDays,
       });
       toast({ type: "success", title: "OCO 등록 완료", message: "손절/익절 조건이 등록되었습니다." });
       setStopLossPrice("");
@@ -138,12 +152,6 @@ export default function ConditionalOrderPage() {
     return (Math.abs(o.triggerPrice - cur) / cur) * 100;
   };
   const imminent = active.filter(o => { const d = distancePct(o); return d != null && d < 2; }).length;
-  const now = new Date();
-  const firedThisMonth = orders.filter(o => {
-    if (!o.triggeredAt) return false;
-    const t = new Date(o.triggeredAt);
-    return t.getFullYear() === now.getFullYear() && t.getMonth() === now.getMonth();
-  }).length;
   const singlePage = (ordersData?.totalPages ?? 0) <= 1;
 
   const activeCols: Column<ConditionalOrderResponse>[] = [
@@ -172,6 +180,30 @@ export default function ConditionalOrderPage() {
     { key: "act", header: <span className="sr-only">해지</span>, align: "right", cell: o => <ConditionalCancelButton o={o} /> },
   ];
 
+  const triggerCols: Column<ConditionalTriggerEvent>[] = [
+    { key: "at", header: "발동 시각", cell: e => <span className="num text-tm-muted">{fmtDateTime(e.triggeredAt)}</span> },
+    { key: "desc", header: "내용", cell: e => (
+      <span className="whitespace-normal">
+        {e.symbol} {TRIGGER_LABEL[e.triggerType]} {fmtNum(e.triggerPrice)}{isBelowTrigger(e.triggerType) ? " 이하" : " 이상"}
+        {" → "}{sideLabel(e.side)} {fmtNum(e.quantity)}주{e.orderType === "LIMIT" ? ` (지정가 ${fmtNum(e.limitPrice)})` : " (시장가)"}
+        {e.failReason && <span className="block text-2xs text-[#ff8a8a]">{e.failReason}</span>}
+      </span>
+    ) },
+    { key: "res", header: "결과", cell: e => {
+      const m = COND_STATUS[e.status];
+      const o = e.orderStatus ? ORDER_STATUS[e.orderStatus] : null;
+      return (
+        <span className="flex flex-wrap items-center gap-1.5">
+          <Pill tone={m?.tone ?? "muted"}>{m?.label ?? e.status}</Pill>
+          {o && <Pill tone={o.tone}>주문 {o.label}</Pill>}
+          {e.filledQty != null && e.filledQty > 0 && e.avgFillPrice != null && (
+            <span className="num text-2xs text-tm-muted">{fmtNum(e.filledQty)}주 @ {fmtNum(e.avgFillPrice)}</span>
+          )}
+        </span>
+      );
+    } },
+  ];
+
   const historyCols: Column<ConditionalOrderResponse>[] = [
     { key: "at", header: "시각", cell: o => <span className="num text-tm-muted">{fmtDateTime(o.triggeredAt ?? o.createdAt)}</span> },
     { key: "desc", header: "내용", cell: o => (
@@ -197,9 +229,9 @@ export default function ConditionalOrderPage() {
       title="조건부 주문"
       crumb="실전투자 · 가격 조건 충족 시 자동 제출"
       stats={[
-        { label: "감시 중", value: `${active.length}건${singlePage ? "" : "+"}` },
-        { label: "트리거 임박", value: `${imminent}건`, tone: imminent > 0 ? "text-dracula-orange" : undefined },
-        { label: "이번 달 발동", value: singlePage ? `${firedThisMonth}건` : "—" },
+        { label: "감시 중", value: stats ? `${fmtNum(stats.byStatus.ACTIVE)}건` : "—" },
+        { label: "트리거 임박", value: `${imminent}건${singlePage ? "" : "+"}`, tone: imminent > 0 ? "text-dracula-orange" : undefined, hint: "현재가가 트리거 가격의 2% 안쪽인 감시 중 주문(이 페이지 기준)" },
+        { label: "이번 달 발동", value: stats ? `${fmtNum(stats.firedThisMonth)}건` : "—", hint: "이번 달 1일 00:00(KST)부터 발동한 조건부 주문" },
         { label: "감시 주기", value: "실시간 시세" },
       ]}
       account={{ kind: "live" }}
@@ -316,10 +348,12 @@ export default function ConditionalOrderPage() {
               </div>
 
               <div className="flex flex-col gap-1">
-                <SelectBox label="유효 기간" disabled value="90">
-                  <option value="90">90일 ({new Date(Date.now() + 90 * DAY).toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" })}까지) · 자동 만료</option>
+                <SelectBox label="유효 기간" value={String(validDays)} onChange={e => setValidDays(Number(e.target.value))}>
+                  {VALID_DAYS_OPTIONS.map(d => (
+                    <option key={d} value={d}>{d}일 ({lastValidDateLabel(d)}까지)</option>
+                  ))}
                 </SelectBox>
-                <span className="flex items-center gap-1.5 text-2xs text-tm-muted">기간 선택 <PreviewTag /></span>
+                <span className="text-2xs text-tm-muted">마지막 날(한국 시간) 자정이 지나면 자동으로 만료됩니다. 최대 90일.</span>
               </div>
 
               <Notice tone="warn" icon="alert">{summary}</Notice>
@@ -349,11 +383,31 @@ export default function ConditionalOrderPage() {
               <DataTable columns={activeCols} rows={active} rowKey={o => o.id} minWidth={900} empty="감시 중인 조건부 주문이 없습니다." />
             )}
           </Panel>
-          <Panel tabs={["발동 기록"]} actions={[]} bodyClassName="px-1.5 pb-1.5 pt-1">
-            {ordersLoading ? <SkeletonRows n={2} /> : (
-              <DataTable columns={historyCols} rows={history} rowKey={o => o.id} minWidth={600} empty="발동·해지·만료된 조건부 주문이 없습니다." />
+          <Panel
+            tabs={[{ key: "triggers", label: "발동 기록" }, { key: "closed", label: "해지·만료" }]}
+            active={logTab}
+            onTabChange={k => setLogTab(k as "triggers" | "closed")}
+            closable={false}
+            actions={["refresh"]}
+            onAction={() => (logTab === "triggers" ? triggersQuery.refetch() : ordersQuery.refetch())}
+            bodyClassName="px-1.5 pb-1.5 pt-1"
+          >
+            {logTab === "triggers" ? (
+              <>
+                {triggersQuery.isLoading ? <SkeletonRows n={2} /> : (
+                  <DataTable columns={triggerCols} rows={triggersQuery.data?.content ?? []} rowKey={e => e.conditionalOrderId} minWidth={640}
+                    empty="발동한 조건부 주문이 없습니다." />
+                )}
+                <PagerButtons page={triggerPage} totalPages={triggersQuery.data?.totalPages ?? 0} onChange={setTriggerPage} />
+              </>
+            ) : (
+              <>
+                {ordersLoading ? <SkeletonRows n={2} /> : (
+                  <DataTable columns={historyCols} rows={closed} rowKey={o => o.id} minWidth={600} empty="해지·만료된 조건부 주문이 없습니다(이 페이지 기준)." />
+                )}
+                <PagerButtons page={page} totalPages={ordersData?.totalPages ?? 0} onChange={setPage} />
+              </>
             )}
-            <PagerButtons page={page} totalPages={ordersData?.totalPages ?? 0} onChange={setPage} />
           </Panel>
           <p className="px-1 text-xs leading-relaxed text-tm-muted">
             같은 계좌를 HTS/앱 등 다른 경로로도 거래하면 조건부 주문이 이를 인지하지 못해 의도치 않은 중복 매매가 발생할 수 있습니다.

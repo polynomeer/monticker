@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/useToast";
 import { ApiError } from "@/services/brokerage";
 import { authFetch } from "@/services/api";
 import {
-  Btn, DataTable, Icon, IconBtn, KV, Notice, Panel, PanelRow, Pill, PreviewTag, Seg, TerminalPage, fmtNum, type Column,
+  Btn, DataTable, Icon, IconBtn, KV, Notice, Panel, PanelRow, Pill, Seg, TerminalPage, fmtNum, type Column,
 } from "@/components/terminal";
 import { TradingHaltBanner } from "@/components/brokerage/TradingHaltBanner";
 import { LiveNotice, LoginRequired, NoAccount, StockSearchBox, sideClass, sideLabel, useLastRebalanceExecution, useSymbolQuotes, type StockHit } from "@/components/brokerage/shared";
@@ -296,16 +296,22 @@ export default function RebalancePage() {
       : null },
   ];
 
-  const holdingPrice = (symbol: string) => holdings.find(h => h.symbol === symbol)?.currentPrice ?? null;
   const previewCols: Column<RebalanceLegResponse>[] = [
     { key: "sym", header: "종목", cell: l => <span className="font-medium">{nameOf(l.symbol)}</span> },
     { key: "side", header: "구분", cell: l => <span className={sideClass(l.side)}>{sideLabel(l.side)}</span> },
     { key: "qty", header: "수량", align: "right", cell: l => <span className="num">{fmtNum(l.quantity)}</span> },
     { key: "w", header: "비중", align: "right", cell: l => <span className="num text-tm-muted">{pct(l.currentWeight)}→{pct(l.targetWeight)}%</span> },
-    { key: "amt", header: "예상 금액", align: "right", cell: l => { const p = holdingPrice(l.symbol); return <span className="num">{p ? fmtNum(p * l.quantity) : "—"}</span>; } },
+    // 서버 미리보기가 수량을 계산한 가격(보유 = 증권사 잔고 현재가, 신규 = 최근 1분봉) × 수량. 실행은 시장가라 실제 체결가와 다르다.
+    { key: "amt", header: "예상 금액", align: "right", cell: l => (
+      <span className="num" title={`추정 가격 ${fmtNum(l.estimatedPrice)}원 (${l.priceSource === "BROKER_BALANCE" ? "증권사 잔고 현재가" : "최근 1분봉 종가"}) · 수수료 ${fmtNum(l.estimatedFee)}원${l.estimatedTax > 0 ? ` · 거래세 ${fmtNum(l.estimatedTax)}원` : ""}`}>
+        {l.estimatedAmount > 0 ? fmtNum(l.estimatedAmount) : "—"}
+      </span>
+    ) },
   ];
 
   const legs = showPreview && previewData ? previewData.legs : null;
+  // 거래비용은 대상이 있을 때만 보여 준다(대상 0건이면 0원이 아니라 "—")
+  const costPreview = legs && legs.length > 0 ? previewData : null;
   const presetValue = (THRESHOLD_PRESETS as readonly string[]).includes(Number(thresholdPct).toFixed(2)) ? Number(thresholdPct).toFixed(2) : "custom";
 
   return (
@@ -421,7 +427,25 @@ export default function RebalancePage() {
               <div className="flex flex-col gap-2">
                 <KV k="기대 수익률 (연)" v={optimizeInfo ? `${pct(optimizeInfo.expectedReturn)}%` : "—"} valueClassName={optimizeInfo ? "text-up" : "text-tm-muted"} />
                 <KV k="예상 위험" v={optimizeInfo ? `${pct(optimizeInfo.expectedRisk)}%` : "—"} valueClassName={optimizeInfo ? undefined : "text-tm-muted"} />
-                <KV k={<span className="inline-flex items-center gap-1.5">예상 거래비용 <PreviewTag /></span>} v="—" valueClassName="text-tm-muted" />
+                <KV
+                  k="예상 거래비용"
+                  v={costPreview ? `${fmtNum(costPreview.estimatedCost)}원` : "—"}
+                  valueClassName={costPreview ? undefined : "text-tm-muted"}
+                />
+                <KV
+                  k="매수 예상 금액"
+                  v={costPreview ? `${fmtNum(costPreview.estimatedBuyAmount)}원` : "—"}
+                  valueClassName={costPreview ? undefined : "text-tm-muted"}
+                />
+                {costPreview && costPreview.estimatedNewBuyAmount > 0 && (
+                  <KV k="그중 신규 종목 매수" v={`${fmtNum(costPreview.estimatedNewBuyAmount)}원`} />
+                )}
+                {costPreview && (
+                  <span className="text-2xs leading-relaxed text-tm-muted">
+                    추정치입니다 — 수수료 {(costPreview.costModel.feeRate * 100).toFixed(3)}%·매도 거래세 {(costPreview.costModel.sellTaxRate * 100).toFixed(2)}%를
+                    미리보기 가격에 적용했습니다. 실행은 시장가라 체결가가 다르고, 증권사·계좌별 실제 수수료율과도 다를 수 있습니다.
+                  </span>
+                )}
                 {optimizeInfo && <span className="text-2xs leading-relaxed text-tm-muted">기대 수익률·위험은 최적 비중 계산 결과(과거 데이터 기반 참고용)이며 투자자문이 아닙니다.</span>}
               </div>
 
