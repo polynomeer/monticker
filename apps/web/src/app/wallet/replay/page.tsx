@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
 import { getAccessToken } from "@/services/auth";
 import { emotionLabel } from "@/components/wallet/emotions";
 import { OriginBadge, PLANNED_DEFINITION } from "@/components/wallet/origin";
+import { DAILY_RETURN_DEFINITION, dailyReturnText, kstToday, kstWeekOf, type DailyReturn } from "@/components/wallet/insights";
 import { EmptyNote, LoginRequired, Skeleton } from "@/components/portfolio/PaperStates";
 import { fmtTime } from "@/components/portfolio/format";
 import {
@@ -56,7 +57,7 @@ interface DailyReplay {
   };
 }
 
-interface EmotionStat { emotion: string; count: number; avgReturnPct: number | null; }
+interface EmotionStat { emotion: string; count: number; avgReturnPct: number | null; sharePct?: number | null; }
 
 const TYPE_LABEL: Record<string, string> = { BUY: "매수", SELL: "매도", DEPOSIT: "입금", WITHDRAWAL: "출금", FEE: "수수료" };
 const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
@@ -69,11 +70,6 @@ function ymd(d: Date) {
 function parseYmd(s: string) {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, m - 1, d);
-}
-/** +44,900 → "+4.5만" */
-function compactWon(v: number) {
-  if (Math.abs(v) < 10_000) return fmtSigned(v);
-  return `${v > 0 ? "+" : "-"}${(Math.abs(v) / 10_000).toFixed(1)}만`;
 }
 function tradeName(t: ReplayEvent | string | null | undefined) {
   if (!t) return null;
@@ -146,14 +142,28 @@ export default function ReplayPage() {
   const { data: cal } = useMarketCalendar(addDays(anchor, -45), addDays(anchor, 15));
   const holidays = useMemo(() => holidaySet(cal), [cal]);
   const days = useMemo(() => previousBusinessDays(6, anchor, holidays).map(parseYmd), [anchor, holidays]);
-  const dayQueries = useQueries({
-    queries: days.map((d) => ({ queryKey: ["wallet", "replay", ymd(d)], queryFn: () => fetchReplay(ymd(d)), enabled: isLoggedIn, staleTime: 60_000 })),
-  });
-
-  const { data: emotions } = useQuery<{ stats: EmotionStat[] }>({
-    queryKey: ["wallet", "emotion-analysis"],
+  // ADR-091 — 날짜 띠의 날짜별 수익률(그날 손익 ÷ 그날 시작 평가자산)을 한 번에 읽는다
+  const stripFrom = days.length ? ymd(days[0]) : date;
+  const stripTo = days.length ? ymd(days[days.length - 1]) : date;
+  const { data: returns } = useQuery<{ days: DailyReturn[] }>({
+    queryKey: ["wallet", "daily-returns", stripFrom, stripTo],
     queryFn: async () => {
-      const r = await authFetch("/api/wallet/emotion-analysis");
+      const r = await authFetch(`/api/wallet/daily-returns?from=${stripFrom}&to=${stripTo}`);
+      if (!r.ok) throw new Error("날짜별 수익률 조회 실패");
+      return r.json();
+    },
+    enabled: isLoggedIn,
+    staleTime: 60_000,
+  });
+  const returnByDate = useMemo(() => new Map((returns?.days ?? []).map((d) => [d.date, d])), [returns]);
+
+  // ADR-091 — 감정 분포는 선택한 날짜가 속한 주(KST 월~일)
+  const week = kstWeekOf(date);
+  const isThisWeek = kstWeekOf(kstToday()).from === week.from;
+  const { data: emotions } = useQuery<{ stats: EmotionStat[]; totalCount?: number }>({
+    queryKey: ["wallet", "emotion-analysis", week.from, week.to],
+    queryFn: async () => {
+      const r = await authFetch(`/api/wallet/emotion-analysis?from=${week.from}&to=${week.to}`);
       if (!r.ok) throw new Error("감정 분석 조회 실패");
       return r.json();
     },
@@ -198,22 +208,24 @@ export default function ReplayPage() {
       <Panel tabs={["날짜 선택"]} actions={[]} closable={false}>
         <div className="flex flex-wrap items-center gap-1.5">
           <IconBtn name="chevl" label="이전 주" size={36} onClick={() => setAnchor((a) => shiftBusinessDays(a, -5, holidays))} />
-          {days.map((d, i) => {
+          {days.map((d) => {
             const key = ymd(d);
             const on = key === date;
-            const v = dayQueries[i]?.data?.summary.totalPnl;
+            const ret = returnByDate.get(key);
+            const v = ret?.status === "OK" ? ret.returnPct : null;
             return (
               <button
                 key={key}
                 type="button"
                 aria-pressed={on}
-                aria-label={`${d.getMonth() + 1}월 ${d.getDate()}일 복기`}
+                aria-label={`${d.getMonth() + 1}월 ${d.getDate()}일 복기 · 수익률 ${dailyReturnText(ret)}`}
+                title={DAILY_RETURN_DEFINITION}
                 onClick={() => setDate(key)}
                 className={cn("flex w-[58px] flex-col items-center gap-0.5 rounded-lg py-2", on ? "bg-dracula-purple text-tm-page" : "bg-tm-inner text-dracula-fg hover:bg-tm-raised")}
               >
                 <span className="text-2xs opacity-80">{WEEKDAY[d.getDay()]}</span>
                 <span className="num text-13 font-semibold">{`${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`}</span>
-                <span className={cn("num text-[0.625rem]", !on && dirClass(v))}>{v == null ? "—" : v === 0 ? "0" : compactWon(v)}</span>
+                <span className={cn("num text-[0.625rem]", !on && dirClass(v))}>{dailyReturnText(ret)}</span>
               </button>
             );
           })}
@@ -266,12 +278,20 @@ export default function ReplayPage() {
               </AutoGrid>
             )}
           </Panel>
-          <Panel tabs={["감정 분포"]} actions={[]} right={<span className="text-2xs text-tm-muted">전체 기간</span>}>
+          <Panel
+            tabs={["감정 분포"]}
+            actions={[]}
+            right={
+              <span className="text-2xs text-tm-muted" title="선택한 날짜가 속한 주(월~일, 한국 시간)에 체결된 거래의 감정 태그">
+                {isThisWeek ? "이번 주" : `${week.from.slice(5).replace("-", ".")}–${week.to.slice(5).replace("-", ".")}`}
+              </span>
+            }
+          >
             {emoStats.length === 0 ? (
-              <EmptyNote className="py-4">아직 감정 태그를 남긴 거래가 없습니다.</EmptyNote>
+              <EmptyNote className="py-4">이 주에 감정 태그를 남긴 거래가 없습니다.</EmptyNote>
             ) : (
               emoStats.map((s, i) => {
-                const p = (s.count / emoTotal) * 100;
+                const p = s.sharePct ?? (s.count / emoTotal) * 100;
                 return (
                   <div key={s.emotion} className="flex flex-col gap-[5px]">
                     <div className="flex justify-between text-xs">
