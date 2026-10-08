@@ -20,6 +20,7 @@ import { useWatchRules } from "@/hooks/useWatchRules";
 import { applyMove, moveTarget, type MoveDir } from "@/components/watchlist/order";
 import { useIntradaySeriesChunked } from "@/hooks/useIntradaySeries";
 import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
+import { downloadCsv, kstDateStamp } from "@/components/portfolio/csv";
 
 interface AlertRule { id: number; stockId: number | null; ruleType: string; }
 
@@ -337,6 +338,15 @@ export default function WatchlistPage() {
       <Panel
         tabs={["관심종목"]}
         actions={["sliders", "download", "expand"]}
+        onAction={(a) => {
+          if (a !== "download" || rows.length === 0) return;
+          // 화면에 보이는 순서·필터 그대로
+          downloadCsv(`watchlist-${kstDateStamp()}.csv`, ["종목코드", "종목명", "현재가", "등락률(%)", "메모"],
+            rows.map((i) => {
+              const q = quoteByStockId.get(i.stockId);
+              return [i.symbol, i.name, q?.price ?? "", q?.changeRate ?? "", i.memo ?? ""];
+            }));
+        }}
         className="flex-[999_1_640px]"
         bodyClassName="px-1.5 pb-1.5 pt-2.5"
         right={activeGroup && activeGroup.items.length > 0 ? (

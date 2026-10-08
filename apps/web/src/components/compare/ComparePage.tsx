@@ -273,7 +273,7 @@ export default function ComparePage() {
         tabs={[{ key: "chart", label: "비교 차트" }, { key: "events", label: "이벤트 겹침" }, { key: "candles", label: "개별 차트" }]}
         active={chartTab}
         onTabChange={setChartTab}
-        actions={["sliders", "download", "expand"]}
+        actions={["sliders", "expand"]}
       >
         <div className="flex flex-wrap items-center gap-2">
           {stocks.map((s) => (
@@ -355,7 +355,7 @@ export default function ComparePage() {
       </Panel>
 
       <PanelRow>
-        <Panel tabs={["지표 비교"]} actions={["download"]} className="flex-[999_1_600px]" bodyClassName="px-1.5 pb-1.5 pt-1">
+        <Panel tabs={["지표 비교"]} className="flex-[999_1_600px]" bodyClassName="px-1.5 pb-1.5 pt-1">
           <DataTable columns={columns} rows={rows} rowKey={(r) => r.key} minWidth={640} />
           <span className="px-2.5 pb-1 text-2xs text-tm-muted">기간 내 일봉 기준 계산. 베타는 KOSPI와 공통 거래일 일간 수익률로 계산(20일 미만이면 —){kospiMocked ? ", 지금 지수는 개발용 모의 값이라 참고용이 아닙니다" : ""}. 배당수익률은 배당 데이터가 없어 표시하지 않습니다.</span>
         </Panel>
