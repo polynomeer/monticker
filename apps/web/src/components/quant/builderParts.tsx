@@ -27,14 +27,42 @@ export function ChipNumber({ suffix, className, ...rest }: { suffix?: string } &
   );
 }
 
-export function CondShell({ children, onRemove }: { children: ReactNode; onRemove: () => void }) {
+export function CondShell({ children, onRemove, onMoveUp, onMoveDown, dragHandle }: {
+  children: ReactNode;
+  onRemove: () => void;
+  /** 키보드로도 순서를 바꿀 수 있게 — 끝에 있으면 undefined를 줘서 버튼을 끈다. */
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  /** 드래그 손잡이에 붙일 HTML5 DnD 속성. 없으면 장식용 점 아이콘만 그린다. */
+  dragHandle?: ComponentProps<"span">;
+}) {
+  const movable = onMoveUp !== undefined || onMoveDown !== undefined || !!dragHandle;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span aria-hidden className="grid text-tm-muted">
-        <Icon name="dots" size={16} />
-      </span>
+      {dragHandle ? (
+        <span
+          {...dragHandle}
+          draggable
+          title="끌어서 순서 바꾸기"
+          className="grid cursor-grab text-tm-muted hover:text-dracula-fg active:cursor-grabbing"
+        >
+          <Icon name="dots" size={16} />
+        </span>
+      ) : (
+        <span aria-hidden className="grid text-tm-muted">
+          <Icon name="dots" size={16} />
+        </span>
+      )}
       {children}
-      <IconBtn name="x" label="조건 삭제" size={32} iconSize={14} onClick={onRemove} className="ml-auto" />
+      <span className="ml-auto flex items-center">
+        {movable && (
+          <>
+            <IconBtn name="chev" label="위로 이동" size={28} iconSize={13} className="rotate-180 disabled:opacity-30" disabled={!onMoveUp} onClick={onMoveUp} />
+            <IconBtn name="chev" label="아래로 이동" size={28} iconSize={13} className="disabled:opacity-30" disabled={!onMoveDown} onClick={onMoveDown} />
+          </>
+        )}
+        <IconBtn name="x" label="조건 삭제" size={32} iconSize={14} onClick={onRemove} />
+      </span>
     </div>
   );
 }

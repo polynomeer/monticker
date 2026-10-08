@@ -157,14 +157,14 @@
 | /quant-lab/earnings | 월별 수익 차트, 이번 달, 활성 구독자, 전략별 지표 | `—`, "전략 #id" | 월 단위·전략별 집계 API(`summary.byStrategy`에 이름·지표) | P1 | ✅ (이탈률은 이력 없음) |
 | /quant-lab | "운용 중"(실전 자동 운용) | 비활성 | 실전 자동 운용 상태와 실행 경로. ADR 필요, 실주문 검증 선행 | P2 | |
 | /quant-lab | 상단 오늘 신호·구독 중 | `—` | 사용자별 집계 | P2 | |
-| /quant-lab/builder | 블록 드래그앤드롭 | 클릭으로 추가 | 프론트 DnD | P2 | |
+| /quant-lab/builder | 블록 드래그앤드롭 | 클릭으로 추가 | 프론트 DnD | P2 | ✅ [552db045](https://github.com/polynomeer/monticker/commit/552db045) 네이티브 HTML5 DnD(새 의존성 없음) — 블록을 매수·매도 목록 원하는 자리에 놓기, 손잡이로 순서 변경, 키보드용 위·아래 버튼, 클릭 추가 유지 |
 | /quant-lab/builder | 사이징 변동성 역가중·켈리 1/2, 최대 동시 보유 | 비활성 | 엔진 사이징 확장과 다종목 동시 보유 | P2 | |
 | /quant-lab/builder | 유니버스 칩(KOSPI 200·거래대금·관리종목 제외), 일치 종목 수 | 시장·시총만 동작 | `universeJson` 확장, 일치 수 카운트 API | P2 | |
-| /quant-lab/builder | 버전 탭 | 제목에 vN만 | 프론트만(`GET /rulesets/{id}/versions`가 이미 있음) | P2 | |
+| /quant-lab/builder | 버전 탭 | 제목에 vN만 | 프론트만(`GET /rulesets/{id}/versions`가 이미 있음) | P2 | ✅ [552db045](https://github.com/polynomeer/monticker/commit/552db045) 버전 목록·읽기 전용 보기·이전 버전 대비 변경 요약, 불러오기는 기존 저장(PUT)으로만 새 버전 기록, 운용 중에는 막음 |
 | /quant-lab/[id] | KOSPI 비교선, 포워드 일치율·구독자, 검증 배지 신청 | 수치만, `—`, 비활성 | 벤치마크 시계열, 구독자 조회, 배지 심사 정책 | P2 | |
 | /backtest | 캔들 + 매수·매도 마커, 종목 검색 | 자산 곡선, 하드코딩 5종목 | StockChart 거래 마커, StockPicker 교체 | P2 | ✅ [125e1c48](https://github.com/polynomeer/monticker/commit/125e1c48) 기간 일봉 + 진입·청산 마커(`TradeRecord.quantity`), StockPicker 검색 |
 | /analytics | 무작위 포트폴리오 산점도·최대 샤프 점, 분석 기간 | 실제 프론티어만, "보유 일봉 전체" | 표본 응답, max-Sharpe 최적화, 기간 파라미터 | P2 | |
-| /quant-lab/market | 검증 배지·필터·정렬, 공유 전략 총수 | "검증 전", 비활성, "N+개" | 배지 부여 로직, total count | P2 | |
+| /quant-lab/market | 검증 배지·필터·정렬, 공유 전략 총수 | "검증 전", 비활성, "N+개" | 배지 부여 로직, total count | P2 | 부분 — 공유 전략 총수 ✅ [9bbb2135](https://github.com/polynomeer/monticker/commit/9bbb2135)·[f0c37c35](https://github.com/polynomeer/monticker/commit/f0c37c35) `GET /api/quant/market/count`(목록과 같은 FROM·JOIN). 검증 배지는 심사 정책 결정 필요 |
 | /quant-lab/earnings | 평균 별점, 다음 정산일 | `—` | 리뷰·별점, 정산 일정 | P2 | |
 
 ## 5. 실전투자
