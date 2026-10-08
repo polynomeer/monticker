@@ -16,6 +16,7 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.EmptyResultDataAccessException
 import org.springframework.jdbc.core.JdbcTemplate
 import java.math.BigDecimal
+import java.sql.Timestamp
 import java.time.Instant
 import java.time.LocalDate
 import java.util.Optional
@@ -40,7 +41,7 @@ class BehaviorScoreServiceTest {
 
         // No trades today by default
         every {
-            jdbc.queryForList(match<String> { it.contains("FROM paper_trades WHERE user_id = ? AND traded_at >=") }, userId, any(), any())
+            jdbc.queryForList(match<String> { it.contains("FROM paper_trades WHERE user_id = ? AND traded_at >=") }, userId, ofType<Timestamp>(), ofType<Timestamp>())
         } returns emptyList()
 
         // No holdings by default
@@ -55,7 +56,7 @@ class BehaviorScoreServiceTest {
 
         // No recent (last-hour) trades by default
         every {
-            jdbc.queryForList(match<String> { it.contains("SELECT id FROM paper_trades WHERE user_id = ? AND traded_at >=") }, userId, any())
+            jdbc.queryForList(match<String> { it.contains("SELECT id FROM paper_trades WHERE user_id = ? AND traded_at >=") }, userId, ofType<Timestamp>())
         } returns emptyList()
     }
 
@@ -98,15 +99,15 @@ class BehaviorScoreServiceTest {
     fun `penalises behavior score for FOMO-tagged trades`() {
         val tradedAt = Instant.now()
         every {
-            jdbc.queryForList(match<String> { it.contains("FROM paper_trades WHERE user_id = ? AND traded_at >=") }, userId, any(), any())
+            jdbc.queryForList(match<String> { it.contains("FROM paper_trades WHERE user_id = ? AND traded_at >=") }, userId, ofType<Timestamp>(), ofType<Timestamp>())
         } returns listOf(
-            mapOf("id" to 10L, "stock_id" to 100L, "side" to "BUY", "price" to BigDecimal("1000"), "quantity" to 5, "traded_at" to tradedAt)
+            mapOf("id" to 10L, "stock_id" to 100L, "side" to "BUY", "price" to BigDecimal("1000"), "quantity" to 5, "traded_at" to Timestamp.from(tradedAt))
         )
         every { emotionTagRepo.findAllByUserIdOrderByCreatedAtDesc(userId) } returns listOf(
             EmotionTag(id = 1L, paperTradeId = 10L, userId = userId, emotion = EmotionType.FOMO)
         )
         every {
-            jdbc.queryForObject(match<String> { it.contains("candles_1m") }, BigDecimal::class.java, 100L, any())
+            jdbc.queryForObject(match<String> { it.contains("candles_1m") }, BigDecimal::class.java, 100L, ofType<Timestamp>())
         } throws EmptyResultDataAccessException(1)
 
         val result = service.getOrCalculateScore(userId, date)
@@ -121,15 +122,15 @@ class BehaviorScoreServiceTest {
     fun `an IMPATIENT tag removes the no-impulse bonus without a FOMO penalty`() {
         val tradedAt = Instant.now()
         every {
-            jdbc.queryForList(match<String> { it.contains("FROM paper_trades WHERE user_id = ? AND traded_at >=") }, userId, any(), any())
+            jdbc.queryForList(match<String> { it.contains("FROM paper_trades WHERE user_id = ? AND traded_at >=") }, userId, ofType<Timestamp>(), ofType<Timestamp>())
         } returns listOf(
-            mapOf("id" to 10L, "stock_id" to 100L, "side" to "BUY", "price" to BigDecimal("1000"), "quantity" to 5, "traded_at" to tradedAt)
+            mapOf("id" to 10L, "stock_id" to 100L, "side" to "BUY", "price" to BigDecimal("1000"), "quantity" to 5, "traded_at" to Timestamp.from(tradedAt))
         )
         every { emotionTagRepo.findAllByUserIdOrderByCreatedAtDesc(userId) } returns listOf(
             EmotionTag(id = 1L, paperTradeId = 10L, userId = userId, emotion = EmotionType.IMPATIENT)
         )
         every {
-            jdbc.queryForObject(match<String> { it.contains("candles_1m") }, BigDecimal::class.java, 100L, any())
+            jdbc.queryForObject(match<String> { it.contains("candles_1m") }, BigDecimal::class.java, 100L, ofType<Timestamp>())
         } throws EmptyResultDataAccessException(1)
 
         val result = service.getOrCalculateScore(userId, date)
@@ -143,14 +144,14 @@ class BehaviorScoreServiceTest {
     fun `penalises behavior score for trading more than 5 times in a day`() {
         val tradedAt = Instant.now()
         val sixTrades = (1..6).map { i ->
-            mapOf("id" to i.toLong(), "stock_id" to 100L, "side" to "BUY", "price" to BigDecimal("1000"), "quantity" to 1, "traded_at" to tradedAt)
+            mapOf("id" to i.toLong(), "stock_id" to 100L, "side" to "BUY", "price" to BigDecimal("1000"), "quantity" to 1, "traded_at" to Timestamp.from(tradedAt))
         }
         every {
-            jdbc.queryForList(match<String> { it.contains("FROM paper_trades WHERE user_id = ? AND traded_at >=") }, userId, any(), any())
+            jdbc.queryForList(match<String> { it.contains("FROM paper_trades WHERE user_id = ? AND traded_at >=") }, userId, ofType<Timestamp>(), ofType<Timestamp>())
         } returns sixTrades
         every { emotionTagRepo.findAllByUserIdOrderByCreatedAtDesc(userId) } returns emptyList()
         every {
-            jdbc.queryForObject(match<String> { it.contains("candles_1m") }, BigDecimal::class.java, 100L, any())
+            jdbc.queryForObject(match<String> { it.contains("candles_1m") }, BigDecimal::class.java, 100L, ofType<Timestamp>())
         } throws EmptyResultDataAccessException(1)
 
         val result = service.getOrCalculateScore(userId, date)
@@ -164,14 +165,14 @@ class BehaviorScoreServiceTest {
     fun `penalises behavior score 5 points per chasing trade where price rose over 3 percent in the prior hour`() {
         val tradedAt = Instant.now()
         every {
-            jdbc.queryForList(match<String> { it.contains("FROM paper_trades WHERE user_id = ? AND traded_at >=") }, userId, any(), any())
+            jdbc.queryForList(match<String> { it.contains("FROM paper_trades WHERE user_id = ? AND traded_at >=") }, userId, ofType<Timestamp>(), ofType<Timestamp>())
         } returns listOf(
-            mapOf("id" to 10L, "stock_id" to 100L, "side" to "BUY", "price" to BigDecimal("1050"), "quantity" to 5, "traded_at" to tradedAt)
+            mapOf("id" to 10L, "stock_id" to 100L, "side" to "BUY", "price" to BigDecimal("1050"), "quantity" to 5, "traded_at" to Timestamp.from(tradedAt))
         )
         every { emotionTagRepo.findAllByUserIdOrderByCreatedAtDesc(userId) } returns emptyList()
         // before price 1000, after price 1050 -> +5% > 3% threshold
         every {
-            jdbc.queryForObject(match<String> { it.contains("candles_1m") }, BigDecimal::class.java, 100L, any())
+            jdbc.queryForObject(match<String> { it.contains("candles_1m") }, BigDecimal::class.java, 100L, ofType<Timestamp>())
         } returnsMany listOf(BigDecimal("1000"), BigDecimal("1050"))
 
         val result = service.getOrCalculateScore(userId, date)
@@ -185,15 +186,15 @@ class BehaviorScoreServiceTest {
     fun `behavior score never drops below zero`() {
         val tradedAt = Instant.now()
         val manyTrades = (1..20).map { i ->
-            mapOf("id" to i.toLong(), "stock_id" to 100L, "side" to "BUY", "price" to BigDecimal("1050"), "quantity" to 1, "traded_at" to tradedAt)
+            mapOf("id" to i.toLong(), "stock_id" to 100L, "side" to "BUY", "price" to BigDecimal("1050"), "quantity" to 1, "traded_at" to Timestamp.from(tradedAt))
         }
         every {
-            jdbc.queryForList(match<String> { it.contains("FROM paper_trades WHERE user_id = ? AND traded_at >=") }, userId, any(), any())
+            jdbc.queryForList(match<String> { it.contains("FROM paper_trades WHERE user_id = ? AND traded_at >=") }, userId, ofType<Timestamp>(), ofType<Timestamp>())
         } returns manyTrades
         every { emotionTagRepo.findAllByUserIdOrderByCreatedAtDesc(userId) } returns
             manyTrades.map { EmotionTag(id = (it["id"] as Long), paperTradeId = it["id"] as Long, userId = userId, emotion = EmotionType.FOMO) }
         every {
-            jdbc.queryForObject(match<String> { it.contains("candles_1m") }, BigDecimal::class.java, 100L, any())
+            jdbc.queryForObject(match<String> { it.contains("candles_1m") }, BigDecimal::class.java, 100L, ofType<Timestamp>())
         } returnsMany List(40) { if (it % 2 == 0) BigDecimal("1000") else BigDecimal("1050") }
 
         val result = service.getOrCalculateScore(userId, date)
@@ -240,7 +241,7 @@ class BehaviorScoreServiceTest {
     @Test
     fun `penalises survival score 10 points for more than 3 trades in the last hour`() {
         every {
-            jdbc.queryForList(match<String> { it.contains("SELECT id FROM paper_trades WHERE user_id = ? AND traded_at >=") }, userId, any())
+            jdbc.queryForList(match<String> { it.contains("SELECT id FROM paper_trades WHERE user_id = ? AND traded_at >=") }, userId, ofType<Timestamp>())
         } returns listOf(mapOf("id" to 1L), mapOf("id" to 2L), mapOf("id" to 3L), mapOf("id" to 4L))
 
         val result = service.getOrCalculateScore(userId, date)
@@ -262,7 +263,7 @@ class BehaviorScoreServiceTest {
             jdbc.queryForObject(match<String> { it.contains("paper_accounts") }, BigDecimal::class.java, userId)
         } returns BigDecimal("1")
         every {
-            jdbc.queryForList(match<String> { it.contains("SELECT id FROM paper_trades WHERE user_id = ? AND traded_at >=") }, userId, any())
+            jdbc.queryForList(match<String> { it.contains("SELECT id FROM paper_trades WHERE user_id = ? AND traded_at >=") }, userId, ofType<Timestamp>())
         } returns listOf(mapOf("id" to 1L), mapOf("id" to 2L), mapOf("id" to 3L), mapOf("id" to 4L))
 
         val result = service.getOrCalculateScore(userId, date)

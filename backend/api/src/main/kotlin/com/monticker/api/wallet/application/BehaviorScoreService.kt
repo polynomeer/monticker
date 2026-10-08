@@ -14,6 +14,7 @@ import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
+import java.sql.Timestamp
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -83,7 +84,7 @@ class BehaviorScoreService(
         // Today's trades
         val todayTrades = jdbc.queryForList(
             "SELECT id, stock_id, side, price, quantity, traded_at FROM paper_trades WHERE user_id = ? AND traded_at >= ? AND traded_at < ?",
-            userId, dayStart, dayEnd
+            userId, Timestamp.from(dayStart), Timestamp.from(dayEnd)
         )
         val todayTradeCount = todayTrades.size
 
@@ -102,16 +103,17 @@ class BehaviorScoreService(
         var chasingCount = 0
         for (trade in todayTrades) {
             val stockId = (trade["stock_id"] as Number).toLong()
-            val tradedAt = trade["traded_at"] as Instant
+            // queryForList는 timestamptz를 java.sql.Timestamp로 준다 — Instant로 바로 캐스팅하면 늘 실패해 추격 매수가 0건이었다
+            val tradedAt = (trade["traded_at"] as Timestamp).toInstant()
             val hourBeforeTrade = tradedAt.minusSeconds(3600)
             val priceChange = runCatching {
                 val before = jdbc.queryForObject(
                     "SELECT close FROM candles_1m WHERE stock_id = ? AND candle_time <= ? ORDER BY candle_time DESC LIMIT 1",
-                    BigDecimal::class.java, stockId, hourBeforeTrade
+                    BigDecimal::class.java, stockId, Timestamp.from(hourBeforeTrade)
                 )
                 val after = jdbc.queryForObject(
                     "SELECT close FROM candles_1m WHERE stock_id = ? AND candle_time <= ? ORDER BY candle_time DESC LIMIT 1",
-                    BigDecimal::class.java, stockId, tradedAt
+                    BigDecimal::class.java, stockId, Timestamp.from(tradedAt)
                 )
                 if (before != null && after != null && before > BigDecimal.ZERO) {
                     after.subtract(before).divide(before, 4, java.math.RoundingMode.HALF_UP)
@@ -205,7 +207,7 @@ class BehaviorScoreService(
 
         val recentTrades = jdbc.queryForList(
             "SELECT id FROM paper_trades WHERE user_id = ? AND traded_at >= ?",
-            userId, hourAgo
+            userId, Timestamp.from(hourAgo)
         ).size
         if (recentTrades > 3) {
             survivalScore -= 10
