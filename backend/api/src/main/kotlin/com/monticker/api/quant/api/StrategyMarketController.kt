@@ -21,6 +21,13 @@ data class StrategyShareRequest(
 
 private val MAX_PRICE = BigDecimal(1_000_000)
 
+/**
+ * 마켓 목록과 총수가 같은 행 집합을 보도록 FROM 절을 한곳에 둔다. 목록에 없는 행(작성자 계정이
+ * 사라진 전략 등)이 총수에만 잡히거나, 나중에 비공개·숨김 조건이 생겼을 때 한쪽만 고쳐지는 걸 막는다.
+ */
+internal const val MARKET_VISIBLE_FROM = """FROM strategy_market sm
+               JOIN users u ON u.id = sm.user_id"""
+
 @Validated
 @RestController
 @RequestMapping("/api/quant/market")
@@ -46,8 +53,7 @@ class StrategyMarketController(
             // 작성자는 닉네임으로만 표시한다 — 이 목록은 비로그인에도 열려 있고, 이메일은 로그인 ID다(보안 리뷰 2026-10).
             """SELECT sm.id, sm.ruleset_id, sm.description, sm.price, sm.subscribe_count, sm.created_at,
                       u.nickname AS author_nickname
-               FROM strategy_market sm
-               JOIN users u ON u.id = sm.user_id
+               $MARKET_VISIBLE_FROM
                ORDER BY sm.subscribe_count DESC, sm.created_at DESC
                LIMIT ? OFFSET ?""",
             size, page * size,
@@ -73,6 +79,13 @@ class StrategyMarketController(
             }
         }
         return ResponseEntity.ok(enriched)
+    }
+
+    /** 공유 전략 총수 — 목록과 같은 공개 범위(`MARKET_VISIBLE_FROM`)만 센다. 목록 응답 형태는 그대로 둔다. */
+    @GetMapping("/count")
+    fun count(): ResponseEntity<Map<String, Long>> {
+        val total = jdbc.queryForObject("SELECT COUNT(*) $MARKET_VISIBLE_FROM", Long::class.java) ?: 0L
+        return ResponseEntity.ok(mapOf("total" to total))
     }
 
     @PostMapping("/share")

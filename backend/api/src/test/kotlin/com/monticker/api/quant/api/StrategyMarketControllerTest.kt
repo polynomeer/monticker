@@ -7,6 +7,7 @@ import com.monticker.api.quant.infrastructure.RuleSetRepository
 import com.monticker.api.settlement.creator.application.CreatorEarningsService
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -167,5 +168,39 @@ class StrategyMarketControllerTest {
 
         assertThrows<NoSuchElementException> { controller.subscribe("Bearer token", 404L) }
         verify(exactly = 0) { jdbc.update(any<String>(), *anyVararg()) }
+    }
+
+    // ── count — 목록과 같은 공개 범위만 센다 ─────────────────────────────────────
+
+    @Test
+    fun `count returns the total of strategies visible in the market list`() {
+        val sql = slot<String>()
+        every { jdbc.queryForObject(capture(sql), Long::class.java) } returns 37L
+
+        val response = controller.count()
+
+        assertThat(response.statusCode).isEqualTo(HttpStatus.OK)
+        assertThat(response.body).isEqualTo(mapOf("total" to 37L))
+        // 목록과 같은 FROM·JOIN을 써야 작성자가 사라진 전략처럼 목록에 안 보이는 행이 총수에 섞이지 않는다.
+        assertThat(sql.captured).startsWith("SELECT COUNT(*)").contains(MARKET_VISIBLE_FROM)
+    }
+
+    @Test
+    fun `list and count share the same visibility clause`() {
+        val listSql = slot<String>()
+        every { jdbc.queryForList(capture(listSql), any<Int>(), any<Int>()) } returns emptyList()
+        every { ruleSetRepository.findAllById(emptyList()) } returns emptyList()
+        every { performanceQuery.summarize(emptyList()) } returns emptyMap()
+
+        controller.list(auth = null, page = 0, size = 20)
+
+        assertThat(listSql.captured).contains(MARKET_VISIBLE_FROM)
+    }
+
+    @Test
+    fun `count falls back to zero when the query yields null`() {
+        every { jdbc.queryForObject(any<String>(), Long::class.java) } returns null
+
+        assertThat(controller.count().body).isEqualTo(mapOf("total" to 0L))
     }
 }
