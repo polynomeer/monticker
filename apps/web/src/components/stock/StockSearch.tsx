@@ -12,7 +12,7 @@ import { eventMeta, fmtWhen, useQuotes, type Quote } from "./parts";
 interface StockResult { id: number; symbol: string; name: string; market: string; sector: string | null; currency: string; }
 interface EventResult { id: number; stockId: number; eventType: string; title: string; eventTime: string; }
 interface NewsResult { id: number; stockId: number | null; title: string; url: string; source: string | null; publishedAt: string; }
-interface StrategyRow { id: number; name: string; description: string | null; price: number | null; subscribe_count: number | null; }
+interface StrategyRow { id: number; name: string; description: string | null; price: number | null; subscribe_count: number | null; author_nickname?: string | null; }
 
 type Scope = "all" | "stock" | "event" | "strategy" | "news";
 const SCOPES: { value: Scope; label: string }[] = [
@@ -22,6 +22,9 @@ const SCOPES: { value: Scope; label: string }[] = [
   { value: "strategy", label: "전략" },
   { value: "news", label: "뉴스" },
 ];
+
+/** 서버 전략 검색어 최대 길이(StrategyMarketController.MAX_SEARCH_QUERY_LENGTH) */
+const STRATEGY_QUERY_MAX = 50;
 
 const RECENT_KEY = "monticker:recentSearches";
 function readRecent(): string[] {
@@ -91,13 +94,14 @@ export default function StockSearch() {
   const stocksQ = useSearch<StockResult>("stocks", q ? `/api/stocks/search?query=${enc}` : null);
   const eventsQ = useSearch<EventResult>("events", q && (scope === "all" || scope === "event") ? `/api/events/search?query=${enc}&limit=12` : null);
   const newsQ = useSearch<NewsResult>("news", q && (scope === "all" || scope === "news") ? `/api/news/search?query=${enc}&limit=10` : null);
-  const strategyQ = useSearch<StrategyRow>("strategies", q && (scope === "all" || scope === "strategy") ? `/api/quant/market?page=0&size=50` : null);
+  // 서버 측 전략 검색 — 이름·설명·작성자 닉네임(목록과 같은 공개 범위). 서버 상한(50자)에 맞춰 자른다
+  const strategyTerm = q.slice(0, STRATEGY_QUERY_MAX);
+  const strategyQ = useSearch<StrategyRow>("strategies", strategyTerm && (scope === "all" || scope === "strategy") ? `/api/quant/market/search?q=${encodeURIComponent(strategyTerm)}&page=0&size=8` : null);
 
   const stocks = (stocksQ.data ?? []).slice(0, 20);
   const events = eventsQ.data ?? [];
   const news = newsQ.data ?? [];
-  const ql = q.toLowerCase();
-  const strategies = (strategyQ.data ?? []).filter((s) => `${s.name} ${s.description ?? ""}`.toLowerCase().includes(ql)).slice(0, 8);
+  const strategies = strategyQ.data ?? [];
   const quotes = useQuotes([...stocks.map((s) => s.id), ...events.map((e) => e.stockId)], 30_000);
 
   const showStocks = scope === "all" || scope === "stock";
@@ -265,7 +269,7 @@ export default function StockSearch() {
                     {strategyQ.isLoading ? (
                       <Loading />
                     ) : strategies.length === 0 ? (
-                      <p className="m-0 px-2.5 py-4 text-13 text-tm-muted">이름이 일치하는 마켓 전략이 없습니다.</p>
+                      <p className="m-0 px-2.5 py-4 text-13 text-tm-muted">이름·설명·작성자가 일치하는 마켓 전략이 없습니다.</p>
                     ) : (
                       <ul className="m-0 list-none p-0">
                         {strategies.map((s) => (
@@ -273,7 +277,7 @@ export default function StockSearch() {
                             <Link href="/quant-lab/market" className="flex justify-between gap-2.5 p-2.5 text-dracula-fg hover:bg-tm-raised/50 hover:text-dracula-fg">
                               <span className="flex min-w-0 flex-col gap-0.5">
                                 <span className="font-semibold">{s.name}</span>
-                                <span className="text-xs text-tm-muted">전략 마켓 · 구독 {fmtNum(s.subscribe_count ?? 0)}</span>
+                                <span className="text-xs text-tm-muted">전략 마켓{s.author_nickname ? ` · ${s.author_nickname}` : ""} · 구독 {fmtNum(s.subscribe_count ?? 0)}</span>
                               </span>
                               <Pill tone={s.price ? "muted" : "green"}>{s.price ? `${fmtNum(s.price)}원` : "무료"}</Pill>
                             </Link>
