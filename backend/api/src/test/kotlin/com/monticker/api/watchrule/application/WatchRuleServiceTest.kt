@@ -170,4 +170,114 @@ class WatchRuleServiceTest {
         assertThatThrownBy { service.update(1L, 9L, null, null, null, true) }
             .isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("삭제")
     }
+
+    // ── ADR-098 — PATCH로 기준 바꾸기 ─────────────────────────────────────
+
+    private fun stockRule(id: Long = 30L, quantity: Int = 5) = WatchRule(
+        id = id, userId = 1L, stockId = 5L, eventType = "VOLUME_SURGE", side = WatchRuleSide.BUY, quantity = quantity,
+    )
+
+    private fun givenRule(rule: WatchRule) {
+        every { ruleRepo.findById(rule.id) } returns Optional.of(rule)
+    }
+
+    @Test
+    fun `switching shares to equity percent needs the percent and clears the share quantity`() {
+        givenRule(stockRule())
+        assertThatThrownBy { service.update(1L, 30L, null, null, null, null, sizeType = "EQUITY_PCT") }
+            .isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("계좌 비율")
+        assertThatThrownBy { service.update(1L, 30L, null, null, null, null, sizeType = "EQUITY_PCT", equityPct = java.math.BigDecimal("30")) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+        // 기준을 바꾸면서 옛 기준의 값을 함께 보내면 생성과 같이 거부한다
+        assertThatThrownBy { service.update(1L, 30L, 3, null, null, null, sizeType = "EQUITY_PCT", equityPct = java.math.BigDecimal("5")) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+        verify(exactly = 0) { ruleRepo.save(any()) }
+
+        val r = service.update(1L, 30L, null, null, null, null, sizeType = "equity_pct", equityPct = java.math.BigDecimal("5"))
+        assertThat(r.sizeType).isEqualTo(com.monticker.api.watchrule.domain.WatchRuleSizeType.EQUITY_PCT)
+        assertThat(r.quantity).isNull()
+        assertThat(r.equityPct).isEqualByComparingTo("5")
+    }
+
+    @Test
+    fun `switching market to limit needs a bounded offset and back to market clears it`() {
+        val rule = stockRule()
+        givenRule(rule)
+        assertThatThrownBy { service.update(1L, 30L, null, null, null, null, orderType = "LIMIT") }
+            .isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("오프셋")
+        assertThatThrownBy { service.update(1L, 30L, null, null, null, null, orderType = "LIMIT", limitOffsetBps = 1500) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+
+        service.update(1L, 30L, null, null, null, null, orderType = "LIMIT", limitOffsetBps = -50)
+        assertThat(rule.orderType).isEqualTo(com.monticker.api.watchrule.domain.WatchRuleOrderType.LIMIT)
+        assertThat(rule.limitOffsetBps).isEqualTo(-50)
+        // 기준이 그대로면 오프셋만 고칠 수 있다(지금 값을 잇는다)
+        service.update(1L, 30L, null, null, null, null, limitOffsetBps = 20)
+        assertThat(rule.limitOffsetBps).isEqualTo(20)
+
+        service.update(1L, 30L, null, null, null, null, orderType = "MARKET")
+        assertThat(rule.orderType).isEqualTo(com.monticker.api.watchrule.domain.WatchRuleOrderType.MARKET)
+        assertThat(rule.limitOffsetBps).isNull()
+        assertThat(rule.quantity).isEqualTo(5)   // 수량 기준은 그대로라 이어진다
+    }
+
+    @Test
+    fun `an offset on a market rule or a quantity on a percent rule is still rejected`() {
+        givenRule(stockRule())
+        assertThatThrownBy { service.update(1L, 30L, null, null, null, null, limitOffsetBps = 10) }
+            .isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("지정가 규칙에만")
+    }
+
+    @Test
+    fun `retargeting a stock rule to someone else's group is the same 404 as a missing group`() {
+        givenRule(stockRule())
+        every { targets.ownsGroup(1L, 77L) } returns false
+        every { targets.ownsGroup(1L, 78L) } returns false
+        val others = runCatching { service.update(1L, 30L, null, null, null, null, targetType = "GROUP", targetGroupId = 77L) }.exceptionOrNull()
+        val missing = runCatching { service.update(1L, 30L, null, null, null, null, targetType = "GROUP", targetGroupId = 78L) }.exceptionOrNull()
+        assertThat(others).isInstanceOf(NoSuchElementException::class.java)
+        assertThat(others!!.message!!.replace("77", "")).isEqualTo(missing!!.message!!.replace("78", ""))
+        verify(exactly = 0) { ruleRepo.save(any()) }
+    }
+
+    @Test
+    fun `retargeting to a group needs the group and drops the stock`() {
+        val rule = stockRule()
+        givenRule(rule)
+        every { targets.ownsGroup(1L, 77L) } returns true
+        assertThatThrownBy { service.update(1L, 30L, null, null, null, null, targetType = "GROUP") }
+            .isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("그룹")
+        // 그룹으로 바꾸면서 종목도 보내면 배타 조건 위반
+        assertThatThrownBy { service.update(1L, 30L, null, null, null, null, targetType = "GROUP", targetGroupId = 77L, stockId = 6L) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+
+        service.update(1L, 30L, null, null, null, null, targetType = "GROUP", targetGroupId = 77L)
+        assertThat(rule.targetType).isEqualTo(com.monticker.api.watchrule.domain.WatchRuleTargetType.GROUP)
+        assertThat(rule.targetGroupId).isEqualTo(77L)
+        assertThat(rule.stockId).isNull()
+    }
+
+    @Test
+    fun `retargeting to a missing stock is a 404`() {
+        givenRule(stockRule())
+        every { jdbc.queryForObject(any<String>(), Boolean::class.java, 404L) } returns false
+        assertThatThrownBy { service.update(1L, 30L, null, null, null, null, stockId = 404L) }
+            .isInstanceOf(NoSuchElementException::class.java)
+    }
+
+    @Test
+    fun `a rule switched off by its deleted group can be retargeted and switched back on`() {
+        val rule = WatchRule(id = 9L, userId = 1L, stockId = null, eventType = "VOLUME_SURGE", side = WatchRuleSide.BUY, quantity = 1,
+            isActive = false, targetType = com.monticker.api.watchrule.domain.WatchRuleTargetType.GROUP, targetGroupId = 77L)
+        givenRule(rule)
+        every { targets.ownsGroup(1L, 77L) } returns false
+        every { targets.ownsGroup(1L, 80L) } returns true
+        // 이름 같은 다른 값은 대상 확인 없이 고칠 수 있다(지워진 그룹이어도)
+        service.update(1L, 9L, null, null, null, null, name = "새 이름")
+        assertThat(rule.name).isEqualTo("새 이름")
+
+        val r = service.update(1L, 9L, null, null, null, true, targetGroupId = 80L)
+        assertThat(r.isActive).isTrue()
+        assertThat(r.targetGroupId).isEqualTo(80L)
+    }
 }

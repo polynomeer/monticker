@@ -9,6 +9,10 @@ enum class WatchRuleExecutionStatus {
     EXECUTED,
     /** ADR-095 — 지정가 주문이 접수됐지만 아직 미체결(이후 체결은 스위퍼, ADR-074). 발동으로 센다. */
     PLACED,
+    /** ADR-098 — PLACED였던 지정가가 이후 체결됐다(스위퍼). fill_price·resolved_at이 채워진다. */
+    FILLED,
+    /** ADR-098 — PLACED였던 지정가가 체결 전에 취소됐다(사용자·체결 시점 리스크·보유 부족). reason·resolved_at. */
+    CANCELLED,
     /** 리스크 게이트·잔고·보유수량 등으로 주문이 거부됐다. */
     REJECTED,
     /** 쿨다운 중이거나 강도가 하한에 못 미쳐 주문을 내지 않았다. */
@@ -65,4 +69,8 @@ class WatchRuleExecution(
 
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant = Instant.now(),
+
+    /** ADR-098 — PLACED 이후 결과(FILLED·CANCELLED)가 정해진 시각. 결과 전이는 JDBC 조건부 UPDATE로만 한다(WatchRuleOrderOutcomes). */
+    @Column(name = "resolved_at")
+    val resolvedAt: Instant? = null,
 )

@@ -25,6 +25,20 @@ class WatchlistOrderRepository(private val jdbc: JdbcTemplate) {
             Long::class.java, groupId, userId,
         ).isNotEmpty()
 
+    /**
+     * [userId]의 그룹 [groupId]를 지우고 지워진 항목 id를 돌려준다(검색 색인 삭제용). 없거나 남의 그룹이면 null — 아무것도 지우지 않는다.
+     *
+     * 그룹 행을 먼저 잠가 같은 그룹에 동시에 들어온 추가·이동과 줄을 세운다(항목 id를 읽은 뒤 새 항목이 끼어들지 않는다).
+     * 항목은 FK `ON DELETE CASCADE`(V3)로 함께 지워지고, 이 그룹을 대상으로 한 Watch Rule은 V92 트리거
+     * `trg_watchlist_group_delete_disables_rules`가 같은 트랜잭션에서 끈다(규칙·발동 기록은 남는다, ADR-095).
+     */
+    fun deleteGroup(userId: Long, groupId: Long): List<Long>? {
+        if (!lockGroup(userId, groupId)) return null
+        val itemIds = jdbc.queryForList("SELECT id FROM watchlist_items WHERE group_id = ?", Long::class.java, groupId)
+        jdbc.update("DELETE FROM watchlist_groups WHERE id = ? AND user_id = ?", groupId, userId)
+        return itemIds
+    }
+
     /** [itemId]가 [userId]의 항목이면 그 그룹을 잠그고 그룹 id. 없거나 남의 항목이면 null. */
     fun lockGroupOfItem(userId: Long, itemId: Long): Long? =
         jdbc.queryForList(

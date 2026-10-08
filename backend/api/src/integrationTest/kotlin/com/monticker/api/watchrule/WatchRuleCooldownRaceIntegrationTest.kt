@@ -177,7 +177,7 @@ class WatchRuleCooldownRaceIntegrationTest : PostgresIntegrationTest() {
             override fun submitLimit(userId: Long, stockId: Long, side: String, quantity: Int, limitPrice: BigDecimal, origin: OrderOrigin, idempotencyKey: String?) =
                 throw UnsupportedOperationException()
         }
-        val executor = WatchRuleExecutor(ruleRepo, execRepo, submitter, SimpleMeterRegistry(), guards, mockk<StrategySignalAccess>(), WatchRuleOrderPlanner(mockk(), mockk()))
+        val executor = WatchRuleExecutor(ruleRepo, execRepo, submitter, SimpleMeterRegistry(), guards, mockk<StrategySignalAccess>(), WatchRuleOrderPlanner(mockk(), mockk()), mockk(relaxed = true))
         val base = System.nanoTime()
 
         race(10) { i ->

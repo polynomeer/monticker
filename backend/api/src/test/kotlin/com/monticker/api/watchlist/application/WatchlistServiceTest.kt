@@ -126,6 +126,34 @@ class WatchlistServiceTest {
         verify(exactly = 0) { itemRepository.delete(any()) }
     }
 
+    // ── 그룹 삭제 ─────────────────────────────────────────────────────────
+
+    @Test
+    fun `deleteGroup of another user's or a missing group is the same 404 and deletes nothing`() {
+        every { orderRepository.deleteGroup(1L, 5L) } returns null   // 남의 그룹(소유자 조건으로 잠금 실패)
+        every { orderRepository.deleteGroup(1L, 6L) } returns null   // 없는 그룹
+        val others = runCatching { service.deleteGroup(1L, 5L) }.exceptionOrNull()
+        val missing = runCatching { service.deleteGroup(1L, 6L) }.exceptionOrNull()
+
+        org.assertj.core.api.Assertions.assertThat(others).isInstanceOf(NoSuchElementException::class.java)
+        org.assertj.core.api.Assertions.assertThat(others!!.message!!.replace("5", "")).isEqualTo(missing!!.message!!.replace("6", ""))
+        verify(exactly = 0) { events.publishEvent(any<Any>()) }
+    }
+
+    @Test
+    fun `deleteGroup removes every item of the group from the search index`() {
+        every { orderRepository.deleteGroup(1L, 5L) } returns listOf(11L, 12L)
+        val published = mutableListOf<Any>()
+        every { events.publishEvent(capture(published)) } returns Unit
+
+        service.deleteGroup(1L, 5L)
+
+        val docIds = published.map { (it as com.monticker.api.common.search.SearchIndexEvent).also { e ->
+            org.assertj.core.api.Assertions.assertThat(e.op).isEqualTo(com.monticker.api.common.search.SearchIndexEvent.Op.DELETE)
+        }.docId }
+        org.assertj.core.api.Assertions.assertThat(docIds).containsExactly("11", "12")
+    }
+
     // ── 순서 ─────────────────────────────────────────────────────────────
 
     @Test

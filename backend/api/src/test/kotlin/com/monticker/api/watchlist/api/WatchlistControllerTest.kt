@@ -134,4 +134,21 @@ class WatchlistControllerTest {
             patch("/api/watchlists/items/99/sort-order").contentType(MediaType.APPLICATION_JSON).content("""{"sortOrder":0}""")
         ).andExpect(status().isNotFound)
     }
+
+    @Test
+    fun `DELETE group returns 204`() {
+        justRun { watchlistService.deleteGroup(1L, 3L) }
+
+        mockMvc.perform(delete("/api/watchlists/groups/3"))
+            .andExpect(status().isNoContent)
+        io.mockk.verify { watchlistService.deleteGroup(1L, 3L) }
+    }
+
+    @Test
+    fun `DELETE of someone else's group is the same 404 as a missing one`() {
+        every { watchlistService.deleteGroup(1L, 99L) } throws NoSuchElementException("Watchlist group not found: 99")
+
+        mockMvc.perform(delete("/api/watchlists/groups/99"))
+            .andExpect(status().isNotFound)
+    }
 }

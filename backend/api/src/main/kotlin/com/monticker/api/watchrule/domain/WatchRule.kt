@@ -15,6 +15,18 @@ enum class WatchRuleOrderType { MARKET, LIMIT }
 /** ADR-095 — 수량 기준: 주 수 또는 모의 계좌 평가자산의 %(발동 시점 계산, 정수 주로 내림). */
 enum class WatchRuleSizeType { SHARES, EQUITY_PCT }
 
+/** ADR-098 — 규칙의 기준(대상·주문 유형·수량 기준)과 그 기준에 딸린 값. V92 CHECK의 배타 조건을 한 묶음으로 다룬다. */
+data class WatchRuleShapeValues(
+    val targetType: WatchRuleTargetType,
+    val stockId: Long?,
+    val targetGroupId: Long?,
+    val orderType: WatchRuleOrderType,
+    val limitOffsetBps: Int?,
+    val sizeType: WatchRuleSizeType,
+    val quantity: Int?,
+    val equityPct: BigDecimal?,
+)
+
 /**
  * ADR-051 — "이 종목에 이런 이벤트가 감지되면 모의투자 계좌로 N주 매수/매도한다".
  *
@@ -32,7 +44,7 @@ class WatchRule(
 
     /** 대상이 종목이면 그 종목. 그룹 규칙이면 null이고 [targetGroupId]가 있다(V92 CHECK). */
     @Column(name = "stock_id")
-    val stockId: Long?,
+    var stockId: Long?,
 
     /** worker의 `DetectedEventType` 이름 — PRICE_SPIKE / PRICE_DROP / VOLUME_SURGE — 또는 QUANT_SIGNAL(ADR-077). */
     @Column(name = "event_type", nullable = false, length = 50)
@@ -83,15 +95,15 @@ class WatchRule(
     /** ADR-095 */
     @Enumerated(EnumType.STRING)
     @Column(name = "target_type", nullable = false, length = 10)
-    val targetType: WatchRuleTargetType = WatchRuleTargetType.STOCK,
+    var targetType: WatchRuleTargetType = WatchRuleTargetType.STOCK,
 
     /** ADR-095 — 대상 관심종목 그룹(watchlist_groups.id, FK 없음 — 그룹 삭제 시 트리거가 규칙을 끈다). */
     @Column(name = "target_group_id")
-    val targetGroupId: Long? = null,
+    var targetGroupId: Long? = null,
 
     @Enumerated(EnumType.STRING)
     @Column(name = "order_type", nullable = false, length = 6)
-    val orderType: WatchRuleOrderType = WatchRuleOrderType.MARKET,
+    var orderType: WatchRuleOrderType = WatchRuleOrderType.MARKET,
 
     /** ADR-095 — 지정가 오프셋(bps, ±1000). 음수 = 발동 가격 아래. LIMIT일 때만. */
     @Column(name = "limit_offset_bps")
@@ -99,7 +111,7 @@ class WatchRule(
 
     @Enumerated(EnumType.STRING)
     @Column(name = "size_type", nullable = false, length = 10)
-    val sizeType: WatchRuleSizeType = WatchRuleSizeType.SHARES,
+    var sizeType: WatchRuleSizeType = WatchRuleSizeType.SHARES,
 
     /** ADR-095 — 평가자산 대비 %(1~25). EQUITY_PCT일 때만. */
     @Column(name = "equity_pct", precision = 5, scale = 2)
@@ -118,7 +130,7 @@ class WatchRule(
     ) {
         name?.let { this.name = it.trim().ifBlank { null } }
         dailyLimit?.let { this.dailyLimit = if (it == 0) null else it }
-        // 수량·오프셋·비율은 규칙의 기준(sizeType·orderType)에 맞는 값만 바꾼다 — 기준 자체는 바꾸지 않는다(서비스가 검증).
+        // 수량·오프셋·비율은 규칙의 기준(sizeType·orderType)에 맞는 값만 바꾼다. 기준 자체를 바꾸는 것은 [reshape](ADR-098).
         quantity?.let { this.quantity = it }
         limitOffsetBps?.let { this.limitOffsetBps = it }
         equityPct?.let { this.equityPct = it }
@@ -127,6 +139,38 @@ class WatchRule(
         isActive?.let { this.isActive = it }
         this.updatedAt = Instant.now()
     }
+
+    /**
+     * ADR-098 — 대상·주문 유형·수량 기준을 통째로 바꾼다. 값의 배타 조건(V92 CHECK)은 서비스가 생성과 같은 검증으로 확인한
+     * 뒤에 부른다 — 여기서는 그대로 옮긴다.
+     */
+    fun reshape(shape: WatchRuleShapeValues) {
+        targetType = shape.targetType
+        stockId = shape.stockId
+        targetGroupId = shape.targetGroupId
+        orderType = shape.orderType
+        limitOffsetBps = shape.limitOffsetBps
+        sizeType = shape.sizeType
+        quantity = shape.quantity
+        equityPct = shape.equityPct
+        updatedAt = Instant.now()
+    }
+
+    /** 이 규칙의 기준을 [shape]로 바꾼 사본 — 발동 시점 잠근 행의 값으로 주문을 정할 때 쓴다(엔티티는 건드리지 않는다). */
+    fun withShape(shape: WatchRuleShapeValues): WatchRule = WatchRule(
+        id = id, userId = userId, stockId = shape.stockId, eventType = eventType, side = side, quantity = shape.quantity,
+        minImportanceScore = minImportanceScore, cooldownSec = cooldownSec, isActive = isActive, name = name,
+        ruleSetId = ruleSetId, signalDirection = signalDirection, requiredEventTypes = requiredEventTypes,
+        conditionWindowSec = conditionWindowSec, dailyLimit = dailyLimit,
+        targetType = shape.targetType, targetGroupId = shape.targetGroupId,
+        orderType = shape.orderType, limitOffsetBps = shape.limitOffsetBps,
+        sizeType = shape.sizeType, equityPct = shape.equityPct,
+        createdAt = createdAt, updatedAt = updatedAt,
+    )
+
+    /** [shape]의 대상이 이 규칙(조회 시점)의 대상과 같은가 — 다르면 이 원인(이벤트·신호)은 더 이상 대상이 아닐 수 있다. */
+    fun hasSameTarget(shape: WatchRuleShapeValues): Boolean =
+        shape.targetType == targetType && shape.stockId == stockId && shape.targetGroupId == targetGroupId
 
     /** 이벤트 강도가 이 룰의 하한을 넘는가. */
     fun acceptsImportance(score: Int): Boolean = score >= minImportanceScore

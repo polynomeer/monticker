@@ -1,5 +1,9 @@
 package com.monticker.api.watchrule.application
 
+import com.monticker.api.watchrule.domain.WatchRuleShapeValues
+import com.monticker.api.watchrule.domain.WatchRuleOrderType
+import com.monticker.api.watchrule.domain.WatchRuleSizeType
+import com.monticker.api.watchrule.domain.WatchRuleTargetType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.SqlParameterValue
 import org.springframework.stereotype.Component
@@ -14,7 +18,11 @@ import java.time.ZoneId
 /** [WatchRuleGuards.claimFiring]의 결과. */
 sealed interface FiringClaim {
     /** 발동권을 얻었다. 주문이 나가지 않으면 [WatchRuleGuards.releaseFiring]으로 이 값을 돌려준다. */
-    data class Claimed(val ruleId: Long, val firedAt: Instant, val previousFiredAt: Instant?, val day: LocalDate) : FiringClaim
+    data class Claimed(
+        val ruleId: Long, val firedAt: Instant, val previousFiredAt: Instant?, val day: LocalDate,
+        /** ADR-098 — 잠근 행의 대상·주문 유형·수량 기준. 조회 뒤 PATCH로 바뀌었을 수 있어 실행기가 이 값으로 주문을 정한다. */
+        val shape: WatchRuleShapeValues? = null,
+    ) : FiringClaim
     data class InCooldown(val cooldownSec: Int) : FiringClaim
     data class DailyLimitReached(val limit: Int) : FiringClaim
     /** 조회 이후 규칙이 비활성화·삭제됐다. */
@@ -54,6 +62,7 @@ class WatchRuleGuards(private val jdbc: JdbcTemplate, private val tx: Transactio
          */
         const val LOCK_RULE_SQL = """
             SELECT last_fired_at, cooldown_sec, daily_limit, clock_timestamp() AS fired_at,
+                   target_type, stock_id, target_group_id, order_type, limit_offset_bps, size_type, quantity, equity_pct,
                    (cooldown_sec = 0 OR last_fired_at IS NULL
                     OR last_fired_at <= clock_timestamp() - make_interval(secs => cooldown_sec)) AS ready
             FROM watch_rules WHERE id = ? AND is_active
@@ -66,7 +75,7 @@ class WatchRuleGuards(private val jdbc: JdbcTemplate, private val tx: Transactio
 
     fun today(): LocalDate = LocalDate.now(ZONE)
 
-    private data class Locked(val previous: Instant?, val cooldownSec: Int, val dailyLimit: Int?, val firedAt: Instant, val ready: Boolean)
+    private data class Locked(val previous: Instant?, val cooldownSec: Int, val dailyLimit: Int?, val firedAt: Instant, val ready: Boolean, val shape: WatchRuleShapeValues)
 
     /**
      * 발동권을 원자적으로 얻는다 — 쿨다운 판정, 하루 슬롯, `last_fired_at` 기록을 규칙 행 잠금 아래 한 트랜잭션에서.
@@ -81,6 +90,16 @@ class WatchRuleGuards(private val jdbc: JdbcTemplate, private val tx: Transactio
                 dailyLimit = rs.getObject("daily_limit") as Int?,
                 firedAt = rs.getTimestamp("fired_at").toInstant(),
                 ready = rs.getBoolean("ready"),
+                shape = WatchRuleShapeValues(
+                    targetType = WatchRuleTargetType.valueOf(rs.getString("target_type")),
+                    stockId = (rs.getObject("stock_id") as Number?)?.toLong(),
+                    targetGroupId = (rs.getObject("target_group_id") as Number?)?.toLong(),
+                    orderType = WatchRuleOrderType.valueOf(rs.getString("order_type")),
+                    limitOffsetBps = (rs.getObject("limit_offset_bps") as Number?)?.toInt(),
+                    sizeType = WatchRuleSizeType.valueOf(rs.getString("size_type")),
+                    quantity = (rs.getObject("quantity") as Number?)?.toInt(),
+                    equityPct = rs.getBigDecimal("equity_pct"),
+                ),
             )
         }, ruleId).firstOrNull() ?: return@execute FiringClaim.Inactive
         if (!row.ready) return@execute FiringClaim.InCooldown(row.cooldownSec)
@@ -92,7 +111,7 @@ class WatchRuleGuards(private val jdbc: JdbcTemplate, private val tx: Transactio
         if (slot.isEmpty()) return@execute FiringClaim.DailyLimitReached(row.dailyLimit!!)
 
         jdbc.update(MARK_FIRED_SQL, Timestamp.from(row.firedAt), ruleId)
-        FiringClaim.Claimed(ruleId, row.firedAt, row.previous, day)
+        FiringClaim.Claimed(ruleId, row.firedAt, row.previous, day, row.shape)
     }!!
 
     /**

@@ -10,9 +10,12 @@
  * ADR-095 — 계좌 % 수량은 wallet::equity(모의 계좌 평가자산, /wallet 총자산과 같은 정의)로 계산한다.
  * 관심종목 그룹 대상은 watchlist 테이블을 읽기 전용 JDBC로 판정한다(모듈 의존 없음 — 그룹 소유자 = 규칙 소유자 조건).
  *
+ * ADR-098 — 지정가 발동(PLACED)의 체결·취소는 matching::api(OrderFilledEvent·OrderCancelledEvent)를 동기 리스너로 받아
+ * 발동 기록에 옮긴다(paper 모듈과 같은 구독 방식).
+ *
  * 실브로커 모듈(brokerage)에 의존하지 않는다. 모의투자 전용이라는 경계를 의존성으로 고정한다.
  */
 @org.springframework.modulith.ApplicationModule(
-    allowedDependencies = {"common", "auth::api", "matching::submit", "quant::api", "quant::events", "wallet::equity"}
+    allowedDependencies = {"common", "auth::api", "matching::submit", "matching::api", "quant::api", "quant::events", "wallet::equity"}
 )
 package com.monticker.api.watchrule;
