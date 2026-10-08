@@ -7,7 +7,7 @@ import { ClobBook } from "@/components/matching/ClobBook";
 import RecentTrades from "@/components/stock/RecentTrades";
 import { OrderForm } from "@/components/matching/OrderForm";
 import { OrdersPanel } from "@/components/matching/OrdersPanel";
-import { STOCKS, useActiveOrders, useExecutionQuality, useMyFills, useOrderbook } from "@/components/matching/data";
+import { QUEUE_DEFINITION, STOCKS, useActiveOrders, useExecutionQuality, useMyFills, useOrderQueue, useOrderbook } from "@/components/matching/data";
 import { LATENCY_DEFINITION, SLIPPAGE_DEFINITION, bpsText, msText, type ExecutionQuality } from "@/components/wallet/insights";
 import { useStockMeta } from "@/components/portfolio/useStockMeta";
 import { fmtTime } from "@/components/portfolio/format";
@@ -38,6 +38,7 @@ export default function MatchingPage() {
   const { data: orders = [] } = useActiveOrders();
   const { data: fills = [] } = useMyFills();
   const { data: quality } = useExecutionQuality(isLoggedIn);
+  const { data: queue } = useOrderQueue(stockId, isLoggedIn);
 
   const meta = useStockMeta([...orders.map((o) => o.stockId), ...fills.map((f) => f.stockId)]);
   const stockName = (id: number) => STOCKS.find((s) => s.id === id)?.label ?? meta.get(id)?.name ?? `종목 #${id}`;
@@ -47,7 +48,8 @@ export default function MatchingPage() {
   const tape = fills.filter((f) => f.stockId === stockId).slice(0, 14);
 
   const stats: TopStat[] = [
-    { label: "엔진", value: "가격·시간 우선" },
+    // ADR-096 — 스위퍼는 접수 순으로 처리하고, 교차한 지정가는 순번과 관계없이 함께 체결된다(엄격한 가격·시간 우선 아님)
+    { label: "엔진", value: "접수 순 처리", hint: QUEUE_DEFINITION },
     { label: "미체결", value: `${orders.length}건` },
     { label: "오늘 체결", value: `${todayFills}건` },
     // ADR-091 — 주문 시점 최우선 호가 대비 체결가(bp, +는 불리)와 시장가 접수 → 체결 시간. 기록이 없으면 "—"
@@ -75,7 +77,7 @@ export default function MatchingPage() {
           <OrderProposalCard stockId={stockId} onApprove={setPresetSide} />
         </PanelCol>
         <Panel tabs={["오더북 (CLOB)"]} actions={["expand"]} className="flex-[2_1_420px]" bodyClassName="px-0 py-2.5">
-          <ClobBook book={book} loading={bookLoading} myOrders={orders} />
+          <ClobBook book={book} loading={bookLoading} myOrders={orders} queue={queue} />
         </Panel>
         <Panel
           tabs={[{ key: "market", label: "시장 체결" }, { key: "mine", label: "내 체결" }]}
