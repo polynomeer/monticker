@@ -20,6 +20,15 @@ spring:
     show-sql: false
   flyway:
     enabled: false
+  # ADR-094 — worker Outbox는 api와 분리된 worker_outbox.event_publication(Flyway V91, api가 만든다)에 둔다.
+  # 공유 테이블이던 시절 두 앱의 재전송이 서로의 이벤트 클래스를 해석하지 못해 통째로 실패했다.
+  # 테이블은 Flyway가 소유한다 — Modulith 스키마 초기화는 끈다(기본값도 false지만 명시).
+  modulith:
+    events:
+      jdbc:
+        schema: worker_outbox
+        schema-initialization:
+          enabled: false
   # ADR-042 — worker는 더 이상 ES에 쓰지 않는다. 색인은 SearchIndexEvent → Kafka search.index → api 컨슈머.
   data:
     redis:

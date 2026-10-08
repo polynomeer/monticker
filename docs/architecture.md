@@ -1006,7 +1006,7 @@ make up-full
 ### MSA Key Design Decisions
 
 - **Strangler-fig proxy — 폐기됨**: `QuantEngineClient`·`TradingServiceClient`는 만들어졌을 뿐 어느 컨트롤러도 부르지 않았고 nginx는 `/api/**` 전부를 api로 보낸다. 두 서비스 모두 트래픽 0으로 확인돼 제거했다([ADR-048](decisions/048-retire-trading-service.md), [ADR-049](decisions/049-retire-quant-engine.md)). 분석 경로 격리는 `backtestExecutor` bulkhead가 맡는다(L-06 실측).
-- **Distributed transaction safety**: order events are `@Externalized` Spring Modulith events ([ADR-008](decisions/008-outbox-pattern-spring-modulith.md)) — recorded in `event_publication` inside the matching transaction, published to Kafka after commit, resubmitted every 5 minutes if publishing failed. Verified under a broker outage in CH-05 ([resilience-plan §6.3](resilience-plan.md)).
+- **Distributed transaction safety**: order events are `@Externalized` Spring Modulith events ([ADR-008](decisions/008-outbox-pattern-spring-modulith.md)) — recorded in `event_publication` inside the matching transaction, published to Kafka after commit, resubmitted every 5 minutes if publishing failed. Each app owns its own publication table — api `public.event_publication`, worker `worker_outbox.event_publication` ([ADR-094](decisions/094-separate-outbox-tables-per-app.md)) — so one app's event classes can never break the other's resubmission. Verified under a broker outage in CH-05 ([resilience-plan §6.3](resilience-plan.md)).
 - **Worker role activation**: `@ConditionalOnExpression("'${worker.role:all}'.matches('market|all')")` activates components per role. The `all` default keeps the monolith worker behaviour.
 - **Tick ingestion dual-path**: `ingestion.source=internal` (default) → `MockPriceGenerator` → Kafka. `ingestion.source=kafka` → Go `market-gateway` → Kafka. Both paths converge at `market.ticks`.
 
@@ -1213,6 +1213,17 @@ MatchingService.submitOrder()  [트랜잭션 시작]
                     (event_publication UPDATE)
 ```
 
+### 발행 기록 테이블 — 앱마다 하나 ([ADR-094](decisions/094-separate-outbox-tables-per-app.md))
+
+| 앱 | 레지스트리 | 테이블 |
+|----|-----------|--------|
+| `backend/api` | Modulith JPA | `public.event_publication` (V18) |
+| `backend/worker` | Modulith JDBC + `spring.modulith.events.jdbc.schema=worker_outbox` | `worker_outbox.event_publication` (V91) |
+
+재전송은 미완료 행을 전부 읽고 `event_type`을 클래스로 해석한다. 그래서 한 테이블에 상대 앱의 클래스가 한 행이라도 있으면
+재전송 **전체**가 실패한다. 공유하던 시절에 실제로 알림이 유실됐다. 새 Modulith 발행 앱은 자기 스키마를 쓴다.
+배포 순서는 api(V91) → worker다. worker는 자기 테이블이 없으면 기동하지 않는다.
+
 ### 유실 방지 메커니즘
 
 | 상황 | 처리 |
@@ -1220,7 +1231,8 @@ MatchingService.submitOrder()  [트랜잭션 시작]
 | 커밋 전 앱 크래시 | 트랜잭션 롤백 → event_publication도 롤백 → 이벤트 없음 (정상) |
 | 커밋 후 Kafka 장애 | event_publication에 `completion_date = NULL` 유지 |
 | 앱 재시작 | 기동 시 미완료 이벤트 자동 재전송 |
-| Kafka 간헐적 오류 | `OutboxResubmissionConfig`가 5분마다 1분 이상 미완료 이벤트 재전송 |
+| Kafka 간헐적 오류 | `OutboxResubmissionConfig`가 5분마다 1분 이상 미완료 이벤트 재전송(앱마다 자기 테이블만) |
+| 완료 행 누적 | `OutboxCompletedCleanup`이 1시간마다 7일 지난 완료 행 삭제(양쪽 앱, ADR-094) |
 
 ### 외부화 대상 이벤트
 

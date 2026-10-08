@@ -1055,7 +1055,8 @@ stocks
 | `creator_payouts` | V27 | — |
 | `detected_patterns` | V16 | ✅ |
 | `device_tokens` | V9 | — |
-| `event_publication` | V18 | — |
+| `event_publication` | V18 (api 전용 Outbox — worker는 아래 `worker_outbox.event_publication`, ADR-094) | — |
+| `worker_outbox.event_publication` | V91 (worker Outbox, Modulith JDBC 레지스트리 — ADR-094) | — |
 | `fills` | V15 | ✅ |
 | `investment_behavior_scores` | V14 | ✅ |
 | `investor_flow` | V29 | — |

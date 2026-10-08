@@ -1,7 +1,7 @@
 # ADR-042: Elasticsearch 인덱싱을 Outbox 기반 단일 파이프라인으로 통일 (CDC는 채택하지 않는다)
 
 ## Status
-Accepted
+Accepted — §2의 "`event_publication`을 api와 공유" 부분은 [ADR-094](094-separate-outbox-tables-per-app.md)가 대체한다(worker는 `worker_outbox.event_publication`).
 
 ## Context
 

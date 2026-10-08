@@ -83,7 +83,7 @@ dependencies {
 sourceSets {
 	create("integrationTest") {
 		kotlin.srcDir("src/integrationTest/kotlin")
-		resources.srcDir("src/integrationTest/resources")
+		// src/integrationTest/resources는 소스셋 관례 경로라 따로 더하지 않는다 — 더하면 같은 파일이 두 번 복사돼 빌드가 실패한다
 		compileClasspath += sourceSets.main.get().output + sourceSets.test.get().output
 		runtimeClasspath += sourceSets.main.get().output + sourceSets.test.get().output
 	}

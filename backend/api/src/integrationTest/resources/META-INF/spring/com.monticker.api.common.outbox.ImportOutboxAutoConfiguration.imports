@@ -1,0 +1,11 @@
+# ADR-094 Outbox 격리 테스트(OutboxIsolationIntegrationTest)가 띄우는 자동 구성 — Boot 테스트 슬라이스와 같은 방식.
+# Modulith 자동 구성 클래스는 package-private이라 클래스 리터럴로 고를 수 없다.
+org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration
+org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+org.springframework.boot.autoconfigure.transaction.TransactionAutoConfiguration
+org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration
+org.springframework.modulith.events.config.EventPublicationAutoConfiguration
+org.springframework.modulith.events.jackson.JacksonEventSerializationConfiguration
+org.springframework.modulith.events.jpa.JpaEventPublicationAutoConfiguration
+org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration
