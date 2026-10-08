@@ -56,6 +56,14 @@ for (i in 0..10) {
 
 관측된 최소~최대 평균 수익률 구간을 11개 점으로 스윕한다. 연환산은 `× 252`(수익률), `× √252`(변동성, 분산의 가산성에서 표준편차는 제곱근 스케일링)을 따른다.
 
+### 분석 기간·무작위 표본·샤프 최대 지점 ([ADR-097](../decisions/097-analytics-random-portfolios-and-max-sharpe.md))
+
+- 입력 수익률은 `AnalysisPeriod`(3M·6M·1Y·2Y·CUSTOM 60일~3년, KST)로 정한 기간 안에서 **모든 종목이 함께 종가를 가진 날**만 모아 만든다. 관측 30개 미만이면 400을 준다.
+- `/portfolio/frontier`는 프론티어 11점과 함께 아래 값을 준다.
+  - `PortfolioSampling.dirichletSamples`: Dirichlet(1) 표본. `samples` 100~2,000개, 고정 시드 `SplittableRandom`으로 뽑는다.
+  - `maxSharpe`: 표본·동일가중·꼭짓점·프론티어 점 중 샤프가 가장 큰 점에서 출발한다. 단체 위 유클리드 투영과 백트래킹을 쓰는 경사상승으로 다듬고, 샤프가 엄격히 오를 때만 이동한다. 최대 500회 반복한다.
+- 샤프 = (연 수익 − `app.analytics.risk-free-rate`) / 연 변동성. 무위험 수익률 기본값은 0이다.
+
 ---
 
 ## 2. 차트 패턴 인식 — ZigZag + 템플릿 매칭
