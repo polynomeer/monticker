@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  CHANGE_STOPS, DEFAULT_CRITERIA, marketGroup, changeRangeLabel, changeToStops, fromServer, sameCriteria, stopsToChange, toQuery, volMultToStop,
+  CHANGE_STOPS, DEFAULT_CRITERIA, capRangeError, capToEokText, parseCapEok, marketGroup, changeRangeLabel, changeToStops, fromServer, sameCriteria, stopsToChange, toQuery, volMultToStop,
 } from "@/components/screener/criteria";
 
 describe("screener criteria", () => {
@@ -54,5 +54,28 @@ describe("screener criteria", () => {
     expect(marketGroup("overseas")).toBe("overseas");
     expect(marketGroup("all")).toBe("all");
     expect(new URLSearchParams(toQuery("realtime", { ...DEFAULT_CRITERIA, market: "kosdaq" }, 50, 0)).get("market")).toBe("kosdaq");
+  });
+
+  it("parses market cap bounds in 억원 and rejects bad input", () => {
+    expect(parseCapEok("")).toBeNull();
+    expect(parseCapEok(" 1,000 ")).toBe(100_000_000_000);
+    expect(parseCapEok("0.5")).toBe(50_000_000);
+    expect(parseCapEok("-1")).toBe("invalid");
+    expect(parseCapEok("1e3")).toBe("invalid");
+    expect(parseCapEok("abc")).toBe("invalid");
+    expect(parseCapEok("100000001")).toBe("invalid");   // 1경 원 초과
+    expect(capToEokText(300_000_000_000)).toBe("3000");
+    expect(capToEokText(null)).toBe("");
+    expect(capRangeError(500, 100)).toMatch(/최소/);
+    expect(capRangeError(null, 100)).toBeNull();
+    expect(capRangeError("invalid", null)).not.toBeNull();
+  });
+
+  it("sends market cap bounds only when set and fills them from older saved screens", () => {
+    const q = new URLSearchParams(toQuery("realtime", { ...DEFAULT_CRITERIA, minCap: 100_000_000_000 }, 20, 0));
+    expect(q.get("minCap")).toBe("100000000000");
+    expect(q.has("maxCap")).toBe(false);
+    expect(new URLSearchParams(toQuery("realtime", DEFAULT_CRITERIA, 20, 0)).has("minCap")).toBe(false);
+    expect(fromServer({ marketCapTier: "large" })).toMatchObject({ minCap: null, maxCap: null });
   });
 });

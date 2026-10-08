@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import ScreenerTable, { type ColumnSet } from "@/components/screener/ScreenerTable";
 import RangeSlider from "@/components/screener/RangeSlider";
+import MarketCapRange from "@/components/screener/MarketCapRange";
 import { useScreener } from "@/hooks/useScreener";
 import { useIsLoggedIn } from "@/components/home/data";
 import {
@@ -149,7 +150,7 @@ export default function ScreenerPage() {
             full
             options={MARKET_GROUPS}
             value={marketGroup(criteria.market)}
-            onChange={(v) => patch({ market: v, ...(v === "overseas" ? { marketCapTier: "all" } : {}) })}
+            onChange={(v) => patch({ market: v, ...(v === "overseas" ? { marketCapTier: "all", minCap: null, maxCap: null } : {}) })}
           />
           {marketGroup(criteria.market) === "domestic" && (
             <Seg
@@ -198,6 +199,7 @@ export default function ScreenerPage() {
             <div className="flex flex-col gap-2">
               <span className="text-xs text-tm-soft">시가총액</span>
               <Seg full size="sm" options={MARKET_CAP_TIERS} value={criteria.marketCapTier as (typeof MARKET_CAP_TIERS)[number]["value"]} onChange={(v) => patch({ marketCapTier: v })} />
+              <MarketCapRange minCap={criteria.minCap} maxCap={criteria.maxCap} onApply={patch} />
             </div>
           )}
 
