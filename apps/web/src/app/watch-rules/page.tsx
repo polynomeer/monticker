@@ -8,7 +8,7 @@ import { EmptyNote, LoginRequired, Skeleton } from "@/components/portfolio/Paper
 import { fmtDateTime } from "@/components/portfolio/format";
 import { WatchRuleExecutionList } from "@/components/watchrule/WatchRuleExecutionList";
 import { WatchRuleForm, type WatchRuleFormValue } from "@/components/watchrule/WatchRuleForm";
-import { RULE_PNL_HINT, WatchRuleRow } from "@/components/watchrule/WatchRuleRow";
+import { RULE_PNL_HINT, WatchRuleRow, targetLabel } from "@/components/watchrule/WatchRuleRow";
 import { usePaperPnlByOrigin } from "@/hooks/usePaperTrade";
 import {
   useCreateWatchRule,
@@ -50,10 +50,14 @@ export default function WatchRulesPage() {
   const remove = useDeleteWatchRule();
   const { toast } = useToast();
 
-  // 룰은 stockId 만 들고 있다 — 표시용 종목명을 한 번에 채운다.
+  // 룰은 stockId 만 들고 있다 — 표시용 종목명을 한 번에 채운다. 그룹 규칙(ADR-095)은 발동 기록의 종목을 채운다.
   useEffect(() => {
     if (!rules?.length) return;
-    const missing = [...new Set(rules.map((r) => r.stockId))].filter((id) => !stocks.has(id));
+    const ids = [
+      ...rules.map((r) => r.stockId),
+      ...(executions ?? []).map((e) => e.stockId),
+    ].filter((id): id is number => id != null);
+    const missing = [...new Set(ids)].filter((id) => !stocks.has(id));
     if (!missing.length) return;
     let cancelled = false;
     Promise.all(
@@ -67,7 +71,7 @@ export default function WatchRulesPage() {
       });
     });
     return () => { cancelled = true; };
-  }, [rules, stocks]);
+  }, [rules, executions, stocks]);
 
   // stocks 가 바뀔 때만 새로 만든다 — 매 렌더마다 새 함수를 만들면 아래 useMemo 가 매번 재계산된다.
   const stockLabel = useCallback(
@@ -80,7 +84,7 @@ export default function WatchRulesPage() {
 
   const ruleLabels = useMemo(() => {
     const map = new Map<number, { stockLabel: string; rule: WatchRuleResponse }>();
-    rules?.forEach((r) => map.set(r.id, { stockLabel: stockLabel(r.stockId), rule: r }));
+    rules?.forEach((r) => map.set(r.id, { stockLabel: targetLabel(r, stockLabel), rule: r }));
     return map;
   }, [rules, stockLabel]);
 
@@ -89,7 +93,7 @@ export default function WatchRulesPage() {
 
   const handleCreate = (value: WatchRuleFormValue) =>
     create.mutate(value, {
-      onSuccess: () => toast({ type: "success", title: "규칙 생성됨", message: "이벤트가 감지되면 자동으로 주문합니다." }),
+      onSuccess: () => toast({ type: "success", title: "규칙 생성됨", message: "이벤트가 감지되면 모의투자 계좌로 자동 주문합니다." }),
       onError: fail("규칙 생성 실패"),
     });
 
@@ -182,7 +186,7 @@ export default function WatchRulesPage() {
                     <WatchRuleRow
                       key={rule.id}
                       rule={rule}
-                      stockLabel={stockLabel(rule.stockId)}
+                      stockLabel={targetLabel(rule, stockLabel)}
                       onToggle={handleToggle}
                       onDelete={handleDelete}
                       pending={pending}
@@ -197,7 +201,7 @@ export default function WatchRulesPage() {
           ) : executionsLoading ? (
             <Skeleton className="h-32" />
           ) : (
-            <WatchRuleExecutionList executions={executions ?? []} ruleLabels={ruleLabels} />
+            <WatchRuleExecutionList executions={executions ?? []} ruleLabels={ruleLabels} stockLabel={stockLabel} />
           )}
         </Panel>
 

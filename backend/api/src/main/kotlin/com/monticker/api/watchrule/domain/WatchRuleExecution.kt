@@ -7,6 +7,8 @@ import java.time.Instant
 enum class WatchRuleExecutionStatus {
     /** 주문이 체결됐다. */
     EXECUTED,
+    /** ADR-095 — 지정가 주문이 접수됐지만 아직 미체결(이후 체결은 스위퍼, ADR-074). 발동으로 센다. */
+    PLACED,
     /** 리스크 게이트·잔고·보유수량 등으로 주문이 거부됐다. */
     REJECTED,
     /** 쿨다운 중이거나 강도가 하한에 못 미쳐 주문을 내지 않았다. */
@@ -52,6 +54,14 @@ class WatchRuleExecution(
 
     @Column
     val reason: String? = null,
+
+    /** ADR-095 — 발동 종목. 그룹 규칙은 발동마다 다르다. V92 이전 기록은 규칙의 종목으로 백필. */
+    @Column(name = "stock_id")
+    val stockId: Long? = null,
+
+    /** ADR-095 — 지정가 접수(PLACED)의 지정가. */
+    @Column(name = "limit_price", precision = 18, scale = 4)
+    val limitPrice: BigDecimal? = null,
 
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant = Instant.now(),

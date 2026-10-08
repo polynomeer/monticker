@@ -9,18 +9,29 @@ export type WatchRuleEventType = WatchRuleDetectedEventType | "QUANT_SIGNAL";
 
 export type WatchRuleSide = "BUY" | "SELL";
 
+/** ADR-095 — 대상: 종목 하나 또는 내 관심종목 그룹(평가 시점 구성 종목마다 판정). */
+export type WatchRuleTargetType = "STOCK" | "GROUP";
+
+/** ADR-095 — 발동 주문 유형. LIMIT은 발동 시점 가격 × (1 + limitOffsetBps/10000)의 지정가. */
+export type WatchRuleOrderType = "MARKET" | "LIMIT";
+
+/** ADR-095 — 수량 기준: 주 수 또는 모의 계좌 평가자산의 %(발동 시점 계산, 정수 주로 내림). */
+export type WatchRuleSizeType = "SHARES" | "EQUITY_PCT";
+
 /**
- * EXECUTED: 주문 체결 / REJECTED: 리스크 게이트·잔고 등으로 거부 / SKIPPED: 쿨다운·중요도 미달.
- * 거부와 건너뜀도 이유와 함께 남는다 — 사용자가 "왜 안 샀지"를 확인할 수 있어야 한다.
+ * EXECUTED: 주문 체결 / PLACED: 지정가 접수(미체결, ADR-095) / REJECTED: 리스크 게이트·잔고 등으로 거부 /
+ * SKIPPED: 쿨다운·중요도 미달·0주 등. 거부와 건너뜀도 이유와 함께 남는다 — 사용자가 "왜 안 샀지"를 확인할 수 있어야 한다.
  */
-export type WatchRuleExecutionStatus = "EXECUTED" | "REJECTED" | "SKIPPED";
+export type WatchRuleExecutionStatus = "EXECUTED" | "PLACED" | "REJECTED" | "SKIPPED";
 
 export interface WatchRuleResponse {
   id: number;
-  stockId: number;
+  /** 그룹 규칙이면 null */
+  stockId: number | null;
   eventType: WatchRuleEventType;
   side: WatchRuleSide;
-  quantity: number;
+  /** 계좌 % 규칙이면 null */
+  quantity: number | null;
   /** 이벤트 importance_score 가 이 값 미만이면 발동하지 않는다(0~100). */
   minImportanceScore: number;
   /** 직전 체결로부터 이 시간 안에는 다시 발동하지 않는다. */
@@ -38,15 +49,27 @@ export interface WatchRuleResponse {
   conditionWindowSec?: number | null;
   /** 하루(KST) 최대 체결 횟수. null이면 제한 없음 */
   dailyLimit?: number | null;
-  /** 오늘(KST) 체결 수 — 서버가 한도를 집행하는 카운터 */
+  /** 오늘(KST) 발동 수 — 서버가 한도를 집행하는 카운터 */
   todayExecutions?: number;
+  /** ADR-095 */
+  targetType?: WatchRuleTargetType;
+  targetGroupId?: number | null;
+  /** 그룹 이름. 그룹이 지워졌으면 null이고 targetGroupMissing = true(규칙은 꺼진다) */
+  targetGroupName?: string | null;
+  targetGroupMissing?: boolean;
+  orderType?: WatchRuleOrderType;
+  limitOffsetBps?: number | null;
+  sizeType?: WatchRuleSizeType;
+  equityPct?: number | null;
 }
 
 export interface CreateWatchRuleRequest {
-  stockId: number;
+  /** 대상이 종목일 때 */
+  stockId?: number;
   eventType: WatchRuleEventType;
   side: WatchRuleSide;
-  quantity: number;
+  /** 수량 기준이 주 수일 때 */
+  quantity?: number;
   minImportanceScore?: number;
   cooldownSec?: number;
   name?: string;
@@ -55,6 +78,15 @@ export interface CreateWatchRuleRequest {
   requiredEventTypes?: WatchRuleDetectedEventType[];
   conditionWindowSec?: number;
   dailyLimit?: number;
+  /** ADR-095 — 기본 STOCK. GROUP이면 targetGroupId(내 관심종목 그룹) */
+  targetType?: WatchRuleTargetType;
+  targetGroupId?: number;
+  /** 기본 MARKET. LIMIT이면 limitOffsetBps(−1000~1000) */
+  orderType?: WatchRuleOrderType;
+  limitOffsetBps?: number;
+  /** 기본 SHARES. EQUITY_PCT면 equityPct(1~25) */
+  sizeType?: WatchRuleSizeType;
+  equityPct?: number;
 }
 
 export interface UpdateWatchRuleRequest {
@@ -66,6 +98,9 @@ export interface UpdateWatchRuleRequest {
   name?: string;
   /** 0이면 제한 해제 */
   dailyLimit?: number;
+  /** ADR-095 — 지정가 규칙의 오프셋 / 계좌 % 규칙의 비율 */
+  limitOffsetBps?: number;
+  equityPct?: number;
 }
 
 export interface WatchRuleExecutionResponse {
@@ -80,4 +115,8 @@ export interface WatchRuleExecutionResponse {
   quantity: number | null;
   reason: string | null;
   createdAt: string;
+  /** ADR-095 — 발동 종목(그룹 규칙은 발동마다 다르다) */
+  stockId?: number | null;
+  /** 지정가 발동의 지정가 */
+  limitPrice?: number | null;
 }

@@ -1,9 +1,19 @@
 package com.monticker.api.watchrule.domain
 
 import jakarta.persistence.*
+import java.math.BigDecimal
 import java.time.Instant
 
 enum class WatchRuleSide { BUY, SELL }
+
+/** ADR-095 — 규칙 대상: 종목 하나 또는 내 관심종목 그룹(평가 시점 구성 종목마다 판정). */
+enum class WatchRuleTargetType { STOCK, GROUP }
+
+/** ADR-095 — 발동 주문 유형. LIMIT은 발동 시점 가격 × (1 + 오프셋 bps)의 지정가(ADR-074 경로). */
+enum class WatchRuleOrderType { MARKET, LIMIT }
+
+/** ADR-095 — 수량 기준: 주 수 또는 모의 계좌 평가자산의 %(발동 시점 계산, 정수 주로 내림). */
+enum class WatchRuleSizeType { SHARES, EQUITY_PCT }
 
 /**
  * ADR-051 — "이 종목에 이런 이벤트가 감지되면 모의투자 계좌로 N주 매수/매도한다".
@@ -20,8 +30,9 @@ class WatchRule(
     @Column(name = "user_id", nullable = false)
     val userId: Long,
 
-    @Column(name = "stock_id", nullable = false)
-    val stockId: Long,
+    /** 대상이 종목이면 그 종목. 그룹 규칙이면 null이고 [targetGroupId]가 있다(V92 CHECK). */
+    @Column(name = "stock_id")
+    val stockId: Long?,
 
     /** worker의 `DetectedEventType` 이름 — PRICE_SPIKE / PRICE_DROP / VOLUME_SURGE — 또는 QUANT_SIGNAL(ADR-077). */
     @Column(name = "event_type", nullable = false, length = 50)
@@ -31,8 +42,9 @@ class WatchRule(
     @Column(nullable = false, length = 4)
     val side: WatchRuleSide,
 
-    @Column(nullable = false)
-    var quantity: Int,
+    /** 수량 기준이 SHARES일 때의 주 수. EQUITY_PCT면 null(V92 CHECK). */
+    @Column
+    var quantity: Int?,
 
     /** 이벤트 importance_score 가 이 값 미만이면 발동하지 않는다. */
     @Column(name = "min_importance_score", nullable = false)
@@ -68,6 +80,31 @@ class WatchRule(
     @Column(name = "daily_limit")
     var dailyLimit: Int? = null,
 
+    /** ADR-095 */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "target_type", nullable = false, length = 10)
+    val targetType: WatchRuleTargetType = WatchRuleTargetType.STOCK,
+
+    /** ADR-095 — 대상 관심종목 그룹(watchlist_groups.id, FK 없음 — 그룹 삭제 시 트리거가 규칙을 끈다). */
+    @Column(name = "target_group_id")
+    val targetGroupId: Long? = null,
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "order_type", nullable = false, length = 6)
+    val orderType: WatchRuleOrderType = WatchRuleOrderType.MARKET,
+
+    /** ADR-095 — 지정가 오프셋(bps, ±1000). 음수 = 발동 가격 아래. LIMIT일 때만. */
+    @Column(name = "limit_offset_bps")
+    var limitOffsetBps: Int? = null,
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "size_type", nullable = false, length = 10)
+    val sizeType: WatchRuleSizeType = WatchRuleSizeType.SHARES,
+
+    /** ADR-095 — 평가자산 대비 %(1~25). EQUITY_PCT일 때만. */
+    @Column(name = "equity_pct", precision = 5, scale = 2)
+    var equityPct: BigDecimal? = null,
+
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant = Instant.now(),
 
@@ -75,10 +112,16 @@ class WatchRule(
     var updatedAt: Instant = Instant.now(),
 ) {
     /** [dailyLimit]: null = 그대로, 0 = 제한 해제, 1 이상 = 새 한도. [name]: null = 그대로, 빈 문자열 = 지움. */
-    fun update(quantity: Int?, minImportanceScore: Int?, cooldownSec: Int?, isActive: Boolean?, name: String? = null, dailyLimit: Int? = null) {
+    fun update(
+        quantity: Int?, minImportanceScore: Int?, cooldownSec: Int?, isActive: Boolean?, name: String? = null, dailyLimit: Int? = null,
+        limitOffsetBps: Int? = null, equityPct: BigDecimal? = null,
+    ) {
         name?.let { this.name = it.trim().ifBlank { null } }
         dailyLimit?.let { this.dailyLimit = if (it == 0) null else it }
+        // 수량·오프셋·비율은 규칙의 기준(sizeType·orderType)에 맞는 값만 바꾼다 — 기준 자체는 바꾸지 않는다(서비스가 검증).
         quantity?.let { this.quantity = it }
+        limitOffsetBps?.let { this.limitOffsetBps = it }
+        equityPct?.let { this.equityPct = it }
         minImportanceScore?.let { this.minImportanceScore = it }
         cooldownSec?.let { this.cooldownSec = it }
         isActive?.let { this.isActive = it }
@@ -89,6 +132,8 @@ class WatchRule(
     fun acceptsImportance(score: Int): Boolean = score >= minImportanceScore
 
     val isQuantSignalRule: Boolean get() = eventType == QUANT_SIGNAL
+
+    val isGroupRule: Boolean get() = targetType == WatchRuleTargetType.GROUP
 
     /** 복합 조건의 동반 이벤트 유형 목록. */
     fun requiredTypes(): List<String> =

@@ -129,4 +129,65 @@ describe("WatchRuleForm", () => {
     expect(onSubmit).not.toHaveBeenCalled();
     expect(await screen.findByRole("alert")).toHaveTextContent("1~1000");
   });
+
+  // ADR-095 — 관심종목 그룹 대상·지정가·계좌 %
+  it("관심종목 그룹을 대상으로 지정가·계좌 % 규칙을 제출한다", async () => {
+    mockFetch.mockImplementation((url: string) =>
+      Promise.resolve(mockOk(String(url).startsWith("/api/watchlists")
+        ? [{ id: 4, name: "반도체", items: [{}, {}] }, { id: 9, name: "2차전지", items: [] }]
+        : searchHit)),
+    );
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(<WatchRuleForm onSubmit={onSubmit} submitting={false} />);
+
+    await user.click(screen.getByRole("button", { name: "관심종목 그룹" }));
+    await waitFor(() => expect(screen.getByRole("option", { name: "2차전지 · 0종목" })).toBeInTheDocument());
+    await user.selectOptions(screen.getByLabelText("관심종목 그룹"), "9");
+    await user.selectOptions(screen.getByLabelText("주문 유형"), "LIMIT");
+    await user.clear(screen.getByLabelText("지정가 오프셋 (bp)"));
+    await user.type(screen.getByLabelText("지정가 오프셋 (bp)"), "-120");
+    await user.selectOptions(screen.getByLabelText("수량 기준"), "EQUITY_PCT");
+    await user.clear(screen.getByLabelText("계좌 비율 (%)"));
+    await user.type(screen.getByLabelText("계좌 비율 (%)"), "2.5");
+    await user.click(screen.getByRole("button", { name: "규칙 저장" }));
+
+    const value = onSubmit.mock.calls[0][0];
+    expect(value).toMatchObject({
+      targetType: "GROUP", targetGroupId: 9, orderType: "LIMIT", limitOffsetBps: -120, sizeType: "EQUITY_PCT", equityPct: 2.5,
+    });
+    expect(value).not.toHaveProperty("stockId");
+    expect(value).not.toHaveProperty("quantity");
+    expect(screen.queryByText("준비 중")).not.toBeInTheDocument();
+  });
+
+  it("지정가 오프셋이 ±1000bp를 넘으면 제출하지 않는다", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(<WatchRuleForm onSubmit={onSubmit} submitting={false} />);
+
+    await pickStock(user);
+    await user.selectOptions(screen.getByLabelText("주문 유형"), "LIMIT");
+    await user.clear(screen.getByLabelText("지정가 오프셋 (bp)"));
+    await user.type(screen.getByLabelText("지정가 오프셋 (bp)"), "1500");
+    await user.click(screen.getByRole("button", { name: "규칙 저장" }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(await screen.findByRole("alert")).toHaveTextContent("1000bp");
+  });
+
+  it("계좌 비율이 1~25%를 벗어나면 제출하지 않는다", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(<WatchRuleForm onSubmit={onSubmit} submitting={false} />);
+
+    await pickStock(user);
+    await user.selectOptions(screen.getByLabelText("수량 기준"), "EQUITY_PCT");
+    await user.clear(screen.getByLabelText("계좌 비율 (%)"));
+    await user.type(screen.getByLabelText("계좌 비율 (%)"), "30");
+    await user.click(screen.getByRole("button", { name: "규칙 저장" }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(await screen.findByRole("alert")).toHaveTextContent("1~25%");
+  });
 });

@@ -125,11 +125,16 @@ class MatchingService(
         quantity: Int,
         limitPrice: BigDecimal,
         origin: OrderOrigin,
+        idempotencyKey: String?,
     ): LimitOrderResult {
         require(limitPrice > BigDecimal.ZERO) { "지정가는 0보다 커야 합니다" }
+        // ADR-095 — Watch Rule 지정가의 멱등 재제출. 시장가(ADR-051)와 같이 리스크 게이트 뒤에서 첫 주문을 그대로 돌려준다.
+        idempotencyKey?.let { key ->
+            orderRepo.findByIdempotencyKey(key)?.let { return limitReplayOf(it) }
+        }
         val res = submitOrder(userId, SubmitOrderRequest(
             stockId = stockId, side = side, orderType = "LIMIT", quantity = quantity, limitPrice = limitPrice,
-            origin = origin,
+            idempotencyKey = idempotencyKey, origin = origin,
         ))
         val fill = res.fills.singleOrNull()?.let {
             MarketOrderResult(
@@ -140,6 +145,20 @@ class MatchingService(
         return LimitOrderResult(
             orderId = res.order.id, stockId = stockId, side = side, quantity = quantity,
             limitPrice = limitPrice, status = res.order.status, fill = fill,
+        )
+    }
+
+    /** ADR-095 — 지정가 멱등 재제출: 첫 주문의 지금 상태를 돌려준다(미체결이면 fill 없음). 새 주문·예약을 만들지 않는다. */
+    private fun limitReplayOf(order: Order): LimitOrderResult {
+        val fill = fillQueryService.findByOrderId(order.id, order.userId).firstOrNull()?.let {
+            MarketOrderResult(
+                orderId = order.id, fillId = it.id, stockId = it.stockId, side = it.side,
+                quantity = it.quantity, fillPrice = it.fillPrice, amount = it.amount, filledAt = it.filledAt,
+            )
+        }
+        return LimitOrderResult(
+            orderId = order.id, stockId = order.stockId, side = order.side.name, quantity = order.quantity,
+            limitPrice = order.limitPrice?.amount ?: BigDecimal.ZERO, status = order.status.name, fill = fill,
         )
     }
 
