@@ -125,10 +125,10 @@
 | /portfolio | 상단 "벤치마크 대비 KOSPI" | `—` | 지수 기간 수익률 API | P2 | |
 | /portfolio | 거래 내역 감정 칸 | 실데이터. 단, 거래마다 개별 조회(N+1) | history 응답에 emotion 포함 | P2 | ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — 내역 응답에 emotion·memo·출처 포함 |
 | /portfolio | 평균단가 차트 매수 마커 | 평균단가선만 | StockChart에 거래 마커 prop | P2 | ✅ [2f336bf1](https://github.com/polynomeer/monticker/commit/2f336bf1) `trades`/`interval` prop(KST 봉 버킷, 같은 봉 체결은 건수로 묶음), [d44d1a6a](https://github.com/polynomeer/monticker/commit/d44d1a6a) 모의 체결 매수·매도 마커(history 100건 단위 일괄 조회, 최근 500건까지) |
-| /matching | 가격별 주문 대기열 조각, "내 주문 · 대기 N번째" | 잔량 막대 하나, "내 주문 · N주 대기" | 호가 API에 가격별 주문 큐와 내 순번 노출 | P2 | |
+| /matching | 가격별 주문 대기열 조각, "내 주문 · 대기 N번째" | 잔량 막대 하나, "내 주문 · N주 대기" | 호가 API에 가격별 주문 큐와 내 순번 노출 | P2 | ✅ [ADR-096](decisions/096-paper-order-queue-position-and-reservation-receipt.md) — `/api/matching/queue`: 모의 지정가를 가격별로, 남의 주문은 내 주문 사이의 연속 구간 건수·잔량 합으로만(id·개별 수량 없음). 순번 = 스위퍼 처리 순서 `(created_at, id)`. 교차하면 순번과 관계없이 함께 체결(유동성 제한 없음)이라 화면에 그대로 적고 상단 "가격·시간 우선"을 "접수 순 처리"로 고침 |
 | /matching | 상단 평균 슬리피지·지연 | `—` | 주문 시점 최우선호가 저장 → 체결가 비교 집계, 엔진 처리시간 메트릭 | P2 | ✅ [ADR-091](decisions/091-wallet-behavior-and-execution-quality-metrics.md) — V88 접수 시점 최우선 호가(KIS 실시간만)·접수 시각, `/api/matching/execution-quality`(최근 30일, 수량 가중 bp, 시장가 지연 중앙값). 호가 기록 없는 체결은 빼고 건수 표시 |
 | /wallet | 원장 행의 돈 흐름(예약금 → 정산 대기)과 출처 | 확실한 유형만 흐름 표시 | 원장 이벤트에 from/to 버킷과 주문 출처 | P2 | 부분 ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — 체결 행에 주문 출처 표시. from/to 버킷은 남음 |
-| /wallet | 영수증 "예약금 잠금" 단계 | 접수 → 체결 → 정산 3단계(모의 즉시체결) | 지정가 영수증 API가 생기면 연결 | P2 | |
+| /wallet | 영수증 "예약금 잠금" 단계 | 접수 → 체결 → 정산 3단계(모의 즉시체결) | 지정가 영수증 API가 생기면 연결 | P2 | ✅ [ADR-096](decisions/096-paper-order-queue-position-and-reservation-receipt.md) — V93 `orders.reserved_at`(사가가 잠금 성공 직후 같은 트랜잭션에서 기록), 영수증 `order`에 접수·잠금·전체 체결·취소. 지정가 4단계(SELL은 "매도 수량 잠금"), 부분 체결·잔량 취소 표시, 시장가·옛 거래는 3단계, V93 이전은 "시각 기록 없음" |
 | /wallet | 감정 태그 "조급함"·"계획대로" | 백엔드 `EmotionType` 10종으로 표시 | enum 확장과 마이그레이션 | P2 | ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — `PLANNED`·`IMPATIENT`(12종), V82 데이터 이관 |
 | /wallet | 점수 카드 세부 지표(계획 준수율, 손절 준수율, 지난주 대비) | 등급 + 피드백 목록 | `/api/wallet/score` 세부 지표 | P2 | ✅ [ADR-091](decisions/091-wallet-behavior-and-execution-quality-metrics.md) — `details`: 이번 주(KST 월~) 계획 준수율(ADR-085 같은 함수)·손절 준수율(손절을 정한 손실 매도만, 처음 손절선 기준)·지난주 대비. 분모 0이면 `—` |
 | /wallet/replay | 계획 준수율, 계획 외 주문 | `—` | 주문별 계획 여부 집계 | P2 | ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — 계획 = 출처 Watch Rule·조건부·전략 또는 `PLANNED` 태그. 정의는 툴팁 |
