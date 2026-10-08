@@ -13,6 +13,7 @@ vi.mock("echarts", () => ({
     isDisposed: () => false,
     dispose: vi.fn(),
     resize: vi.fn(),
+    getWidth: () => 800,
     convertToPixel: () => 0,
     convertFromPixel: () => null,
   }),
