@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { BtnLink, BuySell, Btn, Chip, Field, Icon, SelectBox, fmtNum } from "@/components/terminal";
 import TradeReceipt from "@/components/wallet/TradeReceipt";
 import { sellableQuantity, usePaperOpenOrders, usePaperOrder, usePaperPortfolio } from "@/hooks/usePaperTrade";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
+import { useRiskPreview, type RiskRuleResult as RuleResult } from "@/hooks/useRiskPreview";
 import { authFetch } from "@/services/api";
 import { cn } from "@/lib/utils";
 
@@ -18,8 +19,6 @@ interface Props {
   brokerageConnected?: boolean;
 }
 
-interface RuleResult { rule: string; passed: boolean; detail: string; current: number; limit: number; }
-interface RiskCheckResult { approved: boolean; blockedBy: string | null; severity: string; checks: RuleResult[]; }
 
 const RULE_LABEL: Record<string, string> = {
   VaRRule: "1일 VaR 95%",
@@ -116,24 +115,13 @@ export default function OrderForm({ stock, currentPrice, brokerageConnected }: P
     enabled: receiptTradeId != null,
   });
 
-  // 주문 전 리스크 체크 — 서버 판정(POST /api/risk/check)은 감사 로그를 남기므로 입력마다가 아니라 버튼으로만 부른다.
-  const risk = useMutation({
-    mutationFn: async (): Promise<RiskCheckResult> => {
-      const res = await authFetch("/api/risk/check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stockId: stock.id, side, quantity, estimatedPrice: unitPrice }),
-      });
-      if (!res.ok) {
-        const e = await res.json().catch(() => null);
-        throw new Error(e?.message ?? "리스크 점검 실패");
-      }
-      return res.json();
-    },
-  });
-  const resetRisk = risk.reset;
-  // 수량·방향·가격이 바뀌면 이전 점검 결과는 더 이상 이 주문의 결과가 아니다.
-  useEffect(() => { resetRisk(); }, [side, quantity, orderType, limitInput, resetRisk]);
+  // 주문 전 리스크 체크 — ADR-092: 입력이 멈추고 400ms 뒤 감사 기록이 남지 않는 미리보기(POST /api/risk/preview)로 판정한다.
+  // 예전 "점검하기" 버튼(POST /api/risk/check, dry_run 감사 행)은 이 폼에서 뺐다 — 실제 주문은 제출 시점에 게이트를 다시 돌고
+  // 그때 감사 기록이 남으므로, 입력 중 판정을 따로 감사할 이유가 없다. 이 결과로는 아무것도 주문·예약되지 않는다.
+  const risk = useRiskPreview(
+    { stockId: stock.id, side, quantity, estimatedPrice: unitPrice },
+    isLoggedIn && isValid && unitPrice > 0,
+  );
 
   const setQty = (raw: number) => setQuantity(Math.min(Math.max(max, 1), Math.max(1, Math.floor(raw) || 1)));
 
@@ -309,14 +297,19 @@ export default function OrderForm({ stock, currentPrice, brokerageConnected }: P
           <div className="flex flex-col gap-[7px] rounded-lg bg-tm-inner px-3 py-2.5">
             <div className="flex items-center justify-between">
               <span className="text-2xs text-tm-muted">주문 전 리스크 체크</span>
-              <button type="button" onClick={() => risk.mutate()} disabled={risk.isPending || !isValid} className="text-2xs font-semibold text-dracula-purple hover:underline disabled:opacity-40">
-                {risk.isPending ? "점검 중..." : risk.data ? "다시 점검" : "점검하기"}
-              </button>
+              <span aria-live="polite" className={cn("text-2xs font-semibold", risk.data && !risk.pending && (risk.data.approved ? "text-dracula-green" : "text-dracula-orange"))}>
+                {risk.idle ? "" : risk.pending ? "점검 중..." : risk.data ? (risk.data.approved ? "통과" : "한도 초과") : ""}
+              </span>
             </div>
-            {risk.isError && <p role="alert" className="m-0 text-xs text-[#ff8a8a]">{(risk.error as Error).message}</p>}
-            {!risk.data && !risk.isError && <p className="m-0 text-xs text-tm-muted">내 리스크 한도(VaR·집중도·손실 한도)에 걸리는지 미리 확인합니다.</p>}
+            {risk.error && <p role="alert" className="m-0 text-xs text-[#ff8a8a]">{risk.error.message}</p>}
+            {!risk.data && !risk.error && (
+              <p className="m-0 text-xs text-tm-muted">
+                {risk.idle ? "수량과 가격을 입력하면 내 리스크 한도(VaR·집중도·손실 한도)에 걸리는지 바로 보여 줍니다." : "점검 중..."}
+              </p>
+            )}
+            {risk.data && <span className="text-2xs text-tm-muted">미리보기 — 주문할 때 서버가 다시 판정합니다.</span>}
             {risk.data?.checks.map((c) => (
-              <div key={c.rule} className="flex justify-between gap-2 text-xs" title={c.detail}>
+              <div key={c.rule} className={cn("flex justify-between gap-2 text-xs", risk.pending && "opacity-50")} title={c.detail}>
                 <span className="flex items-center gap-1.5 text-tm-soft">
                   <Icon name={c.passed ? "check" : "alert"} size={14} strokeWidth={c.passed ? 2.4 : 2} className={c.passed ? "text-dracula-green" : "text-dracula-orange"} />
                   {RULE_LABEL[c.rule] ?? c.rule}
