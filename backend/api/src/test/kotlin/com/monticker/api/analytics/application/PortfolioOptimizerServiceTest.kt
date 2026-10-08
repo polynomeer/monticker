@@ -7,6 +7,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.assertj.core.api.Assertions.within
 import org.junit.jupiter.api.Test
 import org.springframework.jdbc.core.JdbcTemplate
@@ -23,11 +24,11 @@ class PortfolioOptimizerServiceTest {
     private val service = PortfolioOptimizerService(queryService, objectMapper, optimizationRepo)
 
     /** Synthesises a `minLen`-day candle series whose daily returns equal `dailyReturn` every day. */
-    private fun stubCandles(stockId: Long, minLen: Int, startPrice: Double, dailyReturn: Double) {
+    private fun stubCandles(stockId: Long, minLen: Int, startPrice: Double, dailyReturn: Double, startDate: LocalDate = LocalDate.of(2025, 1, 1)) {
         var price = startPrice
         val candles = (0 until minLen).map { i ->
             val c = DailyCandle(
-                date = LocalDate.of(2025, 1, 1).plusDays(i.toLong()),
+                date = startDate.plusDays(i.toLong()),
                 open = BigDecimal.valueOf(price), high = BigDecimal.valueOf(price),
                 low = BigDecimal.valueOf(price), close = BigDecimal.valueOf(price), volume = 1000L,
             )
@@ -39,9 +40,29 @@ class PortfolioOptimizerServiceTest {
         } returns candles
     }
 
+    private val period = AnalysisPeriod.resolve(null, null, null, today = LocalDate.of(2026, 10, 8))
+
+    /** 정규 잡음이 섞인 120일 시계열 — 종목마다 다른 seed라 공분산이 단위행렬이 아니다. */
+    private fun stubNoisyCandles(stockId: Long, seed: Long, drift: Double, vol: Double) {
+        val rnd = java.util.Random(seed)
+        var price = 100.0
+        val candles = (0 until 120).map { i ->
+            val c = DailyCandle(
+                date = LocalDate.of(2025, 1, 1).plusDays(i.toLong()),
+                open = BigDecimal.valueOf(price), high = BigDecimal.valueOf(price),
+                low = BigDecimal.valueOf(price), close = BigDecimal.valueOf(price), volume = 1000L,
+            )
+            price *= (1 + drift + vol * rnd.nextGaussian())
+            c
+        }
+        every {
+            jdbc.query(any<String>(), any<RowMapper<DailyCandle>>(), eq(stockId), any(), any())
+        } returns candles
+    }
+
     @Test
     fun `optimize returns an error when fewer than two stocks are provided`() {
-        val result = service.optimize(1L, listOf(100L), null)
+        val result = service.optimize(1L, listOf(100L), null, period)
 
         assertThat(result.error).isEqualTo("최소 2개 이상의 종목이 필요합니다")
     }
@@ -49,14 +70,14 @@ class PortfolioOptimizerServiceTest {
     @Test
     fun `optimize dedupes stock ids before checking the minimum`() {
         // V-M5 — a duplicated id must not count as two distinct stocks.
-        val result = service.optimize(1L, listOf(100L, 100L), null)
+        val result = service.optimize(1L, listOf(100L, 100L), null, period)
 
         assertThat(result.error).isEqualTo("최소 2개 이상의 종목이 필요합니다")
     }
 
     @Test
     fun `optimize rejects more than the maximum number of stocks`() {
-        val result = service.optimize(1L, (1L..21L).toList(), null)
+        val result = service.optimize(1L, (1L..21L).toList(), null, period)
 
         assertThat(result.error).isEqualTo("종목은 최대 20개까지 지정할 수 있습니다")
     }
@@ -66,9 +87,9 @@ class PortfolioOptimizerServiceTest {
         stubCandles(100L, minLen = 10, startPrice = 100.0, dailyReturn = 0.001)
         stubCandles(200L, minLen = 10, startPrice = 200.0, dailyReturn = 0.001)
 
-        val result = service.optimize(1L, listOf(100L, 200L), null)
+        val result = service.optimize(1L, listOf(100L, 200L), null, period)
 
-        assertThat(result.error).isEqualTo("데이터 부족: 최소 30일 데이터가 필요합니다")
+        assertThat(result.error).startsWith("데이터 부족").contains("9일").contains("최소 30일")
     }
 
     @Test
@@ -77,7 +98,7 @@ class PortfolioOptimizerServiceTest {
         stubCandles(200L, minLen = 40, startPrice = 200.0, dailyReturn = -0.001)
         every { optimizationRepo.save(any()) } answers { firstArg() }
 
-        val result = service.optimize(1L, listOf(100L, 200L), null)
+        val result = service.optimize(1L, listOf(100L, 200L), null, period)
 
         assertThat(result.error).isNull()
         assertThat(result.weights.values.sum()).isCloseTo(1.0, within(0.001))
@@ -91,7 +112,7 @@ class PortfolioOptimizerServiceTest {
         val slot = slot<com.monticker.api.analytics.domain.PortfolioOptimization>()
         every { optimizationRepo.save(capture(slot)) } answers { slot.captured }
 
-        service.optimize(1L, listOf(100L, 200L), null)
+        service.optimize(1L, listOf(100L, 200L), null, period)
 
         assertThat(slot.captured.userId).isEqualTo(1L)
         assertThat(slot.captured.universeJson).contains("100").contains("200")
@@ -105,45 +126,93 @@ class PortfolioOptimizerServiceTest {
         stubCandles(200L, minLen = 60, startPrice = 200.0, dailyReturn = 0.0005)
         every { optimizationRepo.save(any()) } answers { firstArg() }
 
-        val result = service.optimize(1L, listOf(100L, 200L), null)
+        val result = service.optimize(1L, listOf(100L, 200L), null, period)
 
         assertThat(result.suggestion).isNotBlank()
         assertThat(result.suggestion).contains("기대 연 수익률")
     }
 
     @Test
-    fun `getEfficientFrontier returns an empty list for fewer than two stocks`() {
-        assertThat(service.getEfficientFrontier(1L, listOf(100L))).isEmpty()
+    fun `getEfficientFrontier rejects fewer than two stocks`() {
+        assertThatThrownBy { service.getEfficientFrontier(1L, listOf(100L), period) }
+            .isInstanceOf(IllegalArgumentException::class.java).hasMessage("최소 2개 이상의 종목이 필요합니다")
     }
 
     @Test
-    fun `getEfficientFrontier returns an empty list for a deduped count below two`() {
-        assertThat(service.getEfficientFrontier(1L, listOf(100L, 100L))).isEmpty()
+    fun `getEfficientFrontier rejects a deduped count below two`() {
+        assertThatThrownBy { service.getEfficientFrontier(1L, listOf(100L, 100L), period) }
+            .isInstanceOf(IllegalArgumentException::class.java)
     }
 
     @Test
-    fun `getEfficientFrontier returns an empty list beyond the maximum stock count`() {
-        assertThat(service.getEfficientFrontier(1L, (1L..21L).toList())).isEmpty()
+    fun `getEfficientFrontier rejects more than the maximum stock count`() {
+        assertThatThrownBy { service.getEfficientFrontier(1L, (1L..21L).toList(), period) }
+            .isInstanceOf(IllegalArgumentException::class.java).hasMessage("종목은 최대 20개까지 지정할 수 있습니다")
     }
 
     @Test
-    fun `getEfficientFrontier returns an empty list when there is insufficient history`() {
+    fun `getEfficientFrontier rejects insufficient history with a clear message`() {
         stubCandles(100L, minLen = 5, startPrice = 100.0, dailyReturn = 0.001)
         stubCandles(200L, minLen = 5, startPrice = 200.0, dailyReturn = 0.001)
 
-        assertThat(service.getEfficientFrontier(1L, listOf(100L, 200L))).isEmpty()
+        assertThatThrownBy { service.getEfficientFrontier(1L, listOf(100L, 200L), period) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("데이터 부족").hasMessageContaining("4일")
     }
 
     @Test
-    fun `getEfficientFrontier returns 11 points spanning from min to max observed return`() {
-        stubCandles(100L, minLen = 40, startPrice = 100.0, dailyReturn = 0.003)
-        stubCandles(200L, minLen = 40, startPrice = 200.0, dailyReturn = -0.001)
+    fun `getEfficientFrontier only uses dates every stock traded on`() {
+        // 200은 100보다 20일 늦게 상장 — 겹치는 날은 40일(수익률 39개)뿐이다.
+        stubCandles(100L, minLen = 60, startPrice = 100.0, dailyReturn = 0.001)
+        stubCandles(200L, minLen = 40, startPrice = 200.0, dailyReturn = 0.002, startDate = LocalDate.of(2025, 1, 21))
         every { optimizationRepo.save(any()) } answers { firstArg() }
 
-        val frontier = service.getEfficientFrontier(1L, listOf(100L, 200L))
+        val analysis = service.getEfficientFrontier(1L, listOf(100L, 200L), period)
 
-        assertThat(frontier).hasSize(11)
-        assertThat(frontier.first().targetReturn).isLessThanOrEqualTo(frontier.last().targetReturn)
+        assertThat(analysis.period.observations).isEqualTo(39)
+        assertThat(analysis.period.firstDate).isEqualTo(LocalDate.of(2025, 1, 21))
+        assertThat(analysis.period.period).isEqualTo("1Y")
+    }
+
+    @Test
+    fun `getEfficientFrontier rejects a sample count outside the bounds`() {
+        assertThatThrownBy { service.getEfficientFrontier(1L, listOf(100L, 200L), period, sampleCount = 2001) }
+            .isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("표본 수")
+        assertThatThrownBy { service.getEfficientFrontier(1L, listOf(100L, 200L), period, sampleCount = 99) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+    }
+
+    @Test
+    fun `getEfficientFrontier returns 11 frontier points, the samples and a max-Sharpe point`() {
+        stubNoisyCandles(100L, seed = 1, drift = 0.002, vol = 0.02)
+        stubNoisyCandles(200L, seed = 2, drift = 0.0005, vol = 0.01)
+        stubNoisyCandles(300L, seed = 3, drift = 0.001, vol = 0.015)
+        every { optimizationRepo.save(any()) } answers { firstArg() }
+
+        val analysis = service.getEfficientFrontier(1L, listOf(100L, 200L, 300L), period, sampleCount = 500)
+
+        assertThat(analysis.frontier).hasSize(11)
+        assertThat(analysis.frontier.first().targetReturn).isLessThanOrEqualTo(analysis.frontier.last().targetReturn)
+        assertThat(analysis.samples).hasSize(500)
+        assertThat(analysis.riskFreeRate).isEqualTo(0.0)
+        val best = analysis.maxSharpe!!
+        assertThat(best.weights.values.sum()).isCloseTo(1.0, within(1e-9))
+        assertThat(best.weights.values).allMatch { it >= 0.0 }
+        val bestSampleSharpe = analysis.samples.mapNotNull { it.sharpe }.max()
+        assertThat(best.sharpe).isGreaterThanOrEqualTo(bestSampleSharpe)
+    }
+
+    @Test
+    fun `getEfficientFrontier is deterministic for the same input`() {
+        stubNoisyCandles(100L, seed = 1, drift = 0.002, vol = 0.02)
+        stubNoisyCandles(200L, seed = 2, drift = 0.0005, vol = 0.01)
+        every { optimizationRepo.save(any()) } answers { firstArg() }
+
+        val a = service.getEfficientFrontier(1L, listOf(100L, 200L), period, sampleCount = 200)
+        val b = service.getEfficientFrontier(1L, listOf(100L, 200L), period, sampleCount = 200)
+
+        assertThat(a.samples).isEqualTo(b.samples)
+        assertThat(a.maxSharpe).isEqualTo(b.maxSharpe)
     }
 
     @Test
@@ -153,10 +222,16 @@ class PortfolioOptimizerServiceTest {
         val slot = slot<com.monticker.api.analytics.domain.PortfolioOptimization>()
         every { optimizationRepo.save(capture(slot)) } answers { slot.captured }
 
-        service.getEfficientFrontier(1L, listOf(100L, 200L))
+        service.getEfficientFrontier(1L, listOf(100L, 200L), period)
 
         assertThat(slot.captured.frontierJson).isNotNull()
         assertThat(slot.captured.targetReturn).isNull()
+    }
+
+    @Test
+    fun `risk-free rate outside the configured bounds fails fast`() {
+        assertThatThrownBy { PortfolioOptimizerService(queryService, objectMapper, optimizationRepo, riskFreeRate = 0.5) }
+            .isInstanceOf(IllegalArgumentException::class.java)
     }
 
     // ── Pure math helpers ───────────────────────────────────────────────────────
