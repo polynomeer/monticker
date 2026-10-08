@@ -340,4 +340,49 @@ class OrderSagaOrchestratorTest {
         verify(exactly = 0) { fillRepo.save(any()) }
         verify { orderBookService.submit(any()) }
     }
+
+    // ADR-096 — 예약 잠금 시각은 잠금이 성공한 뒤, 주문 행과 함께 저장된다(영수증 "예약금 잠금" 단계)
+    @Test
+    fun `a resting BUY LIMIT records reservedAt after the cash reservation succeeds`() {
+        stubStockExistsAndPrice()
+        stubAccountCash()
+        val savedOrders = mutableListOf<com.monticker.api.matching.domain.Order>()
+        every { orderRepo.save(capture(savedOrders)) } answers { savedOrders.last() }
+        val before = Instant.now()
+
+        orchestrator.execute(userId, SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "LIMIT", quantity = 3, limitPrice = BigDecimal("900"), origin = OrderOrigin.MANUAL))
+
+        val o = savedOrders.first()
+        assertThat(o.reservedAt).isNotNull().isBetween(before, Instant.now())
+        assertThat(o.reservedAt).isAfterOrEqualTo(o.submittedAt)
+    }
+
+    @Test
+    fun `a SELL LIMIT records reservedAt once the sellable quantity check passes`() {
+        stubStockExistsAndPrice()
+        every {
+            jdbc.query(match<String> { it.contains("FROM portfolio_positions") }, any<org.springframework.jdbc.core.RowMapper<Int>>(), userId, stockId)
+        } returns listOf(10)
+        every {
+            jdbc.query(OrderSagaOrchestrator.PENDING_SELL_QTY_SQL, any<org.springframework.jdbc.core.RowMapper<Int>>(), userId, stockId)
+        } returns listOf(0)
+        val savedOrders = mutableListOf<com.monticker.api.matching.domain.Order>()
+        every { orderRepo.save(capture(savedOrders)) } answers { savedOrders.last() }
+
+        orchestrator.execute(userId, SubmitOrderRequest(stockId = stockId, side = "SELL", orderType = "LIMIT", quantity = 3, limitPrice = BigDecimal("1200"), origin = OrderOrigin.MANUAL))
+
+        assertThat(savedOrders.first().reservedAt).isNotNull()
+    }
+
+    @Test
+    fun `a BUY with insufficient cash never creates an order row, so no reservedAt is left behind`() {
+        stubStockExistsAndPrice()
+        stubAccountCash(sufficient = false)
+
+        org.assertj.core.api.Assertions.assertThatThrownBy {
+            orchestrator.execute(userId, SubmitOrderRequest(stockId = stockId, side = "BUY", orderType = "LIMIT", quantity = 3, limitPrice = BigDecimal("900"), origin = OrderOrigin.MANUAL))
+        }.isInstanceOf(IllegalArgumentException::class.java)
+
+        verify(exactly = 0) { orderRepo.save(any()) }
+    }
 }

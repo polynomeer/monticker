@@ -85,6 +85,10 @@ class Order(
     @Column(name = "submitted_at")
     val submittedAt: Instant? = null,
 
+    /** ADR-096 — 사가가 현금(BUY)·매도 수량(SELL)을 잠근 시각. 주문 INSERT와 같은 트랜잭션. V93 이전 주문은 null. */
+    @Column(name = "reserved_at")
+    val reservedAt: Instant? = null,
+
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant = Instant.now(),
 
