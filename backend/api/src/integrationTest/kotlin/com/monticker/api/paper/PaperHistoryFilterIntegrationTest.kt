@@ -100,6 +100,6 @@ class PaperHistoryFilterIntegrationTest : PostgresIntegrationTest() {
             }
         })!!.joinToString("\n")
         println("paper history filtered plan:\n$plan")
-        assertThat(plan).containsPattern("idx_paper_trades_(stock|user|user_traded)")
+        assertThat(plan).contains("idx_paper_trades_user_stock_traded") // V98
     }
 }
