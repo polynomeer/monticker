@@ -192,7 +192,7 @@
 | /subscription | FAQ 답변(플랜별 기능 범위·환불) | 사실에 맞게 고쳤고, 환불은 "[법률 검토 후 확정]" | 플랜별 기능 게이팅 정책, 환불 정책 | P1 | 보류 — 플랜별 기능 제한 정책(사업 결정)·환불 정책(법무) 필요 |
 | /settings/notifications | 전체 알림, 거래량 급증, 퀀트 시그널, 체결·정산, 전략 마켓 소식 | 비활성 토글 | `NotificationPreferenceRequest` 필드 추가와 발송 경로 확인(리스크·결과 확인 중은 0-5) | P1 | ✅ [ADR-082](decisions/082-notification-preferences-enforced-at-delivery.md) |
 | /login | 로그인 상태 유지 | 비활성 | refresh 토큰 수명 2단계 | P2 | |
-| /onboarding | 관심 분야·사용 방식 저장 | 선택만 되고 저장 안 함 | `PUT /api/users/me/preferences`, 홈·알림 우선순위 반영 | P2 | ✅ 저장·조회(V86, 화이트리스트) [ADR-089](decisions/089-paper-initial-capital-and-user-preferences.md). 홈·알림 우선순위 반영은 후속 |
+| /onboarding | 관심 분야·사용 방식 저장 | 선택만 되고 저장 안 함 | `PUT /api/users/me/preferences`, 홈·알림 우선순위 반영 | P2 | ✅ 저장·조회(V86, 화이트리스트) [ADR-089](decisions/089-paper-initial-capital-and-user-preferences.md). ✅ 홈·알림 반영 — 홈 섹터 히트맵·이벤트 피드는 같은 항목 안에서 관심 분야 먼저("관심 분야 순" 스위치, V95), 알림 이력은 "관심 분야" 필터 칩만(발송·방해 금지 불변), 편집은 `/settings/interests` [ADR-099](decisions/099-interest-sectors-as-display-ordering-signal.md) |
 | /onboarding | 시작 자금 3,000만원·1억원 | 비활성(1,000만원 고정) | 모의 계좌 생성 시 초기 자금 파라미터 | P2 | ✅ `POST /api/paper/account` 처음 생성 때만, 화이트리스트 3종, 대사·초기화가 계좌별 시작 자금 사용 [ADR-089](decisions/089-paper-initial-capital-and-user-preferences.md) |
 | /onboarding | 3단계 관심종목 고르기 | 검색 화면 링크 | 인기 종목 추천 + 일괄 추가(기존 watchlist API) | P2 | ✅ 거래대금 상위 12종목(라벨로 밝힘) + 다중 선택 담기. 일괄 API가 없어 단건 순차·부분 실패 보고·이미 담긴 종목 생략 — [watchlistBulk.ts](../apps/web/src/lib/watchlistBulk.ts) |
 | /subscription | 연간 결제, 카드 변경 | 연간 비활성. 카드는 등록/해지만 | 연간 요금제, 빌링키 교체 API | P2 | |

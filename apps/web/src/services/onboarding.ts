@@ -1,15 +1,17 @@
 import { authFetch } from "./api";
 
-/** 서버 enum(UserPreferenceService.InterestSector/UsageStyle, V86 CHECK)과 같은 값. 라벨은 화면에서만 쓴다. */
-export type InterestSector =
-  | "SEMICONDUCTOR" | "SECONDARY_BATTERY" | "INTERNET_PLATFORM" | "BIO" | "FINANCE"
-  | "AUTOMOTIVE" | "DIVIDEND" | "ETF" | "SHIPBUILDING_DEFENSE";
+import type { InterestSector } from "@/lib/interestSectors";
+
+/** 서버 enum(UserPreferenceService.InterestSector/UsageStyle, V86 CHECK)과 같은 값. 라벨·업종 매핑은 lib/interestSectors(ADR-099). */
+export type { InterestSector };
 export type UsageStyle = "OBSERVE" | "EVENT_TRADING" | "QUANT";
 
 export interface UserPreferences {
   interestSectors: InterestSector[];
   usageStyle: UsageStyle | null;
   updatedAt: string | null;
+  /** ADR-099 — 홈·알림의 "관심 분야 순" 스위치(기본 true). 관심 분야가 없으면 화면이 무시한다. 이전 서버 응답엔 없을 수 있다. */
+  interestOrdering?: boolean;
 }
 
 /** ADR-089 — 서버 화이트리스트(PaperInitialCapital)와 같은 값. */
@@ -39,6 +41,17 @@ export async function savePreferences(interestSectors: InterestSector[], usageSt
     body: JSON.stringify({ interestSectors, usageStyle }),
   });
   if (!r.ok) throw new Error(await errorMessage(r, "관심 분야를 저장하지 못했습니다."));
+  return r.json();
+}
+
+/** ADR-099 — "관심 분야 순" 스위치만 바꾼다(관심 분야·사용 방식은 그대로). */
+export async function saveInterestOrdering(interestOrdering: boolean): Promise<UserPreferences> {
+  const r = await authFetch("/api/users/me/preferences", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ interestOrdering }),
+  });
+  if (!r.ok) throw new Error(await errorMessage(r, "설정을 저장하지 못했습니다."));
   return r.json();
 }
 

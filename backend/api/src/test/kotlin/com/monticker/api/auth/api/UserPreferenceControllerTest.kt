@@ -15,6 +15,7 @@ import org.springframework.core.MethodParameter
 import org.springframework.http.MediaType
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
@@ -97,5 +98,35 @@ class UserPreferenceControllerTest {
         assertThat(sectors).containsExactly(InterestSector.FINANCE, InterestSector.BIO)
         assertThat(style).isNull()
         assertThatThrownBy { UserPreferenceService.parse(List(21) { "BIO" }, null) }.isInstanceOf(IllegalArgumentException::class.java)
+    }
+
+    private fun patchJson(body: String) = mvc.perform(patch("/api/users/me/preferences").contentType(MediaType.APPLICATION_JSON).content(body))
+
+    @Test
+    fun `GET exposes the interest ordering switch, default true`() {
+        every { service.get(42L) } returns UserPreferences()
+
+        mvc.perform(get("/api/users/me/preferences"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.interestOrdering").value(true))
+    }
+
+    @Test
+    fun `PATCH toggles only the interest ordering switch of the token user`() {
+        every { service.setInterestOrdering(42L, false) } returns UserPreferences(listOf(InterestSector.BIO), null, null, false)
+
+        patchJson("""{"userId":1,"interestOrdering":false}""")
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.interestOrdering").value(false))
+            .andExpect(jsonPath("$.interestSectors[0]").value("BIO"))
+
+        verify(exactly = 1) { service.setInterestOrdering(42L, false) }
+        verify(exactly = 0) { service.save(any(), any(), any()) }
+    }
+
+    @Test
+    fun `PATCH without the switch is 400 and nothing changes`() {
+        listOf("""{}""", """{"interestOrdering":null}""").forEach { patchJson(it).andExpect(status().isBadRequest) }
+        verify(exactly = 0) { service.setInterestOrdering(any(), any()) }
     }
 }

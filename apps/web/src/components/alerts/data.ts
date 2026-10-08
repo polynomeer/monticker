@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
+import { isInterestSector, type InterestSector } from "@/lib/interestSectors";
 
 export interface AlertStats {
   totalFired: number; totalSent: number; totalFailed: number;
@@ -148,6 +149,19 @@ export function matchesFilter(a: Pick<AlertHistory, "ruleType" | "readAt">, filt
   if (filter === "all") return true;
   if (filter === "unread") return !a.readAt;
   return ruleMeta(a.ruleType).category === filter;
+}
+
+/**
+ * ADR-099 — 알림 이력의 "관심 분야" 칩. 종목의 업종(시세 응답)이 고른 관심 분야에 해당하는 알림만 남긴다.
+ * 사용자가 칩을 고를 때만 쓰는 화면 필터다 — 기본(전체)은 그대로이고, 발송·읽음·방해 금지 시간과는 무관하다.
+ * 종목이 없는 알림(관심종목 전체·시그널)이나 업종을 모르는 종목은 해당하지 않는다.
+ */
+export function matchesInterest(
+  a: Pick<AlertHistory, "stockId">,
+  sectorOf: (stockId: number) => string | null | undefined,
+  interests: readonly InterestSector[],
+) {
+  return a.stockId != null && isInterestSector(sectorOf(a.stockId), interests);
 }
 
 /** 규칙 조건을 사람이 읽는 문장으로 */
