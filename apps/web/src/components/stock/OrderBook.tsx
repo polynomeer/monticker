@@ -30,11 +30,10 @@ export function mergeLevels(levels: OrderBookLevel[]): OrderBookLevel[] {
 }
 
 /**
- * 시안의 호가 패널 본문 — 매도 호가(위, 하락색) · 현재가 줄 · 매수 호가(아래, 상승색) · 잔량 합계 막대.
- * 1초 폴링. 호가 데이터만 바뀌므로 이 컴포넌트 안에서만 다시 그려진다(부모는 리렌더되지 않는다).
+ * 호가 조회(1초 폴링). 호가 패널과 "호가 깊이" 탭이 같은 쿼리 키를 써서 요청은 하나만 나간다.
  */
-function OrderBook({ stockId, prevClose }: Props) {
-  const { data: d, isLoading } = useQuery<OrderBookData | null>({
+export function useOrderBook(stockId: number, enabled = true) {
+  return useQuery<OrderBookData | null>({
     queryKey: stockKeys.orderbook(stockId),
     queryFn: async () => {
       const res = await fetch(`/api/stocks/${stockId}/orderbook`);
@@ -44,7 +43,16 @@ function OrderBook({ stockId, prevClose }: Props) {
     },
     refetchInterval: 1000,
     staleTime: 1000,
+    enabled,
   });
+}
+
+/**
+ * 시안의 호가 패널 본문 — 매도 호가(위, 하락색) · 현재가 줄 · 매수 호가(아래, 상승색) · 잔량 합계 막대.
+ * 1초 폴링. 호가 데이터만 바뀌므로 이 컴포넌트 안에서만 다시 그려진다(부모는 리렌더되지 않는다).
+ */
+function OrderBook({ stockId, prevClose }: Props) {
+  const { data: d, isLoading } = useOrderBook(stockId);
 
   if (isLoading) {
     return <div className="mx-2.5 h-72 animate-pulse rounded-lg bg-tm-inner" aria-busy="true" aria-label="호가 불러오는 중" />;

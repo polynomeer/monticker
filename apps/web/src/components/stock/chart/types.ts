@@ -113,6 +113,35 @@ export interface ChartAdapterProps {
   reduceMotion?: boolean;
 }
 
+// ── 호가 깊이(누적) 차트 ─────────────────────────────────────
+/** 호가 한 단계 — 가격과 잔량 */
+export interface DepthLevel {
+  price: number;
+  quantity: number;
+}
+
+/** 누적 깊이 계열. 두 계열 모두 [가격, 누적잔량]을 가격 오름차순으로 담는다 */
+export interface DepthSeries {
+  bids: [number, number][];
+  asks: [number, number][];
+  bidTotal: number;
+  askTotal: number;
+  bestBid: number | null;
+  bestAsk: number | null;
+}
+
+export interface DepthAdapterProps {
+  depth: DepthSeries;
+  height?: number;
+  theme: ChartTheme;
+  /** 가격 축 소수 자릿수(국내 0, 해외 2) */
+  priceDigits?: number;
+}
+
+export interface DepthAdapterComponent {
+  (props: DepthAdapterProps): React.ReactElement | null;
+}
+
 // ── 어댑터 구현체가 준수해야 할 인터페이스 ───────────────────
 export interface ChartAdapterComponent {
   (props: ChartAdapterProps): React.ReactElement | null;

@@ -10,6 +10,7 @@ import EventTimeline from "./EventTimeline";
 import AlertPanel from "./AlertPanel";
 import WatchlistAddButton from "./WatchlistAddButton";
 import OrderBook from "./OrderBook";
+import DepthPanel from "./DepthPanel";
 import OrderForm from "./OrderForm";
 import PositionsPanel from "./PositionsPanel";
 import PaperConditionalPanel from "./PaperConditionalPanel";
@@ -189,13 +190,12 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
             active={eventsTab}
             onTabChange={(k) => setEventsTab(k as EventsTab)}
             actions={["expand"]}
-            preview={eventsTab === "depth"}
             bodyClassName="px-3 pb-2.5 pt-1"
           >
             {eventsTab === "events" ? (
               <EventTimeline stockId={stockId} bare highlightEventId={highlightEventId} onViewNews={() => setChartTab("news")} />
             ) : (
-              <p className="m-0 py-8 text-center text-13 text-tm-muted">누적 호가 깊이 차트는 준비 중입니다. 호가 패널에서 단계별 잔량을 볼 수 있어요.</p>
+              <DepthPanel stockId={stockId} domestic={market === "KOSPI" || market === "KOSDAQ"} />
             )}
           </Panel>
         </PanelCol>
