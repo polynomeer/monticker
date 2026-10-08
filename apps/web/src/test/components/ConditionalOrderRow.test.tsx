@@ -9,7 +9,7 @@ import { ConditionalStatusCell } from "@/components/brokerage/ConditionalOrderRo
 
 function order(over: Partial<ConditionalOrderResponse>): ConditionalOrderResponse {
   return {
-    id: 1, symbol: "005930", side: "SELL", triggerType: "STOP_LOSS", triggerPrice: 70000, orderType: "MARKET",
+    id: 1, stockId: 9, symbol: "005930", side: "SELL", triggerType: "STOP_LOSS", triggerPrice: 70000, orderType: "MARKET",
     limitPrice: null, quantity: 10, ocoGroupId: null, status: "ACTIVE", failReason: null, executedOrderId: null,
     createdAt: "2026-10-04T01:00:00Z", triggeredAt: null, expiresAt: null, priceFeed: "LIVE", ...over,
   };

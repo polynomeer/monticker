@@ -22,6 +22,9 @@ import {
   getBrokerageOrders,
   getBrokerageSettlements,
   getConditionalOrders,
+  getConditionalOrderQuotes,
+  getConditionalOrderStats,
+  getConditionalTriggers,
   getRebalanceTarget,
   previewRebalance,
   saveRebalanceTarget,
@@ -36,6 +39,8 @@ export function useBrokerageAccount() {
   return useQuery({
     queryKey: ["brokerage", "account"],
     queryFn: getBrokerageAccount,
+    // apiHealth(마지막 증권사 호출 지연·오류)가 바뀐다. DB 조회만 하는 엔드포인트라 증권사를 부르지 않는다.
+    refetchInterval: 30_000,
   });
 }
 
@@ -151,6 +156,36 @@ export function useConditionalOrders(page: number, enabled: boolean) {
     enabled,
     // 발동 대기 중인 주문 상태가 실시간으로 바뀔 수 있으므로 짧은 주기로 갱신한다.
     refetchInterval: enabled ? 5_000 : false,
+  });
+}
+
+/** 상태별 건수·이번 달 발동 — 목록과 같은 키 아래에 둬서 등록·해지 후 함께 무효화된다. */
+export function useConditionalOrderStats(enabled: boolean) {
+  return useQuery({
+    queryKey: ["brokerage", "conditional-orders", "stats"],
+    queryFn: getConditionalOrderStats,
+    enabled,
+    refetchInterval: enabled ? 15_000 : false,
+  });
+}
+
+export function useConditionalTriggers(page: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ["brokerage", "conditional-orders", "triggers", page],
+    queryFn: () => getConditionalTriggers(page),
+    enabled,
+    refetchInterval: enabled ? 15_000 : false,
+  });
+}
+
+/** 감시 중인 종목의 최근가 — 종목마다 따로 부르던 것을 한 요청으로. */
+export function useConditionalOrderQuotes(enabled: boolean) {
+  return useQuery({
+    queryKey: ["brokerage", "conditional-orders", "quotes"],
+    queryFn: getConditionalOrderQuotes,
+    enabled,
+    staleTime: 10_000,
+    refetchInterval: enabled ? 10_000 : false,
   });
 }
 

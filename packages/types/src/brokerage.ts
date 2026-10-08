@@ -30,6 +30,25 @@ export interface BrokerageAccountResponse {
   isActive: boolean;
   connectedAt: string;
   tokenValid: boolean;
+  /** 이 서버가 관측한 마지막 증권사 호출 상태. 관측이 없으면 null/생략. 오류는 고정 코드만 온다. */
+  apiHealth?: BrokerageApiHealth | null;
+}
+
+export type BrokerCallOperation =
+  | "SUBMIT_ORDER" | "CANCEL_ORDER" | "GET_ORDER_STATUS" | "GET_SETTLEMENTS" | "FIND_ORDERS" | "GET_BALANCE";
+
+export type BrokerErrorCode =
+  | "TIMEOUT" | "NETWORK" | "CIRCUIT_OPEN" | "BROKER_UNAVAILABLE" | "AUTH_FAILED" | "RATE_LIMITED"
+  | "BROKER_4XX" | "BROKER_5XX" | "SUBMIT_INDETERMINATE" | "ORDER_REJECTED" | "LOOKUP_FAILED" | "UNKNOWN";
+
+export interface BrokerageApiHealth {
+  lastLatencyMs: number;
+  lastCallAt: string;
+  lastOperation: BrokerCallOperation;
+  lastSuccessAt: string | null;
+  lastErrorCode: BrokerErrorCode | null;
+  lastErrorAt: string | null;
+  lastErrorOperation: BrokerCallOperation | null;
 }
 
 export interface BrokerageHolding {
@@ -111,6 +130,8 @@ export interface CreateConditionalOrderRequest {
   side: BrokerageOrderSide;
   quantity: number;
   leg: ConditionalOrderLegRequest;
+  /** 유효 기간(일) 1~90. 생략하면 90. KST 날짜로 오늘+N일까지 유효. */
+  validDays?: number;
 }
 
 export interface CreateOcoOrderRequest {
@@ -118,10 +139,55 @@ export interface CreateOcoOrderRequest {
   side: BrokerageOrderSide;
   quantity: number;
   legs: ConditionalOrderLegRequest[];
+  validDays?: number;
+}
+
+export interface ConditionalOrderStatsResponse {
+  byStatus: Record<ConditionalOrderStatus, number>;
+  total: number;
+  firedThisMonth: number;
+  monthStart: string;
+}
+
+export interface ConditionalTriggerEvent {
+  conditionalOrderId: number;
+  symbol: string;
+  side: BrokerageOrderSide;
+  triggerType: ConditionalTriggerType;
+  triggerPrice: number;
+  orderType: BrokerageOrderType;
+  limitPrice: number | null;
+  quantity: number;
+  ocoGroupId: string | null;
+  triggeredAt: string;
+  status: ConditionalOrderStatus;
+  failReason: string | null;
+  executedOrderId: number | null;
+  orderStatus: BrokerageOrderStatus | null;
+  filledQty: number | null;
+  avgFillPrice: number | null;
+}
+
+export interface ConditionalTriggerPage {
+  content: ConditionalTriggerEvent[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+}
+
+export interface ConditionalOrderQuote {
+  stockId: number;
+  symbol: string;
+  name: string;
+  /** 최근 1분봉 종가. 없으면 null */
+  price: number | null;
+  priceAt: string | null;
 }
 
 export interface ConditionalOrderResponse {
   id: number;
+  stockId: number;
   symbol: string;
   side: BrokerageOrderSide;
   triggerType: ConditionalTriggerType;
@@ -169,11 +235,33 @@ export interface RebalanceLegResponse {
   currentWeight: number;
   diffPct: number;
   quantity: number;
+  /** 수량을 계산한 추정 가격. 실행은 시장가 — 이 가격으로 주문하지 않는다. */
+  estimatedPrice: number;
+  priceSource: "BROKER_BALANCE" | "LAST_CANDLE";
+  estimatedAmount: number;
+  estimatedFee: number;
+  estimatedTax: number;
+}
+
+export interface RebalanceCostModel {
+  feeRate: number;
+  sellTaxRate: number;
+  basis: "ESTIMATE";
+  note: string;
 }
 
 export interface RebalancePreviewResponse {
   totalValue: number;
   legs: RebalanceLegResponse[];
+  estimatedFee: number;
+  estimatedTax: number;
+  /** 수수료 + 매도 거래세(추정) */
+  estimatedCost: number;
+  estimatedBuyAmount: number;
+  estimatedSellAmount: number;
+  /** 매수 중 지금 보유하지 않은 종목 */
+  estimatedNewBuyAmount: number;
+  costModel: RebalanceCostModel;
 }
 
 export interface RebalanceExecutionLegResponse {

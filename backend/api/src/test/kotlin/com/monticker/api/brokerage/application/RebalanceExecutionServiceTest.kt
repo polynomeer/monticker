@@ -81,6 +81,55 @@ class RebalanceExecutionServiceTest {
     }
 
     @Test
+    fun `preview는 leg별 추정 가격·금액과 정산과 같은 식의 예상 거래비용을 준다`() {
+        // 보유 A(잔고 현재가) 매도 + 미보유 B(최근 1분봉) 신규 매수
+        val target = makeTarget(mapOf("000660" to BigDecimal("0.50")))
+        every { targetService.get(1L) } returns target
+        val holdingA = BrokerageHolding(symbol = "005930", quantity = 20, avgPrice = BigDecimal("60000"), currentPrice = BigDecimal("50000"))
+        every { brokerageService.getBalance(1L) } returns makeBalance(BigDecimal("1000000"), listOf(holdingA))
+        every { jdbc.queryForObject(match<String> { it.contains("candles_1m") }, eq(BigDecimal::class.java), eq("000660")) } returns BigDecimal("100000")
+        stubStockId("005930", 1L)
+        stubStockId("000660", 2L)
+
+        val preview = service.preview(1L)
+
+        val sell = preview.legs.single { it.side == OrderSide.SELL }
+        assertThat(sell.price).isEqualByComparingTo("50000")
+        assertThat(sell.priceSource).isEqualTo(LegPriceSource.BROKER_BALANCE)
+        assertThat(sell.quantity).isEqualTo(20)
+        assertThat(sell.estimatedAmount).isEqualByComparingTo("1000000")
+        assertThat(sell.estimatedFee).isEqualByComparingTo("150")      // 0.015%
+        assertThat(sell.estimatedTax).isEqualByComparingTo("1800")     // 0.18%
+
+        val buy = preview.legs.single { it.side == OrderSide.BUY }
+        assertThat(buy.priceSource).isEqualTo(LegPriceSource.LAST_CANDLE)
+        assertThat(buy.quantity).isEqualTo(5)                          // 50% of 1,000,000 / 100,000
+        assertThat(buy.estimatedAmount).isEqualByComparingTo("500000")
+        assertThat(buy.estimatedFee).isEqualByComparingTo("75")
+        assertThat(buy.estimatedTax).isEqualByComparingTo("0")
+
+        assertThat(preview.estimatedCost).isEqualByComparingTo("2025")
+        assertThat(preview.estimatedBuyAmount).isEqualByComparingTo("500000")
+        assertThat(preview.estimatedNewBuyAmount).isEqualByComparingTo("500000")
+        assertThat(preview.estimatedSellAmount).isEqualByComparingTo("1000000")
+    }
+
+    @Test
+    fun `preview는 주문·실행 기록을 만들지 않는다`() {
+        val target = makeTarget(mapOf("005930" to BigDecimal("0.50")))
+        every { targetService.get(1L) } returns target
+        every { brokerageService.getBalance(1L) } returns makeBalance(BigDecimal("1000000"), emptyList())
+        every { jdbc.queryForObject(match<String> { it.contains("candles_1m") }, eq(BigDecimal::class.java), eq("005930")) } returns BigDecimal("50000")
+        stubStockId("005930", 2L)
+
+        service.preview(1L)
+
+        verify(exactly = 0) { brokerageService.submitOrder(any(), any(), any()) }
+        verify(exactly = 0) { executionRepo.save(any()) }
+        verify(exactly = 0) { legRepo.save(any()) }
+    }
+
+    @Test
     fun `수량이 Int 범위를 넘으면 그 leg는 버려진다`() {
         // V-L5 — BigDecimal.toInt()는 예외 없이 32비트로 wrap한다. diffPct*totalValue/price가
         // Int.MAX_VALUE(약 21억)를 넘으면 엉뚱한 수량으로 이어질 수 있어 leg 자체를 버려야 한다.

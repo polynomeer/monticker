@@ -19,7 +19,8 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.time.Instant
-import java.time.temporal.ChronoUnit
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.UUID
 
 data class ConditionalOrderLeg(
@@ -44,8 +45,11 @@ class ConditionalOrderService(
     private val log = LoggerFactory.getLogger(javaClass)
 
     @Transactional
-    fun create(userId: Long, symbol: String, side: OrderSide, quantity: Int, leg: ConditionalOrderLeg): ConditionalOrder {
+    fun create(
+        userId: Long, symbol: String, side: OrderSide, quantity: Int, leg: ConditionalOrderLeg, validDays: Int? = null,
+    ): ConditionalOrder {
         require(quantity > 0) { "수량은 0보다 커야 합니다." }
+        val expiresAt = expiryFor(validDays)
         val account = activeAccount(userId)
         val stockId = resolveStockId(symbol) ?: throw IllegalArgumentException("존재하지 않는 종목입니다: $symbol")
         requireRealtimeFeed(account, stockId, symbol)
@@ -56,7 +60,7 @@ class ConditionalOrderService(
                 userId = userId, accountId = account.id, stockId = stockId, symbol = symbol,
                 side = side, triggerType = leg.triggerType, triggerPrice = leg.triggerPrice,
                 orderType = leg.orderType, limitPrice = leg.limitPrice, quantity = quantity,
-                expiresAt = defaultExpiry(),
+                expiresAt = expiresAt,
             )
         )
         log.info("조건부 주문 등록: userId={} symbol={} triggerType={} triggerPrice={}", userId, symbol, leg.triggerType, leg.triggerPrice)
@@ -65,16 +69,18 @@ class ConditionalOrderService(
 
     /** ADR-032 — OCO: 두 조건 중 하나가 발동/실패하면 나머지를 자동 취소한다(ConditionalOrderEvaluator). */
     @Transactional
-    fun createOco(userId: Long, symbol: String, side: OrderSide, quantity: Int, legs: List<ConditionalOrderLeg>): List<ConditionalOrder> {
+    fun createOco(
+        userId: Long, symbol: String, side: OrderSide, quantity: Int, legs: List<ConditionalOrderLeg>, validDays: Int? = null,
+    ): List<ConditionalOrder> {
         require(legs.size == 2) { "OCO는 정확히 2개의 조건이 필요합니다." }
         require(quantity > 0) { "수량은 0보다 커야 합니다." }
+        val expiresAt = expiryFor(validDays)
         val account = activeAccount(userId)
         val stockId = resolveStockId(symbol) ?: throw IllegalArgumentException("존재하지 않는 종목입니다: $symbol")
         requireRealtimeFeed(account, stockId, symbol)
         legs.forEach { validateLeg(it, stockId) }
 
         val groupId = UUID.randomUUID()
-        val expiresAt = defaultExpiry()
         val orders = conditionalOrderRepo.saveAll(
             legs.map { leg ->
                 ConditionalOrder(
@@ -148,13 +154,27 @@ class ConditionalOrderService(
             jdbc.queryForObject("SELECT id FROM stocks WHERE symbol = ?", Long::class.java, symbol)
         }.getOrNull()
 
-    // V-L2 — expiresAt/EXPIRED가 스키마엔 있지만 아무도 채우지 않아 조건부 주문이 영원히
-    // ACTIVE로 남았다(등록 후 잊혀진 조건이 몇 달 뒤 낡은 가격 가정으로 실거래를 낼 수 있는
-    // 위험 — 만료 스케줄러는 ConditionalOrderExpiryScheduler). 90일은 실제 증권사 스탑주문의
-    // 통상적인 GTC 상한(예: 국내 HTS 스탑/지정가 주문 최대 유효기간)에 맞춘 기본값이다.
-    private fun defaultExpiry(): Instant = Instant.now().plus(DEFAULT_EXPIRY_DAYS, ChronoUnit.DAYS)
+    /**
+     * 유효 기간 → 만료 시각. **어떤 조회·저장보다 먼저** 부른다(범위 밖이면 계좌 조회도 하지 않고 400).
+     *
+     * V-L2 — expiresAt/EXPIRED가 스키마엔 있지만 아무도 채우지 않아 조건부 주문이 영원히 ACTIVE로 남았다(등록 후 잊혀진 조건이
+     * 몇 달 뒤 낡은 가격 가정으로 실거래를 낼 수 있는 위험 — 만료 스케줄러는 ConditionalOrderExpiryScheduler). 90일은 실제 증권사
+     * 스탑주문의 통상적인 GTC 상한에 맞춘 상한이자 기본값이다.
+     *
+     * N일 = **KST 날짜로 오늘+N일까지 유효**, 즉 그 다음 날 00:00 KST에 만료. 화면은 "MM/DD까지"를 KST 날짜로 보여 준다.
+     * 이전(고정 90일)은 `now + 90×24h`였다 — 같은 90일이지만 만료가 등록 시각이 아니라 날짜 경계에 맞춰져 최대 하루 늦다.
+     * 이미 저장된 행의 expires_at은 건드리지 않는다.
+     */
+    internal fun expiryFor(validDays: Int?, now: Instant = Instant.now()): Instant {
+        val days = validDays ?: DEFAULT_VALID_DAYS
+        require(days in MIN_VALID_DAYS..MAX_VALID_DAYS) { "유효 기간은 ${MIN_VALID_DAYS}일 이상 ${MAX_VALID_DAYS}일 이하여야 합니다." }
+        return LocalDate.ofInstant(now, KST).plusDays(days.toLong() + 1).atStartOfDay(KST).toInstant()
+    }
 
     companion object {
-        private const val DEFAULT_EXPIRY_DAYS = 90L
+        const val MIN_VALID_DAYS = 1
+        const val MAX_VALID_DAYS = 90
+        const val DEFAULT_VALID_DAYS = 90
+        private val KST: ZoneId = ZoneId.of("Asia/Seoul")
     }
 }

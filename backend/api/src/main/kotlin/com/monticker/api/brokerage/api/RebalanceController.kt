@@ -6,6 +6,7 @@ import com.monticker.api.brokerage.application.RebalanceExecutionService
 import com.monticker.api.brokerage.application.RebalanceLegPlan
 import com.monticker.api.brokerage.application.RebalancePreview
 import com.monticker.api.brokerage.application.RebalanceTargetService
+import com.monticker.api.brokerage.domain.BrokerageFeeModel
 import com.monticker.api.brokerage.domain.RebalanceExecution
 import com.monticker.api.brokerage.domain.RebalanceExecutionLeg
 import com.monticker.api.brokerage.domain.RebalanceTarget
@@ -47,11 +48,35 @@ data class RebalanceLegResponse(
     val currentWeight: BigDecimal,
     val diffPct: BigDecimal,
     val quantity: Int,
+    /** 수량을 계산한 가격(추정). 실행은 시장가 주문이다 — 이 가격으로 주문하지 않는다. */
+    val estimatedPrice: BigDecimal,
+    /** BROKER_BALANCE(증권사 잔고의 현재가) | LAST_CANDLE(최근 1분봉 종가) */
+    val priceSource: String,
+    val estimatedAmount: BigDecimal,
+    val estimatedFee: BigDecimal,
+    val estimatedTax: BigDecimal,
+)
+
+/** 예상 거래비용 계산 근거 — 화면에 "추정"으로 표시한다. 증권사 견적이 아니다. */
+data class RebalanceCostModelResponse(
+    val feeRate: BigDecimal,
+    val sellTaxRate: BigDecimal,
+    val basis: String = "ESTIMATE",
+    val note: String = "정산과 같은 수수료(0.015%)·매도 거래세(0.18%) 식을 미리보기 가격에 적용한 추정치입니다. 시장가 체결가·증권사별 수수료율에 따라 달라집니다.",
 )
 
 data class RebalancePreviewResponse(
     val totalValue: BigDecimal,
     val legs: List<RebalanceLegResponse>,
+    val estimatedFee: BigDecimal,
+    val estimatedTax: BigDecimal,
+    /** 예상 거래비용 = 수수료 + 매도 거래세 */
+    val estimatedCost: BigDecimal,
+    val estimatedBuyAmount: BigDecimal,
+    val estimatedSellAmount: BigDecimal,
+    /** 매수 중 지금 보유하지 않은 종목의 예상 금액 */
+    val estimatedNewBuyAmount: BigDecimal,
+    val costModel: RebalanceCostModelResponse,
 )
 
 data class RebalanceExecutionResponse(
@@ -133,11 +158,20 @@ class RebalanceController(
     private fun RebalancePreview.toResponse() = RebalancePreviewResponse(
         totalValue = totalValue,
         legs = legs.map { it.toResponse() },
+        estimatedFee = estimatedFee,
+        estimatedTax = estimatedTax,
+        estimatedCost = estimatedCost,
+        estimatedBuyAmount = estimatedBuyAmount,
+        estimatedSellAmount = estimatedSellAmount,
+        estimatedNewBuyAmount = estimatedNewBuyAmount,
+        costModel = RebalanceCostModelResponse(BrokerageFeeModel.FEE_RATE, BrokerageFeeModel.SELL_TAX_RATE),
     )
 
     private fun RebalanceLegPlan.toResponse() = RebalanceLegResponse(
         symbol = symbol, side = side.name, targetWeight = targetWeight, currentWeight = currentWeight,
         diffPct = diffPct, quantity = quantity,
+        estimatedPrice = price, priceSource = priceSource.name,
+        estimatedAmount = estimatedAmount, estimatedFee = estimatedFee, estimatedTax = estimatedTax,
     )
 
     private fun RebalanceExecution.toResponse(legs: List<RebalanceExecutionLeg>) = RebalanceExecutionResponse(

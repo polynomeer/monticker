@@ -5,6 +5,7 @@ import com.monticker.api.brokerage.application.BrokerageService
 import com.monticker.api.brokerage.application.DisconnectResult
 import com.monticker.api.brokerage.application.TradingHaltService
 import com.monticker.api.brokerage.domain.*
+import com.monticker.api.brokerage.infrastructure.BrokerCallHealthTracker
 import com.monticker.api.brokerage.infrastructure.BrokerageBalance
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRequest
 import com.monticker.api.common.aop.RateLimited
@@ -50,6 +51,22 @@ data class AccountResponse(
     val isActive: Boolean,
     val connectedAt: Instant,
     val tokenValid: Boolean,
+    /** 이 서버가 관측한 마지막 증권사 호출 상태. 관측이 없으면(재시작 직후·다른 레플리카가 처리) null. */
+    val apiHealth: ApiHealthResponse? = null,
+)
+
+/**
+ * 증권사 API 지연·마지막 오류. 오류는 고정 코드만 준다(BrokerErrorCode) — 증권사 원문 메시지는 계좌·주문 정보가 섞일 수 있어
+ * 내보내지 않는다. 키·토큰은 없다.
+ */
+data class ApiHealthResponse(
+    val lastLatencyMs: Long,
+    val lastCallAt: Instant,
+    val lastOperation: String,
+    val lastSuccessAt: Instant?,
+    val lastErrorCode: String?,
+    val lastErrorAt: Instant?,
+    val lastErrorOperation: String?,
 )
 
 data class BalanceResponse(
@@ -107,6 +124,7 @@ class BrokerageController(
     private val brokerageService: BrokerageService,
     private val jwtTokenProvider: JwtTokenProvider,
     private val tradingHaltService: TradingHaltService,
+    private val callHealth: BrokerCallHealthTracker,
 ) {
     private fun userId(token: String) =
         jwtTokenProvider.getUserId(token.removePrefix("Bearer "))
@@ -266,6 +284,13 @@ class BrokerageController(
         isActive      = isActive,
         connectedAt   = connectedAt,
         tokenValid    = !needsReconnect(),
+        apiHealth     = callHealth.get(provider, appKey, accountNumber)?.let {
+            ApiHealthResponse(
+                lastLatencyMs = it.lastLatencyMs, lastCallAt = it.lastCallAt, lastOperation = it.lastOperation.name,
+                lastSuccessAt = it.lastSuccessAt, lastErrorCode = it.lastErrorCode?.name, lastErrorAt = it.lastErrorAt,
+                lastErrorOperation = it.lastErrorOperation?.name,
+            )
+        },
     )
 
     private fun BrokerageOrder.toResponse() = OrderResponse(

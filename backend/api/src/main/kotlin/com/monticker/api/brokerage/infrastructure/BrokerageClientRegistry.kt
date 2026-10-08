@@ -31,18 +31,23 @@ class BrokerageClientRegistryConfig {
     // @brokerageClientRegistry를 참조한다(ADR-060).
     @Bean(BEAN_NAME)
     @ConditionalOnProperty("app.brokerage.mock.enabled", havingValue = "true", matchIfMissing = true)
-    fun mockBrokerageClientRegistry(mock: MockBrokerageClient): BrokerageClientRegistry =
-        BrokerageClientRegistry(BrokerageProvider.entries.associateWith { mock })
+    fun mockBrokerageClientRegistry(mock: MockBrokerageClient, health: BrokerCallHealthTracker): BrokerageClientRegistry =
+        instrumented(BrokerageProvider.entries.associateWith { mock }, health)
 
     @Bean(BEAN_NAME)
     @ConditionalOnProperty("app.brokerage.mock.enabled", havingValue = "false")
-    fun realBrokerageClientRegistry(kis: KisBrokerageClient, toss: TossBrokerageClient): BrokerageClientRegistry =
-        BrokerageClientRegistry(
+    fun realBrokerageClientRegistry(kis: KisBrokerageClient, toss: TossBrokerageClient, health: BrokerCallHealthTracker): BrokerageClientRegistry =
+        instrumented(
             mapOf(
                 BrokerageProvider.KIS to kis,
                 BrokerageProvider.TOSS to toss,
-            )
+            ),
+            health,
         )
+
+    /** 계좌 상태의 API 지연·마지막 오류를 재는 데코레이터로 감싼다. 위임만 하고 동작은 바꾸지 않는다(InstrumentedBrokerageClient). */
+    private fun instrumented(clients: Map<BrokerageProvider, BrokerageClient>, health: BrokerCallHealthTracker) =
+        BrokerageClientRegistry(clients.mapValues { (provider, client) -> InstrumentedBrokerageClient(client, provider, health) })
 
     companion object {
         const val BEAN_NAME = "brokerageClientRegistry"
