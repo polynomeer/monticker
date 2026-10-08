@@ -103,6 +103,21 @@ class StockEventWriter(
     companion object {
         const val SEARCH_INDEX = "stock_events"
 
+        /**
+         * 이 종목을 관심종목에 넣은 사용자의 활성 기기 토큰. 바인딩: stockId.
+         * 예전 쿼리는 존재하지 않는 컬럼 `wi.watchlist_group_id`로 조인해 매번 SQL 오류였고(실제 컬럼은 `group_id`, V3),
+         * 오류가 runCatching + debug 로그에 묻혀 관심종목 급등·급락·거래량 급증 푸시가 한 번도 나가지 않았다.
+         * 같은 종목이 여러 그룹에 있어도 토큰은 한 번 — 탈퇴한 사용자는 제외.
+         */
+        const val WATCHER_DEVICE_TOKENS_SQL = """
+            SELECT DISTINCT dt.user_id, dt.token
+            FROM watchlist_items wi
+            JOIN watchlist_groups wg ON wg.id = wi.group_id
+            JOIN device_tokens dt ON dt.user_id = wg.user_id AND dt.is_active = true
+            JOIN users u ON u.id = wg.user_id AND u.deleted_at IS NULL
+            WHERE wi.stock_id = ?
+        """
+
         /** api `StockEventDocument` 매핑과 같은 형태 — 날짜는 epoch_millis, sentimentScore는 감지 이벤트에 없다. */
         fun searchPayload(
             stockId: Long, eventType: String, title: String, description: String?, eventTime: Instant,
@@ -123,20 +138,15 @@ class StockEventWriter(
         // hot path 탈출 — collect() 스레드를 블로킹하지 않음
         pushExecutor.submit {
             runCatching { sendEventPushAsync(event) }
-                .onFailure { log.debug("Event push failed: {}", it.message) }
+                // debug였다 — 그래서 존재하지 않는 컬럼으로 매번 실패하던 것이 운영 로그에 보이지 않았다
+                .onFailure { log.warn("Event push failed for stockId={}: {}", event.stockId, it.message) }
         }
     }
 
     private fun sendEventPushAsync(event: DetectedEvent) {
         // 이 stock_id를 관심종목으로 가진 user들의 device token 조회
         val rows = jdbcTemplate.query(
-                """
-                SELECT dt.user_id, dt.token
-                FROM device_tokens dt
-                JOIN watchlist_items wi ON wi.stock_id = ?
-                JOIN watchlist_groups wg ON wg.id = wi.watchlist_group_id
-                WHERE wg.user_id = dt.user_id AND dt.is_active = true
-                """,
+                WATCHER_DEVICE_TOKENS_SQL,
                 { rs, _ -> rs.getLong("user_id") to rs.getString("token") },
                 event.stockId,
             )
