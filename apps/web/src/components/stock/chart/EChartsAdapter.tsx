@@ -674,6 +674,9 @@ export default function EChartsAdapter({
         height,
       });
       chartRef.current = chart;
+      // e2e(Playwright)가 캔버스 속 상태(줌 구간·드로잉·마커)를 읽고 정확한 픽셀을 계산할 수 있게
+      // 인스턴스를 컨테이너 DOM 노드에만 붙여 둔다(전역 노출 없음, 화면·동작 영향 없음).
+      (containerRef.current as HTMLDivElement & { __mtChart?: EChart }).__mtChart = chart;
 
       const opt = buildOption();
       if (opt) chart.setOption(opt as Parameters<typeof chart.setOption>[0]);
@@ -843,6 +846,7 @@ export default function EChartsAdapter({
     <div className="relative w-full" style={{ height }}>
       <div
         ref={containerRef}
+        data-testid="stock-chart"
         className="w-full rounded-lg overflow-hidden border border-gray-200 dark:border-dracula-line"
         style={{ height, cursor: activeDrawingTool ? "crosshair" : undefined }}
       />
