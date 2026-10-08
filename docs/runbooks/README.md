@@ -12,6 +12,8 @@
 | [tick-stalled.md](tick-stalled.md) | `TickPipelineStalled` `DltMessagesGrowing` `CandleFlushFailing` | 장중 시세 정지. 게이트웨이 → Kafka → worker → api 순으로 좁힌다 |
 | [db-failover.md](db-failover.md) | `ApiErrorBudgetBurn` + `HikariPoolNearExhaustion`/`AllReplicasDown` | Postgres 장애·복구·검증. readiness가 pod를 빼는 동안 할 일 |
 | [deploy-rollback.md](deploy-rollback.md) | (배포 직후 아무 알람) | 이미지 되돌리기, 마이그레이션 역호환, 되돌리면 안 되는 것 |
+| [outbox-backlog.md](outbox-backlog.md) | `OutboxBacklog` `WorkerOutboxBacklog` | Outbox는 앱별 테이블(ADR-094). 늦을 뿐 잃지 않는다. 어느 리스너가 막혔는지 보고, 행을 손으로 완료 처리하지 않는다 |
+| [market-calendar.md](market-calendar.md) | `MarketCalendarNextYearMissing` `MarketCalendarCurrentYearMissing` `MarketCalendarUncoveredLookup` | 휴장일 데이터가 없으면 주말만 휴장으로 계산한다(ADR-086). 11월에 내년 마이그레이션을 넣는다 |
 | [search-index.md](search-index.md) | `SearchIndexMappingMismatch` `SearchIndexDltGrowing` `SearchFallbackSustained` | ES는 검색 레이어. DB 폴백으로 살아 있으니 급하지 않되 재색인 절차 |
 
 ## 공통 원칙

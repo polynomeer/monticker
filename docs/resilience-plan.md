@@ -496,8 +496,12 @@ E7 같은 사고를 막는 유일한 구조적 방법이다.
 #### Ticket (업무시간 대응) — 사용자는 아직 안 아프지만 곧 아프다
 
 `HikariPoolNearExhaustion`, `HighJvmHeapUsage`, `DltMessagesGrowing`,
-`OutboxBacklog`, `SearchFallbackSustained`, `CandleFlushFailing`,
-`AlertRuleEvalFailing`, `BacktestQueueSaturated`, `RedisLatencyHigh`
+`OutboxBacklog`(api)·`WorkerOutboxBacklog`(worker, ADR-094), `SearchFallbackSustained`, `CandleFlushFailing`,
+`AlertRuleEvalFailing`, `BacktestQueueSaturated`, `RedisFailOpenSustained`,
+`MarketCalendarNextYearMissing`·`MarketCalendarCurrentYearMissing`·`MarketCalendarUncoveredLookup`(ADR-086)
+
+> 2026-10: 이 목록에 있던 `RedisLatencyHigh`는 `alert-rules.yml`에 정의된 적이 없다. 실제 Redis 알람은 `RedisFailOpenSustained`(ticket)와
+> `IdempotencyStoreDown`(page)이다. 전체 목록은 [alert-rules.yml](../infra/monitoring/alert-rules.yml)이 기준이다.
 
 #### Dashboard only (알람 아님)
 
@@ -1164,17 +1168,21 @@ CH-13/CH-14는 **스텁 PG**로 돌렸다. 우리 쪽 동작(브레이커, 실�
 
 알람마다 런북이 있어야 한다. 없는 알람은 "누군가 언젠가 보겠지"가 된다. 7종을 썼고 26개 알람 중 17개가
 `runbook:` 주석으로 연결된다. 나머지(`AllReplicasDown`·`HighJvmHeapUsage`·`NonBrokerCircuitOpen`·`BacktestQueueSaturated`·
-`WsConnectionsSkewed`·`OutboxBacklog`·`SagaIncomplete`·`AlertRuleEvalFailing`·`ApiLatencyHigh`)는 대시보드 패널 설명에
-조치가 있고, Outbox·Saga는 [ledger-mismatch.md](runbooks/ledger-mismatch.md)의 판별 표가 다룬다. 내용은 CH-01~09 실측(MTTR, 영향 범위)과 코드의 실제 정책(fail-open/closed, 재전송 주기)에서 나왔다.
+`WsConnectionsSkewed`·`SagaIncomplete`·`AlertRuleEvalFailing`·`ApiLatencyHigh`)는 대시보드 패널 설명에
+조치가 있고, Saga는 [ledger-mismatch.md](runbooks/ledger-mismatch.md)의 판별 표가 다룬다.
+2026-10에 두 개를 더 썼다. `OutboxBacklog`(원래 위 "나머지"에 있었다)·`WorkerOutboxBacklog`는 [outbox-backlog.md](runbooks/outbox-backlog.md),
+KRX 캘린더 알람 3종은 [market-calendar.md](runbooks/market-calendar.md)가 다룬다. 내용은 CH-01~09 실측(MTTR, 영향 범위)과 코드의 실제 정책(fail-open/closed, 재전송 주기)에서 나왔다.
 
 | 런북 | 대응 알람 | 핵심 내용 |
 |------|----------|----------|
-| `redis-down.md` | `RedisLatencyHigh` 등 | fail-open 확인, 영향 범위, 복구 후 검증 |
+| `redis-down.md` | `RedisFailOpenSustained` `IdempotencyStoreDown` | fail-open 확인, 영향 범위, 복구 후 검증 |
 | `ledger-mismatch.md` | **`LedgerMismatch`** | **자동 교정 금지**, 조사 절차, 에스컬레이션 |
 | `broker-cb-open.md` | `BrokerCircuitOpen` | 사용자 공지 문구, KIS 상태 확인, 수동 리셋 조건 |
 | `tick-stalled.md` | `TickPipelineStalled` | 랙 확인, 파티션/컨슈머 상태, 재시작 순서 |
 | `db-failover.md` | `ApiErrorBudgetBurn` + DB | 승격 절차, 애플리케이션 재연결, 데이터 검증 |
 | `deploy-rollback.md` | — | 롤백 명령, 마이그레이션 역호환 확인 |
+| `outbox-backlog.md` | `OutboxBacklog` `WorkerOutboxBacklog` | 어느 앱·어느 리스너가 막혔나, 손으로 완료 처리 금지 |
+| `market-calendar.md` | `MarketCalendar*` 3종 | 휴장일 마이그레이션 절차, 미커버 기간 정산일 확인 |
 
 **템플릿**: 증상 / 영향 범위 / 1차 확인 3단계 / 완화 조치 / 근본 원인 조사 / 에스컬레이션 기준.
 

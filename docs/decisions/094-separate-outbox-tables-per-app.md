@@ -99,6 +99,8 @@ worker를 먼저 배포하면 기동 가드가 새 pod를 멈춘다. 롤링 업�
   `search.index`는 문서 id 기준이라 멱등이다. `market.event-detected`는 소비자의 멱등 키(`WR:{ruleId}:{eventId}`, ADR-051)가
   중복 주문을 막는다.
 - Grafana의 Outbox 패널은 `job="monticker-api"`로 필터한다. worker 적체는 경보로만 보인다.
+  (2026-10 후속: 패널이 api·worker를 따로 그린다. `OutboxBacklog`는 api로 한정했고 worker는 `WorkerOutboxBacklog`가 받는다.
+  런북은 [outbox-backlog.md](../runbooks/outbox-backlog.md).)
 - 테스트: api `OutboxIsolationIntegrationTest`, `V91SeparateWorkerOutboxMigrationIntegrationTest`, worker
   `WorkerOutboxIsolationIntegrationTest`. Testcontainers로 실제 레지스트리, 운영 `application.yml`, V91을 쓴다.
   - 1분 지난 미완료 알림이 재전송된다.

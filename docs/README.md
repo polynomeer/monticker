@@ -42,7 +42,7 @@ monticker의 모든 문서를 **독자별 · 주제별**로 정리한 색인입�
 
 1. [deployment.md](deployment.md) — OAuth·PG·브로커 등록, 프로덕션 환경변수
 2. [platform-api-keys.md](platform-api-keys.md) — KIS/Toss 플랫폼 앱키 발급 절차
-3. [runbooks/](runbooks/README.md) — 알람별 대응 절차 7종
+3. [runbooks/](runbooks/README.md) — 알람별 대응 절차 10종
 4. [resilience-plan.md](resilience-plan.md) — 장애 시나리오·모니터링·부하/카오스 테스트
 5. [scale-out-plan.md](scale-out-plan.md) — 대규모 트래픽 전환 로드맵
 
@@ -95,7 +95,7 @@ monticker의 모든 문서를 **독자별 · 주제별**로 정리한 색인입�
 | 문서 | 내용 |
 |------|------|
 | [technical/README.md](technical/README.md) | 구현 심층 문서 32편 — 데이터 파이프라인, 실시간, 보안, 금융 도메인, 성능, 아키텍처 패턴, 복원력, 트러블슈팅 |
-| [runbooks/README.md](runbooks/README.md) | 알람 ↔ 런북 매핑 7종 (Redis 다운, 원장 불일치, 브로커 CB, 틱 정지, DB failover, 롤백, 검색 인덱스) |
+| [runbooks/README.md](runbooks/README.md) | 알람 ↔ 런북 매핑 10종 (Redis 다운, 원장 불일치, 킬 스위치, 브로커 CB, 틱 정지, DB failover, 롤백, 검색 인덱스, Outbox 적체, KRX 캘린더) |
 | [deployment.md](deployment.md) | 프로덕션 배포 — OAuth2 앱 등록, 토스페이먼츠, 환경변수 체크리스트 |
 | [platform-api-keys.md](platform-api-keys.md) | KIS/Toss 플랫폼 앱키 발급 절차 (실명·사업자 인증 필요) |
 | [resilience-plan.md](resilience-plan.md) | 장애 시나리오별 대응 능력 판정, 모니터링·부하·카오스 테스트 설계 |
