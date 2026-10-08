@@ -175,7 +175,7 @@
 | /brokerage/orders | 호가 단위·현재가 ±30% 검증 | 클라이언트에서 계산(국내 6자리 종목). 막지 않는 '참고' 항목 | **서버** 호가 단위·가격제한폭 검증(400 거부)과 전일 종가 데이터 | P1 | ✅ [ADR-081](decisions/081-krx-limit-order-price-validation.md) |
 | /brokerage/orders | 정정 | "주문 취소"만 동작 | 정정 API(KIS/Toss), 결과 불명 처리 포함 | P1 | 보류 — KIS 정정 후 수명주기·Toss 정정 API 규격 확인 필요, 실주문 코드 없음 |
 | /brokerage | API 지연시간 | tokenValid로 "정상/재인증 필요"만 | 계좌 상태 응답에 latency·lastError | P2 | |
-| /brokerage | 보유·주문 CSV 내보내기 | 없음 | 프론트 | P2 | |
+| /brokerage | 보유·주문 CSV 내보내기 | 없음 | 프론트 | P2 | ✅ 화면에 보이는 보유·주문·정산 표(/brokerage, /brokerage/orders). 계좌번호 마스킹, 키·토큰 없음, 수식 주입 방지, BOM, KST 날짜 파일명 — [exportCsv.ts](../apps/web/src/components/brokerage/exportCsv.ts) |
 | /brokerage/connect | 4단계 스테퍼, 권한(scope) 확인 | 한 화면 폼 + 진행 표시. connect 토큰 발급으로만 확인 | 권한 확인 API | P2 | |
 | /brokerage/orders | 예상 수수료 | "증권사 기준" | 증권사별 수수료율 | P2 | |
 | /brokerage/conditional-orders | 유효 기간 선택 | "90일(자동 만료)" 고정 | 요청에 유효일수, 상한 검증 | P2 | |
@@ -192,12 +192,12 @@
 | /subscription | FAQ 답변(플랜별 기능 범위·환불) | 사실에 맞게 고쳤고, 환불은 "[법률 검토 후 확정]" | 플랜별 기능 게이팅 정책, 환불 정책 | P1 | 보류 — 플랜별 기능 제한 정책(사업 결정)·환불 정책(법무) 필요 |
 | /settings/notifications | 전체 알림, 거래량 급증, 퀀트 시그널, 체결·정산, 전략 마켓 소식 | 비활성 토글 | `NotificationPreferenceRequest` 필드 추가와 발송 경로 확인(리스크·결과 확인 중은 0-5) | P1 | ✅ [ADR-082](decisions/082-notification-preferences-enforced-at-delivery.md) |
 | /login | 로그인 상태 유지 | 비활성 | refresh 토큰 수명 2단계 | P2 | |
-| /onboarding | 관심 분야·사용 방식 저장 | 선택만 되고 저장 안 함 | `PUT /api/users/me/preferences`, 홈·알림 우선순위 반영 | P2 | |
-| /onboarding | 시작 자금 3,000만원·1억원 | 비활성(1,000만원 고정) | 모의 계좌 생성 시 초기 자금 파라미터 | P2 | |
-| /onboarding | 3단계 관심종목 고르기 | 검색 화면 링크 | 인기 종목 추천 + 일괄 추가(기존 watchlist API) | P2 | |
+| /onboarding | 관심 분야·사용 방식 저장 | 선택만 되고 저장 안 함 | `PUT /api/users/me/preferences`, 홈·알림 우선순위 반영 | P2 | ✅ 저장·조회(V86, 화이트리스트) [ADR-089](decisions/089-paper-initial-capital-and-user-preferences.md). 홈·알림 우선순위 반영은 후속 |
+| /onboarding | 시작 자금 3,000만원·1억원 | 비활성(1,000만원 고정) | 모의 계좌 생성 시 초기 자금 파라미터 | P2 | ✅ `POST /api/paper/account` 처음 생성 때만, 화이트리스트 3종, 대사·초기화가 계좌별 시작 자금 사용 [ADR-089](decisions/089-paper-initial-capital-and-user-preferences.md) |
+| /onboarding | 3단계 관심종목 고르기 | 검색 화면 링크 | 인기 종목 추천 + 일괄 추가(기존 watchlist API) | P2 | ✅ 거래대금 상위 12종목(라벨로 밝힘) + 다중 선택 담기. 일괄 API가 없어 단건 순차·부분 실패 보고·이미 담긴 종목 생략 — [watchlistBulk.ts](../apps/web/src/lib/watchlistBulk.ts) |
 | /subscription | 연간 결제, 카드 변경 | 연간 비활성. 카드는 등록/해지만 | 연간 요금제, 빌링키 교체 API | P2 | |
 | /settings/notifications | 카카오 알림톡, 방해 금지 시간 | 비활성 | 비즈메시지 연동, quiet-hours 필드와 발송 필터 | P2 | |
-| /login | `?error=oauth2` 메시지 | 표시 안 함(이전부터) | 쿼리 오류 메시지 표시와 테스트 목 확장 | P2 | |
+| /login | `?error=oauth2` 메시지 | 표시 안 함(이전부터) | 쿼리 오류 메시지 표시와 테스트 목 확장 | P2 | ✅ 아는 코드만 고정 문구(원문 미표시), `useSearchParams` 목 추가 — [loginError.ts](../apps/web/src/lib/loginError.ts) |
 
 ---
 

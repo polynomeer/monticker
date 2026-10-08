@@ -695,6 +695,25 @@ CREATE TABLE portfolio_optimizations (
 
 ---
 
+## Onboarding Tables (V86 — done, [ADR-089](decisions/089-paper-initial-capital-and-user-preferences.md))
+
+### paper_accounts.initial_capital
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| initial_capital | NUMERIC(18,4) | 계좌를 처음 만들 때 고른 시작 자금. CHECK `IN (10000000, 30000000, 100000000)`, DEFAULT 1,000만(기존 행). 생성 뒤 바뀌지 않는다. 원장 대사의 "초기 지급" 항이고 초기화(`/api/paper/reset`)가 되돌리는 값 |
+
+### user_preferences
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| user_id | BIGINT PK | `users(id)` ON DELETE CASCADE |
+| interest_sectors | VARCHAR(32)[] | 관심 분야 enum 이름. CHECK: 최대 9개, 화이트리스트(`SEMICONDUCTOR`…`SHIPBUILDING_DEFENSE`)의 부분집합 |
+| usage_style | VARCHAR(16) NULL | `OBSERVE` / `EVENT_TRADING` / `QUANT` |
+| updated_at | TIMESTAMPTZ | |
+
+저장·조회만 한다(`PUT/GET /api/users/me/preferences`). 홈·알림 우선순위에는 아직 쓰지 않는다.
+
+---
+
 ## Market Calendar Tables (V83 — done, [ADR-086](decisions/086-krx-trading-calendar.md))
 
 ### market_holidays
@@ -1029,7 +1048,7 @@ stocks
 | `order_proposals` | V40 | — |
 | `order_sagas` | V20 | — |
 | `orders` | V15 | ✅ |
-| `paper_accounts` | V11 | — |
+| `paper_accounts` | V11 (+V86 `initial_capital`) | ✅ |
 | `paper_settlements` | V27 | — |
 | `paper_trades` | V11 | — |
 | `payment_records` | V27 | — |
@@ -1062,6 +1081,7 @@ stocks
 | `tax_harvesting_logs` | V16 | ✅ |
 | `trading_halts` | V52 | — 실거래 킬 스위치·감사 이력, 행 삭제 없음 (ADR-057) |
 | `user_billing_keys` | V32 | — |
+| `user_preferences` | V86 | ✅ |
 | `user_subscriptions` | V27 | — |
 | `users` | V2 | ✅ |
 | `watch_rule_executions` | V49 | ✅ |
