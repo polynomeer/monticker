@@ -63,7 +63,7 @@ export default function PortfolioPage() {
         { label: "벤치마크 대비", value: "—", tone: "text-tm-muted" },
       ]
     : [];
-  const account = { kind: "paper" as const, balance: portfolio ? `${fmtNum(portfolio.totalValue)}원` : undefined };
+  const account = { kind: "paper" as const };
 
   const exportHoldings = () =>
     downloadCsv(

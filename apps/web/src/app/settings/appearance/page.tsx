@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { H2, Panel, PanelRow, PreviewTag, TerminalPage, Toggle } from "@/components/terminal";
 import { SettingsNav } from "@/components/settings/SettingsNav";
 import { useThemeStore, CHART_THEMES, type ChartThemeKey } from "@/stores/themeStore";
-import { useA11yStore, TEXT_SIZES, type TextSize } from "@/stores/a11yStore";
+import { useA11yStore, useReducedMotion, TEXT_SIZES, type TextSize } from "@/stores/a11yStore";
 import { cn } from "@/lib/utils";
 
 /** 시세 색상 — 기존 차트 테마(themeStore)에 시안의 이름을 붙인다 */
@@ -54,7 +54,11 @@ function SettingRow({ title, sub, children }: { title: ReactNode; sub: ReactNode
 
 export default function AppearanceSettingsPage() {
   const { chartTheme, setChartTheme } = useThemeStore();
-  const { textSize, setTextSize, highContrast, setHighContrast } = useA11yStore();
+  const {
+    textSize, setTextSize, highContrast, setHighContrast,
+    reduceMotion, setReduceMotion, monoNumbers, setMonoNumbers, priceFlash, setPriceFlash,
+  } = useA11yStore();
+  const motionReduced = useReducedMotion();
 
   const marketName = MARKET_COLORS.find((m) => m.key === chartTheme)?.name ?? CHART_THEMES[chartTheme]?.label ?? "—";
 
@@ -111,10 +115,6 @@ export default function AppearanceSettingsPage() {
           <H2>글자 크기</H2>
           <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex flex-wrap gap-0.5 rounded-lg bg-tm-inner p-[3px]" role="group" aria-label="글자 크기">
-              {/* '작게'는 시안 요소 — a11yStore에는 보통 이상만 있다 */}
-              <button type="button" disabled aria-pressed={false} title="준비 중" className="h-8 rounded-md px-3 text-13 text-tm-muted disabled:cursor-not-allowed disabled:opacity-50">
-                작게
-              </button>
               {(Object.entries(TEXT_SIZES) as [TextSize, { label: string }][]).map(([v, t]) => {
                 const on = textSize === v;
                 return (
@@ -135,14 +135,32 @@ export default function AppearanceSettingsPage() {
 
           <H2>접근성</H2>
           <div>
-            <SettingRow title={<>움직임 줄이기 <PreviewTag /></>} sub="차트 애니메이션과 실시간 깜빡임을 끕니다">
-              <Toggle checked={false} label="움직임 줄이기" disabled />
+            <SettingRow
+              title="움직임 줄이기"
+              sub={
+                <>
+                  차트 애니메이션과 실시간 깜빡임을 끕니다
+                  {reduceMotion === null ? " · 시스템 설정을 따르는 중" : (
+                    <>
+                      {" · "}
+                      <button type="button" onClick={() => setReduceMotion(null)} className="text-dracula-purple underline-offset-2 hover:underline">
+                        시스템 설정 따르기
+                      </button>
+                    </>
+                  )}
+                </>
+              }
+            >
+              <Toggle checked={motionReduced} label="움직임 줄이기" onChange={setReduceMotion} />
             </SettingRow>
-            <SettingRow title={<>숫자 고정폭 글꼴 <PreviewTag /></>} sub="가격·수량을 고정폭으로 정렬합니다 (현재 항상 켜짐)">
-              <Toggle checked label="숫자 고정폭 글꼴" disabled />
+            <SettingRow title="숫자 고정폭 글꼴" sub="가격·수량을 고정폭 글꼴로 정렬합니다. 끄면 본문 글꼴에 숫자 폭만 맞춥니다">
+              <Toggle checked={monoNumbers} label="숫자 고정폭 글꼴" onChange={setMonoNumbers} />
             </SettingRow>
-            <SettingRow title={<>가격 변동 깜빡임 <PreviewTag /></>} sub="체결 시 호가가 잠깐 강조됩니다">
-              <Toggle checked label="가격 변동 깜빡임" disabled />
+            <SettingRow
+              title="가격 변동 깜빡임"
+              sub={motionReduced ? "움직임 줄이기가 켜져 있어 깜빡이지 않습니다" : "실시간 가격이 바뀌면 잠깐 상승·하락 색으로 강조합니다"}
+            >
+              <Toggle checked={priceFlash} label="가격 변동 깜빡임" onChange={setPriceFlash} />
             </SettingRow>
           </div>
         </Panel>

@@ -39,12 +39,12 @@
 | 항목 | 지금 | 필요한 것 | 우선순위 | 상태 |
 |---|---|---|---|---|
 | 상단 바 "레이아웃 편집"·"전체 메뉴" 버튼 | 비활성 아이콘 | 패널 배치 저장(사용자별, 서버 또는 localStorage), 전체 메뉴 시트 | P2 | |
-| 패널 헤더 + / 설정 / 확대 아이콘 | 아이콘만 있고 동작 없음. 내보내기는 일부 화면(포트폴리오·지갑)만 CSV로 동작 | 패널 확대 모달, 탭 추가, 패널별 설정을 키트 `Panel`에 구현 | P2 | |
-| 상단 계좌 칩 잔액 | 잔액 없이 "모의투자 계좌 / 실전 계좌"만 표시 | 모의 총자산·실계좌 가용 현금 요약 조회를 셸에서 공유 | P2 | |
+| 패널 헤더 + / 설정 / 확대 아이콘 | 아이콘만 있고 동작 없음. 내보내기는 일부 화면(포트폴리오·지갑)만 CSV로 동작 | 패널 확대 모달, 탭 추가, 패널별 설정을 키트 `Panel`에 구현 | P2 | 부분 ✅ [fa542cff](https://github.com/polynomeer/monticker/commit/fa542cff) 확대: 확대 아이콘이 있는 모든 패널이 그 자리에서 화면 위 대화상자로 뜬다(Esc·닫기·배경 클릭, 포커스 가둠·복귀, 내용 재마운트 없음). 설정 아이콘은 패널마다 내용이 달라 키트에서 일반화할 수 없어 비활성 "준비 중"으로 둠. + 는 화면이 `onAction`으로 처리할 때만(스크리너 저장) |
+| 상단 계좌 칩 잔액 | 잔액 없이 "모의투자 계좌 / 실전 계좌"만 표시 | 모의 총자산·실계좌 가용 현금 요약 조회를 셸에서 공유 | P2 | ✅ [2c9e39cc](https://github.com/polynomeer/monticker/commit/2c9e39cc) 모의 = `/api/wallet` 총자산(/wallet과 같은 쿼리, 30초), 실전 = 연동된 계좌가 있을 때만 실전 화면에서 `/api/brokerage/account/balance` 가용 현금(주황). 로딩·오류는 `—` |
 | 라이트·시스템 테마 | 다크 고정(`forcedTheme`) | 토큰을 CSS 변수로 바꾸고 테마별 값 세트를 둔다([ADR-066](decisions/066-terminal-ui-shell.md) Revisit) | P2 | |
 | 리스크 한도 근접 경고(80%) | 없음(P0-5에서 분리) | VaR·집중도·일간 손실 사용률을 주기적으로 평가해 임계값을 넘는 순간 한 번 알림(사용자·규칙·일자별 dedupKey). 차단된 조건부 주문은 이미 ADR-065로 알린다 | P1 | ✅ [ADR-070](decisions/070-risk-limit-near-warnings.md) — 모의계좌, 5분 주기, 항목·일자별 1회, 끌 수 없음(실계좌는 잔고 캐시 필요해 보류) |
 | 고대비 모드 | `a11yStore.highContrast`는 연결돼 있다. 하지만 globals.css 규칙이 옛 토큰(`dracula-comment`)만 덮어 새 화면에서는 효과가 약하다 | `tm-muted`·`tm-line2` 등 새 토큰용 고대비 규칙 | P1 | ✅ tm-* 토큰 고대비 규칙 |
-| 접근성 설정: 글자 "작게", 움직임 줄이기, 숫자 고정폭, 가격 깜빡임 | 비활성 | `a11yStore` 필드를 추가하고 ECharts 애니메이션·`.num` 글꼴을 설정값에 연동 | P2 | |
+| 접근성 설정: 글자 "작게", 움직임 줄이기, 숫자 고정폭, 가격 깜빡임 | 비활성 | `a11yStore` 필드를 추가하고 ECharts 애니메이션·`.num` 글꼴을 설정값에 연동 | P2 | ✅ [d9e364a2](https://github.com/polynomeer/monticker/commit/d9e364a2) 글자 작게(87.5%), 움직임 줄이기(기본은 OS `prefers-reduced-motion`, 켜면 CSS 전환과 차트 툴팁·십자선 전환을 어댑터 prop으로 끔), 숫자 고정폭 끄기(본문 글꼴+tabular-nums), 가격 깜빡임(`FlashValue`, 종목 화면 현재가 — [2c9e39cc](https://github.com/polynomeer/monticker/commit/2c9e39cc)). 이 브라우저에 저장 |
 | 고정폭 숫자 글꼴 | 시스템 모노 스택(OS마다 다름) | 모노 웹폰트를 self-host(CSP `font-src 'self'`)할지 결정 | P2 | |
 
 ## 2. 마켓
