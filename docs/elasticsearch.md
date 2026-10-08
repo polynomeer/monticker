@@ -296,9 +296,9 @@ removeItem() → DB 삭제 → ES 삭제
 | 필드 | 타입 | 비고 |
 |---|---|---|
 | `userId` | Long | filter 필수 |
-| `ruleId` | Long | — |
+| `ruleId` | Long | 규칙 없이 생긴 이력(퀀트 시그널)은 null ([ADR-090](decisions/090-quant-signal-alert-history-fanout.md)) |
 | `stockId` | Long | filter |
-| `ruleType` | Keyword | PRICE_ABOVE·PRICE_BELOW·VOLUME_SURGE 등 |
+| `ruleType` | Keyword | PRICE_ABOVE·PRICE_BELOW·VOLUME_SURGE 등, 시그널은 QUANT_SIGNAL |
 | `message` | Text (nori) | 검색 대상 ("가격이 ₩75,000 이상이 되었습니다") |
 | `deliveryStatus` | Keyword | PENDING·SENT·FAILED |
 | `triggeredAt` | Date (epoch_millis) | range filter |
@@ -312,6 +312,7 @@ GET /api/alerts/history/search?query=목표가&stockId=1&ruleType=PRICE_ABOVE&de
 ```
 AlertHistoryIndexer(@PostConstruct, 50,000건) → alert_histories ES
 AlertEvaluator(Worker 틱 이벤트) → DB INSERT + UPDATE → dual-write → alert_histories ES
+QuantSignalAlertFanout(api, ADR-090) → DB INSERT(사용자당 1행) + SearchIndexEvent(같은 트랜잭션) → search.index → ES
 ```
 
 > ES 실패는 WARN 로그만 — 알림 발송 트랜잭션에 영향 없음
