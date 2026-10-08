@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import type { WatchRuleResponse } from "@monticker/types";
+import type { UpdateWatchRuleRequest, WatchRuleResponse } from "@monticker/types";
 import { Notice, Panel, PanelRow, TerminalPage, dirClass, fmtSigned, type TopStat } from "@/components/terminal";
 import { EmptyNote, LoginRequired, Skeleton } from "@/components/portfolio/PaperStates";
 import { fmtDateTime } from "@/components/portfolio/format";
@@ -108,9 +108,62 @@ export default function WatchRulesPage() {
 
   const handleDelete = (rule: WatchRuleResponse) =>
     remove.mutate(rule.id, {
-      onSuccess: () => toast({ type: "success", title: "규칙 삭제됨" }),
+      onSuccess: () => {
+        if (editingId === rule.id) closeEdit();
+        toast({ type: "success", title: "규칙 삭제됨" });
+      },
       onError: fail("삭제 실패"),
     });
+
+  // ADR-098 — 규칙 수정. 오른쪽 패널의 "새 규칙" 폼이 같은 컴포넌트로 수정 모드가 된다.
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const editPanelRef = useRef<HTMLDivElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+  const editingRule = editingId != null ? rules?.find((r) => r.id === editingId) ?? null : null;
+
+  const openEdit = (rule: WatchRuleResponse) => {
+    returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setEditError(null);
+    setEditingId(rule.id);
+  };
+  const closeEdit = () => {
+    setEditingId(null);
+    setEditError(null);
+    const back = returnFocusRef.current;
+    returnFocusRef.current = null;
+    // 수정 버튼으로 포커스를 돌려준다(키보드 사용자가 목록에서 위치를 잃지 않게)
+    if (back?.isConnected) requestAnimationFrame(() => back.focus());
+  };
+
+  // 수정 폼을 열면 폼으로 스크롤하고(폰 폭에서는 목록 아래에 있다) 첫 입력칸에 포커스한다
+  useEffect(() => {
+    if (editingId == null) return;
+    const panel = editPanelRef.current;
+    if (!panel) return;
+    panel.scrollIntoView?.({ block: "start", behavior: "smooth" });
+    panel.querySelector<HTMLElement>("input,select,button")?.focus({ preventScroll: true });
+  }, [editingId]);
+
+  // 수정 중인 규칙이 목록에서 사라지면(다른 탭에서 삭제 등) 폼을 닫는다
+  useEffect(() => {
+    if (editingId != null && rules && !rules.some((r) => r.id === editingId)) { setEditingId(null); setEditError(null); }
+  }, [rules, editingId]);
+
+  const handleUpdate = (rule: WatchRuleResponse) => (patch: UpdateWatchRuleRequest) => {
+    setEditError(null);
+    update.mutate(
+      { ruleId: rule.id, req: patch },
+      {
+        onSuccess: () => {
+          toast({ type: "success", title: "규칙 수정됨", message: patch.isActive ? "새 대상으로 다시 켰습니다." : undefined });
+          closeEdit();
+        },
+        // 서버의 400(검증)·404(규칙·종목·그룹 없음) 메시지를 폼 안에 그대로 보인다
+        onError: (e) => setEditError(e instanceof ApiError ? e.message : "잠시 후 다시 시도해주세요."),
+      },
+    );
+  };
 
   // 규칙별 마지막 발동·오늘 발동 횟수 — 발동 이력(최근 50건)에서 센다
   const fired = useMemo(() => {
@@ -189,6 +242,8 @@ export default function WatchRulesPage() {
                       stockLabel={targetLabel(rule, stockLabel)}
                       onToggle={handleToggle}
                       onDelete={handleDelete}
+                      onEdit={openEdit}
+                      highlight={rule.id === editingId}
                       pending={pending}
                       lastFired={f ? fmtDateTime(f.last) : null}
                       todayCount={f?.today ?? 0}
@@ -205,8 +260,22 @@ export default function WatchRulesPage() {
           )}
         </Panel>
 
-        <Panel tabs={["새 규칙"]} actions={[]} className="flex-[1_1_340px]">
-          <WatchRuleForm onSubmit={handleCreate} submitting={create.isPending} />
+        <Panel tabs={[editingRule ? "규칙 수정" : "새 규칙"]} actions={[]} closable={false} className="flex-[1_1_340px]">
+          <div ref={editPanelRef} className="flex min-w-0 scroll-mt-4 flex-col gap-3">
+            {editingRule ? (
+              <WatchRuleForm
+                key={editingRule.id}
+                rule={editingRule}
+                initialStock={editingRule.stockId != null ? stocks.get(editingRule.stockId) ?? null : null}
+                onUpdate={handleUpdate(editingRule)}
+                onCancel={closeEdit}
+                submitting={update.isPending}
+                serverError={editError}
+              />
+            ) : (
+              <WatchRuleForm onSubmit={handleCreate} submitting={create.isPending} />
+            )}
+          </div>
         </Panel>
       </PanelRow>
     </TerminalPage>
