@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import NewRuleForm from "@/components/alerts/NewRuleForm";
+import DeliveryChannelsPanel from "@/components/alerts/DeliveryChannelsPanel";
+import { channelsSummary, useDeliveryChannels } from "@/components/alerts/channels";
 import {
   Btn, BtnLink, Notice, Panel, PanelRow, Seg, TerminalPage, TitleBlock, Toggle,
 } from "@/components/terminal";
@@ -21,7 +23,10 @@ const FILTERS = [
 ] as const;
 type Filter = (typeof FILTERS)[number]["value"];
 
-const STATUS_LABEL: Record<string, string> = { SENT: "발송됨", FAILED: "발송 실패", PENDING: "발송 대기" };
+const STATUS_LABEL: Record<string, string> = {
+  SENT: "발송됨", FAILED: "발송 실패", PENDING: "발송 대기", EMAIL_FALLBACK: "이메일로 발송",
+  SUPPRESSED: "설정으로 보내지 않음", QUIET_HOURS: "방해 금지 시간 — 푸시 안 함",
+};
 
 function kstDate(d: Date) {
   return d.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }); // YYYY-MM-DD
@@ -43,6 +48,7 @@ export default function AlertsPage() {
   const { data: alerts = [], isLoading: loadingHistory, dataUpdatedAt: historyFetchedAt } = useAlertHistory(isLoggedIn);
   const { data: rules = [], isLoading: loadingRules } = useAlertRules(isLoggedIn);
   const { data: stats } = useAlertStats(isLoggedIn);
+  const { data: channels, isLoading: loadingChannels } = useDeliveryChannels(isLoggedIn);
   const { toggleRule, markRead, markAllRead } = useAlertMutations();
   const unreadCount = stats?.unread ?? null;
   const actionError = (toggleRule.error ?? markAllRead.error) as Error | null;
@@ -68,7 +74,7 @@ export default function AlertsPage() {
         { label: "오늘", value: todayCount == null ? "—" : `${todayCount}건` },
         { label: "읽지 않음", value: unreadCount == null ? "—" : `${unreadCount}건`, tone: "text-dracula-pink" },
         { label: "활성 규칙", value: `${stats?.activeRules ?? rules.length}개` },
-        { label: "전달 채널", value: "—" },
+        { label: "전달 채널", value: loadingChannels ? "—" : channelsSummary(channels) },
       ] : []}
     >
       {children}
@@ -190,6 +196,9 @@ export default function AlertsPage() {
         {showNewRule && <NewRuleForm onDone={() => setShowNewRule(false)} />}
         <Link href="/settings/notifications" className="text-xs text-dracula-purple hover:underline">채널·방해 금지 시간 설정 →</Link>
       </Panel>
+
+      {/* ── 전달 채널(ADR-093) ─────────────────────────────── */}
+      <DeliveryChannelsPanel data={channels} loading={loadingChannels} />
     </PanelRow>
   );
 }

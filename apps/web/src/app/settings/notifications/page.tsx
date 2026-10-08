@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, type ChangeEvent, type ReactNode } from "react";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
 import { Btn, Checkbox, Chip, Divider, Field, H2, Panel, PanelRow, PreviewTag, TerminalPage, Toggle } from "@/components/terminal";
 import { SettingsNav } from "@/components/settings/SettingsNav";
 import { MarketingConsentRow } from "@/components/settings/MarketingConsentRow";
+import { crossesMidnight, quietHoursError, quietHoursStat } from "@/components/settings/quietHours";
+import { useQueryClient } from "@tanstack/react-query";
 
-/** ADR-082 — 서버 NotificationPreferenceRequest와 같은 필드·기본값(V78 notification_preferences). */
+/** ADR-082/093 — 서버 NotificationPreferenceRequest와 같은 필드·기본값(V78·V90 notification_preferences). */
 interface NotifPref {
   allEnabled: boolean;
   pushEnabled: boolean;
@@ -25,6 +27,10 @@ interface NotifPref {
   strategyMarketNewsPush: boolean;
   strategyMarketNewsEmail: boolean;
   weeklyReportEmail: boolean;
+  /** ADR-093 — 방해 금지 시간(KST "HH:mm", 자정을 넘을 수 있다) */
+  quietHoursEnabled: boolean;
+  quietHoursStart: string;
+  quietHoursEnd: string;
 }
 
 const DEFAULT: NotifPref = {
@@ -44,6 +50,9 @@ const DEFAULT: NotifPref = {
   strategyMarketNewsPush: false,
   strategyMarketNewsEmail: false,
   weeklyReportEmail: true,
+  quietHoursEnabled: false,
+  quietHoursStart: "22:00",
+  quietHoursEnd: "07:00",
 };
 
 function Row({ title, sub, preview, children, extra }: { title: string; sub: ReactNode; preview?: boolean; children: ReactNode; extra?: ReactNode }) {
@@ -73,6 +82,7 @@ function AlwaysOnRow({ title, sub }: { title: string; sub: string }) {
 
 export default function NotificationSettingsPage() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [pref, setPref] = useState<NotifPref>(DEFAULT);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -85,7 +95,10 @@ export default function NotificationSettingsPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const quietError = pref.quietHoursEnabled ? quietHoursError(pref.quietHoursStart, pref.quietHoursEnd) : null;
+
   const save = async () => {
+    if (quietError) return;
     setSaving(true);
     try {
       const res = await authFetch("/api/users/me/notification-preferences", {
@@ -93,19 +106,27 @@ export default function NotificationSettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(pref),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message ?? "다시 시도해주세요.");
+      }
+      // 알림 화면의 "전달 채널"이 새 설정으로 다시 계산되게
+      void queryClient.invalidateQueries({ queryKey: ["notification", "channels"] });
       toast({ type: "success", title: "저장 완료", message: "알림 설정이 저장되었습니다." });
-    } catch {
-      toast({ type: "error", title: "저장 실패", message: "다시 시도해주세요." });
+    } catch (e) {
+      toast({ type: "error", title: "저장 실패", message: e instanceof Error && e.message ? e.message : "다시 시도해주세요." });
     } finally {
       setSaving(false);
     }
   };
 
   const set = (key: keyof NotifPref) => (v: boolean) => setPref((p) => ({ ...p, [key]: v }));
+  const setTime = (key: "quietHoursStart" | "quietHoursEnd") => (e: ChangeEvent<HTMLInputElement>) =>
+    setPref((p) => ({ ...p, [key]: e.target.value }));
 
   /** 종류별 켜기/끄기 — 서버는 푸시/이메일을 따로 저장하므로, 켜면 푸시부터 켜고 끄면 둘 다 끈다 */
-  const pair = (push: keyof NotifPref, email: keyof NotifPref) => ({
+  type BoolKey = { [K in keyof NotifPref]: NotifPref[K] extends boolean ? K : never }[keyof NotifPref];
+  const pair = (push: BoolKey, email: BoolKey) => ({
     on: pref[push] || pref[email],
     toggle: (v: boolean) => setPref((p) => ({ ...p, [push]: v ? true : false, [email]: v ? p[email] : false })),
     channels: (
@@ -133,7 +154,7 @@ export default function NotificationSettingsPage() {
       stats={[
         { label: "켜진 알림", value: loading ? "—" : `${onCount} / ${kinds.length}` },
         { label: "채널", value: loading ? "—" : channels },
-        { label: "방해 금지", value: "—" },
+        { label: "방해 금지", value: loading ? "—" : quietHoursStat(pref.quietHoursEnabled, pref.quietHoursStart, pref.quietHoursEnd) },
       ]}
     >
       <PanelRow>
@@ -145,7 +166,7 @@ export default function NotificationSettingsPage() {
           className="flex-[999_1_520px]"
           bodyClassName="p-5"
           right={
-            <Btn size="sm" onClick={save} disabled={saving || loading}>
+            <Btn size="sm" onClick={save} disabled={saving || loading || !!quietError}>
               {saving ? "저장 중..." : "저장"}
             </Btn>
           }
@@ -219,14 +240,22 @@ export default function NotificationSettingsPage() {
           </div>
           <Divider />
           <div className="flex items-center justify-between">
-            <span className="flex items-center gap-2 font-semibold">방해 금지 시간 <PreviewTag /></span>
-            <Toggle checked={false} label="방해 금지 시간" disabled />
+            <span className="font-semibold">방해 금지 시간</span>
+            <Toggle checked={pref.quietHoursEnabled} onChange={set("quietHoursEnabled")} label="방해 금지 시간" disabled={loading} />
           </div>
           <div className="flex gap-2">
-            <Field label="시작" placeholder="22:00" disabled />
-            <Field label="종료" placeholder="07:30" disabled />
+            <Field label="시작 (KST)" type="time" value={pref.quietHoursStart} onChange={setTime("quietHoursStart")} disabled={loading || !pref.quietHoursEnabled} />
+            <Field label="종료 (KST)" type="time" value={pref.quietHoursEnd} onChange={setTime("quietHoursEnd")} disabled={loading || !pref.quietHoursEnabled} />
           </div>
-          <span className="text-xs text-tm-muted">리스크 경고와 ‘결과 확인 중’ 주문 알림은 방해 금지 시간에도 전달됩니다.</span>
+          {quietError ? (
+            <span role="alert" className="text-xs text-[#ff8a8a]">{quietError}</span>
+          ) : pref.quietHoursEnabled && crossesMidnight(pref.quietHoursStart, pref.quietHoursEnd) ? (
+            <span className="text-xs text-tm-muted">다음 날 {pref.quietHoursEnd}까지 이어집니다.</span>
+          ) : null}
+          <span className="text-xs text-tm-muted">
+            방해 금지 시간에는 앱 푸시를 보내지 않습니다(나중에 몰아서 보내지 않음). 고른 이메일과 알림 이력은 그대로 남습니다.
+            리스크 경고·‘결과 확인 중’ 주문·조건부 주문 실패 알림은 방해 금지 시간에도 바로 전달됩니다.
+          </span>
           <span className="text-xs text-tm-muted">채널 변경도 ‘저장’을 눌러야 반영됩니다.</span>
         </Panel>
       </PanelRow>
