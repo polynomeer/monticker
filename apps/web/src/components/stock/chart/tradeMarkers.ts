@@ -23,6 +23,11 @@ export function bucketOf(t: number, interval: ChartInterval): number {
   return Math.floor((t + KST_OFFSET_SEC) / BUCKET_SEC[interval]);
 }
 
+/** 시각 t가 속한 봉 버킷의 시작 시각(epoch seconds). bucketOf가 같으면 같은 값이다. */
+export function bucketStartOf(t: number, interval: ChartInterval): number {
+  return bucketOf(t, interval) * BUCKET_SEC[interval] - KST_OFFSET_SEC;
+}
+
 export interface TradeMarkerGroup {
   /** candles 배열 인덱스 */
   index: number;

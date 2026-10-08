@@ -9,11 +9,14 @@ import com.monticker.api.paper.application.PaperPortfolioQueryService
 import com.monticker.api.paper.application.PaperRealizedPnlService
 import com.monticker.api.matching.submit.OrderOriginType
 import com.monticker.api.paper.application.PaperTradingService
+import com.monticker.api.paper.application.TradeHistoryFilter
+import com.monticker.api.paper.application.TradeHistoryResponse
 import com.monticker.api.paper.application.TradeResultResponse
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
+import java.time.Instant
 
 @Validated
 @RestController
@@ -62,11 +65,22 @@ class PaperController(
     fun placeOrder(@RequestBody req: PaperOrderRequest): ResponseEntity<PaperOrderResponse> =
         ResponseEntity.ok(tradingService.placeOrder(userId(), req))
 
+    /**
+     * 내 모의 체결 내역(최신순). `stockId`로 한 종목만, `from`(포함)·`to`(제외, ISO-8601 Instant)로 체결 시각 구간만
+     * 좁힐 수 있다 — 차트 마커처럼 종목 하나를 보는 화면이 전체 내역을 받아 거르지 않도록. 항상 인증 사용자 것만 돈다.
+     */
     @GetMapping("/history")
     fun getHistory(
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") size: Int,
-    ) = ResponseEntity.ok(portfolioQueryService.getHistory(userId(), page, size.coerceIn(1, 100)))
+        @RequestParam(required = false) stockId: Long?,
+        @RequestParam(required = false) from: Instant?,
+        @RequestParam(required = false) to: Instant?,
+    ): ResponseEntity<List<TradeHistoryResponse>> {
+        require(page >= 0) { "page는 0 이상이어야 합니다" }
+        val filter = TradeHistoryFilter(stockId, from, to)
+        return ResponseEntity.ok(portfolioQueryService.getHistory(userId(), page, size.coerceIn(1, 100), filter))
+    }
 
     @PostMapping("/reset")
     @RateLimited(limit = 3, windowSec = 86400, keyPrefix = "paper.reset")

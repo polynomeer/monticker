@@ -103,7 +103,12 @@ class PaperPortfolioQueryService(
      * 감정 태그는 wallet 모듈의 테이블이지만 화면 하나를 위해 거래마다 따로 부르던 N+1을 없애려고 여기서 조인한다
      * (읽기 전용 — 태그 쓰기는 wallet EmotionTagService만). 태그 소유자도 거래 소유자와 같아야 한다(예전 IDOR 잔여 행 차단).
      */
-    fun getHistory(userId: Long, page: Int = 0, size: Int = 20): List<TradeHistoryResponse> {
+    fun getHistory(
+        userId: Long,
+        page: Int = 0,
+        size: Int = 20,
+        filter: TradeHistoryFilter = TradeHistoryFilter.NONE,
+    ): List<TradeHistoryResponse> {
         data class Row(
             val id: Long, val side: String, val stockId: Long, val quantity: Int,
             val price: BigDecimal, val amount: BigDecimal, val tradedAt: Instant,
@@ -117,7 +122,7 @@ class PaperPortfolioQueryService(
                LEFT JOIN fills f  ON f.id = pt.fill_id
                LEFT JOIN orders o ON o.id = f.order_id
                LEFT JOIN order_emotion_tags et ON et.paper_trade_id = pt.id AND et.user_id = pt.user_id
-               WHERE pt.user_id = ? ORDER BY pt.traded_at DESC, pt.id DESC LIMIT ? OFFSET ?""",
+               WHERE pt.user_id = ?${filter.sql()} ORDER BY pt.traded_at DESC, pt.id DESC LIMIT ? OFFSET ?""",
             { rs, _ -> Row(
                 id        = rs.getLong("id"),
                 side      = rs.getString("side"),
@@ -132,7 +137,7 @@ class PaperPortfolioQueryService(
                 emotion   = rs.getString("emotion"),
                 emotionMemo = rs.getString("memo"),
             ) },
-            userId, size, page * size,
+            userId, *filter.args(), size, page.toLong() * size,
         )
         if (trades.isEmpty()) return emptyList()
         val infoMap = stockInfoMap(trades.map { it.stockId }.distinct())
@@ -241,5 +246,37 @@ class PaperPortfolioQueryService(
             hasEnoughData  = true,
             message        = null,
         )
+    }
+}
+
+/**
+ * 거래 내역 조건 — 종목·체결 시각 구간(from 포함, to 제외). 사용자 범위(user_id)는 조건과 무관하게 항상 걸린다.
+ * 값은 바인딩 파라미터로만 들어가고 SQL 조각은 고정 문자열이다.
+ */
+data class TradeHistoryFilter(
+    val stockId: Long? = null,
+    val from: Instant? = null,
+    val to: Instant? = null,
+) {
+    init {
+        require(stockId == null || stockId > 0) { "stockId는 양수여야 합니다" }
+        require(from == null || to == null || from.isBefore(to)) { "from은 to보다 앞서야 합니다" }
+    }
+
+    internal fun sql(): String = buildString {
+        if (stockId != null) append(" AND pt.stock_id = ?")
+        if (from != null) append(" AND pt.traded_at >= ?")
+        if (to != null) append(" AND pt.traded_at < ?")
+    }
+
+    /** Instant는 JdbcTemplate에 바로 넘기지 않는다(드라이버 타입 추론 문제) — Timestamp로 감싼다. */
+    internal fun args(): Array<Any> = listOfNotNull<Any>(
+        stockId,
+        from?.let { java.sql.Timestamp.from(it) },
+        to?.let { java.sql.Timestamp.from(it) },
+    ).toTypedArray()
+
+    companion object {
+        val NONE = TradeHistoryFilter()
     }
 }

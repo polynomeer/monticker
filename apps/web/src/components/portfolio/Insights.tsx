@@ -5,9 +5,9 @@ import type { Holding } from "@/hooks/usePaperTrade";
 import { Donut, Notice, dirClass, fmtSigned } from "@/components/terminal";
 import StockChart from "@/components/stock/chart/StockChart";
 import type { EventMarker, IndicatorKey, OrderLine, TradeMarker } from "@/components/stock/chart/types";
-import { bucketOf } from "@/components/stock/chart/tradeMarkers";
+import { bucketStartOf } from "@/components/stock/chart/tradeMarkers";
 import { useStockChart } from "@/hooks/useStockChart";
-import { usePaperFills } from "@/hooks/usePaperFills";
+import { PAPER_FILLS_MAX, usePaperFills } from "@/hooks/usePaperFills";
 import type { TradeHistory } from "@/hooks/usePaperTrade";
 import type { StockMeta } from "./useStockMeta";
 import { EmptyNote, Skeleton } from "./PaperStates";
@@ -112,14 +112,15 @@ export function fillsToTradeMarkers(fills: TradeHistory[], stockId: number): Tra
 /** 보유 종목 일봉 위에 내 평균단가를 가로선으로, 내 모의 체결을 매수▲·매도▼ 마커로 겹친다. */
 export function AvgPriceOverlay({ holding }: { holding: Holding | null }) {
   const { candles, loading } = useStockChart(holding?.stockId ?? null, "1d");
-  const { data: fillData } = usePaperFills(!!holding);
   const stockId = holding?.stockId;
+  const firstCandle = candles[0]?.time;
+  // 차트 첫 봉의 KST 일 시작부터 — 서버가 이 종목·구간만 돌려준다
+  const fromSec = firstCandle == null ? null : bucketStartOf(firstCandle, "1d");
+  const { data: fillData } = usePaperFills(stockId != null && fromSec != null ? { stockId, fromSec } : null);
   const trades = useMemo(
     () => (fillData && stockId != null ? fillsToTradeMarkers(fillData.fills, stockId) : []),
     [fillData, stockId],
   );
-  const firstCandle = candles[0]?.time;
-  const outOfRange = firstCandle == null ? 0 : trades.filter((t) => bucketOf(t.time, "1d") < bucketOf(firstCandle, "1d")).length;
   const avg = holding?.avgPrice;
   // 포트폴리오는 5초마다 새 객체로 오므로 평균단가 값이 바뀔 때만 선을 새로 만든다(차트 재생성 방지)
   const lines: OrderLine[] = useMemo(
@@ -133,11 +134,11 @@ export function AvgPriceOverlay({ holding }: { holding: Holding | null }) {
       <div className="overflow-hidden rounded-lg">
         <StockChart candles={candles} events={NO_EVENTS} height={230} orderLines={lines} trades={trades} interval="1d" enabledIndicators={NO_INDICATORS} />
       </div>
-      {(outOfRange > 0 || fillData?.truncated) && (
+      {fillData && (fillData.hasEarlier || fillData.truncated) && (
         <span className="text-2xs text-tm-muted">
-          {outOfRange > 0 && `차트 구간 이전 체결 ${outOfRange}건은 표시하지 않음`}
-          {outOfRange > 0 && fillData?.truncated && " · "}
-          {fillData?.truncated && "최근 500건 체결까지만 표시"}
+          {fillData.hasEarlier && "차트 구간 이전 체결은 표시하지 않음"}
+          {fillData.hasEarlier && fillData.truncated && " · "}
+          {fillData.truncated && `이 구간의 최근 ${PAPER_FILLS_MAX.toLocaleString("ko-KR")}건 체결까지만 표시`}
         </span>
       )}
     </>
