@@ -109,6 +109,7 @@ export default function EChartsAdapter({
   activeDrawingTool = null,
   drawings = [],
   onDrawingsChange,
+  reduceMotion = false,
 }: ChartAdapterProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef     = useRef<import("echarts").ECharts | null>(null);
@@ -242,7 +243,9 @@ export default function EChartsAdapter({
 
       return {
         backgroundColor: theme.bg,
+        // 시리즈 애니메이션은 항상 끈다(실시간 갱신마다 봉이 움직이지 않게). 움직임 줄이기면 툴팁·십자선 전환까지 끈다.
         animation: false,
+        stateAnimation: reduceMotion ? { duration: 0 } : undefined,
 
         // ── 범례 ────────────────────────────────────────────
         legend: {
@@ -256,7 +259,8 @@ export default function EChartsAdapter({
         // ── 툴팁 ────────────────────────────────────────────
         tooltip: {
           trigger: "axis",
-          axisPointer: { type: "cross", crossStyle: { color: theme.text } },
+          transitionDuration: reduceMotion ? 0 : 0.4,
+          axisPointer: { type: "cross", crossStyle: { color: theme.text }, animation: !reduceMotion },
           backgroundColor: theme.bg === "#ffffff" ? "#f8f8f2" : "#282a36",
           borderColor: theme.grid,
           padding: [8, 12],
@@ -490,7 +494,7 @@ export default function EChartsAdapter({
       };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [candles, events, height, theme, vwapData, orderLines, enabledIndicators, signalMarkers, sentimentMarkers, trades, interval]
+    [candles, events, height, theme, vwapData, orderLines, enabledIndicators, signalMarkers, sentimentMarkers, trades, interval, reduceMotion]
   );
 
   // 드로잉을 현재 줌/팬 상태 기준 픽셀 좌표로 다시 그린다 — data 좌표(시각+가격)로

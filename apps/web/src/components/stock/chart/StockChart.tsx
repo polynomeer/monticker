@@ -2,6 +2,7 @@
 
 import { useMemo }       from "react";
 import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
+import { useReducedMotion } from "@/stores/a11yStore";
 import type { ChartTheme, CandleData, EventMarker, IndicatorKey, OrderLine, DrawingTool, Drawing, SignalMarker, SentimentMarker, TradeMarker, ChartInterval } from "./types";
 import EChartsAdapter from "./EChartsAdapter";
 
@@ -34,6 +35,7 @@ export default function StockChart({
 }: Props) {
   const { chartTheme }    = useThemeStore();
   const ct                = CHART_THEMES[chartTheme] ?? CHART_THEMES.default;
+  const reduceMotion      = useReducedMotion();
 
   // 매 렌더 새 객체를 넘기면 EChartsAdapter가 (theme이 deps라) 차트를 통째로
   // dispose+재생성한다 — 드로잉 한 점 찍을 때마다 화면이 깜빡이는 원인이 되므로
@@ -76,6 +78,7 @@ export default function StockChart({
       activeDrawingTool={activeDrawingTool}
       drawings={drawings}
       onDrawingsChange={onDrawingsChange}
+      reduceMotion={reduceMotion}
     />
   );
 }

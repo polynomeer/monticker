@@ -109,6 +109,8 @@ export interface ChartAdapterProps {
   activeDrawingTool?: DrawingTool | null;
   drawings?: Drawing[];
   onDrawingsChange?: (drawings: Drawing[]) => void;
+  /** 움직임 줄이기(접근성 설정·OS prefers-reduced-motion) — 툴팁·십자선 이동 등 모든 차트 애니메이션을 끈다 */
+  reduceMotion?: boolean;
 }
 
 // ── 어댑터 구현체가 준수해야 할 인터페이스 ───────────────────
