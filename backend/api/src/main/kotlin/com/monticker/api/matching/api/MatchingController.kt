@@ -4,6 +4,7 @@ import com.monticker.api.common.aop.RateLimited
 import com.monticker.api.common.time.KstPeriod
 import com.monticker.api.matching.application.ExecutionQualityService
 import com.monticker.api.matching.application.MatchingService
+import com.monticker.api.matching.application.OrderQueueService
 import com.monticker.api.matching.application.SubmitOrderRequest
 import com.monticker.api.matching.submit.OrderOrigin
 import org.springframework.format.annotation.DateTimeFormat
@@ -20,6 +21,7 @@ import java.time.LocalDate
 class MatchingController(
     private val matchingService: MatchingService,
     private val executionQualityService: ExecutionQualityService,
+    private val orderQueueService: OrderQueueService,
 ) {
 
     private fun userId(): Long = SecurityContextHolder.getContext().authentication.principal as Long
@@ -54,6 +56,14 @@ class MatchingController(
     @GetMapping("/fills")
     fun getMyFills(): ResponseEntity<*> =
         ResponseEntity.ok(matchingService.getMyFills(userId()))
+
+    /**
+     * ADR-096 — 종목의 모의 지정가 대기열(가격별 조각)과 내 주문의 대기 순번. 남의 주문은 건수·잔량 합으로만 나온다.
+     * 순번은 스위퍼의 처리 순서(접수 순)이며, 교차한 주문은 순번과 관계없이 함께 체결된다(유동성 제한 없음).
+     */
+    @GetMapping("/queue")
+    fun getQueue(@RequestParam stockId: Long): ResponseEntity<*> =
+        ResponseEntity.ok(orderQueueService.snapshot(userId(), stockId))
 
     /**
      * ADR-091 — 내 모의 체결의 평균 슬리피지(접수 시점 최우선 호가 대비, bps)와 엔진 지연(시장가 접수 → 체결, ms).
