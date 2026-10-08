@@ -29,6 +29,9 @@ class ScreenerCriteriaTest {
             ScreenerCriteria(minVolMult = Double.POSITIVE_INFINITY),
             ScreenerCriteria(sectors = (1..21).map { "s$it" }),
             ScreenerCriteria(sectors = listOf("x".repeat(101))),
+            ScreenerCriteria(minCap = -1),
+            ScreenerCriteria(maxCap = ScreenerCriteria.MARKET_CAP_CEIL + 1),
+            ScreenerCriteria(minCap = 500, maxCap = 100),
         )
         bad.forEach { c ->
             assertThatThrownBy { c.normalized() }.`as`(c.toString()).isInstanceOf(IllegalArgumentException::class.java)
@@ -84,5 +87,16 @@ class ScreenerCriteriaTest {
         assertThat(m.matchesMarket("kosdaq", "KOSDAQ")).isTrue()
         assertThat(m.matchesMarket("kosdaq", "NASDAQ")).isFalse()
         assertThat(m.matchesMarket("domestic", "KOSDAQ")).isTrue()
+    }
+
+    @Test
+    fun `market cap range accepts equal bounds and marks the fundamentals join`() {
+        val c = ScreenerCriteria(minCap = 100_000_000_000L, maxCap = 100_000_000_000L).normalized()
+        assertThat(c.hasMarketCapFilter).isTrue()
+        assertThat(ScreenerCriteria(maxCap = 0).normalized().hasMarketCapFilter).isTrue()
+        assertThat(ScreenerCriteria().hasMarketCapFilter).isFalse()
+        assertThat(ScreenerCriteria(marketCapTier = "large").hasMarketCapFilter).isTrue()
+        // 범위가 다르면 캐시 키도 다르다
+        assertThat(ScreenerCriteria(minCap = 1).normalized().cacheKey()).isNotEqualTo(ScreenerCriteria().normalized().cacheKey())
     }
 }

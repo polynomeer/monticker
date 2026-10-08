@@ -15,7 +15,7 @@ class ScreenerControllerOffsetTest {
     @Test
     fun `rejects an offset above the cap before querying`() {
         assertThatThrownBy {
-            controller.getScreener("realtime", "all", "amount", 20, ScreenerController.MAX_OFFSET + 1, "all", null, null, null, null, null)
+            controller.getScreener("realtime", "all", "amount", 20, ScreenerController.MAX_OFFSET + 1, "all", null, null, null, null, null, null, null)
         }.isInstanceOf(IllegalArgumentException::class.java)
         verify(exactly = 0) { service.getItems(any(), any(), any(), any(), any()) }
     }
