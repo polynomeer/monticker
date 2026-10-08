@@ -160,7 +160,7 @@ export function OrderForm({ stockId, setStockId, presetSide, book }: {
         {submitMutation.isPending ? "처리 중..." : `${isBuy ? "매수" : "매도"} 주문 제출`}
       </Btn>
       {submitMutation.isError && <p role="alert" className="m-0 text-xs text-[#ff8a8a]">{(submitMutation.error as Error).message}</p>}
-      <p className="m-0 text-xs leading-normal text-tm-muted">가격 우선 → 시간 우선으로 매칭됩니다. 호가 잔량보다 큰 주문은 여러 호가에 걸쳐 부분 체결됩니다.</p>
+      <p className="m-0 text-xs leading-normal text-tm-muted">지정가는 약 3초마다 접수 순으로 확인해, 1분봉 종가가 지정가에 닿으면 그 값으로 전량 체결됩니다(가격·시간 우선 매칭이 아닙니다).</p>
     </>
   );
 }
