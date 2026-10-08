@@ -21,7 +21,7 @@ import { useStockPrice } from "@/hooks/useStockPrice";
 import { useRecentlyViewedStocks } from "@/hooks/useRecentlyViewedStocks";
 import { useActiveBrokerageOrdersForSymbol, useBrokerageAccount, useCancelBrokerageOrder } from "@/hooks/useBrokerage";
 import { useToast } from "@/hooks/useToast";
-import { usePaperOpenOrders, usePaperOrder, usePaperPortfolio } from "@/hooks/usePaperTrade";
+import { usePaperOpenOrders, usePaperOrder } from "@/hooks/usePaperTrade";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
@@ -116,7 +116,6 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
   const { candles: dailyCandles, events } = useStockChart(stockId, "1d");
   const { price: livePrice } = useStockPrice(stockId);
   const quote = useQuotes([stockId])[stockId];
-  const { data: paper } = usePaperPortfolio();
 
   const latestDaily = dailyCandles[dailyCandles.length - 1];
   const prevDaily = dailyCandles[dailyCandles.length - 2];
@@ -131,7 +130,7 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
   const tone = changeAmount == null ? undefined : up ? "text-up" : "text-down";
 
   const stats: TopStat[] = [
-    { label: "현재가", value: currentPrice > 0 ? `${fmtNum(currentPrice)}원` : "—", tone },
+    { label: "현재가", value: currentPrice > 0 ? `${fmtNum(currentPrice)}원` : "—", tone, flash: livePrice?.price ?? null },
     {
       label: "전일 대비",
       value: changeAmount != null && changeRate != null ? `${up ? "▲" : "▼"}${fmtNum(Math.abs(changeAmount))} ${up ? "+" : ""}${changeRate.toFixed(2)}%` : "—",
@@ -153,7 +152,7 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
         </div>
       }
       stats={stats}
-      account={{ kind: "paper", balance: isLoggedIn && paper ? `${fmtNum(paper.totalValue)}원` : undefined }}
+      account={{ kind: "paper" }}
     >
       <PanelRow>
         {/* 주문 + 이벤트 */}

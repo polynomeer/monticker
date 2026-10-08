@@ -6,8 +6,10 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useConsentStatus } from "@/hooks/useConsents";
+import { useAccountChipSummary } from "@/hooks/useAccountSummary";
 import { Icon, type IconName } from "./Icon";
 import { IconBtn } from "./ui";
+import { FlashValue } from "./FlashValue";
 
 // ── 아이콘 레일 ────────────────────────────────────────────────────────
 interface RailItem {
@@ -93,6 +95,8 @@ export interface TopStat {
   tone?: string;
   /** 지표 정의 — 마우스를 올리면 보인다(title) */
   hint?: string;
+  /** 실시간 가격 — 이 숫자가 바뀌면 값이 잠깐 깜빡인다(접근성 설정의 "가격 변동 깜빡임"·움직임 줄이기를 따른다) */
+  flash?: number | null;
 }
 
 export function TitleBlock({ title, crumb }: { title: ReactNode; crumb?: ReactNode }) {
@@ -174,13 +178,14 @@ function UserMenu() {
 }
 
 export interface AccountChip {
+  /** 실전(live)이면 주황 표시. 잔액은 셸이 공유 쿼리로 채운다(모의 총자산·실계좌 가용 현금) */
   kind: "paper" | "live";
-  /** 표시용 잔액 문자열 — 모를 때는 생략 */
-  balance?: string;
 }
 
 function TopBar({ left, stats, account }: { left: ReactNode; stats: TopStat[]; account: AccountChip }) {
   const live = account.kind === "live";
+  const { isLoggedIn } = useAuth();
+  const chip = useAccountChipSummary(account.kind, isLoggedIn);
   return (
     <header className="flex flex-wrap items-center gap-x-6 gap-y-2.5 border-b border-tm-line bg-tm-page py-2.5 pl-[15px] pr-4">
       <Link href="/" aria-label="monticker 홈" className="grid w-[26px] place-items-center">
@@ -191,7 +196,9 @@ function TopBar({ left, stats, account }: { left: ReactNode; stats: TopStat[]; a
         {stats.map((s) => (
           <div key={s.label} className="flex min-w-0 flex-col gap-0.5" title={s.hint}>
             <span className="whitespace-nowrap text-[0.65625rem] tracking-[0.04em] text-tm-muted">{s.label}</span>
-            <span className={cn("num whitespace-nowrap text-13", s.tone ?? "text-dracula-fg")}>{s.value}</span>
+            <span className={cn("num whitespace-nowrap text-13", s.tone ?? "text-dracula-fg")}>
+              {s.flash !== undefined ? <FlashValue value={s.flash}>{s.value}</FlashValue> : s.value}
+            </span>
           </div>
         ))}
       </div>
@@ -200,11 +207,20 @@ function TopBar({ left, stats, account }: { left: ReactNode; stats: TopStat[]; a
         <IconBtn name="layout" label="레이아웃 편집 (준비 중)" size={36} iconSize={18} aria-disabled="true" />
         <Link
           href={live ? "/brokerage" : "/wallet"}
-          className="flex h-9 items-center gap-2 rounded-lg border border-tm-line2 px-3 text-13 text-dracula-fg hover:bg-tm-raised"
+          data-account={account.kind}
+          className={cn(
+            "flex h-9 items-center gap-2 rounded-lg border px-3 text-13 text-dracula-fg hover:bg-tm-raised",
+            live ? "border-dracula-orange/60" : "border-tm-line2",
+          )}
         >
-          <span className={cn("h-[7px] w-[7px] rounded-full", live ? "bg-dracula-orange" : "bg-dracula-yellow")} />
+          <span aria-hidden className={cn("h-[7px] w-[7px] rounded-full", live ? "bg-dracula-orange" : "bg-dracula-yellow")} />
           {live ? "실전" : "모의투자"} 계좌
-          {account.balance && <span className="num text-tm-muted">{account.balance}</span>}
+          {chip.amount !== undefined && (
+            <span className={cn("num", live ? "text-dracula-orange" : "text-tm-muted")} title={chip.amountLabel}>
+              <span className="sr-only">{chip.amountLabel} </span>
+              {chip.amount}
+            </span>
+          )}
           <Icon name="chev" size={14} className="text-tm-muted" />
         </Link>
         <IconBtn name="grid" label="전체 메뉴 (준비 중)" size={36} iconSize={18} aria-disabled="true" />

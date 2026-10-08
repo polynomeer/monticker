@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
 import { getAccessToken } from "@/services/auth";
 import { usePaperHistory } from "@/hooks/usePaperTrade";
-import type { LedgerEvent } from "@/hooks/useWalletLedger";
+import { usePaperWallet } from "@/hooks/useAccountSummary";
 import WalletLedger, { type LedgerFilter } from "@/components/wallet/WalletLedger";
 import { ReceiptCard, type Receipt } from "@/components/wallet/ReceiptCard";
 import { useRiskExposure } from "@/components/risk/useRiskExposure";
@@ -14,15 +14,6 @@ import { EmptyNote, LoginRequired, Skeleton } from "@/components/portfolio/Paper
 import {
   AutoGrid, Bar, BtnLink, Panel, PanelCol, PanelRow, Seg, TerminalPage, Tile, dirClass, fmtNum, fmtPct, fmtSigned, type TopStat,
 } from "@/components/terminal";
-
-interface WalletMap {
-  availableCash: number;
-  reservedCash: number;
-  holdingsValue: number;
-  settlementPending: number;
-  totalAssets: number;
-  recentLedger: LedgerEvent[];
-}
 
 interface BehaviorScore {
   behaviorScore: number;
@@ -66,16 +57,8 @@ export default function WalletPage() {
 
   useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
 
-  const { data: wallet, isLoading: walletLoading, isError } = useQuery<WalletMap>({
-    queryKey: ["wallet"],
-    queryFn: async () => {
-      const res = await authFetch("/api/wallet");
-      if (!res.ok) throw new Error("지갑 정보 조회 실패");
-      return res.json();
-    },
-    refetchInterval: 30_000,
-    enabled: isLoggedIn,
-  });
+  // 상단 계좌 칩과 같은 쿼리(["wallet"])를 공유한다
+  const { data: wallet, isLoading: walletLoading, isError } = usePaperWallet(isLoggedIn, { refetchInterval: 30_000 });
 
   const { data: score, isLoading: scoreLoading } = useQuery<BehaviorScore>({
     queryKey: ["wallet", "score"],
@@ -127,7 +110,7 @@ export default function WalletPage() {
     : [];
 
   return (
-    <TerminalPage {...title} stats={stats} account={{ kind: "paper", balance: wallet ? `${fmtNum(total)}원` : undefined }}>
+    <TerminalPage {...title} stats={stats} account={{ kind: "paper" }}>
       <Panel
         tabs={["돈의 이동 지도"]}
         actions={["expand"]}
