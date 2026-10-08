@@ -36,6 +36,12 @@ class AlertService(
     companion object {
         const val ALERT_RULES_CHANGED_CHANNEL = "alert:rules:changed"   // worker와 관례로 동기화
         const val UNKNOWN_STOCK_MESSAGE = "알림을 걸 수 없는 종목입니다"
+
+        /**
+         * ADR-090 — 이 이력이 내 것인가: 내 규칙의 이력(rule_id) 또는 나에게 직접 붙은 이력(user_id, 퀀트 시그널 등).
+         * 바인딩 순서: userId, userId. 남의 이력은 없는 이력과 구분되지 않는다(H6).
+         */
+        internal const val OWNED_BY = "(ah.user_id = ? OR ah.rule_id IN (SELECT id FROM alert_rules WHERE user_id = ?))"
     }
     private val log = LoggerFactory.getLogger(javaClass)
     /** 기본은 켜진 규칙만(모바일 등 기존 호출부). includePaused면 꺼 둔 규칙도(삭제한 것은 제외). */
@@ -119,11 +125,10 @@ class AlertService(
         return jdbc.query(
             """
             SELECT ah.id, ah.read_at FROM alert_histories ah
-            JOIN alert_rules ar ON ar.id = ah.rule_id
-            WHERE ar.user_id = ? AND ah.id IN ($placeholders)
+            WHERE $OWNED_BY AND ah.id IN ($placeholders)
             """,
             { rs, _ -> rs.getLong("id") to rs.getTimestamp("read_at")?.toInstant() },
-            *(listOf<Any>(userId) + ids).toTypedArray(),
+            *(listOf<Any>(userId, userId) + ids).toTypedArray(),
         ).toMap()
     }
 
@@ -132,10 +137,9 @@ class AlertService(
         val updated = jdbc.update(
             """
             UPDATE alert_histories ah SET read_at = now()
-            FROM alert_rules ar
-            WHERE ah.id = ? AND ar.id = ah.rule_id AND ar.user_id = ? AND ah.read_at IS NULL
+            WHERE ah.id = ? AND $OWNED_BY AND ah.read_at IS NULL
             """,
-            historyId, userId,
+            historyId, userId, userId,
         )
         if (updated == 0 && readStates(userId, listOf(historyId)).isEmpty()) {
             throw NoSuchElementException("알림을 찾을 수 없습니다: $historyId")
@@ -146,10 +150,9 @@ class AlertService(
     fun markAllRead(userId: Long, upTo: Instant): Int = jdbc.update(
         """
         UPDATE alert_histories ah SET read_at = now()
-        FROM alert_rules ar
-        WHERE ar.id = ah.rule_id AND ar.user_id = ? AND ah.read_at IS NULL AND ah.triggered_at <= ?
+        WHERE $OWNED_BY AND ah.read_at IS NULL AND ah.triggered_at <= ?
         """,
-        userId, java.sql.Timestamp.from(upTo),
+        userId, userId, java.sql.Timestamp.from(upTo),
     )
 
     /**
@@ -179,9 +182,8 @@ class AlertService(
               COUNT(*) FILTER (WHERE ah.delivery_status = 'FAILED')  AS failed,
               COUNT(*) FILTER (WHERE ah.delivery_status = 'PENDING') AS pending
             FROM alert_histories ah
-            JOIN alert_rules ar ON ar.id = ah.rule_id
-            WHERE ar.user_id = ?
-        """, userId)
+            WHERE $OWNED_BY
+        """, userId, userId)
 
         val sent    = (counts["sent"]    as? Number)?.toInt() ?: 0
         val failed  = (counts["failed"]  as? Number)?.toInt() ?: 0
@@ -192,10 +194,9 @@ class AlertService(
         val unread = jdbc.queryForObject(
             """
             SELECT COUNT(*) FROM alert_histories ah
-            JOIN alert_rules ar ON ar.id = ah.rule_id
-            WHERE ar.user_id = ? AND ah.read_at IS NULL
+            WHERE $OWNED_BY AND ah.read_at IS NULL
             """,
-            Int::class.java, userId
+            Int::class.java, userId, userId
         ) ?: 0
 
         val activeRules = jdbc.queryForObject(
@@ -206,10 +207,9 @@ class AlertService(
         val daily = jdbc.query("""
             SELECT DATE(ah.triggered_at AT TIME ZONE 'Asia/Seoul') AS d, COUNT(*) AS cnt
             FROM alert_histories ah
-            JOIN alert_rules ar ON ar.id = ah.rule_id
-            WHERE ar.user_id = ? AND ah.triggered_at > NOW() - INTERVAL '7 days'
+            WHERE $OWNED_BY AND ah.triggered_at > NOW() - INTERVAL '7 days'
             GROUP BY d ORDER BY d
-        """, { rs, _ -> AlertFireStat(rs.getString("d"), rs.getInt("cnt")) }, userId)
+        """, { rs, _ -> AlertFireStat(rs.getString("d"), rs.getInt("cnt")) }, userId, userId)
 
         return AlertStatsResponse(total, sent, failed, rate, activeRules, daily, unread)
     }
@@ -292,7 +292,7 @@ data class AlertFireStat(val date: String, val count: Int)
 
 data class AlertHistoryResult(
     val id: Long,
-    val ruleId: Long,
+    val ruleId: Long?,
     val stockId: Long?,
     val ruleType: String,
     val message: String,

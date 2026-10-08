@@ -117,7 +117,8 @@ class AlertController(private val alertService: AlertService) {
 
 data class AlertHistoryResponse(
     val id: Long,
-    val ruleId: Long,
+    /** ADR-090 — 규칙 없이 생긴 이력(ruleType = QUANT_SIGNAL)은 null */
+    val ruleId: Long?,
     val stockId: Long?,
     val ruleType: String,
     val message: String,
