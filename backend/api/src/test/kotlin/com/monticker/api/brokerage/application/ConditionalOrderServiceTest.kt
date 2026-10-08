@@ -21,6 +21,7 @@ import java.time.temporal.ChronoUnit
 import java.util.Optional
 
 class ConditionalOrderServiceTest {
+    private val KST = java.time.ZoneId.of("Asia/Seoul")
 
     private val accountRepo = mockk<BrokerageAccountRepository>()
     private val conditionalOrderRepo = mockk<ConditionalOrderRepository>()
@@ -93,7 +94,52 @@ class ConditionalOrderServiceTest {
 
         val expiresAt = savedSlot.captured.expiresAt
         assertThat(expiresAt).isNotNull()
-        assertThat(expiresAt).isCloseTo(Instant.now().plus(90, ChronoUnit.DAYS), org.assertj.core.api.Assertions.within(1, ChronoUnit.MINUTES))
+        // 기본 90일 — KST 날짜 경계(오늘+90일의 다음 날 00:00 KST)라 now+90일보다 늦고 하루 안쪽이다
+        assertThat(expiresAt).isAfter(Instant.now().plus(90, ChronoUnit.DAYS))
+        assertThat(expiresAt).isBefore(Instant.now().plus(91, ChronoUnit.DAYS).plusSeconds(60))
+        assertThat(expiresAt!!.atZone(KST).toLocalTime()).isEqualTo(java.time.LocalTime.MIDNIGHT)
+    }
+
+    @Test
+    fun `유효 기간 N일은 KST 날짜로 오늘+N일까지 — 그다음 날 00시(KST)에 만료된다`() {
+        // 2026-10-08 23:30 KST = 14:30Z. UTC로 날짜를 셌다면 같은 날이지만, 00:30 KST(전날 15:30Z)에는 하루가 어긋난다.
+        val lateNightKst = Instant.parse("2026-10-08T14:30:00Z")
+        assertThat(service.expiryFor(1, lateNightKst)).isEqualTo(Instant.parse("2026-10-09T15:00:00Z"))   // 10-10 00:00 KST
+        val justAfterMidnightKst = Instant.parse("2026-10-08T15:30:00Z")   // 10-09 00:30 KST
+        assertThat(service.expiryFor(1, justAfterMidnightKst)).isEqualTo(Instant.parse("2026-10-10T15:00:00Z"))   // 10-11 00:00 KST
+        assertThat(service.expiryFor(30, lateNightKst)).isEqualTo(Instant.parse("2026-11-07T15:00:00Z"))
+        assertThat(service.expiryFor(null, lateNightKst)).isEqualTo(service.expiryFor(90, lateNightKst))
+    }
+
+    @Test
+    fun `유효 기간이 범위(1~90일) 밖이면 계좌·종목을 보기 전에 거부한다`() {
+        for (days in listOf(0, -1, 91, 365, Int.MAX_VALUE, Int.MIN_VALUE)) {
+            assertThatThrownBy { service.create(1L, "005930", OrderSide.SELL, 10, stopLoss, validDays = days) }
+                .isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("유효 기간")
+            assertThatThrownBy {
+                service.createOco(1L, "005930", OrderSide.SELL, 10,
+                    listOf(stopLoss, stopLoss.copy(triggerType = ConditionalTriggerType.TAKE_PROFIT, triggerPrice = BigDecimal("80000"))), validDays = days)
+            }.isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("유효 기간")
+        }
+        verify(exactly = 0) { accountRepo.findByUserIdAndIsActiveTrue(any()) }
+        verify(exactly = 0) { conditionalOrderRepo.save(any()) }
+    }
+
+    @Test
+    fun `요청한 유효 기간으로 단일·OCO 모두 같은 만료 시각을 저장한다`() {
+        stubAccountAndStock()
+        val savedSlot = slot<ConditionalOrder>()
+        every { conditionalOrderRepo.save(capture(savedSlot)) } answers { savedSlot.captured }
+        every { conditionalOrderRepo.saveAll(any<List<ConditionalOrder>>()) } answers { firstArg() }
+
+        service.create(1L, "005930", OrderSide.SELL, 10, stopLoss, validDays = 7)
+        val single = savedSlot.captured.expiresAt!!
+        val oco = service.createOco(1L, "005930", OrderSide.SELL, 10,
+            listOf(stopLoss, stopLoss.copy(triggerType = ConditionalTriggerType.TAKE_PROFIT, triggerPrice = BigDecimal("80000"))), validDays = 7)
+
+        val expected = java.time.LocalDate.now(KST).plusDays(8).atStartOfDay(KST).toInstant()
+        assertThat(single).isEqualTo(expected)
+        assertThat(oco.map { it.expiresAt }).containsOnly(expected)
     }
 
     @Test
