@@ -93,7 +93,7 @@ export default function ScreenerRow({ item, columns, intraday }: Props) {
       case "amount":
         return <AmountLabel value={item.amount} />;
       case "buySell":
-        return <BuySellBar buy={item.buyRatio} sell={item.sellRatio} />;
+        return item.buyRatio != null && item.sellRatio != null ? <BuySellBar buy={item.buyRatio} sell={item.sellRatio} /> : <Dash />;
       case "per":
         return <span className="num">{item.per != null ? item.per.toFixed(2) : "-"}</span>;
       case "pbr":

@@ -18,8 +18,9 @@ export interface ScreenerItem {
   changeAmount: number;
   volume: number;
   amount: number;
-  buyRatio: number;
-  sellRatio: number;
+  /** 실제 수급 소스가 없어 서버가 null을 준다 — 화면은 "—" */
+  buyRatio: number | null;
+  sellRatio: number | null;
   marketCap: number | null;
   per: number | null;
   pbr: number | null;
