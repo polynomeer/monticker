@@ -143,8 +143,8 @@ export default function NotificationSettingsPage() {
   const fills = pair("fillsPush", "fillsEmail");
   const market = pair("strategyMarketNewsPush", "strategyMarketNewsEmail");
   const news = pair("newsAlertPush", "newsAlertEmail");
-  // 주간 리포트는 설정만 저장되고 보내는 코드가 아직 없다(준비 중) — 켜진 알림 수에 넣지 않는다
-  const kinds = [price.on, volume.on, news.on, quant.on, fills.on, market.on];
+  // 뉴스·공시(ADR-100)와 주간 리포트(이메일 전용, ADR-101) 모두 실제로 보낸다 — 켜져 있으면 센다(이메일 채널이 꺼져 있으면 아래 안내).
+  const kinds = [price.on, volume.on, news.on, quant.on, fills.on, pref.weeklyReportEmail, market.on];
   const onCount = pref.allEnabled ? kinds.filter(Boolean).length : 0;
   const channels = [pref.pushEnabled && "푸시", pref.emailEnabled && "이메일"].filter(Boolean).join(" · ") || "없음";
 
@@ -217,8 +217,16 @@ export default function NotificationSettingsPage() {
 
               <H2>리포트</H2>
               <div>
-                <Row title="주간 투자 행동 리포트" sub="매주 월요일 · 이메일 — 아직 보내지 않습니다" preview>
-                  <Toggle checked={false} disabled label="주간 투자 행동 리포트 (준비 중)" />
+                <Row
+                  title="주간 투자 행동 리포트"
+                  sub="매주 월요일 오전 · 이메일 — 지난주 모의투자의 계획·손절 준수율, 감정 분포, 행동 점수 변화 (거래가 있던 주만)"
+                  extra={
+                    pref.weeklyReportEmail && !pref.emailEnabled ? (
+                      <span className="text-xs text-dracula-orange">이메일 채널이 꺼져 있어 보내지 않습니다</span>
+                    ) : undefined
+                  }
+                >
+                  <Toggle checked={pref.weeklyReportEmail} onChange={set("weeklyReportEmail")} label="주간 투자 행동 리포트" />
                 </Row>
                 <Row
                   title="전략 마켓 소식"
