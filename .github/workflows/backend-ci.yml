@@ -9,6 +9,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write # gradle/actions/dependency-submission가 Dependency Graph에 제출하는 데 필요
     strategy:
