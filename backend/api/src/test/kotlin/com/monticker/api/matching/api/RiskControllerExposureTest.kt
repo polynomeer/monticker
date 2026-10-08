@@ -12,6 +12,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.jdbc.core.RowMapper
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.core.context.SecurityContextHolder
 import java.math.BigDecimal
@@ -29,7 +30,7 @@ class RiskControllerExposureTest {
     fun setUp() {
         SecurityContextHolder.getContext().authentication = UsernamePasswordAuthenticationToken(userId, null, emptyList())
         every { limitService.view(userId) } returns RiskLimitsView(RiskLimit(userId = userId), emptyList())
-        every { jdbc.queryForObject(match<String> { it.contains("paper_accounts") }, BigDecimal::class.java, userId) } returns BigDecimal("7385871")
+        every { jdbc.query(match<String> { it.contains("paper_accounts") }, any<RowMapper<BigDecimal>>(), userId) } returns listOf(BigDecimal("7385871"))
         every { jdbc.queryForList(match<String> { it.contains("paper_trades") }, userId) } returns emptyList()
         // 이전 구현이 읽던 '오늘 체결 현금 흐름' — 매수만 했으면 음수가 된다. 이 값이 손익으로 새면 안 된다.
         every { jdbc.queryForObject(match<String> { it.contains("FROM fills") }, BigDecimal::class.java, userId) } returns BigDecimal("-2614129")
@@ -56,5 +57,16 @@ class RiskControllerExposureTest {
 
         assertThat(body.dailyPnl).isEqualByComparingTo(BigDecimal("-73859"))
         assertThat(body.dailyPnlPct).isEqualTo(-1.0)
+    }
+
+    @Test
+    fun `a user without a paper account yet gets the default starting cash instead of a 500`() {
+        // 첫 주문 전에는 paper_accounts 행이 없다 — queryForObject였을 땐 EmptyResultDataAccessException으로 500이었다
+        every { jdbc.query(match<String> { it.contains("paper_accounts") }, any<RowMapper<BigDecimal>>(), userId) } returns emptyList()
+        every { riskChecker.paperRealizedPnlToday(userId) } returns BigDecimal("-100000")
+
+        val body = controller.getCurrentExposure().body!!
+
+        assertThat(body.dailyPnlPct).isEqualTo(-1.0)   // 기본 시작 자금 1,000만 원 대비
     }
 }
