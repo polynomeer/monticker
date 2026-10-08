@@ -82,7 +82,7 @@
 | 이벤트 레이어 "퀀트 시그널"·"감성" | 비활성 칩 | 종목별 포워드 테스트 시그널 조회, `sentimentScore` 기반 레이어 | P1 | ✅ |
 | 상단 시가총액·거래대금 | screener quotes. 펀더멘털이 모의 데이터면 `—` | KIS 펀더멘털 실데이터 연동 | P1 | 보류 — 코드 경로는 있음, 실제 KIS 키와 단위 검증 필요 |
 | 계좌 세그 "실전 · 연동 필요" | 항상 비활성. 이 폼은 실주문을 보내지 않는다 | 종목 화면 실주문은 [ADR-055](decisions/055-price-provenance-gate-for-real-orders.md)/[056](decisions/056-brokerage-order-unknown-outcome.md) 경로 정리 후 별도 설계 | P2 | |
-| 주문 전 리스크 체크 | "점검하기" 버튼으로 `POST /api/risk/check` 호출(감사 로그가 남아 자동 호출하지 않음) | 감사 로그 없는 미리보기 전용 엔드포인트가 있으면 입력할 때마다 점검 | P2 | |
+| 주문 전 리스크 체크 | "점검하기" 버튼으로 `POST /api/risk/check` 호출(감사 로그가 남아 자동 호출하지 않음) | 감사 로그 없는 미리보기 전용 엔드포인트가 있으면 입력할 때마다 점검 | P2 | ✅ [ADR-092](decisions/092-risk-check-preview-without-audit.md) — `POST /api/risk/preview`(감사 행·메트릭 없음, 읽기 전용 트랜잭션, 60회/분, 정수 수량 검증). 입력 400ms 디바운스로 자동 점검, `점검하기` 버튼은 뺐다(주문 제출이 감사된다) |
 | 감정 태그 "계획대로" | `OTHER` + 메모 "계획대로"로 저장 | `EmotionType`에 `PLANNED` 추가 | P2 | ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — `PLANNED`로 저장, 기존 `OTHER`+"계획대로" 행은 V82가 이관 |
 | 호가 "체결강도"·"내 주문" 표시 | 생략 | 체결강도 데이터, 모의 지정가 도입 후 | P2 | |
 | 이벤트 패널 "호가 깊이" 탭 | 준비 중 | 프론트만: 기존 호가로 누적 깊이 차트 | P2 | ✅ 호가 패널과 같은 쿼리(추가 요청 없음)를 누적. 차트는 어댑터 뒤(`components/stock/chart/DepthChart`), 매수=상승색·매도=하락색(차트 테마). 보이는 호가 단계만의 누적이다 |
@@ -174,13 +174,13 @@
 | /brokerage/orders | 상단 "등락" | `—` | `/api/stocks/{id}/price`에 전일 종가·등락률 | P1 | ✅ |
 | /brokerage/orders | 호가 단위·현재가 ±30% 검증 | 클라이언트에서 계산(국내 6자리 종목). 막지 않는 '참고' 항목 | **서버** 호가 단위·가격제한폭 검증(400 거부)과 전일 종가 데이터 | P1 | ✅ [ADR-081](decisions/081-krx-limit-order-price-validation.md) |
 | /brokerage/orders | 정정 | "주문 취소"만 동작 | 정정 API(KIS/Toss), 결과 불명 처리 포함 | P1 | 보류 — KIS 정정 후 수명주기·Toss 정정 API 규격 확인 필요, 실주문 코드 없음 |
-| /brokerage | API 지연시간 | tokenValid로 "정상/재인증 필요"만 | 계좌 상태 응답에 latency·lastError | P2 | |
+| /brokerage | API 지연시간 | tokenValid로 "정상/재인증 필요"만 | 계좌 상태 응답에 latency·lastError | P2 | ✅ `GET /api/brokerage/account`의 `apiHealth` — 클라이언트 레지스트리의 위임 데코레이터(`InstrumentedBrokerageClient`)가 계좌별 마지막 호출 지연·마지막 오류를 **메모리에** 둔다(주문 경로에 DB 쓰기 추가 없음, 인스턴스별·재시작 시 비움). 오류는 고정 코드만(예외 타입·HTTP 상태), 증권사 원문 메시지 없음. 상단 바 "API 지연"·계좌 패널 |
 | /brokerage | 보유·주문 CSV 내보내기 | 없음 | 프론트 | P2 | ✅ 화면에 보이는 보유·주문·정산 표(/brokerage, /brokerage/orders). 계좌번호 마스킹, 키·토큰 없음, 수식 주입 방지, BOM, KST 날짜 파일명 — [exportCsv.ts](../apps/web/src/components/brokerage/exportCsv.ts) |
 | /brokerage/connect | 4단계 스테퍼, 권한(scope) 확인 | 한 화면 폼 + 진행 표시. connect 토큰 발급으로만 확인 | 권한 확인 API | P2 | |
 | /brokerage/orders | 예상 수수료 | "증권사 기준" | 증권사별 수수료율 | P2 | |
-| /brokerage/conditional-orders | 유효 기간 선택 | "90일(자동 만료)" 고정 | 요청에 유효일수, 상한 검증 | P2 | |
-| /brokerage/conditional-orders | 통계·발동 기록·현재가 | 현재 페이지 데이터로 계산, 종목별 시세 개별 호출 | 상태별 집계, 발동 이벤트 로그, 일괄 시세 | P2 | |
-| /brokerage/rebalance | 예상 거래비용, 신규 매수 예상 금액 | `—` | preview 응답에 estimatedCost·leg 가격 | P2 | |
+| /brokerage/conditional-orders | 유효 기간 선택 | "90일(자동 만료)" 고정 | 요청에 유효일수, 상한 검증 | P2 | ✅ `validDays` 1~90(기본 90), 400은 계좌·종목 조회 전. N일 = KST 날짜로 오늘+N일까지(다음 날 00:00 KST 만료). 기존 행의 만료 시각은 그대로. 화면 1·7·30·60·90일 |
+| /brokerage/conditional-orders | 통계·발동 기록·현재가 | 현재 페이지 데이터로 계산, 종목별 시세 개별 호출 | 상태별 집계, 발동 이벤트 로그, 일괄 시세 | P2 | ✅ 읽기 전용 `GET …/stats`(상태별·이번 달(KST) 발동), `…/triggers`(발동 시각 최신순 + 연결된 증권사 주문 상태, 같은 사용자 주문만 조인), `…/quotes`(내 ACTIVE 종목 최근 1분봉 한 번에). 발동 기록은 기존 `triggered_at`·상태 컬럼에서 읽는다 — 새 로그 테이블 없음(평가기의 클레임 UPDATE는 트랜잭션 밖이라 같은 트랜잭션에 쓸 수 없다) |
+| /brokerage/rebalance | 예상 거래비용, 신규 매수 예상 금액 | `—` | preview 응답에 estimatedCost·leg 가격 | P2 | ✅ leg별 추정 가격(출처: 잔고 현재가/최근 1분봉)·금액·수수료·세금, 합계 `estimatedCost`·매수/신규 매수 예상 금액. 정산과 같은 식(`BrokerageFeeModel`: 수수료 0.015%, 매도세 0.18%) — 화면에 "추정치" 표시. 실행(시장가)은 바뀌지 않음 |
 | /brokerage/rebalance | 주문 건별 확인 | 일괄 실행 전 한 번 확인 | 건별 승인은 실행 사가 변경 필요 | P2 | |
 
 ## 6. 계정 · 설정
