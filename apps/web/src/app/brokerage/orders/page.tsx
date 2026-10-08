@@ -17,6 +17,7 @@ import {
 } from "@/components/terminal";
 import { TradingHaltBanner } from "@/components/brokerage/TradingHaltBanner";
 import { OrderActions, OrderStatusCell, orderPriceText } from "@/components/brokerage/OrderCells";
+import { exportBrokerageCsv, ordersTable, settlementsTable } from "@/components/brokerage/exportCsv";
 import { SettlementsTable } from "@/components/brokerage/SettlementsTable";
 import {
   LiveNotice, LoginRequired, NoAccount, PagerButtons, SelectedStock, SkeletonRows, StockSearchBox, apiStat, maskAccount,
@@ -465,8 +466,16 @@ export default function BrokerageOrderPage() {
         tabs={[{ key: "orders", label: "주문 내역" }, { key: "fills", label: "체결 내역" }]}
         active={histTab}
         onTabChange={k => { setHistTab(k as "orders" | "fills"); setHistPage(0); }}
-        actions={["refresh"]}
-        onAction={() => (histTab === "orders" ? ordersQuery.refetch() : fillsQuery.refetch())}
+        actions={["download", "refresh"]}
+        onAction={a => {
+          if (a === "download") {
+            // 지금 탭·페이지에 보이는 행만. 계좌번호는 화면과 같은 마스킹, 키·토큰은 넣지 않는다.
+            if (histTab === "orders") exportBrokerageCsv("orders", ordersTable(ordersQuery.data?.content ?? [], account?.accountNumber));
+            else exportBrokerageCsv("settlements", settlementsTable(fillsQuery.data?.content ?? [], account?.accountNumber));
+            return;
+          }
+          if (histTab === "orders") ordersQuery.refetch(); else fillsQuery.refetch();
+        }}
         bodyClassName="px-1.5 pb-1.5 pt-1"
       >
         {histTab === "orders" ? (
