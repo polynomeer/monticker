@@ -24,6 +24,8 @@ data class ReceiptResponse(
     val status: String,
     val balanceBefore: BigDecimal?,
     val balanceAfter: BigDecimal?,
+    /** ADR-096 — 이 거래를 만든 주문의 진행 기록. ADR-047 이전 거래는 null(3단계 영수증). */
+    val order: ReceiptOrder? = null,
 )
 
 @Service
@@ -32,6 +34,7 @@ class ReceiptService(
     private val tradeQueryService: PaperTradeQueryService,
     private val ledgerRepo: LedgerEventRepository,
     private val jdbc: JdbcTemplate,
+    private val orderTimeline: ReceiptOrderTimelineQuery,
 ) {
 
     fun getReceipt(userId: Long, tradeId: Long): ReceiptResponse {
@@ -73,6 +76,7 @@ class ReceiptService(
             status = "SETTLED",
             balanceBefore = balanceBefore,
             balanceAfter = balanceAfter,
+            order = orderTimeline.find(userId, tradeId),
         )
     }
 }

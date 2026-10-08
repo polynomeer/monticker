@@ -46,6 +46,42 @@ export function useOrderbook(stockId: number) {
   });
 }
 
+/** ADR-096 — 모의 지정가 대기열 한 조각. 남의 주문은 이어진 구간을 합친 건수·잔량만 온다(orderId 없음). */
+export interface QueueSlice { mine: boolean; orderCount: number; quantity: number; orderId: number | null; startPosition: number; }
+export interface QueueLevel { price: number; orderCount: number; quantity: number; slices: QueueSlice[]; }
+export interface MyQueuePosition {
+  orderId: number; side: "BUY" | "SELL"; price: number;
+  /** 같은 가격·방향의 접수 순 순번(1부터) */
+  position: number;
+  aheadCount: number; aheadQuantity: number; remainingQuantity: number; levelOrderCount: number;
+}
+export interface OrderQueueSnapshot { stockId: number; asOf: string; bids: QueueLevel[]; asks: QueueLevel[]; mine: MyQueuePosition[]; }
+
+/** 순번의 뜻 — 스위퍼의 처리 순서일 뿐, 체결 여부를 정하지 않는다(ADR-096). */
+export const QUEUE_DEFINITION =
+  "대기 순번은 같은 가격에서 먼저 접수된 모의 지정가 순서이며 체결 처리 순서와 같습니다. " +
+  "모의 체결은 잔량 제한이 없어, 시세가 지정가에 닿으면 순번과 관계없이 함께 체결됩니다.";
+
+/** ADR-096 — 이 종목의 모의 지정가 대기열과 내 순번. 스위퍼 주기(3초)에 맞춰 갱신한다. */
+export function useOrderQueue(stockId: number, enabled = true) {
+  return useQuery<OrderQueueSnapshot | null>({
+    queryKey: ["matching", "queue", stockId],
+    queryFn: async () => {
+      const r = await authFetch(`/api/matching/queue?stockId=${stockId}`);
+      if (!r.ok) return null;
+      return r.json();
+    },
+    refetchInterval: 3000,
+    enabled,
+  });
+}
+
+/** 같은 가격·방향의 대기열 레벨(호가 행과 가격이 같을 때만). */
+export function queueLevelAt(queue: OrderQueueSnapshot | null | undefined, side: "BUY" | "SELL", price: number) {
+  const levels = side === "BUY" ? queue?.bids : queue?.asks;
+  return levels?.find((l) => l.price === price);
+}
+
 export function useActiveOrders(enabled = true) {
   return useQuery<OrderDto[]>({
     queryKey: ["matching", "orders"],

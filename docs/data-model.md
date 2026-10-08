@@ -451,6 +451,12 @@ CREATE TABLE simulation_trades (
 기록하지 않음)를 남긴다. 슬리피지(체결가 vs 반대편 호가, bp)와 시장가 엔진 지연(첫 체결 − 접수)의 근거이며, NULL 행(V88 이전·호가
 없음)은 집계에서 빠지고 건수만 보고된다. 새 인덱스 없음(`idx_fills_user`로 체결을 고른 뒤 PK 조인).
 
+### orders 예약 잠금 시각 (V93 — done)
+
+[ADR-096](decisions/096-paper-order-queue-position-and-reservation-receipt.md): `reserved_at TIMESTAMPTZ` nullable. 사가가 BUY 현금
+예약 성공 직후·SELL 매도 가능 수량 판정 통과 직후 같은 트랜잭션에서 기록한다(지갑 영수증 "예약금 잠금" 단계). 잠근 금액은 지정가 BUY의
+`limit_price × quantity`라 저장하지 않는다. NULL = V93 이전 주문. 새 인덱스 없음.
+
 ### ledger_events
 
 모든 잔고 변화의 append-only 원장. ~~잔고는 이벤트를 replay해서 계산한다.~~ **잔고의 authoritative

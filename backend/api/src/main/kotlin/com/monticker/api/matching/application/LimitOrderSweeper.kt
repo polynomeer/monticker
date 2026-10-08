@@ -15,6 +15,10 @@ import org.springframework.stereotype.Component
  * 최신 `candles_1m` 종가로 한다. pod가 여럿이어도 [LimitOrderFiller]의 SKIP LOCKED가 한 번만 체결되게 한다.
  *
  * 후보 선정은 락 없이 넓게 읽고, 실제 판정·체결은 주문별 트랜잭션에서 다시 한다(읽은 뒤 바뀌었을 수 있다).
+ *
+ * 처리 순서(ADR-096): 접수 순 `(created_at, id)` — 가격 우선이 아니다. 유동성 모형이 없어 교차한 주문은 순번과 관계없이
+ * 모두 같은 종가로 전량 체결되므로, 순번이 결과를 바꾸는 경우는 후보가 [batch]를 넘어 다음 주기로 밀릴 때뿐이다.
+ * `/api/matching/queue`의 "대기 N번째"는 이 순서의 같은 가격 안 순번이다 — 동률(같은 created_at)은 id로 끊어 둘이 일치한다.
  */
 @Component
 class LimitOrderSweeper(
@@ -34,7 +38,7 @@ class LimitOrderSweeper(
             ) p ON true
             WHERE o.order_type = 'LIMIT' AND o.status IN ('PENDING', 'PARTIALLY_FILLED')
               AND ((o.side = 'BUY' AND o.limit_price >= p.close) OR (o.side = 'SELL' AND o.limit_price <= p.close))
-            ORDER BY o.created_at
+            ORDER BY o.created_at, o.id
             LIMIT ?
         """
     }
