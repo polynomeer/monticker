@@ -91,4 +91,32 @@ describe("WatchRuleExecutionList", () => {
     expect(screen.getByText(/3주 지정가 69,650원 · 미체결/)).toBeInTheDocument();
     expect(screen.getByText("→ 카카오 (035720)")).toBeInTheDocument();
   });
+
+  // ADR-098 — 접수했던 지정가가 나중에 체결·취소되면 그 결과를 보여준다.
+  it("나중에 체결된 지정가는 지정가와 체결가를 보여준다", () => {
+    render(
+      <WatchRuleExecutionList
+        executions={[execution({ status: "FILLED", orderId: 77, quantity: 3, limitPrice: 69650, fillPrice: 69500,
+          resolvedAt: "2026-09-23T11:40:00Z", reason: "지정가 69650 접수 — 미체결" })]}
+        ruleLabels={labels}
+      />,
+    );
+    expect(screen.getByText("지정가 체결")).toBeInTheDocument();
+    expect(screen.getByText(/3주 지정가 69,650원 → 체결 69,500원/)).toBeInTheDocument();
+    // 접수 당시의 "미체결" 문구는 더 이상 보이지 않는다
+    expect(screen.queryByText("지정가 69650 접수 — 미체결")).not.toBeInTheDocument();
+  });
+
+  it("체결 전에 취소된 지정가는 취소 사유를 보여준다", () => {
+    render(
+      <WatchRuleExecutionList
+        executions={[execution({ status: "CANCELLED", orderId: 78, quantity: 3, limitPrice: 69650,
+          resolvedAt: "2026-09-23T11:40:00Z", reason: "지정가 미체결 취소 — 사용자 취소" })]}
+        ruleLabels={labels}
+      />,
+    );
+    expect(screen.getByText("지정가 취소")).toBeInTheDocument();
+    expect(screen.getByText(/3주 지정가 69,650원 · 미체결 취소/)).toBeInTheDocument();
+    expect(screen.getByText("지정가 미체결 취소 — 사용자 취소")).toBeInTheDocument();
+  });
 });

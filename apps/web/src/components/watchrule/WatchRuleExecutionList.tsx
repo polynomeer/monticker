@@ -7,6 +7,8 @@ import { EVENT_LABEL } from "./WatchRuleRow";
 const STATUS_LABEL: Record<WatchRuleExecutionStatus, string> = {
   EXECUTED: "체결",
   PLACED: "지정가 접수",
+  FILLED: "지정가 체결",
+  CANCELLED: "지정가 취소",
   REJECTED: "거부",
   SKIPPED: "건너뜀",
 };
@@ -14,6 +16,8 @@ const STATUS_LABEL: Record<WatchRuleExecutionStatus, string> = {
 const STATUS_TONE: Record<WatchRuleExecutionStatus, Tone> = {
   EXECUTED: "green",
   PLACED: "cyan",
+  FILLED: "green",
+  CANCELLED: "orange",
   REJECTED: "red",
   SKIPPED: "muted",
 };
@@ -32,7 +36,7 @@ export function WatchRuleExecutionList({ executions, ruleLabels, stockLabel }: P
       <div className="flex flex-col items-center gap-2 py-10 text-center">
         <Icon name="clock" size={22} className="text-tm-muted" />
         <p className="m-0 text-sm font-semibold">아직 발동한 규칙이 없습니다</p>
-        <p className="m-0 text-xs text-tm-muted">이벤트가 감지되면 여기에 체결·거부·건너뜀이 이유와 함께 기록됩니다.</p>
+        <p className="m-0 text-xs text-tm-muted">이벤트가 감지되면 여기에 체결·지정가 접수와 그 결과·거부·건너뜀이 이유와 함께 기록됩니다.</p>
       </div>
     );
   }
@@ -56,6 +60,22 @@ export function WatchRuleExecutionList({ executions, ruleLabels, stockLabel }: P
                   {e.quantity}주{e.limitPrice != null && ` 지정가 ${e.limitPrice.toLocaleString("ko-KR")}원`} · 미체결
                 </p>
               )}
+              {/* ADR-098 — 접수했던 지정가의 이후 결과. 체결가·결과 시각을 함께 보인다. */}
+              {e.status === "FILLED" && e.quantity != null && (
+                <p className="num m-0 text-xs text-tm-soft">
+                  {e.quantity}주
+                  {e.limitPrice != null && ` 지정가 ${e.limitPrice.toLocaleString("ko-KR")}원`}
+                  {e.fillPrice != null && ` → 체결 ${e.fillPrice.toLocaleString("ko-KR")}원`}
+                  {e.resolvedAt && ` · ${new Date(e.resolvedAt).toLocaleString("ko-KR")}`}
+                </p>
+              )}
+              {e.status === "CANCELLED" && (
+                <p className="num m-0 text-xs text-tm-soft">
+                  {e.quantity != null && `${e.quantity}주`}
+                  {e.limitPrice != null && ` 지정가 ${e.limitPrice.toLocaleString("ko-KR")}원`} · 미체결 취소
+                  {e.resolvedAt && ` · ${new Date(e.resolvedAt).toLocaleString("ko-KR")}`}
+                </p>
+              )}
               {e.status === "EXECUTED" && e.quantity != null && (
                 <p className="num m-0 text-xs text-tm-soft">
                   {e.quantity}주
@@ -63,7 +83,7 @@ export function WatchRuleExecutionList({ executions, ruleLabels, stockLabel }: P
                 </p>
               )}
               {/* 거부·건너뜀은 이유가 핵심이다 — "왜 안 샀지"에 답하는 자리다. */}
-              {e.reason && e.status !== "PLACED" && <p className="m-0 text-xs text-tm-muted">{e.reason}</p>}
+              {e.reason && e.status !== "PLACED" && e.status !== "FILLED" && <p className="m-0 text-xs text-tm-muted">{e.reason}</p>}
               <p className="num m-0 text-2xs text-tm-muted">{new Date(e.createdAt).toLocaleString("ko-KR")}</p>
             </div>
             <Pill tone={STATUS_TONE[e.status]} className="mt-0.5 shrink-0">{STATUS_LABEL[e.status]}</Pill>

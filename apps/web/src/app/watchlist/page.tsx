@@ -15,6 +15,8 @@ import {
 } from "@/components/home/data";
 import SelectedStockPanel from "@/components/watchlist/SelectedStockPanel";
 import RowMenu from "@/components/watchlist/RowMenu";
+import GroupDeleteConfirm from "@/components/watchlist/GroupDeleteConfirm";
+import { useWatchRules } from "@/hooks/useWatchRules";
 import { applyMove, moveTarget, type MoveDir } from "@/components/watchlist/order";
 import { useIntradaySeriesChunked } from "@/hooks/useIntradaySeries";
 import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
@@ -52,6 +54,7 @@ export default function WatchlistPage() {
   const [market, setMarket] = useState<MarketTab>("all");
   const [sort, setSort] = useState<Sort>("custom");
   const [selectedStockId, setSelectedStockId] = useState<number | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -93,6 +96,31 @@ export default function WatchlistPage() {
       qc.invalidateQueries({ queryKey: ["watchlist"] });
     },
     onError: (e: Error) => toast({ type: "error", title: "그룹 생성 실패", message: e.message }),
+  });
+
+  // 그룹 삭제 확인에 "꺼질 규칙 수"를 보인다 — 확인 창을 열 때만 읽는다.
+  const { data: watchRules } = useWatchRules(isLoggedIn && confirmDelete);
+  const activeRuleCount = watchRules && activeGroup
+    ? watchRules.filter((r) => r.targetType === "GROUP" && r.targetGroupId === activeGroup.id && r.isActive).length
+    : null;
+
+  // DELETE /api/watchlists/groups/{id} — 항목은 함께 지워지고, 이 그룹을 대상으로 한 Watch Rule은 서버(DB 트리거)가 끈다(ADR-095).
+  const deleteGroup = useMutation({
+    mutationFn: async (groupId: number) => {
+      const r = await authFetch(`/api/watchlists/groups/${groupId}`, { method: "DELETE" });
+      if (!r.ok) throw new Error(r.status === 404 ? "이미 삭제됐거나 찾을 수 없는 그룹입니다. 목록을 새로고침합니다." : "그룹을 삭제하지 못했습니다.");
+    },
+    onSuccess: () => {
+      setConfirmDelete(false);
+      setActiveGroupId(null);
+      setSelectedStockId(null);
+      toast({ type: "success", title: "그룹을 삭제했습니다" });
+    },
+    onError: (e: Error) => toast({ type: "error", title: "그룹 삭제 실패", message: e.message }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["watchlist"] });
+      qc.invalidateQueries({ queryKey: ["watch-rules"] });
+    },
   });
 
   const removeItem = useMutation({
@@ -329,10 +357,13 @@ export default function WatchlistPage() {
             <Seg
               options={groups.map((g) => ({ value: String(g.id), label: `${g.name} ${g.items.length}` }))}
               value={String(activeGroup?.id ?? "")}
-              onChange={(v) => { setActiveGroupId(Number(v)); setSelectedStockId(null); }}
+              onChange={(v) => { setActiveGroupId(Number(v)); setSelectedStockId(null); setConfirmDelete(false); }}
             />
           )}
           <IconBtn name="plus" label="그룹 추가" size={34} aria-expanded={showNewGroup || groups.length === 0} onClick={() => setShowNewGroup((v) => !v)} />
+          {activeGroup && (
+            <IconBtn name="trash" label="그룹 삭제" size={34} aria-expanded={confirmDelete} onClick={() => setConfirmDelete((v) => !v)} />
+          )}
           <div className="ml-auto flex flex-wrap items-center gap-1.5">
             <Seg options={MARKET_TABS} value={market} onChange={setMarket} />
             <SelectBox aria-label="정렬 기준" value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="min-h-[34px] w-[120px] py-1">
@@ -340,6 +371,17 @@ export default function WatchlistPage() {
             </SelectBox>
           </div>
         </div>
+
+        {confirmDelete && activeGroup && (
+          <GroupDeleteConfirm
+            groupName={activeGroup.name}
+            itemCount={activeGroup.items.length}
+            activeRuleCount={activeRuleCount}
+            pending={deleteGroup.isPending}
+            onConfirm={() => deleteGroup.mutate(activeGroup.id)}
+            onCancel={() => setConfirmDelete(false)}
+          />
+        )}
 
         {(showNewGroup || groups.length === 0) && (
           <form
