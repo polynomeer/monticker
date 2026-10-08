@@ -4,6 +4,7 @@ import { memo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { stockKeys } from "@/hooks/useStockChart";
 import { cn } from "@/lib/utils";
+import { fmtNum } from "@/components/terminal";
 
 interface OrderBookLevel { price: number; quantity: number; amount: number; }
 interface OrderBookData {
@@ -15,9 +16,12 @@ interface Props {
   stockId: number;
   /** 전일 종가 — 주면 각 호가의 등락률 열을 채운다 */
   prevClose?: number | null;
+  /** 국내(원화) 종목이면 가격을 정수로, 해외면 소수점 둘째 자리까지 — 원화가 "35,538.19"처럼 나오지 않게 */
+  domestic?: boolean;
 }
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
+const fmtPrice = (n: number, domestic: boolean) => fmtNum(n, domestic ? 0 : 2);
 
 /** 같은 가격 호가를 하나로 합친다 — 공급원이 중복 레벨을 보내도 행 key가 겹치지 않게(React key 중복 경고·행 누락 방지). */
 export function mergeLevels(levels: OrderBookLevel[]): OrderBookLevel[] {
@@ -51,7 +55,7 @@ export function useOrderBook(stockId: number, enabled = true) {
  * 시안의 호가 패널 본문 — 매도 호가(위, 하락색) · 현재가 줄 · 매수 호가(아래, 상승색) · 잔량 합계 막대.
  * 1초 폴링. 호가 데이터만 바뀌므로 이 컴포넌트 안에서만 다시 그려진다(부모는 리렌더되지 않는다).
  */
-function OrderBook({ stockId, prevClose }: Props) {
+function OrderBook({ stockId, prevClose, domestic = true }: Props) {
   const { data: d, isLoading } = useOrderBook(stockId);
 
   if (isLoading) {
@@ -78,7 +82,7 @@ function OrderBook({ stockId, prevClose }: Props) {
         className={cn("absolute bottom-px right-0 top-px opacity-[.14]", side === "ask" ? "bg-down" : "bg-up")}
         style={{ width: `${Math.round((level.quantity / maxQty) * 100)}%` }}
       />
-      <span className={cn("num relative", side === "ask" ? "text-down" : "text-up")}>{fmt(level.price)}</span>
+      <span className={cn("num relative", side === "ask" ? "text-down" : "text-up")}>{fmtPrice(level.price, domestic)}</span>
       <span className="num relative text-right">{fmt(level.quantity)}</span>
       <span className="num relative text-right text-tm-muted">{chg(level.price)}</span>
     </div>
@@ -97,9 +101,9 @@ function OrderBook({ stockId, prevClose }: Props) {
         ))}
         <div className="my-1 flex items-center justify-between bg-tm-inner px-2.5 py-2 text-xs">
           <span className={cn("num text-base font-semibold", curUp ? "text-up" : "text-down")}>
-            {fmt(d.currentPrice)} {curUp ? "▲" : "▼"}
+            {fmtPrice(d.currentPrice, domestic)} {curUp ? "▲" : "▼"}
           </span>
-          <span className="text-tm-muted">{spread != null ? <>스프레드 <span className="num">{fmt(spread)}</span>원</> : "—"}</span>
+          <span className="text-tm-muted">{spread != null ? <>스프레드 <span className="num">{fmtPrice(spread, domestic)}</span>{domestic ? "원" : ""}</> : "—"}</span>
         </div>
         {[...d.bids].sort((a, b) => b.price - a.price).map((l) => (
           <Row key={`b${l.price}`} level={l} side="bid" />
