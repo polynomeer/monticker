@@ -91,6 +91,20 @@ class AlertControllerTest {
         verify(exactly = 0) { alertService.createRule(any(), any(), any(), any()) }
     }
 
+    // 없는·비활성 종목 — 예전에는 FK 위반이 500으로 샜다. 서비스가 고정 메시지의 IllegalArgumentException을 던지면 400이다.
+    @Test
+    fun `POST rules returns 400 with a fixed message for an unknown stock`() {
+        val advised = MockMvcBuilders.standaloneSetup(controller)
+            .setControllerAdvice(com.monticker.api.common.exception.GlobalExceptionHandler()).build()
+        every { alertService.createRule(any(), 999_999L, any(), any()) } throws
+            IllegalArgumentException(AlertService.UNKNOWN_STOCK_MESSAGE)
+        val body = mapOf("stockId" to 999_999, "ruleType" to "PRICE_ABOVE", "condition" to mapOf("threshold" to 75000))
+
+        advised.perform(post("/api/alerts/rules").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(body)))
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.message").value(AlertService.UNKNOWN_STOCK_MESSAGE))
+    }
+
     // 평가기가 구현된 적 없는 타입 — "저장은 되는데 평생 안 울리는 룰"을 만들지 않는다
     @Test
     fun `POST rules returns 400 for rule types that nothing evaluates`() {

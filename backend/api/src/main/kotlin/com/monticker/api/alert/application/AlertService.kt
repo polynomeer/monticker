@@ -33,7 +33,10 @@ class AlertService(
     private val redis: StringRedisTemplate,
     private val guard: RedisGuard,
 ) {
-    companion object { const val ALERT_RULES_CHANGED_CHANNEL = "alert:rules:changed" }   // worker와 관례로 동기화
+    companion object {
+        const val ALERT_RULES_CHANGED_CHANNEL = "alert:rules:changed"   // worker와 관례로 동기화
+        const val UNKNOWN_STOCK_MESSAGE = "알림을 걸 수 없는 종목입니다"
+    }
     private val log = LoggerFactory.getLogger(javaClass)
     /** 기본은 켜진 규칙만(모바일 등 기존 호출부). includePaused면 꺼 둔 규칙도(삭제한 것은 제외). */
     @Transactional(readOnly = true)
@@ -41,12 +44,18 @@ class AlertService(
         if (includePaused) alertRuleRepository.findAllByUserIdAndDeletedAtIsNullOrderByCreatedAtAsc(userId)
         else alertRuleRepository.findAllByUserIdAndIsActiveTrue(userId)
 
+    /**
+     * 규칙 생성. 종목은 **삽입 전에** 확인한다 — 없는 stockId는 FK 위반(500)으로, 상장폐지·비활성 종목은 시세가 오지 않아 영원히
+     * 울리지 않는 규칙으로 남았다. 종목 검색도 활성 종목만 돌려주므로 같은 기준(존재 ∧ is_active)이다. 메시지는 고정이다
+     * (요청한 id를 되풀이하지 않고, 없음과 비활성을 구분하지 않는다).
+     */
     fun createRule(
         userId: Long,
         stockId: Long?,
         ruleType: AlertRuleType,
         condition: Map<String, Any>,
     ): AlertRule {
+        if (stockId == null || !isAlertableStock(stockId)) throw IllegalArgumentException(UNKNOWN_STOCK_MESSAGE)
         val rule = AlertRule(
             userId = userId,
             stockId = stockId,
@@ -57,6 +66,11 @@ class AlertService(
         publishChangedAfterCommit(stockId)
         return saved
     }
+
+    private fun isAlertableStock(stockId: Long): Boolean =
+        jdbc.queryForObject(
+            "SELECT EXISTS(SELECT 1 FROM stocks WHERE id = ? AND is_active = true)", Boolean::class.java, stockId,
+        ) ?: false
 
     /** DELETE — 규칙 삭제(ADR-073: 꺼지고 다시 켤 수 없다). */
     fun deactivateRule(userId: Long, ruleId: Long) {
