@@ -10,7 +10,10 @@ class PaperAccount(
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) val id: Long = 0,
     @Column(name = "user_id", nullable = false, unique = true) val userId: Long,
     @Convert(converter = MoneyConverter::class)
-    @Column(nullable = false) var cash: Money = Money.INITIAL_BALANCE,
+    @Column(name = "initial_capital", nullable = false, updatable = false)
+    val initialCapital: Money = Money.INITIAL_BALANCE,
+    @Convert(converter = MoneyConverter::class)
+    @Column(nullable = false) var cash: Money = initialCapital,
     @Column(nullable = false) val createdAt: Instant = Instant.now(),
     @Column(nullable = false) var updatedAt: Instant = Instant.now(),
 ) {
@@ -24,8 +27,9 @@ class PaperAccount(
         updatedAt = Instant.now()
     }
 
+    /** ADR-089 — 초기화는 이 계좌의 시작 자금으로 되돌린다(기존 계좌는 모두 1,000만원이라 이전 동작과 같다). */
     fun reset() {
-        cash = Money.INITIAL_BALANCE
+        cash = initialCapital
         updatedAt = Instant.now()
     }
 

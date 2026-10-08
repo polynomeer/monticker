@@ -16,11 +16,10 @@ import {
 } from "@/components/brokerage/shared";
 import { SettlementsTable } from "@/components/brokerage/SettlementsTable";
 import { brokerageProviderLabel } from "@/lib/brokerageProvider";
-import type { BrokerageHolding, BrokerageOrderResponse, ConditionalOrderResponse } from "@monticker/types";
+import { exportBrokerageCsv, holdingsTable, settlementsTable, timelineTable, type OrderTimelineEntry } from "@/components/brokerage/exportCsv";
+import type { BrokerageHolding } from "@monticker/types";
 
-type TimelineEntry =
-  | { kind: "REGULAR"; at: string; order: BrokerageOrderResponse }
-  | { kind: "CONDITIONAL"; at: string; order: ConditionalOrderResponse };
+type TimelineEntry = OrderTimelineEntry;
 
 const QUICK: { title: string; sub: string; icon: IconName; href: string }[] = [
   { title: "실전 주문", sub: "지정가·시장가 주문 · 확인 단계 포함", icon: "send", href: "/brokerage/orders" },
@@ -177,7 +176,15 @@ export default function BrokerageDashboardPage() {
         </PanelCol>
 
         <PanelCol className="flex-[999_1_620px]">
-          <Panel tabs={["보유 종목"]} actions={["refresh"]} onAction={() => balanceQuery.refetch()} bodyClassName="px-1.5 pb-1.5 pt-1">
+          <Panel
+            tabs={["보유 종목"]}
+            actions={["download", "refresh"]}
+            onAction={a => a === "download"
+              // 화면에 보이는 보유 종목 그대로 — 잔고 조회 실패 중엔 표가 비어 있으므로 내보내지 않는다
+              ? (!balanceError && exportBrokerageCsv("holdings", holdingsTable(holdings, s => names.get(s)?.name, account.accountNumber)))
+              : balanceQuery.refetch()}
+            bodyClassName="px-1.5 pb-1.5 pt-1"
+          >
             {balanceLoading ? <SkeletonRows /> : balanceError ? (
               <p className="px-3 py-8 text-center text-13 text-tm-muted">잔고를 확인할 수 없어 보유 종목을 표시하지 않습니다.</p>
             ) : (
@@ -190,8 +197,16 @@ export default function BrokerageDashboardPage() {
             active={orderTab}
             onTabChange={k => setOrderTab(k as "orders" | "settlements")}
             closable={false}
-            actions={["refresh"]}
-            onAction={() => { if (orderTab === "orders") { ordersQuery.refetch(); conditionalQuery.refetch(); } else settlementsQuery.refetch(); }}
+            actions={["download", "refresh"]}
+            onAction={a => {
+              if (a === "download") {
+                // 지금 탭·페이지에 보이는 행만(서버 전체 내역이 아니다)
+                if (orderTab === "orders") exportBrokerageCsv("orders", timelineTable(timeline, account.accountNumber));
+                else exportBrokerageCsv("settlements", settlementsTable(settlements, account.accountNumber));
+                return;
+              }
+              if (orderTab === "orders") { ordersQuery.refetch(); conditionalQuery.refetch(); } else settlementsQuery.refetch();
+            }}
             bodyClassName="px-1.5 pb-2.5 pt-1"
           >
             {orderTab === "orders" ? (

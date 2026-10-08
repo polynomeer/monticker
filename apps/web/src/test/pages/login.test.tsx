@@ -4,7 +4,11 @@ import userEvent from "@testing-library/user-event";
 
 // next/navigation mock
 const mockPush = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mockPush }) }));
+let mockSearch = "";
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: mockPush }),
+  useSearchParams: () => new URLSearchParams(mockSearch),
+}));
 vi.mock("next/link", () => ({ default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a> }));
 
 const mockLogin     = vi.fn();
@@ -18,6 +22,7 @@ beforeEach(async () => {
   mockPush.mockReset();
   mockLogin.mockReset();
   mockSaveTokens.mockReset();
+  mockSearch = "";
   ({ default: LoginPage } = await import("@/app/login/page"));
 });
 
@@ -74,5 +79,37 @@ describe("LoginPage", () => {
     expect(await screen.findByText("비밀번호를 입력해주세요.")).toBeInTheDocument();
     expect(screen.queryByText("이메일을 입력해주세요.")).not.toBeInTheDocument();
     expect(mockLogin).not.toHaveBeenCalled();
+  });
+
+  it("?error=oauth2 이면 고정된 소셜 로그인 실패 문구를 보여 준다", async () => {
+    mockSearch = "error=oauth2";
+    render(<LoginPage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("소셜 로그인에 실패했습니다");
+  });
+
+  it("모르는 오류 코드는 원문을 찍지 않고 일반 문구를 보여 준다", async () => {
+    mockSearch = "error=" + encodeURIComponent("고객센터 010-0000-0000으로 연락하세요");
+    render(<LoginPage />);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("로그인 중 문제가 발생했습니다");
+    expect(screen.queryByText(/010-0000-0000/)).not.toBeInTheDocument();
+  });
+
+  it("오류 쿼리가 없으면 알림이 없다", () => {
+    render(<LoginPage />);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("다시 로그인을 시도하면 리다이렉트 오류 알림을 지운다", async () => {
+    mockSearch = "error=oauth2";
+    mockLogin.mockResolvedValueOnce({ accessToken: "a", refreshToken: "r" });
+    render(<LoginPage />);
+    expect(await screen.findByText(/소셜 로그인에 실패했습니다/)).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText("이메일"), "user@example.com");
+    await userEvent.type(screen.getByLabelText("비밀번호"), "password123");
+    fireEvent.submit(screen.getByRole("button", { name: /로그인/ }));
+
+    await waitFor(() => expect(screen.queryByText(/소셜 로그인에 실패했습니다/)).not.toBeInTheDocument());
   });
 });

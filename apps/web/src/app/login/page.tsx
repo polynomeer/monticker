@@ -1,11 +1,18 @@
 "use client";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { login, saveTokens } from "@/services/auth";
 import { Btn, Checkbox, PreviewTag } from "@/components/terminal";
 import { AuthField, AuthHeading, AuthShell, FormError, OrDivider } from "@/components/auth/AuthShell";
 import { SocialButtons } from "@/components/auth/SocialButtons";
+import { loginErrorMessage } from "@/lib/loginError";
+
+/** `?error=oauth2` 등 — 아는 코드만 고정 문구로 보여 준다(쿼리 원문은 찍지 않는다). */
+function QueryErrorNotice() {
+  const message = loginErrorMessage(useSearchParams().get("error"));
+  return message ? <FormError>{message}</FormError> : null;
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,6 +20,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  // 리다이렉트로 받은 오류는 사용자가 다시 시도하면 지운다(새 결과와 섞이지 않게)
+  const [queryErrorDismissed, setQueryErrorDismissed] = useState(false);
 
   const validate = () => {
     const e: Record<string, string> = {};
@@ -23,6 +32,7 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setQueryErrorDismissed(true);
     const errs = validate();
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setErrors({});
@@ -47,7 +57,13 @@ export default function LoginPage() {
         <Link href="/signup" className="text-dracula-purple hover:text-[#d6bcfb]">회원가입</Link>
       </AuthHeading>
 
-      <SocialButtons onError={(m) => setErrors({ form: m })} />
+      {!queryErrorDismissed && (
+        // useSearchParams는 정적 렌더에서 Suspense 경계가 필요하다 — 폼 전체가 아니라 이 알림만 감싼다
+        <Suspense fallback={null}>
+          <QueryErrorNotice />
+        </Suspense>
+      )}
+      <SocialButtons onError={(m) => { setQueryErrorDismissed(true); setErrors({ form: m }); }} />
       <OrDivider>또는</OrDivider>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>

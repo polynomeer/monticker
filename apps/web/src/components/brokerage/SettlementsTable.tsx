@@ -4,7 +4,7 @@ import type { BrokerageSettlementResponse } from "@monticker/types";
 import { DataTable, Pill, fmtNum, type Column } from "@/components/terminal";
 import { sideClass, sideLabel } from "./shared";
 
-const SETTLEMENT_STATUS: Record<string, { label: string; tone: "orange" | "green" | "red" }> = {
+export const SETTLEMENT_STATUS: Record<string, { label: string; tone: "orange" | "green" | "red" }> = {
   PENDING: { label: "대기 중",   tone: "orange" },
   SETTLED: { label: "정산 완료", tone: "green" },
   FAILED:  { label: "실패",      tone: "red" },

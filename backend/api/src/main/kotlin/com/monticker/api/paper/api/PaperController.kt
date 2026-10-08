@@ -1,6 +1,8 @@
 package com.monticker.api.paper.api
 
 import com.monticker.api.common.aop.RateLimited
+import com.monticker.api.paper.application.PaperAccountResponse
+import com.monticker.api.paper.application.PaperAccountService
 import com.monticker.api.paper.application.PaperOrderRequest
 import com.monticker.api.paper.application.PaperOrderResponse
 import com.monticker.api.paper.application.PaperPortfolioQueryService
@@ -20,12 +22,29 @@ class PaperController(
     private val tradingService: PaperTradingService,
     private val portfolioQueryService: PaperPortfolioQueryService,
     private val realizedPnlService: PaperRealizedPnlService,
+    private val accountService: PaperAccountService,
 ) {
     private fun userId(): Long =
         SecurityContextHolder.getContext().authentication.principal as Long
 
     @GetMapping("/portfolio")
     fun getPortfolio() = ResponseEntity.ok(portfolioQueryService.getPortfolio(userId()))
+
+    /** ADR-089 — 내 모의 계좌의 시작 자금·현금. 아직 없으면 204(첫 주문·온보딩에서 만들어진다). */
+    @GetMapping("/account")
+    fun getAccount(): ResponseEntity<PaperAccountResponse> =
+        accountService.find(userId())?.let { ResponseEntity.ok(it) } ?: ResponseEntity.noContent().build()
+
+    /**
+     * ADR-089 — 시작 자금을 정해 모의 계좌를 처음 만든다. 허용값 밖은 400, 이미 다른 시작 자금의 계좌가 있으면 409,
+     * 같은 값으로 다시 부르면 200(created=false). 기존 잔고는 이 경로로 바뀌지 않는다.
+     */
+    @PostMapping("/account")
+    @RateLimited(limit = 10, windowSec = 60, keyPrefix = "paper.account.open")
+    fun openAccount(@RequestBody req: OpenPaperAccountRequest): ResponseEntity<PaperAccountResponse> {
+        val res = accountService.open(userId(), req.initialCapital)
+        return if (res.created) ResponseEntity.status(201).body(res) else ResponseEntity.ok(res)
+    }
 
     @PostMapping("/buy")
     @RateLimited(limit = 60, windowSec = 60, keyPrefix = "paper.buy")
@@ -74,3 +93,5 @@ class PaperController(
 }
 
 data class TradeRequest(val stockId: Long, val quantity: Int)
+
+data class OpenPaperAccountRequest(val initialCapital: java.math.BigDecimal? = null)

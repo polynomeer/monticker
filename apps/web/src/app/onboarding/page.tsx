@@ -1,28 +1,51 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Btn, Icon, PreviewTag, type IconName } from "@/components/terminal";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Btn, Icon, Notice, PreviewTag, type IconName } from "@/components/terminal";
 import { BrandLink } from "@/components/auth/AuthShell";
 import { cn } from "@/lib/utils";
+import { getAccessToken } from "@/services/auth";
+import { authFetch } from "@/services/api";
+import {
+  PAPER_INITIAL_CAPITALS, fetchPaperAccount, fetchPreferences, openPaperAccount, savePreferences,
+  type InterestSector, type PaperAccountInfo, type PaperInitialCapital, type UsageStyle,
+} from "@/services/onboarding";
+import { BULK_WATCHLIST_MAX, addStocksToWatchlist, type BulkAddResult, type WatchlistGroupLite } from "@/lib/watchlistBulk";
 
 const TOTAL = 4;
 
-const SECTORS = ["반도체", "2차전지", "인터넷·플랫폼", "바이오", "금융", "자동차", "배당주", "ETF", "조선·방산"];
-
-const STYLES: { key: string; icon: IconName; title: string; desc: string }[] = [
-  { key: "observe", icon: "eye", title: "관찰 위주", desc: "차트와 이벤트를 먼저 익히고 싶어요" },
-  { key: "event", icon: "trend", title: "단기 이벤트 매매", desc: "급등·급락 신호에 빠르게 반응하고 싶어요" },
-  { key: "quant", icon: "flask", title: "규칙 기반 퀀트", desc: "전략을 만들고 검증하고 싶어요" },
+/** 키는 서버 enum(V86 CHECK)과 같다. 라벨은 화면 전용. */
+const SECTORS: { key: InterestSector; label: string }[] = [
+  { key: "SEMICONDUCTOR", label: "반도체" },
+  { key: "SECONDARY_BATTERY", label: "2차전지" },
+  { key: "INTERNET_PLATFORM", label: "인터넷·플랫폼" },
+  { key: "BIO", label: "바이오" },
+  { key: "FINANCE", label: "금융" },
+  { key: "AUTOMOTIVE", label: "자동차" },
+  { key: "DIVIDEND", label: "배당주" },
+  { key: "ETF", label: "ETF" },
+  { key: "SHIPBUILDING_DEFENSE", label: "조선·방산" },
 ];
 
-/** 모의투자 시작 자금 — 현재 서버는 1,000만원 고정(PaperAccount.INITIAL_BALANCE). 나머지는 시안 요소. */
-const CAPITAL = [
-  { key: "10m", label: "1,000만원", available: true },
-  { key: "30m", label: "3,000만원", available: false },
-  { key: "100m", label: "1억원", available: false },
+const STYLES: { key: UsageStyle; icon: IconName; title: string; desc: string }[] = [
+  { key: "OBSERVE", icon: "eye", title: "관찰 위주", desc: "차트와 이벤트를 먼저 익히고 싶어요" },
+  { key: "EVENT_TRADING", icon: "trend", title: "단기 이벤트 매매", desc: "급등·급락 신호에 빠르게 반응하고 싶어요" },
+  { key: "QUANT", icon: "flask", title: "규칙 기반 퀀트", desc: "전략을 만들고 검증하고 싶어요" },
 ];
+
+/** 모의투자 시작 자금 — 서버 화이트리스트(ADR-089)와 같은 세 값. 계좌를 처음 만들 때만 정할 수 있다. */
+const CAPITAL_LABEL: Record<PaperInitialCapital, string> = {
+  10_000_000: "1,000만원",
+  30_000_000: "3,000만원",
+  100_000_000: "1억원",
+};
+
+/** 3단계 목록 — 인기도 통계가 없어 거래대금 상위 종목을 쓴다(화면에 그렇게 밝힌다). */
+const POPULAR_LIMIT = 12;
+interface PopularStock { stockId: number; symbol: string; name: string; changeRate: number }
 
 const FEATURES: { icon: IconName; title: string; desc: string; note?: string }[] = [
   { icon: "star", title: "관심 종목", desc: "원하는 종목을 관심종목에 담아 시세와 이벤트를 한눈에 확인하세요." },
@@ -46,17 +69,74 @@ function choiceClass(on: boolean) {
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const qc = useQueryClient();
   const [step, setStep] = useState(0);
-  // 관심 분야·사용 방식 선택은 아직 저장할 곳이 없다(서버 API 없음) — 화면 안에서만 유지한다.
-  const [sectors, setSectors] = useState<string[]>([]);
-  const [style, setStyle] = useState<string | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  // ADR-089 — 관심 분야·사용 방식은 PUT /api/users/me/preferences로 저장한다. 홈·알림 우선순위 반영은 아직 없다.
+  const [sectors, setSectors] = useState<InterestSector[]>([]);
+  const [style, setStyle] = useState<UsageStyle | null>(null);
+  const [capital, setCapital] = useState<PaperInitialCapital>(10_000_000);
+  const [account, setAccount] = useState<PaperAccountInfo | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const touched = useRef(false);
   const isLast = step === TOTAL - 1;
+
+  useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
+
+  // 저장해 둔 선택과 기존 모의 계좌를 불러온다. 사용자가 먼저 손댔으면 덮어쓰지 않는다.
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    let cancelled = false;
+    fetchPreferences()
+      .then((p) => {
+        if (cancelled || !p || touched.current) return;
+        setSectors(p.interestSectors);
+        setStyle(p.usageStyle);
+      })
+      .catch(() => {});
+    fetchPaperAccount()
+      .then((a) => {
+        if (cancelled || !a) return;
+        setAccount(a);
+        const c = PAPER_INITIAL_CAPITALS.find((v) => v === Number(a.initialCapital));
+        if (c) setCapital(c);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isLoggedIn]);
 
   const finish = () => {
     localStorage.setItem("onboarding_done", "1");
     router.replace("/");
   };
-  const next = () => (isLast ? finish() : setStep((s) => s + 1));
+
+  /** 관심 분야 단계를 넘어갈 때 저장한다 — 실패하면 머문다(건너뛰기는 언제든 가능). */
+  const saveStep1 = async (): Promise<boolean> => {
+    if (!isLoggedIn) return true;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await savePreferences(sectors, style);
+      if (!account) {
+        const opened = await openPaperAccount(capital);
+        setAccount(opened);
+        qc.invalidateQueries({ queryKey: ["paper"] });
+      }
+      return true;
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "저장하지 못했습니다.");
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const next = async () => {
+    if (isLast) return finish();
+    if (step === 1 && !(await saveStep1())) return;
+    setStep((s) => s + 1);
+  };
 
   return (
     <div className="flex min-h-screen justify-center bg-tm-page px-6 pb-12 pt-8 text-sm text-dracula-fg">
@@ -102,21 +182,24 @@ export default function OnboardingPage() {
             <>
               <Title
                 title="어떤 시장을 지켜볼까요?"
-                desc="고른 분야의 이벤트가 홈과 알림에 먼저 올라옵니다. 나중에 언제든 바꿀 수 있어요."
+                desc="고른 분야와 사용 방식은 계정에 저장되고, 이 화면에서 언제든 바꿀 수 있어요. 홈·알림에 먼저 올려 주는 기능은 준비 중입니다."
                 tag
               />
               <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))" }}>
                 {SECTORS.map((s) => {
-                  const on = sectors.includes(s);
+                  const on = sectors.includes(s.key);
                   return (
                     <button
-                      key={s}
+                      key={s.key}
                       type="button"
                       aria-pressed={on}
-                      onClick={() => setSectors((v) => (on ? v.filter((x) => x !== s) : [...v, s]))}
+                      onClick={() => {
+                        touched.current = true;
+                        setSectors((v) => (on ? v.filter((x) => x !== s.key) : [...v, s.key]));
+                      }}
                       className={cn("h-12 rounded-[10px] text-sm", choiceClass(on))}
                     >
-                      {s}
+                      {s.label}
                     </button>
                   );
                 })}
@@ -132,7 +215,10 @@ export default function OnboardingPage() {
                         key={s.key}
                         type="button"
                         aria-pressed={on}
-                        onClick={() => setStyle(on ? null : s.key)}
+                        onClick={() => {
+                          touched.current = true;
+                          setStyle(on ? null : s.key);
+                        }}
                         className={cn("flex flex-col gap-1.5 rounded-xl p-4 text-left", choiceClass(on), "font-normal text-dracula-fg")}
                       >
                         <Icon name={s.icon} size={22} className="text-dracula-purple" />
@@ -146,44 +232,43 @@ export default function OnboardingPage() {
 
               <div className="flex flex-col gap-3">
                 <h2 className="m-0 text-[1.0625rem] font-bold">모의투자 시작 자금</h2>
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="inline-flex gap-0.5 rounded-lg bg-tm-inner p-[3px]">
-                    {CAPITAL.map((c) => (
+                <div role="radiogroup" aria-label="모의투자 시작 자금" className="inline-flex w-fit gap-0.5 rounded-lg bg-tm-inner p-[3px]">
+                  {PAPER_INITIAL_CAPITALS.map((c) => {
+                    const on = capital === c;
+                    // 이미 계좌가 있으면 시작 자금은 바꿀 수 없다(서버도 409) — 다른 값은 잠근다
+                    const locked = !!account && !on;
+                    return (
                       <button
-                        key={c.key}
+                        key={c}
                         type="button"
-                        aria-pressed={c.available}
-                        disabled={!c.available}
-                        title={c.available ? undefined : "준비 중"}
+                        role="radio"
+                        aria-checked={on}
+                        disabled={locked}
+                        onClick={() => setCapital(c)}
                         className={cn(
                           "h-[34px] whitespace-nowrap rounded-md px-3 text-13 disabled:cursor-not-allowed disabled:opacity-50",
-                          c.available ? "bg-tm-line2 font-semibold text-dracula-fg" : "text-tm-muted",
+                          on ? "bg-tm-line2 font-semibold text-dracula-fg" : "text-tm-muted hover:text-dracula-fg",
                         )}
                       >
-                        {c.label}
+                        {CAPITAL_LABEL[c]}
                       </button>
-                    ))}
-                  </div>
-                  <PreviewTag />
+                    );
+                  })}
                 </div>
-                <span className="text-xs text-tm-muted">가상의 돈입니다. 실제 계좌 연동은 원할 때 따로 진행합니다.</span>
+                {account ? (
+                  <span className="text-xs text-tm-muted">
+                    이미 시작 자금 {CAPITAL_LABEL[capital]}으로 만든 모의 계좌가 있습니다. 시작 자금은 계좌를 처음 만들 때만 정할 수 있어요.
+                  </span>
+                ) : (
+                  <span className="text-xs text-tm-muted">가상의 돈입니다. 실제 계좌 연동은 원할 때 따로 진행합니다. 시작 자금은 처음 한 번만 정할 수 있어요.</span>
+                )}
               </div>
+              {!isLoggedIn && <Notice tone="info">로그인하면 선택이 계정에 저장되고 모의 계좌가 만들어집니다.</Notice>}
+              {saveError && <Notice tone="danger">{saveError}</Notice>}
             </>
           )}
 
-          {step === 2 && (
-            <>
-              <Title title="관심종목을 담아보세요" desc="종목 검색에서 ☆를 누르면 관심종목에 추가됩니다. 관심종목의 이벤트와 가격 알림이 홈에 모입니다." />
-              <div className="flex flex-col items-start gap-3 rounded-xl border border-tm-line2 bg-tm-panel p-5">
-                <Icon name="search" size={22} className="text-dracula-purple" />
-                <span className="text-15 font-bold">종목·이벤트·전략 검색</span>
-                <span className="text-13 text-tm-muted">⌘K(Ctrl+K)로 어디서든 검색을 열 수 있어요.</span>
-                <Link href="/stocks/search" className="text-13 text-dracula-purple hover:text-[#d6bcfb]" onClick={() => localStorage.setItem("onboarding_done", "1")}>
-                  지금 종목 검색으로 이동 →
-                </Link>
-              </div>
-            </>
-          )}
+          {step === 2 && <PickStocksStep isLoggedIn={isLoggedIn} />}
 
           {step === 3 && (
             <>
@@ -201,10 +286,132 @@ export default function OnboardingPage() {
           ) : (
             <span />
           )}
-          <Btn size="xl" onClick={next}>{NEXT_LABEL[step]}</Btn>
+          <Btn size="xl" onClick={next} disabled={saving}>{saving ? "저장 중..." : NEXT_LABEL[step]}</Btn>
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * 3단계 — 거래대금 상위 종목에서 골라 관심종목에 한 번에 담는다. 이미 담긴 종목은 "담김"으로 잠그고 다시 요청하지 않는다.
+ * 서버에 일괄 추가 API가 없어 단건 API를 순서대로 부르고(lib/watchlistBulk), 실패한 종목은 이름으로 알려 준다.
+ */
+function PickStocksStep({ isLoggedIn }: { isLoggedIn: boolean }) {
+  const qc = useQueryClient();
+  const [selected, setSelected] = useState<number[]>([]);
+  const [adding, setAdding] = useState(false);
+  const [result, setResult] = useState<BulkAddResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const { data: popular = [], isLoading } = useQuery<PopularStock[]>({
+    queryKey: ["screener", "onboarding-popular", POPULAR_LIMIT],
+    queryFn: async () => {
+      const r = await fetch(`/api/screener?tab=realtime&market=all&sort=amount&limit=${POPULAR_LIMIT}`);
+      if (!r.ok) return [];
+      return (await r.json())?.items ?? [];
+    },
+    staleTime: 60_000,
+  });
+
+  const { data: groups = [] } = useQuery<WatchlistGroupLite[]>({
+    queryKey: ["watchlist", "groups"],
+    queryFn: async () => {
+      const r = await authFetch("/api/watchlists");
+      return r.ok ? r.json() : [];
+    },
+    enabled: isLoggedIn,
+    staleTime: 15_000,
+  });
+  const watched = new Set(groups.flatMap((g) => g.items.map((i) => i.stockId)));
+  const nameOf = (id: number) => popular.find((p) => p.stockId === id)?.name ?? String(id);
+
+  const toggle = (id: number) =>
+    setSelected((v) => (v.includes(id) ? v.filter((x) => x !== id) : v.length >= BULK_WATCHLIST_MAX ? v : [...v, id]));
+
+  const addAll = async () => {
+    setAdding(true);
+    setError(null);
+    setResult(null);
+    try {
+      const r = await addStocksToWatchlist(selected, authFetch);
+      setResult(r);
+      setSelected(r.failed); // 실패한 것만 선택에 남겨 다시 시도할 수 있게
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "관심종목에 담지 못했습니다.");
+    } finally {
+      setAdding(false);
+      qc.invalidateQueries({ queryKey: ["watchlist"] });
+    }
+  };
+
+  return (
+    <>
+      <Title
+        title="관심종목을 담아보세요"
+        desc="관심종목의 이벤트와 가격 알림이 홈에 모입니다. 아래에서 골라 한 번에 담거나, 종목 검색에서 ☆를 눌러 추가할 수 있어요."
+      />
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="m-0 text-[1.0625rem] font-bold">거래대금 상위 종목</h2>
+          <span className="text-xs text-tm-muted">인기 순위 통계가 아직 없어 거래대금 순으로 보여 줍니다. 투자 추천이 아닙니다.</span>
+        </div>
+        {isLoading ? (
+          <div className="h-40 animate-pulse rounded-xl bg-tm-inner" />
+        ) : popular.length === 0 ? (
+          <p className="m-0 text-13 text-tm-muted">지금은 시세 데이터가 없어 보여 줄 종목이 없습니다. 종목 검색에서 직접 담아 보세요.</p>
+        ) : (
+          <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(170px,1fr))" }}>
+            {popular.map((p) => {
+              const isWatched = watched.has(p.stockId);
+              const on = isWatched || selected.includes(p.stockId);
+              return (
+                <button
+                  key={p.stockId}
+                  type="button"
+                  aria-pressed={on}
+                  disabled={isWatched || !isLoggedIn}
+                  onClick={() => toggle(p.stockId)}
+                  className={cn("flex flex-col items-start gap-0.5 rounded-[10px] px-3 py-2.5 text-left disabled:cursor-default", choiceClass(on))}
+                >
+                  <span className="flex w-full items-center justify-between gap-2">
+                    <span className="truncate text-sm">{p.name}</span>
+                    {isWatched && <span className="text-2xs text-dracula-green">담김</span>}
+                  </span>
+                  <span className="flex w-full items-center justify-between gap-2 text-xs font-normal">
+                    <span className="num text-tm-muted">{p.symbol}</span>
+                    <span className={cn("num", p.changeRate >= 0 ? "text-up" : "text-down")}>
+                      {p.changeRate >= 0 ? "+" : ""}
+                      {p.changeRate.toFixed(2)}%
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {isLoggedIn ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <Btn onClick={addAll} disabled={adding || selected.length === 0}>
+              {adding ? "담는 중..." : `선택한 ${selected.length}개 관심종목에 담기`}
+            </Btn>
+            <Link href="/stocks/search" className="text-13 text-dracula-purple hover:text-[#d6bcfb]" onClick={() => localStorage.setItem("onboarding_done", "1")}>
+              종목 검색으로 이동 →
+            </Link>
+          </div>
+        ) : (
+          <Notice tone="info">로그인하면 관심종목에 담을 수 있습니다.</Notice>
+        )}
+        {result && (
+          <Notice tone={result.failed.length > 0 ? "warn" : "ok"}>
+            {result.added.length}개를 담았습니다
+            {result.alreadyWatched.length > 0 && ` · ${result.alreadyWatched.length}개는 이미 관심종목에 있습니다`}
+            {result.failed.length > 0 && ` · ${result.failed.length}개 실패(${result.failed.map(nameOf).join(", ")}) — 다시 시도해 주세요`}
+          </Notice>
+        )}
+        {error && <Notice tone="danger">{error}</Notice>}
+      </div>
+    </>
   );
 }
 
