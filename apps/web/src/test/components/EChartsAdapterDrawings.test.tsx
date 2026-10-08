@@ -35,7 +35,7 @@ const minuteCandles: CandleData[] = [
 type Opt = {
   series?: Array<{ name: string; type: string; data: unknown[]; areaStyle?: unknown; markPoint?: { data: Array<{ coord: [number, number]; eventId?: number }> } }>;
   xAxis?: Array<{ data: string[] }>;
-  graphic?: { elements: Array<{ id: string; $action: string; children: Array<Record<string, unknown>> }> };
+  graphic?: { elements: Array<{ id: string; $action?: string; children: Array<Record<string, unknown>> }> };
   dataZoom?: Array<Record<string, unknown>>;
 };
 const fullOption = () => setOption.mock.calls.map((c) => c[0] as Opt).filter((o) => Array.isArray(o.series)).at(-1)!;
@@ -93,7 +93,10 @@ describe("EChartsAdapter — 드로잉", () => {
     render(<EChartsAdapter candles={minuteCandles} theme={theme} interval="1m" drawings={drawings} />);
     await waitFor(() => expect(lastGraphic()).toBeTruthy());
     const g = lastGraphic();
-    expect(g.$action).toBe("replace");
+    // graphic 컴포넌트를 통째로 갈아 끼운다 — 그룹 $action: "replace"는 ECharts 6에서 글자가 바뀐 text를 화면에서 빠뜨린다
+    expect(g.$action).toBeUndefined();
+    const graphicCall = setOption.mock.calls.filter((c) => (c[0] as Opt).graphic).at(-1)!;
+    expect(graphicCall[1]).toEqual({ replaceMerge: ["graphic"] });
     const byId = Object.fromEntries(g.children.map((c) => [c.id, c]));
     expect(byId.tl.shape).toEqual({ x1: 108, y1: 400, x2: 128, y2: 380 });
     expect(byId.hl.shape).toEqual({ x1: 48, y1: 350, x2: 800 - 82, y2: 350 });

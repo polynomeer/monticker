@@ -646,8 +646,14 @@ export default function EChartsAdapter({
       elements.push({ type: "polyline", silent: true, z: 51, shape: { points: pen.points.map(toPx) }, style: { stroke: DRAW_COLORS.pen, lineWidth: 2, fill: null } });
     }
 
-    // 그룹을 통째로 교체한다 — merge면 지운 드로잉이 화면에 남는다.
-    chart.setOption({ graphic: { elements: [{ id: DRAWINGS_GROUP, type: "group", $action: "replace", children: elements }] } } as never);
+    // graphic 컴포넌트를 통째로 갈아 끼운다(replaceMerge) — merge면 지운 드로잉이 화면에 남는다.
+    // 그룹에 `$action: "replace"`를 쓰면 안 된다: ECharts 6에서 같은 그룹을 다시 replace할 때 글자가 바뀐
+    // text 요소는 화면(zrender)에서 빠진다 — 옵션에는 남아 있는데, 마우스를 따라 바뀌는 측정 미리보기 라벨과
+    // 두 번째 측정 결과 라벨이 보이지 않았다(e2e chart-drawing.spec.ts에서 실제 캔버스로 확인).
+    chart.setOption(
+      { graphic: { elements: [{ id: DRAWINGS_GROUP, type: "group", children: elements }] } } as never,
+      { replaceMerge: ["graphic"] },
+    );
   }, [theme, height]);
 
   useEffect(() => {
