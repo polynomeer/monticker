@@ -21,6 +21,8 @@ class WatchlistGroup(
     @Column(nullable = false)
     val createdAt: Instant = Instant.now(),
 
+    // 그룹 안 순서 — sort_order가 같은 예전 행은 추가 순(id)
+    @OrderBy("sortOrder ASC, id ASC")
     @OneToMany(mappedBy = "group", cascade = [CascadeType.ALL], orphanRemoval = true)
     val items: MutableList<WatchlistItem> = mutableListOf(),
 )

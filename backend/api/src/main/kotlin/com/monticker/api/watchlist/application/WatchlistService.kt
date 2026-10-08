@@ -2,12 +2,15 @@ package com.monticker.api.watchlist.application
 
 import com.monticker.api.common.metrics.SearchMetrics
 import com.monticker.api.common.search.SearchIndexEvent
+import com.monticker.api.marketdata.application.CandleService
+import com.monticker.api.marketdata.domain.PriceRange52w
 import com.monticker.api.stock.application.StockService
 import com.monticker.api.watchlist.domain.WatchlistGroup
 import com.monticker.api.watchlist.domain.WatchlistItem
 import com.monticker.api.watchlist.infrastructure.WatchlistGroupRepository
 import com.monticker.api.watchlist.infrastructure.WatchlistItemDocument
 import com.monticker.api.watchlist.infrastructure.WatchlistItemRepository
+import com.monticker.api.watchlist.infrastructure.WatchlistOrderRepository
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.elasticsearch.client.elc.NativeQuery
@@ -24,12 +27,30 @@ class WatchlistService(
     private val esOps: ElasticsearchOperations,
     private val searchMetrics: SearchMetrics,
     private val events: ApplicationEventPublisher,
+    private val orderRepository: WatchlistOrderRepository,
+    private val candleService: CandleService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
     @Transactional(readOnly = true)
     fun getGroups(userId: Long): List<WatchlistGroup> =
-        groupRepository.findAllByUserIdOrderBySortOrder(userId)
+        groupRepository.findAllByUserIdOrderBySortOrderAscIdAsc(userId)
+
+    /**
+     * 그룹들에 담긴 종목의 52주 최고/최저(종목 수와 무관하게 쿼리 1번). 실패해도 관심종목 목록은 보여야 하므로
+     * 빈 맵으로 내려간다 — 화면은 `—`를 보인다.
+     */
+    @Transactional(readOnly = true)
+    fun get52WeekRanges(groups: List<WatchlistGroup>): Map<Long, PriceRange52w> {
+        val stockIds = groups.flatMap { g -> g.items.map { it.stock.id } }.toSet()
+        if (stockIds.isEmpty()) return emptyMap()
+        return try {
+            candleService.get52WeekRanges(stockIds)
+        } catch (e: Exception) {
+            log.warn("52주 고저 조회 실패 — 목록은 고저 없이 내려간다: {}", e.message)
+            emptyMap()
+        }
+    }
 
     fun createGroup(userId: Long, name: String): WatchlistGroup {
         require(name.isNotBlank()) { "Group name must not be blank" }
@@ -39,6 +60,8 @@ class WatchlistService(
 
     fun addItem(userId: Long, groupId: Long, stockId: Long, memo: String?): WatchlistItem {
         // 남의 그룹·항목은 없는 것과 같은 404 — 400/403으로 구분하면 id 존재 여부를 열거할 수 있다
+        // 그룹 행 잠금 — 동시에 추가해도 sort_order(맨 끝 자리)가 겹치지 않는다
+        if (!orderRepository.lockGroup(userId, groupId)) throw NoSuchElementException("Watchlist group not found: $groupId")
         val group = groupRepository.findById(groupId).orElse(null)?.takeIf { it.userId == userId }
             ?: throw NoSuchElementException("Watchlist group not found: $groupId")
 
@@ -48,7 +71,7 @@ class WatchlistService(
             "Stock already in watchlist"
         }
 
-        val item = WatchlistItem(group = group, stock = stock, memo = memo)
+        val item = WatchlistItem(group = group, stock = stock, memo = memo, sortOrder = orderRepository.nextSortOrder(groupId))
         val saved = itemRepository.save(item)
 
         publishIndex(saved, group, stock.name, stock.sector)
@@ -58,10 +81,22 @@ class WatchlistService(
     fun removeItem(userId: Long, itemId: Long) {
         val item = itemRepository.findById(itemId).orElse(null)?.takeIf { it.group.userId == userId }
             ?: throw NoSuchElementException("Watchlist item not found: $itemId")
+        // 남은 항목 순서를 0..n-1로 당긴다 — 그룹을 잠그고 삭제를 먼저 내보낸 뒤(flush) 다시 매긴다
+        val groupId = orderRepository.lockGroupOfItem(userId, itemId)
+            ?: throw NoSuchElementException("Watchlist item not found: $itemId")
         itemRepository.delete(item)
+        itemRepository.flush()
+        orderRepository.compact(groupId)
         // ADR-042: 삭제도 이벤트 — 트랜잭션이 롤백되면 이벤트도 함께 사라진다
         events.publishEvent(SearchIndexEvent.delete(WatchlistIndexer.INDEX, itemId.toString()))
     }
+
+    /**
+     * 그룹 안에서 [itemId]를 [targetIndex](0부터) 자리로 옮기고 실제로 놓인 자리를 돌려준다.
+     * 남의 항목·없는 항목은 똑같이 NoSuchElementException(404).
+     */
+    fun moveItem(userId: Long, itemId: Long, targetIndex: Int): Int =
+        orderRepository.moveItem(userId, itemId, targetIndex)
 
     /**
      * 내 관심종목 중 키워드 검색 (ES). 종목명·심볼·섹터·메모를 통합 검색한다.

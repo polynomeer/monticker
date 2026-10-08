@@ -2,6 +2,10 @@ package com.monticker.api.watchlist.api
 
 import com.monticker.api.watchlist.application.WatchlistSearchResult
 import com.monticker.api.watchlist.application.WatchlistService
+import jakarta.validation.Valid
+import jakarta.validation.constraints.Max
+import jakarta.validation.constraints.Min
+import jakarta.validation.constraints.NotNull
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.validation.annotation.Validated
@@ -16,7 +20,8 @@ class WatchlistController(
     @GetMapping
     fun getGroups(@AuthenticationPrincipal userId: Long): ResponseEntity<List<WatchlistGroupResponse>> {
         val groups = watchlistService.getGroups(userId)
-        return ResponseEntity.ok(groups.map { WatchlistGroupResponse.from(it) })
+        val ranges = watchlistService.get52WeekRanges(groups)
+        return ResponseEntity.ok(groups.map { WatchlistGroupResponse.from(it, ranges) })
     }
 
     @PostMapping("/groups")
@@ -43,6 +48,20 @@ class WatchlistController(
         } catch (e: IllegalStateException) {
             ResponseEntity.badRequest().build()
         }
+    }
+
+    /**
+     * 그룹 안 순서 이동. PATCH /api/watchlists/items/{itemId}/sort-order  {"sortOrder": 0}
+     * sortOrder는 옮길 자리(0부터). 목록 길이를 넘으면 맨 끝. 남의 항목·없는 항목은 똑같이 404.
+     */
+    @PatchMapping("/items/{itemId}/sort-order")
+    fun moveItem(
+        @PathVariable itemId: Long,
+        @AuthenticationPrincipal userId: Long,
+        @Valid @RequestBody request: MoveItemRequest,
+    ): ResponseEntity<MoveItemResponse> {
+        val placed = watchlistService.moveItem(userId, itemId, request.sortOrder!!)
+        return ResponseEntity.ok(MoveItemResponse(itemId = itemId, sortOrder = placed))
     }
 
     @DeleteMapping("/items/{itemId}")
@@ -79,6 +98,11 @@ class WatchlistController(
 
 data class CreateGroupRequest(val name: String)
 data class AddItemRequest(val stockId: Long, val memo: String? = null)
+data class MoveItemRequest(
+    @field:NotNull @field:Min(0) @field:Max(10_000)
+    val sortOrder: Int? = null,
+)
+data class MoveItemResponse(val itemId: Long, val sortOrder: Int)
 
 data class WatchlistSearchResponse(
     val itemId: Long,
