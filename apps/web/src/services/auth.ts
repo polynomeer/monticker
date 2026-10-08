@@ -75,8 +75,27 @@ export function saveTokens(tokens: AuthTokens) {
   notifyAuthChanged();
 }
 
+let legacyPurged = false;
+
+/**
+ * 예전 버전(055cad6d 이전)은 refresh token을 localStorage("refreshToken")에 뒀다. 쿠키로 옮기면서 읽기만 끊고 이미 저장된
+ * 값은 지우지 않아, 그때 로그인한 브라우저엔 장기 토큰이 그대로 남아 XSS 한 번에 노출될 수 있었다(security-review C2).
+ * 처음 토큰을 읽을 때 한 번 지운다.
+ */
+function purgeLegacyRefreshToken() {
+  if (legacyPurged) return;
+  legacyPurged = true;
+  try {
+    localStorage.removeItem("refreshToken");
+  } catch {
+    /* 저장소 접근 불가 — 지울 것도 없다 */
+  }
+}
+
 export function getAccessToken(): string | null {
-  return typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+  if (typeof window === "undefined") return null;
+  purgeLegacyRefreshToken();
+  return localStorage.getItem("accessToken");
 }
 
 /**

@@ -120,10 +120,12 @@ class RiskController(
     fun getCurrentExposure(): ResponseEntity<RiskExposureResponse> {
         val limits = limitService.view(userId())
 
-        val cash = jdbc.queryForObject(
+        // 모의 계좌가 아직 없는 사용자(첫 주문 전)도 있다 — queryForObject는 행이 없으면 null이 아니라 예외라
+        // 아래 기본값이 쓰이지 않고 500이 났다. 행이 없으면 계좌를 만들 때의 기본 시작 자금으로 본다.
+        val cash = jdbc.query(
             "SELECT COALESCE(cash, 0) FROM paper_accounts WHERE user_id = ?",
-            BigDecimal::class.java, userId()
-        ) ?: BigDecimal("10000000")
+            { rs, _ -> rs.getBigDecimal(1) }, userId()
+        ).firstOrNull() ?: BigDecimal("10000000")
 
         // Holdings
         data class Holding(val stockId: Long, val qty: Int, val currentPrice: BigDecimal)

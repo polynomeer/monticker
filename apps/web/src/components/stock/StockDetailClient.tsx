@@ -209,7 +209,7 @@ export default function StockDetailClient({ stockId, symbol, stockName, market }
           className="flex-[0_1_290px]"
           bodyClassName={bookTab === "book" ? "px-0 pb-3 pt-2.5" : undefined}
         >
-          {bookTab === "book" && <OrderBook stockId={stockId} prevClose={prevClose} />}
+          {bookTab === "book" && <OrderBook stockId={stockId} prevClose={prevClose} domestic={market === "KOSPI" || market === "KOSDAQ"} />}
           {bookTab === "ticks" && <RecentTrades stockId={stockId} />}
           {bookTab === "summary" && (
             <div className="flex flex-col gap-3">

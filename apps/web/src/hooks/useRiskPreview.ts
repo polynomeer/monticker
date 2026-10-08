@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
 
@@ -17,6 +17,35 @@ export interface RiskPreviewInput {
 
 /** 입력이 멈춘 뒤 이만큼 기다렸다가 서버에 묻는다. 서버 한도(분당 60회)는 이 간격의 타이핑을 넉넉히 받는다. */
 export const RISK_PREVIEW_DEBOUNCE_MS = 400;
+
+/** 시장가 미리보기 기준가가 이만큼 넘게 움직이면 다시 판정한다. 집중도·손실 한도 판정은 이 안의 변동으로 거의 바뀌지 않는다. */
+export const RISK_PREVIEW_PRICE_TOLERANCE = 0.01;
+
+/** 기준가를 새로 잡을지 — 기준이 없거나 실시간가가 허용 폭을 넘게 벗어나면 실시간가로 옮긴다. */
+export function nextAnchorPrice(anchor: number, live: number, tolerance = RISK_PREVIEW_PRICE_TOLERANCE): number {
+  if (!(live > 0)) return anchor;
+  if (!(anchor > 0)) return live;
+  return Math.abs(live - anchor) / anchor > tolerance ? live : anchor;
+}
+
+/**
+ * 시장가 주문의 미리보기용 가격. 실시간 현재가를 그대로 쓰면 틱마다(약 1초) 입력 키가 바뀌어 미리보기가 계속 나갔고,
+ * 서버 한도(분당 60회)에 1분이면 걸렸다. [resetKey](종목·방향·수량·주문 유형 등 사용자 입력)가 바뀌면 그때의 현재가로 다시 잡는다.
+ */
+export function useAnchoredPrice(live: number, resetKey: string, tolerance = RISK_PREVIEW_PRICE_TOLERANCE): number {
+  const [anchor, setAnchor] = useState(live);
+  const lastKey = useRef(resetKey);
+  useEffect(() => {
+    if (lastKey.current !== resetKey) {
+      lastKey.current = resetKey;
+      if (live > 0) setAnchor(live);
+      return;
+    }
+    const next = nextAnchorPrice(anchor, live, tolerance);
+    if (next !== anchor) setAnchor(next);
+  }, [live, resetKey, anchor, tolerance]);
+  return anchor > 0 ? anchor : live;
+}
 
 /** 서버(RiskPreviewRequest)와 같은 검증 — 통과하지 못하면 요청하지 않는다. */
 export function isPreviewable(i: RiskPreviewInput | null | undefined): i is RiskPreviewInput {
