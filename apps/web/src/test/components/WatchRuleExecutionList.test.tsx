@@ -76,4 +76,19 @@ describe("WatchRuleExecutionList", () => {
     );
     expect(screen.getByText("규칙 #999")).toBeInTheDocument();
   });
+
+  // ADR-095 — 지정가 접수(미체결)와 그룹 규칙의 발동 종목
+  it("지정가 접수는 지정가와 미체결을, 그룹 규칙은 발동 종목을 보여준다", () => {
+    const groupRule: WatchRuleResponse = { ...rule, id: 8, stockId: null, targetType: "GROUP", targetGroupId: 4, targetGroupName: "반도체" };
+    render(
+      <WatchRuleExecutionList
+        executions={[execution({ watchRuleId: 8, status: "PLACED", orderId: 77, quantity: 3, limitPrice: 69650, stockId: 19, reason: "지정가 69650 접수 — 미체결" })]}
+        ruleLabels={new Map([[8, { stockLabel: "그룹 · 반도체", rule: groupRule }]])}
+        stockLabel={(id) => (id === 19 ? "카카오 (035720)" : `종목 #${id}`)}
+      />,
+    );
+    expect(screen.getByText("지정가 접수")).toBeInTheDocument();
+    expect(screen.getByText(/3주 지정가 69,650원 · 미체결/)).toBeInTheDocument();
+    expect(screen.getByText("→ 카카오 (035720)")).toBeInTheDocument();
+  });
 });

@@ -33,6 +33,28 @@ export function triggerLabel(rule: WatchRuleResponse): string {
   return req.length ? `${base} + ${req.map((t) => EVENT_LABEL[t]).join(" + ")} (${windowLabel(rule.conditionWindowSec)} 내)` : base;
 }
 
+/** ADR-095 — 주문 유형 한 줄: "시장가" 또는 "지정가 (가격 −0.50%)" */
+export function orderTypeLabel(rule: WatchRuleResponse): string {
+  if (rule.orderType !== "LIMIT" || rule.limitOffsetBps == null) return "시장가";
+  const bps = rule.limitOffsetBps;
+  const pct = (Math.abs(bps) / 100).toFixed(2);
+  return `지정가 (가격 ${bps > 0 ? "+" : bps < 0 ? "−" : ""}${pct}%)`;
+}
+
+/** ADR-095 — 수량 한 줄: "10주" 또는 "자산 5%" */
+export function sizeLabel(rule: WatchRuleResponse): string {
+  if (rule.sizeType === "EQUITY_PCT" && rule.equityPct != null) return `자산 ${rule.equityPct}%`;
+  return `${rule.quantity ?? "—"}주`;
+}
+
+/** ADR-095 — 대상 한 줄: 종목 라벨 또는 "그룹 · 이름"(지워졌으면 "삭제된 그룹") */
+export function targetLabel(rule: WatchRuleResponse, stockLabel: (id: number) => string): string {
+  if (rule.targetType === "GROUP") {
+    return rule.targetGroupMissing || !rule.targetGroupName ? "삭제된 관심종목 그룹" : `그룹 · ${rule.targetGroupName}`;
+  }
+  return rule.stockId != null ? stockLabel(rule.stockId) : "—";
+}
+
 export function cooldownLabel(sec: number): string {
   if (sec <= 0) return "쿨다운 없음";
   if (sec % 3600 === 0) return `쿨다운 ${sec / 3600}시간`;
@@ -68,7 +90,9 @@ export function WatchRuleRow({ rule, stockLabel, onToggle, onDelete, pending, la
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-bold">{title}</span>
           <Pill tone="muted">{rule.eventType === "QUANT_SIGNAL" ? "퀀트랩 전략" : (rule.requiredEventTypes?.length ? "복합 조건" : "직접 만든 규칙")}</Pill>
+          {rule.targetType === "GROUP" && <Pill tone="cyan">관심종목 그룹</Pill>}
           {limitReached && rule.isActive && <Pill tone="orange">오늘 한도 도달</Pill>}
+          {rule.targetGroupMissing && <Pill tone="red">대상 그룹 삭제됨</Pill>}
           {!rule.isActive && <Pill tone="yellow">중지됨</Pill>}
         </div>
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
@@ -77,7 +101,7 @@ export function WatchRuleRow({ rule, stockLabel, onToggle, onDelete, pending, la
           <span className="text-tm-muted" aria-hidden>→</span>
           <span className="rounded-md bg-tm-panel px-2 py-[3px] text-dracula-green">모의 주문</span>
           <span className="text-tm-soft">
-            시장가 <span className={rule.side === "BUY" ? "text-up" : "text-down"}>{rule.side === "BUY" ? "매수" : "매도"}</span> · <span className="num">{rule.quantity}주</span> · {cooldownLabel(rule.cooldownSec)}
+            {orderTypeLabel(rule)} <span className={rule.side === "BUY" ? "text-up" : "text-down"}>{rule.side === "BUY" ? "매수" : "매도"}</span> · <span className="num">{sizeLabel(rule)}</span> · {cooldownLabel(rule.cooldownSec)}
           </span>
         </div>
       </div>
@@ -93,7 +117,8 @@ export function WatchRuleRow({ rule, stockLabel, onToggle, onDelete, pending, la
         </span>
       </div>
       <div className="flex items-center gap-1.5">
-        <Toggle checked={rule.isActive} label={`${title} 켜기`} disabled={pending} onChange={() => onToggle(rule)} />
+        {/* 대상 그룹이 지워진 규칙은 다시 켤 수 없다(서버도 거부한다) */}
+        <Toggle checked={rule.isActive} label={`${title} 켜기`} disabled={pending || (!!rule.targetGroupMissing && !rule.isActive)} onChange={() => onToggle(rule)} />
         {confirmingDelete ? (
           <>
             <Btn kind="danger" size="sm" onClick={() => onDelete(rule)} disabled={pending}>삭제</Btn>
