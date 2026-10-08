@@ -116,6 +116,34 @@ class RiskCheckerService(
         estimatedPrice: BigDecimal,
     ): RiskCheckResult = paperCheck(userId, stockId, side, qty, estimatedPrice, dryRun = true)
 
+    /**
+     * ADR-092 — 주문 입력 중 미리보기(POST /api/risk/preview). 판정은 [dryRun]과 같은 규칙·같은 유효 한도로 하지만
+     * **아무것도 남기지 않는다**: 감사 행(risk_check_logs)도, 거부율 메트릭(risk_check_total)도 없다. 입력이 바뀔 때마다
+     * 불리므로 감사 기록이 남으면 사용자가 타이핑한 중간값이 "판정"으로 쌓인다. 읽기 전용 트랜잭션이라 실수로 쓰기 경로가
+     * 끼어들어도 DB가 거부한다. 주문·예약·한도 사용량 어느 것도 만들지 않는다 — 이 결과는 주문의 근거가 아니다(주문 경로는
+     * 제출 시점에 게이트를 다시 돈다).
+     */
+    @Transactional(readOnly = true)
+    fun preview(
+        userId: Long,
+        stockId: Long,
+        side: String,
+        qty: Int,
+        estimatedPrice: BigDecimal,
+    ): RiskCheckResult {
+        requireSide(side)
+        ensureStockExists(stockId)
+        val limits = limitService.effective(userId)
+        if (!limits.isActive) {
+            return judge(riskRuleQueryService.quantityGuard(qty) + RuleResult(
+                rule = "RiskChecksDisabled", passed = true, detail = "리스크 체크가 꺼져 있어 한도 규칙을 평가하지 않았습니다(모의투자).",
+                current = 0.0, limit = 0.0,
+            ))
+        }
+        val price = if (estimatedPrice > BigDecimal.ZERO) estimatedPrice else riskRuleQueryService.currentPrice(stockId)
+        return judge(riskRuleQueryService.evaluate(userId, stockId, side, qty, price, limits))
+    }
+
     private fun paperCheck(
         userId: Long,
         stockId: Long,
@@ -196,6 +224,21 @@ class RiskCheckerService(
         accountType: String,
         dryRun: Boolean = false,
     ): RiskCheckResult {
+        val result = judge(checks)
+        val approved = result.approved
+        val blockedBy = result.blockedBy
+
+        auditLogger.record(userId, stockId, side, qty, approved, blockedBy, checks, accountType, dryRun)
+        if (dryRun) return result
+        // Trading 대시보드 "리스크 거부율" — 감사 로그는 DB에만 있어 추이를 볼 수 없었다. 룰 라벨은 규칙 수(7개)로 유계.
+        registry.counter("risk_check_total", "account", accountType, "side", side,
+            "result", if (approved) "approved" else "blocked", "rule", blockedBy ?: "none").increment()
+
+        return result
+    }
+
+    /** 규칙 결과 → 판정. 부수 효과가 없다 — [finalize]와 [preview]가 같은 판정식을 쓴다. */
+    private fun judge(checks: List<RuleResult>): RiskCheckResult {
         val blockedBy = checks.firstOrNull { !it.passed }?.rule
         val approved  = blockedBy == null
         val severity  = when {
@@ -203,13 +246,6 @@ class RiskCheckerService(
             checks.any { !it.passed } -> "WARNING"
             else                   -> "APPROVED"
         }
-
-        auditLogger.record(userId, stockId, side, qty, approved, blockedBy, checks, accountType, dryRun)
-        if (dryRun) return RiskCheckResult(approved = approved, blockedBy = blockedBy, severity = severity, checks = checks)
-        // Trading 대시보드 "리스크 거부율" — 감사 로그는 DB에만 있어 추이를 볼 수 없었다. 룰 라벨은 규칙 수(7개)로 유계.
-        registry.counter("risk_check_total", "account", accountType, "side", side,
-            "result", if (approved) "approved" else "blocked", "rule", blockedBy ?: "none").increment()
-
         return RiskCheckResult(approved = approved, blockedBy = blockedBy, severity = severity, checks = checks)
     }
 
