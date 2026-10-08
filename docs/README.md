@@ -34,7 +34,7 @@ monticker의 모든 문서를 **독자별 · 주제별**로 정리한 색인입�
 
 ### 일반 사용자
 
-1. [manual/user-guide.md](manual/user-guide.md) — 화면별 사용법 전체
+1. [manual/user-guide.md](manual/user-guide.md) — 화면별 사용법 전체(터미널 화면 기준, "준비 중" 기능 표시 포함)
 2. [stock-knowledge/](stock-knowledge/README.md) — 주식 기초부터 퀀트·한국 시장 제도까지 24장
 3. [../README.md 면책 고지](../README.md#면책-고지) — 실전투자 기능을 쓰기 전 반드시
 
@@ -64,7 +64,7 @@ monticker의 모든 문서를 **독자별 · 주제별**로 정리한 색인입�
 | [screener.md](screener.md) | 스크리너 화면 설계 |
 | [settlement.md](settlement.md) | 정산 시스템 설계 — 페이퍼/전략마켓/구독/증권사 4종, Mock→Real 전환 지점 |
 | [event-storming.html](event-storming.html) | 이벤트 스토밍 결과 (브라우저로 열기) |
-| [images/](images/) | README·매뉴얼용 화면 스크린샷. 재생성은 `apps/web/scripts/capture-screenshots.mjs` ([../CONTRIBUTING.md](../CONTRIBUTING.md#문서-스크린샷-다시-찍기)) |
+| [images/](images/) | README·매뉴얼용 화면 스크린샷 — 2026-09-23 캡처로 터미널 디자인 이전 화면이라 다시 찍어야 함([목록](manual/README.md#스크린샷-다시-찍을-목록)). 재생성은 `apps/web/scripts/capture-screenshots.mjs` ([../CONTRIBUTING.md](../CONTRIBUTING.md#문서-스크린샷-다시-찍기)) |
 
 ### 설계·결정
 
@@ -111,7 +111,8 @@ monticker의 모든 문서를 **독자별 · 주제별**로 정리한 색인입�
 
 | 문서 | 내용 |
 |------|------|
-| [manual/user-guide.md](manual/user-guide.md) | 화면별 사용 설명서 — 스크리너, 종목 상세, 관심종목, 알림, 모의투자, 체결엔진, 리스크, 지갑, 포트폴리오, 백테스팅, Quant Lab, Analytics, 실전투자, 구독, 설정, FAQ |
+| [manual/README.md](manual/README.md) | 사용자 매뉴얼 색인과 **다시 찍어야 할 스크린샷 목록**(터미널 디자인 전환으로 기존 캡처는 매뉴얼에서 뺐음) |
+| [manual/user-guide.md](manual/user-guide.md) | 화면별 사용 설명서(2026-10 터미널 화면 기준) — 화면 구성(아이콘 레일·계좌 칩·패널), 홈, 스크리너, 종목 상세(그리기 도구), 관심종목, 알림, 모의투자 주문(지정가·조건부·영수증·감정 태그), 체결 엔진, 자동 주문 규칙, 리스크(쿨링오프·근접 경고), 지갑·리플레이, 포트폴리오, 정산, 백테스팅, Quant Lab, 전략 마켓, Analytics, 실전투자(연동·해지·'결과 확인 중'), 설정, 구독, FAQ. "준비 중" 요소는 그렇게 표시 |
 | [domain/README.md](domain/README.md) | 제품·비즈니스 판단의 근거 5편 — 용어집, Quant Lab 포지셔닝, 지갑 UX 철학, 리스크 관리 신뢰, Analytics 사용자 가치 |
 | [stock-knowledge/README.md](stock-knowledge/README.md) | 주식 도메인 백과 24장 — 시장 구조, 차트 분석, 포트폴리오·리스크, 퀀트·백테스트, 한국 시장 제도, monticker 도메인 매핑 |
 
