@@ -640,6 +640,21 @@ CREATE UNIQUE INDEX ux_watch_rule_exec_idempotency
 > `orders.idempotency_key`(V48)도 같은 ADR에서 추가됐다. **중복 체결을 막는 것은 그쪽**이고,
 > 이 유니크는 기록 중복만 막는다. 둘 다 필요하다.
 
+### V92 — 대상 그룹·지정가·계좌 % ([ADR-095](decisions/095-watch-rule-group-target-limit-equity-pct.md))
+
+```sql
+-- watch_rules
+target_type      VARCHAR(10) NOT NULL DEFAULT 'STOCK'   -- STOCK | GROUP (stock_id ⇔ STOCK, target_group_id ⇔ GROUP; stock_id NULL 허용)
+target_group_id  BIGINT                                  -- watchlist_groups.id, FK 없음
+order_type       VARCHAR(6)  NOT NULL DEFAULT 'MARKET'  -- MARKET | LIMIT
+limit_offset_bps INTEGER                                 -- LIMIT일 때 -1000~1000
+size_type        VARCHAR(10) NOT NULL DEFAULT 'SHARES'  -- SHARES(quantity) | EQUITY_PCT(equity_pct 1~25, quantity NULL)
+equity_pct       NUMERIC(5,2)
+-- watch_rule_executions
+stock_id BIGINT, limit_price NUMERIC(18,4), status += 'PLACED'(지정가 접수·미체결)
+-- 트리거: watchlist_groups 삭제 → 그 그룹을 대상으로 한 활성 규칙 is_active = false (연쇄 삭제 아님)
+```
+
 ---
 
 ## Quant Analytics Tables (V16 — done)

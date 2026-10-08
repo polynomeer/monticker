@@ -135,7 +135,7 @@
 | /wallet/replay | 주문 복기 행의 감정 칩·코멘트 | 종목·방향·수량·수익률만 | ReplayEvent에 tradeId·emotion·memo. 코멘트는 AI 생성 | P2 | 부분 ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — tradeId·감정 칩·메모·출처(일괄 조회). AI 코멘트는 남음 |
 | /wallet/replay | "감정 분포 · 이번 주"·날짜별 % | 전체 기간 분포, 일별 손익 금액 | emotion-analysis 기간 파라미터, 일별 수익률 API | P2 | ✅ [ADR-091](decisions/091-wallet-behavior-and-execution-quality-metrics.md) — `emotion-analysis?from&to`(체결일 기준, 최대 1년, 한 쿼리), `/api/wallet/daily-returns`(그날 손익 ÷ 00:00 평가자산, 입출금 제외, 초기화 이전·시세 없음은 `—`). 날짜 띠 요청 6 → 1 |
 | /settlement | 이번 주 순액, 공휴일, "완료" 서버 필터 | 정산 예정만 표시, 주말만 건너뜀, 현재 페이지 필터 | 기간별 정산 집계, 영업일 캘린더, `?status=` | P2 | ✅ [ADR-086](decisions/086-krx-trading-calendar.md) — `/api/settlement/paper/summary`(이번 주 순액), KRX 휴장일 반영(T+2·정산 캘린더·다가오는 휴장일), `?status=SETTLED`. 기존 PENDING 정산일은 기동 시 재정렬 |
-| /watch-rules | 관심종목 그룹 단위, 주문 유형·금액(계좌 %) | 비활성, 시장가 고정, 수량(주) | 규칙 대상 그룹, 지정가·비율 수량 | P2 | |
+| /watch-rules | 관심종목 그룹 단위, 주문 유형·금액(계좌 %) | 비활성, 시장가 고정, 수량(주) | 규칙 대상 그룹, 지정가·비율 수량 | P2 | ✅ [ADR-095](decisions/095-watch-rule-group-target-limit-equity-pct.md) — 그룹은 평가 시점 구성·소유자 조건, 쿨다운·한도는 규칙 단위, 그룹 삭제 시 규칙 중지. 지정가 = 발동 가격 ±bp(±10%), 계좌 % = 평가자산 1~25% 정수 주 내림(0주면 건너뜀) |
 | /watch-rules | 상단 "규칙 경유 손익" | `—` | 규칙 체결 손익 집계 | P2 | ✅ [ADR-085](decisions/085-paper-order-entry-origin.md) — 규칙이 낸 매도 체결의 실현 손익(이동평균), 합계·규칙별 |
 | /risk | 한도 초과 시 "경고 후 진행" 모드, VaR 단위(원/%) | "주문 차단" 고정, % 입력 + 원화 환산 병기 | 정책 결정과 severity 처리 | P2 | |
 
