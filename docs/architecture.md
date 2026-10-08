@@ -427,6 +427,7 @@ DELETE /api/devices/push-token
 
 # 모의투자 · 체결엔진 · 리스크
 GET    /api/paper/portfolio | history | risk
+                                              # history: ?page&size(1..100)&stockId&from(포함)&to(제외, ISO-8601) — 본인 체결만
 POST   /api/paper/buy | sell | reset
 POST   /api/matching/orders                   # 리스크 게이트 → CLOB
 DELETE /api/matching/orders/{id}
