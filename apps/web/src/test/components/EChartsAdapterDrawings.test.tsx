@@ -124,6 +124,30 @@ describe("EChartsAdapter — 드로잉", () => {
     expect(el.onclick).toBeUndefined();
   });
 
+  it("클릭(제자리 누름·뗌)하면 지우고, 실제로 끈 뒤의 클릭은 지우지 않고 옮긴다", async () => {
+    const drawings: Drawing[] = [{ id: "hl", tool: "HORIZONTAL_LINE", points: [{ time: 0, price: 150 }] }];
+    const onChange = vi.fn();
+    render(<EChartsAdapter candles={minuteCandles} theme={theme} interval="1m" drawings={drawings} onDrawingsChange={onChange} />);
+    await waitFor(() => expect(lastGraphic()).toBeTruthy());
+    type Handlers = { ondragstart?: () => void; ondragend: (this: { x: number; y: number }) => void; onclick: () => void };
+    const el = lastGraphic().children[0] as unknown as Handlers;
+
+    // zrender: draggable 요소는 움직이지 않아도 mousedown에 dragstart, mouseup에 dragend(x=y=0) → click 순서
+    el.ondragstart?.();
+    el.ondragend.call({ x: 0, y: 0 });
+    el.onclick();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0]).toEqual([]);
+
+    // 실제로 끌면(dy=-20px → 가격 +20) 옮기고, 이어지는 click은 무시한다
+    onChange.mockClear();
+    el.ondragstart?.();
+    el.ondragend.call({ x: 0, y: -20 });
+    el.onclick();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect((onChange.mock.calls[0][0] as Drawing[])[0].points[0].price).toBe(170);
+  });
+
   it("수평선 — 자석이면 가장 가까운 OHLC 가격에 붙는다", async () => {
     const onChange = vi.fn();
     render(<EChartsAdapter candles={minuteCandles} theme={theme} interval="1m" activeDrawingTool="HORIZONTAL_LINE" magnet onDrawingsChange={onChange} />);

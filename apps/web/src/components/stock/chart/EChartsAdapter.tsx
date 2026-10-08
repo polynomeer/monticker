@@ -581,8 +581,11 @@ export default function EChartsAdapter({
               cur.onDrawingsChange?.(cur.drawings.filter(x => x.id !== d.id));
             }
           : undefined,
-        ondragstart: () => { draggedAtRef.current = Date.now(); },
+        // zrender는 draggable 요소를 누르기만 해도(mousedown) dragstart를, 떼면 dragend를 보낸다 — 움직이지
+        // 않은 클릭에도 오므로 "방금 끌었다"는 실제로 옮겨졌을 때만 기록한다. 그렇지 않으면 뒤따르는
+        // click이 항상 무시돼 클릭으로 지우기가 동작하지 않는다.
         ondragend(this: { x: number; y: number }) {
+          if (!this.x && !this.y) return;
           draggedAtRef.current = Date.now();
           moveDrawing(d.id, this.x, this.y);
         },
