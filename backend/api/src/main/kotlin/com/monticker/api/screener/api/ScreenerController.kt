@@ -46,6 +46,7 @@ class ScreenerController(
      *
      * GET /api/screener?tab=realtime&market=domestic&sort=amount
      * GET /api/screener?sectors=반도체,2차전지&minChange=1&maxChange=30&minVolMult=2&events=NEWS,QUANT_SIGNAL
+     * GET /api/screener?minCap=100000000000&maxCap=500000000000   (시가총액 원 단위, 양 끝 포함 — 시가총액 없는 종목은 빠진다)
      *
      * events: NEWS | DISCLOSURE | SENTIMENT | QUANT_SIGNAL(로그인 필요, 내 룰셋·구독 전략 신호만) — 모두 만족(AND)
      */
@@ -62,6 +63,8 @@ class ScreenerController(
         @RequestParam(required = false)          maxChange: Double?,
         @RequestParam(required = false)          minVolMult: Double?,
         @RequestParam(required = false)          events: String?,
+        @RequestParam(required = false)          minCap: Long?,
+        @RequestParam(required = false)          maxCap: Long?,
     ): ResponseEntity<ScreenerResponse> {
         requireOffset(offset)
         val criteria = ScreenerCriteria(
@@ -73,6 +76,8 @@ class ScreenerController(
             minVolMult    = minVolMult,
             events        = ScreenerCriteria.parseEvents(events),
             sort          = sort,
+            minCap        = minCap,
+            maxCap        = maxCap,
         ).normalized()   // 잘못된 값은 IllegalArgumentException → 400
         return run(tab, criteria, limit, offset)
     }

@@ -11,6 +11,9 @@ export interface ScreenerCriteria {
   minVolMult: number | null;
   events: ScreenerEvent[];
   sort: string;
+  /** 시가총액 범위(원, 양 끝 포함). 걸면 시가총액이 없는 종목은 빠진다 */
+  minCap: number | null;
+  maxCap: number | null;
 }
 
 export const DEFAULT_CRITERIA: ScreenerCriteria = {
@@ -22,6 +25,8 @@ export const DEFAULT_CRITERIA: ScreenerCriteria = {
   minVolMult: null,
   events: [],
   sort: "amount",
+  minCap: null,
+  maxCap: null,
 };
 
 /** 시장 세그먼트 — 위 칸(전체/국내/해외)과 국내일 때만 보이는 아래 칸(국내 전체/코스피/코스닥). 서버 ScreenerCriteria.MARKETS와 같다. */
@@ -109,6 +114,8 @@ export function toQuery(tab: string, c: ScreenerCriteria, limit: number, offset:
   if (c.maxChange != null) p.set("maxChange", String(c.maxChange));
   if (c.minVolMult != null) p.set("minVolMult", String(c.minVolMult));
   if (c.events.length) p.set("events", c.events.join(","));
+  if (c.minCap != null) p.set("minCap", String(c.minCap));
+  if (c.maxCap != null) p.set("maxCap", String(c.maxCap));
   return p.toString();
 }
 
@@ -128,5 +135,37 @@ export function fromServer(c: Partial<ScreenerCriteria> | null | undefined): Scr
     minChange: c?.minChange ?? null,
     maxChange: c?.maxChange ?? null,
     minVolMult: c?.minVolMult ?? null,
+    minCap: c?.minCap ?? null,
+    maxCap: c?.maxCap ?? null,
   };
+}
+
+// ── 시가총액 범위 — 화면은 억원 단위로 입력받고 서버에는 원으로 보낸다 ─────────────
+export const EOK = 100_000_000;
+/** 서버 ScreenerCriteria.MARKET_CAP_CEIL(1경 원)을 억원으로 */
+export const MARKET_CAP_CEIL_EOK = 100_000_000;
+
+/**
+ * 억원 입력 → 원. 빈 값은 null(제한 없음). 음수·숫자 아님·상한 초과는 "invalid".
+ * 소수 억원(예: 0.5 = 5천만 원)은 원 단위로 반올림한다.
+ */
+export function parseCapEok(text: string): number | null | "invalid" {
+  const t = text.trim().replace(/,/g, "");
+  if (t === "") return null;
+  if (!/^\d+(\.\d+)?$/.test(t)) return "invalid";
+  const v = Number(t);
+  if (!Number.isFinite(v) || v < 0 || v > MARKET_CAP_CEIL_EOK) return "invalid";
+  return Math.round(v * EOK);
+}
+
+/** 원 → 억원 입력값(빈 값은 ""). */
+export function capToEokText(won: number | null): string {
+  return won == null ? "" : String(won / EOK);
+}
+
+/** 범위 검증 — 문제가 있으면 메시지, 없으면 null */
+export function capRangeError(min: number | null | "invalid", max: number | null | "invalid"): string | null {
+  if (min === "invalid" || max === "invalid") return "0 이상 1억(억원) 이하의 숫자를 입력하세요.";
+  if (min != null && max != null && min > max) return "최소가 최대보다 큽니다.";
+  return null;
 }

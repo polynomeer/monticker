@@ -86,6 +86,12 @@ class ScreenerRepository(private val jdbc: JdbcTemplate) {
         else    -> ""
     }
 
+    /** 시가총액 범위(minCap/maxCap) — 값은 바인딩한다. NULL 시가총액은 비교가 참이 아니므로 범위를 걸 때만 빠진다 */
+    private fun marketCapRange(c: ScreenerCriteria, where: StringBuilder, args: MutableList<Any>) {
+        c.minCap?.let { where.append(" AND sf.market_cap >= ?"); args += it }
+        c.maxCap?.let { where.append(" AND sf.market_cap <= ?"); args += it }
+    }
+
     private fun orderBy(sort: String) = when (sort) {
         "volume"  -> "volume DESC"
         "rise"    -> "change_pct DESC"
@@ -102,6 +108,7 @@ class ScreenerRepository(private val jdbc: JdbcTemplate) {
         val args = ArrayList<Any>()
         val active = if (activeOnly) "s.is_active = true" else "true"
         val where = StringBuilder("WHERE $active ${marketFilter(c.market)} ${marketCapTierFilter(c.marketCapTier)}")
+        marketCapRange(c, where, args)
         if (c.sectors.isNotEmpty()) {
             where.append(" AND s.sector IN (${c.sectors.joinToString(",") { "?" }})")
             args.addAll(c.sectors)
@@ -202,6 +209,7 @@ class ScreenerRepository(private val jdbc: JdbcTemplate) {
         if (!criteria.hasComputedFilter) {
             val args = ArrayList<Any>()
             val where = StringBuilder("WHERE s.is_active = true ${marketFilter(criteria.market)} ${marketCapTierFilter(criteria.marketCapTier)}")
+            marketCapRange(criteria, where, args)
             if (criteria.sectors.isNotEmpty()) {
                 where.append(" AND s.sector IN (${criteria.sectors.joinToString(",") { "?" }})"); args.addAll(criteria.sectors)
             }
@@ -210,7 +218,7 @@ class ScreenerRepository(private val jdbc: JdbcTemplate) {
                 args += type; args += Timestamp.from(todayStart)
             }
             if (stockIdIn != null) { where.append(" AND s.id IN (${stockIdIn.joinToString(",") { "?" }})"); args.addAll(stockIdIn) }
-            val joinFundamentals = if (criteria.marketCapTier != "all") "LEFT JOIN stock_fundamentals sf ON sf.stock_id = s.id" else ""
+            val joinFundamentals = if (criteria.hasMarketCapFilter) "LEFT JOIN stock_fundamentals sf ON sf.stock_id = s.id" else ""
             return jdbc.queryForObject("SELECT COUNT(*) FROM stocks s $joinFundamentals $where", Int::class.java, *args.toTypedArray()) ?: 0
         }
         val base = buildBase(criteria, stockIdIn, todayStart)

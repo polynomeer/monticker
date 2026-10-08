@@ -4,7 +4,10 @@ import com.monticker.api.auth.infrastructure.JwtTokenProvider
 import com.monticker.api.common.exception.BusinessRuleException
 import com.monticker.api.quant.application.StrategyPerformanceQuery
 import com.monticker.api.quant.domain.RuleSetStatus
+import com.monticker.api.quant.infrastructure.MARKET_ROW_COLUMNS
+import com.monticker.api.quant.infrastructure.MARKET_VISIBLE_FROM
 import com.monticker.api.quant.infrastructure.RuleSetRepository
+import com.monticker.api.quant.infrastructure.StrategyMarketSearchRepository
 import com.monticker.api.settlement.creator.application.CreatorEarningsService
 import org.springframework.http.ResponseEntity
 import org.springframework.jdbc.core.JdbcTemplate
@@ -21,13 +24,6 @@ data class StrategyShareRequest(
 
 private val MAX_PRICE = BigDecimal(1_000_000)
 
-/**
- * 마켓 목록과 총수가 같은 행 집합을 보도록 FROM 절을 한곳에 둔다. 목록에 없는 행(작성자 계정이
- * 사라진 전략 등)이 총수에만 잡히거나, 나중에 비공개·숨김 조건이 생겼을 때 한쪽만 고쳐지는 걸 막는다.
- */
-internal const val MARKET_VISIBLE_FROM = """FROM strategy_market sm
-               JOIN users u ON u.id = sm.user_id"""
-
 @Validated
 @RestController
 @RequestMapping("/api/quant/market")
@@ -37,7 +33,18 @@ class StrategyMarketController(
     private val creatorEarningsService: CreatorEarningsService,
     private val ruleSetRepository: RuleSetRepository,
     private val performanceQuery: StrategyPerformanceQuery,
+    private val searchRepository: StrategyMarketSearchRepository,
 ) {
+    companion object {
+        const val MAX_SEARCH_QUERY_LENGTH = 50
+        const val MAX_SEARCH_SIZE = 50
+        /** 검색 페이지 깊이 상한 — page × size가 이 값을 넘으면 400 */
+        const val MAX_SEARCH_OFFSET = 1000
+    }
+
+    private fun optionalUserId(auth: String?): Long? =
+        auth?.let { runCatching { jwtTokenProvider.getUserId(it.removePrefix("Bearer ").trim()) }.getOrNull() }
+
     @GetMapping
     fun list(
         // ADR-035 — isSubscribed 계산에 로그인 사용자가 필요하지만, 마켓 둘러보기 자체는
@@ -46,19 +53,53 @@ class StrategyMarketController(
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "20") size: Int,
     ): ResponseEntity<List<Map<String, Any?>>> {
-        val userId = auth?.let { runCatching { jwtTokenProvider.getUserId(it.removePrefix("Bearer ").trim()) }.getOrNull() }
-
         val rows = jdbc.queryForList(
-            // ADR-035 — price가 빠져 있으면 구매자가 얼마가 청구될지 모른 채 구독을 누르게 된다.
-            // 작성자는 닉네임으로만 표시한다 — 이 목록은 비로그인에도 열려 있고, 이메일은 로그인 ID다(보안 리뷰 2026-10).
-            """SELECT sm.id, sm.ruleset_id, sm.description, sm.price, sm.subscribe_count, sm.created_at,
-                      u.nickname AS author_nickname
-               $MARKET_VISIBLE_FROM
-               ORDER BY sm.subscribe_count DESC, sm.created_at DESC
-               LIMIT ? OFFSET ?""",
+            "SELECT $MARKET_ROW_COLUMNS $MARKET_VISIBLE_FROM ORDER BY sm.subscribe_count DESC, sm.created_at DESC LIMIT ? OFFSET ?",
             size, page * size,
         )
+        return ResponseEntity.ok(enrich(rows, optionalUserId(auth)))
+    }
 
+    /**
+     * 전략 마켓 서버 측 검색 — 전략 이름·설명·작성자 닉네임 부분 일치(대소문자 무시). 공개 범위는 목록과 같다.
+     *
+     * GET /api/quant/market/search?q=모멘텀&page=0&size=20
+     *
+     * 전략 이름은 Mongo(rule_sets)에 있어 SQL로 조인할 수 없다 — 공개 전략 ruleset_id(구독 많은 순 최대
+     * [StrategyMarketSearchRepository.MAX_NAME_SCAN]개)의 이름만 읽어 맞는 것을 고르고, 설명·닉네임 조건과 OR로 묶는다.
+     */
+    @GetMapping("/search")
+    fun search(
+        @RequestHeader(value = "Authorization", required = false) auth: String?,
+        @RequestParam q: String,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+    ): ResponseEntity<Map<String, Any>> {
+        val term = q.trim()
+        require(term.isNotEmpty() && term.length <= MAX_SEARCH_QUERY_LENGTH) { "검색어는 1~${MAX_SEARCH_QUERY_LENGTH}자여야 합니다" }
+        require(size in 1..MAX_SEARCH_SIZE) { "size는 1~$MAX_SEARCH_SIZE 이어야 합니다" }
+        require(page >= 0 && page.toLong() * size <= MAX_SEARCH_OFFSET) { "page는 0 이상, page×size는 $MAX_SEARCH_OFFSET 이하여야 합니다" }
+        val offset = page * size
+
+        val candidateIds = searchRepository.visibleRulesetIds()
+        val nameMatched = if (candidateIds.isEmpty()) emptyList() else
+            ruleSetRepository.findByIdIn(candidateIds)
+                .filter { it.name.contains(term, ignoreCase = true) }
+                .mapNotNull { it.id }
+
+        val rows = searchRepository.search(term, nameMatched, size, offset)
+        val total = searchRepository.count(term, nameMatched)
+        return ResponseEntity.ok(
+            mapOf(
+                "items" to enrich(rows, optionalUserId(auth)),
+                "total" to total,
+                "hasMore" to (offset + rows.size < total),
+            ),
+        )
+    }
+
+    /** 카드에 이름·구독 여부·성과를 붙인다(목록·검색 공용) */
+    private fun enrich(rows: List<Map<String, Any?>>, userId: Long?): List<Map<String, Any?>> {
         // ruleset_id는 Postgres FK가 아니라 Mongo(rule_sets)의 ObjectId라 SQL JOIN이 불가능하다 —
         // 전략 이름은 이 별도 조회로 채워 넣는다(빠지면 프론트 카드 제목이 항상 빈 문자열이 된다).
         val rulesetIds = rows.mapNotNull { it["ruleset_id"] as? String }
@@ -71,14 +112,13 @@ class StrategyMarketController(
             jdbc.queryForList("SELECT market_id FROM strategy_subscriptions WHERE user_id = ?", Long::class.java, userId).toSet()
         } else emptySet()
 
-        val enriched = rows.map { row ->
+        return rows.map { row ->
             LinkedHashMap(row).apply {
                 put("name", namesById[row["ruleset_id"]] ?: "(삭제된 전략)")
                 put("isSubscribed", (row["id"] as Number).toLong() in subscribedMarketIds)
                 put("performance", performance[row["ruleset_id"]])
             }
         }
-        return ResponseEntity.ok(enriched)
     }
 
     /** 공유 전략 총수 — 목록과 같은 공개 범위(`MARKET_VISIBLE_FROM`)만 센다. 목록 응답 형태는 그대로 둔다. */

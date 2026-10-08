@@ -21,6 +21,8 @@ enum class ScreenerEventFilter(val eventType: String?) {
  * - minChange/maxChange: 전일 종가 대비 등락률(%) 범위
  * - minVolMult: 거래량 배수 하한 — 최신 일봉 거래량 ÷ 직전 20거래일 평균 거래량
  * - sectors: stocks.sector 정확히 일치(여러 개면 OR)
+ * - minCap/maxCap: 시가총액(stock_fundamentals.market_cap, 원) 범위. 양 끝 포함. 대형/중형/소형 구간(marketCapTier)과 함께 쓰면
+ *   둘 다 만족해야 한다. 시가총액이 비어 있는 종목은 이 범위를 걸었을 때만 빠진다(값을 모르는 종목을 범위 안이라고 할 수 없다).
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class ScreenerCriteria(
@@ -32,6 +34,8 @@ data class ScreenerCriteria(
     val minVolMult: Double? = null,
     val events: List<ScreenerEventFilter> = emptyList(),
     val sort: String = "amount",
+    val minCap: Long? = null,
+    val maxCap: Long? = null,
 ) {
     companion object {
         /** 시장 세그먼트. kospi/kosdaq은 국내(domestic)를 거래소별로 나눈 것 — SQL에는 리포지토리의 고정 조각으로만 들어간다 */
@@ -43,6 +47,8 @@ data class ScreenerCriteria(
         const val CHANGE_FLOOR = -100.0
         const val CHANGE_CEIL = 1000.0
         const val VOL_MULT_CEIL = 1000.0
+        /** 시가총액 범위 상한(원) — 1경. 실제 최대 종목보다 한참 크고 BIGINT 범위 안이다 */
+        const val MARKET_CAP_CEIL = 10_000_000_000_000_000L
 
         /** 캐시 키 직렬화 — 속성 순서를 고정한다(필드 선언 순서가 바뀌어도 키가 흔들리지 않게). */
         private val CACHE_KEY_MAPPER = com.fasterxml.jackson.module.kotlin.jacksonObjectMapper()
@@ -72,12 +78,20 @@ data class ScreenerCriteria(
         }
         if (minChange != null && maxChange != null) require(minChange <= maxChange) { "등락률 하한이 상한보다 큽니다" }
         minVolMult?.let { require(it.isFinite() && it in 0.0..VOL_MULT_CEIL) { "거래량 배수는 0 ~ $VOL_MULT_CEIL 입니다" } }
+        listOfNotNull(minCap, maxCap).forEach {
+            require(it in 0L..MARKET_CAP_CEIL) { "시가총액 범위는 0 ~ ${MARKET_CAP_CEIL}원입니다" }
+        }
+        if (minCap != null && maxCap != null) require(minCap <= maxCap) { "시가총액 하한이 상한보다 큽니다" }
         return copy(sectors = cleanSectors, events = events.distinct().sortedBy { it.ordinal })
     }
 
     /** 오늘 이벤트 조건 중 stock_events로 거는 것 */
     @get:JsonIgnore
     val stockEventTypes: List<String> get() = events.mapNotNull { it.eventType }
+
+    /** 시가총액 조건(구간 또는 범위)이 있는가 — 있으면 stock_fundamentals를 조인해야 하고, 시가총액이 없는 종목은 빠진다 */
+    @get:JsonIgnore
+    val hasMarketCapFilter: Boolean get() = marketCapTier != "all" || minCap != null || maxCap != null
 
     @get:JsonIgnore
     val requiresQuantSignal: Boolean get() = ScreenerEventFilter.QUANT_SIGNAL in events
