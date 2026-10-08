@@ -34,6 +34,24 @@ class WatchlistController(
         return ResponseEntity.ok(WatchlistGroupResponse.from(group))
     }
 
+    /**
+     * 그룹 삭제. DELETE /api/watchlists/groups/{groupId} → 204.
+     * 항목도 함께 지워지고, 이 그룹을 대상으로 한 Watch Rule은 꺼진다(규칙·발동 기록은 남는다, ADR-095).
+     * 남의 그룹·없는 그룹은 똑같이 404.
+     */
+    @DeleteMapping("/groups/{groupId}")
+    fun deleteGroup(
+        @PathVariable groupId: Long,
+        @AuthenticationPrincipal userId: Long,
+    ): ResponseEntity<Void> {
+        return try {
+            watchlistService.deleteGroup(userId, groupId)
+            ResponseEntity.noContent().build()
+        } catch (e: NoSuchElementException) {
+            ResponseEntity.notFound().build()
+        }
+    }
+
     @PostMapping("/groups/{groupId}/items")
     fun addItem(
         @PathVariable groupId: Long,

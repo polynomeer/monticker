@@ -19,10 +19,11 @@ export type WatchRuleOrderType = "MARKET" | "LIMIT";
 export type WatchRuleSizeType = "SHARES" | "EQUITY_PCT";
 
 /**
- * EXECUTED: 주문 체결 / PLACED: 지정가 접수(미체결, ADR-095) / REJECTED: 리스크 게이트·잔고 등으로 거부 /
+ * EXECUTED: 주문 체결 / PLACED: 지정가 접수(미체결, ADR-095) / FILLED: 접수했던 지정가가 이후 체결(ADR-098) /
+ * CANCELLED: 접수했던 지정가가 체결 전에 취소(ADR-098) / REJECTED: 리스크 게이트·잔고 등으로 거부 /
  * SKIPPED: 쿨다운·중요도 미달·0주 등. 거부와 건너뜀도 이유와 함께 남는다 — 사용자가 "왜 안 샀지"를 확인할 수 있어야 한다.
  */
-export type WatchRuleExecutionStatus = "EXECUTED" | "PLACED" | "REJECTED" | "SKIPPED";
+export type WatchRuleExecutionStatus = "EXECUTED" | "PLACED" | "FILLED" | "CANCELLED" | "REJECTED" | "SKIPPED";
 
 export interface WatchRuleResponse {
   id: number;
@@ -101,6 +102,15 @@ export interface UpdateWatchRuleRequest {
   /** ADR-095 — 지정가 규칙의 오프셋 / 계좌 % 규칙의 비율 */
   limitOffsetBps?: number;
   equityPct?: number;
+  /**
+   * ADR-098 — 기준 바꾸기(생성과 같은 검증). 기준을 바꾸면 새 기준의 값이 함께 와야 한다:
+   * GROUP → targetGroupId, STOCK → stockId, LIMIT → limitOffsetBps, EQUITY_PCT → equityPct, SHARES → quantity.
+   */
+  targetType?: WatchRuleTargetType;
+  stockId?: number;
+  targetGroupId?: number;
+  orderType?: WatchRuleOrderType;
+  sizeType?: WatchRuleSizeType;
 }
 
 export interface WatchRuleExecutionResponse {
@@ -119,4 +129,6 @@ export interface WatchRuleExecutionResponse {
   stockId?: number | null;
   /** 지정가 발동의 지정가 */
   limitPrice?: number | null;
+  /** ADR-098 — PLACED 이후 결과(FILLED·CANCELLED)가 정해진 시각. FILLED면 fillPrice가 체결가 */
+  resolvedAt?: string | null;
 }

@@ -6,6 +6,7 @@ import com.monticker.api.watchrule.domain.WatchRuleExecution
 import com.monticker.api.watchrule.domain.WatchRuleOrderType
 import com.monticker.api.watchrule.domain.WatchRuleSide
 import com.monticker.api.watchrule.domain.WatchRuleSizeType
+import com.monticker.api.watchrule.domain.WatchRuleShapeValues
 import com.monticker.api.watchrule.domain.WatchRuleSizing
 import com.monticker.api.watchrule.domain.WatchRuleTargetType
 import com.monticker.api.watchrule.infrastructure.WatchRuleExecutionRepository
@@ -68,26 +69,7 @@ class WatchRuleService(
         val target = enumOf<WatchRuleTargetType>(targetType, "대상 유형")
         val type = enumOf<WatchRuleOrderType>(orderType, "주문 유형")
         val size = enumOf<WatchRuleSizeType>(sizeType, "수량 기준")
-        // ADR-095 — 수량 기준: 주 수 또는 계좌 평가자산 %(1~25)
-        when (size) {
-            WatchRuleSizeType.SHARES -> {
-                require(quantity != null && quantity > 0) { "수량은 1 이상이어야 합니다" }
-                require(equityPct == null) { "계좌 비율은 수량 기준이 계좌 %일 때만 씁니다" }
-            }
-            WatchRuleSizeType.EQUITY_PCT -> {
-                require(equityPct != null) { "계좌 비율(%)이 필요합니다" }
-                WatchRuleSizing.requireEquityPct(equityPct)
-                require(quantity == null) { "계좌 % 규칙에는 수량(주)을 넣지 않습니다" }
-            }
-        }
-        // ADR-095 — 지정가 오프셋(bps, ±1000)
-        when (type) {
-            WatchRuleOrderType.MARKET -> require(limitOffsetBps == null) { "지정가 오프셋은 지정가 규칙에만 씁니다" }
-            WatchRuleOrderType.LIMIT -> {
-                require(limitOffsetBps != null) { "지정가 규칙에는 오프셋(bp)이 필요합니다" }
-                WatchRuleSizing.requireOffset(limitOffsetBps)
-            }
-        }
+        validateOrderAndSize(type, limitOffsetBps, size, quantity, equityPct)
         require(minImportanceScore in 0..100) { "중요도 하한은 0~100 사이여야 합니다" }
         require(cooldownSec >= 0) { "쿨다운은 0 이상이어야 합니다" }
         require(eventType in SUPPORTED_EVENT_TYPES || eventType == WatchRule.QUANT_SIGNAL) {
@@ -119,22 +101,7 @@ class WatchRuleService(
         window?.let { require(it in 60..86400) { "복합 조건 창은 1분~24시간이어야 합니다" } }
         val sideEnum = runCatching { WatchRuleSide.valueOf(side.uppercase()) }
             .getOrElse { throw IllegalArgumentException("매수/매도 구분이 올바르지 않습니다: $side") }
-        // ADR-095 — 대상: 종목 하나 또는 내 관심종목 그룹. 남의 그룹은 없는 그룹과 같은 404(security-review H6).
-        when (target) {
-            WatchRuleTargetType.STOCK -> {
-                require(stockId != null) { "대상 종목(stockId)이 필요합니다" }
-                require(targetGroupId == null) { "종목 규칙에는 그룹을 넣지 않습니다" }
-                val stockExists = jdbc.queryForObject(
-                    "SELECT EXISTS(SELECT 1 FROM stocks WHERE id = ?)", Boolean::class.java, stockId,
-                ) ?: false
-                if (!stockExists) throw NoSuchElementException("종목을 찾을 수 없습니다: $stockId")
-            }
-            WatchRuleTargetType.GROUP -> {
-                require(targetGroupId != null) { "대상 관심종목 그룹(targetGroupId)이 필요합니다" }
-                require(stockId == null) { "그룹 규칙에는 종목을 넣지 않습니다" }
-                if (!targets.ownsGroup(userId, targetGroupId)) throw NoSuchElementException("관심종목 그룹을 찾을 수 없습니다: $targetGroupId")
-            }
-        }
+        validateTarget(userId, target, stockId, targetGroupId)
 
         return ruleRepo.save(
             WatchRule(
@@ -161,6 +128,13 @@ class WatchRuleService(
         )
     }
 
+    /**
+     * 규칙 수정. ADR-098 — 기준(대상 [targetType]·주문 유형 [orderType]·수량 기준 [sizeType])도 바꿀 수 있다. 요청에 없는 값은
+     * 지금 값을 이어받되, 기준이 바뀌면 그 기준에 딸린 값은 이어받지 않는다(예: SHARES → EQUITY_PCT면 equityPct가 있어야 하고
+     * quantity는 지워진다). 합친 결과는 생성과 **같은 검증**([validateOrderAndSize]·[validateTarget], V92 CHECK와 같은 조건)을 통과해야
+     * 한다. 대상을 바꾸면 그 대상의 존재·소유를 다시 확인한다 — 남의 그룹은 없는 그룹과 같은 404다(security-review H6).
+     * 쿨다운·오늘 발동 수는 이어진다(규칙 id 단위) — 기준을 바꿔 한도를 비우는 우회가 되지 않는다.
+     */
     fun update(
         userId: Long,
         ruleId: Long,
@@ -172,31 +146,47 @@ class WatchRuleService(
         dailyLimit: Int? = null,
         limitOffsetBps: Int? = null,
         equityPct: BigDecimal? = null,
+        targetType: String? = null,
+        stockId: Long? = null,
+        targetGroupId: Long? = null,
+        orderType: String? = null,
+        sizeType: String? = null,
     ): WatchRule {
         val rule = owned(userId, ruleId)
-        // ADR-095 — 기준(대상·주문 유형·수량 기준)은 바꾸지 않는다. 그 기준에 맞는 값만 고칠 수 있다.
-        quantity?.let {
-            require(rule.sizeType == WatchRuleSizeType.SHARES) { "계좌 % 규칙의 수량(주)은 바꿀 수 없습니다 — 계좌 비율을 고치세요" }
-            require(it > 0) { "수량은 1 이상이어야 합니다" }
-        }
-        equityPct?.let {
-            require(rule.sizeType == WatchRuleSizeType.EQUITY_PCT) { "계좌 비율은 계좌 % 규칙에만 씁니다" }
-            WatchRuleSizing.requireEquityPct(it)
-        }
-        limitOffsetBps?.let {
-            require(rule.orderType == WatchRuleOrderType.LIMIT) { "지정가 오프셋은 지정가 규칙에만 씁니다" }
-            WatchRuleSizing.requireOffset(it)
-        }
-        // 그룹이 지워져 꺼진 규칙(V92 트리거)은 다시 켤 수 없다 — 대상이 없다.
-        if (isActive == true && rule.isGroupRule) {
-            require(targets.ownsGroup(userId, rule.targetGroupId!!)) { "대상 관심종목 그룹이 삭제되어 다시 켤 수 없습니다 — 새 규칙을 만드세요" }
+
+        val target = targetType?.let { enumOf<WatchRuleTargetType>(it, "대상 유형") } ?: rule.targetType
+        val type = orderType?.let { enumOf<WatchRuleOrderType>(it, "주문 유형") } ?: rule.orderType
+        val size = sizeType?.let { enumOf<WatchRuleSizeType>(it, "수량 기준") } ?: rule.sizeType
+        // 기준이 그대로면 요청에 없는 값은 지금 값을 잇는다. 기준이 바뀌면 새 기준의 값은 요청에서만 온다.
+        val sameTarget = target == rule.targetType
+        val shape = WatchRuleShapeValues(
+            targetType = target,
+            stockId = stockId ?: rule.stockId.takeIf { sameTarget },
+            targetGroupId = targetGroupId ?: rule.targetGroupId.takeIf { sameTarget },
+            orderType = type,
+            limitOffsetBps = limitOffsetBps ?: rule.limitOffsetBps.takeIf { type == rule.orderType },
+            sizeType = size,
+            quantity = quantity ?: rule.quantity.takeIf { size == rule.sizeType },
+            equityPct = equityPct ?: rule.equityPct.takeIf { size == rule.sizeType },
+        )
+        validateOrderAndSize(shape.orderType, shape.limitOffsetBps, shape.sizeType, shape.quantity, shape.equityPct)
+        val targetChanged = !rule.hasSameTarget(shape)
+        // 대상을 바꿀 때만 존재·소유를 확인한다. 그대로면 확인하지 않는다 — 그룹이 지워져 꺼진 규칙도 이름·쿨다운은 고칠 수 있다.
+        if (targetChanged) validateTarget(userId, shape.targetType, shape.stockId, shape.targetGroupId)
+
+        // 그룹이 지워져 꺼진 규칙(V92 트리거)은 그 그룹으로는 다시 켤 수 없다 — 대상을 다른 종목·그룹으로 바꾸면 켤 수 있다.
+        if (isActive == true && shape.targetType == WatchRuleTargetType.GROUP) {
+            require(targets.ownsGroup(userId, shape.targetGroupId!!)) {
+                "대상 관심종목 그룹이 삭제되어 다시 켤 수 없습니다 — 대상을 다른 종목·그룹으로 바꾸거나 새 규칙을 만드세요"
+            }
         }
         minImportanceScore?.let { require(it in 0..100) { "중요도 하한은 0~100 사이여야 합니다" } }
         cooldownSec?.let { require(it >= 0) { "쿨다운은 0 이상이어야 합니다" } }
         name?.let { require(it.trim().length <= 100) { "규칙 이름은 100자 이하여야 합니다" } }
         // 0 = 제한 해제
         dailyLimit?.let { require(it == 0 || it in 1..1000) { "하루 최대 발동은 1~1000회(0 = 제한 없음)여야 합니다" } }
-        rule.update(quantity, minImportanceScore, cooldownSec, isActive, name, dailyLimit, limitOffsetBps, equityPct)
+        rule.update(null, minImportanceScore, cooldownSec, isActive, name, dailyLimit)
+        rule.reshape(shape)
         return ruleRepo.save(rule)
     }
 
@@ -205,6 +195,52 @@ class WatchRuleService(
     @Transactional(readOnly = true)
     fun executions(userId: Long, limit: Int): List<WatchRuleExecution> =
         execRepo.findAllByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(0, limit.coerceIn(1, 200)))
+
+    /** ADR-095 — 주문 유형·수량 기준과 그 값의 배타 조건(V92 ck_watch_rules_order_type·ck_watch_rules_size). 생성·수정 공통. */
+    private fun validateOrderAndSize(type: WatchRuleOrderType, limitOffsetBps: Int?, size: WatchRuleSizeType, quantity: Int?, equityPct: BigDecimal?) {
+        // 수량 기준: 주 수 또는 계좌 평가자산 %(1~25)
+        when (size) {
+            WatchRuleSizeType.SHARES -> {
+                require(quantity != null && quantity > 0) { "수량은 1 이상이어야 합니다" }
+                require(equityPct == null) { "계좌 비율은 수량 기준이 계좌 %일 때만 씁니다" }
+            }
+            WatchRuleSizeType.EQUITY_PCT -> {
+                require(equityPct != null) { "계좌 비율(%)이 필요합니다" }
+                WatchRuleSizing.requireEquityPct(equityPct)
+                require(quantity == null) { "계좌 % 규칙에는 수량(주)을 넣지 않습니다" }
+            }
+        }
+        // 지정가 오프셋(bps, ±1000)
+        when (type) {
+            WatchRuleOrderType.MARKET -> require(limitOffsetBps == null) { "지정가 오프셋은 지정가 규칙에만 씁니다" }
+            WatchRuleOrderType.LIMIT -> {
+                require(limitOffsetBps != null) { "지정가 규칙에는 오프셋(bp)이 필요합니다" }
+                WatchRuleSizing.requireOffset(limitOffsetBps)
+            }
+        }
+    }
+
+    /**
+     * ADR-095 — 대상의 배타 조건(V92 ck_watch_rules_target)과 존재·소유. 종목 하나 또는 내 관심종목 그룹.
+     * 남의 그룹은 없는 그룹과 같은 404·같은 메시지(security-review H6).
+     */
+    private fun validateTarget(userId: Long, target: WatchRuleTargetType, stockId: Long?, targetGroupId: Long?) {
+        when (target) {
+            WatchRuleTargetType.STOCK -> {
+                require(stockId != null) { "대상 종목(stockId)이 필요합니다" }
+                require(targetGroupId == null) { "종목 규칙에는 그룹을 넣지 않습니다" }
+                val stockExists = jdbc.queryForObject(
+                    "SELECT EXISTS(SELECT 1 FROM stocks WHERE id = ?)", Boolean::class.java, stockId,
+                ) ?: false
+                if (!stockExists) throw NoSuchElementException("종목을 찾을 수 없습니다: $stockId")
+            }
+            WatchRuleTargetType.GROUP -> {
+                require(targetGroupId != null) { "대상 관심종목 그룹(targetGroupId)이 필요합니다" }
+                require(stockId == null) { "그룹 규칙에는 종목을 넣지 않습니다" }
+                if (!targets.ownsGroup(userId, targetGroupId)) throw NoSuchElementException("관심종목 그룹을 찾을 수 없습니다: $targetGroupId")
+            }
+        }
+    }
 
     private fun owned(userId: Long, ruleId: Long): WatchRule {
         // 남의 룰은 없는 룰과 같은 404 — 400/403으로 구분하면 룰 id 존재 여부를 열거할 수 있다

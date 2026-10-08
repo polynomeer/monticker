@@ -92,6 +92,20 @@ class WatchlistService(
     }
 
     /**
+     * 그룹 삭제 — 항목도 함께 지워지고(FK CASCADE), 이 그룹을 대상으로 한 Watch Rule은 DB 트리거가 끈다(ADR-095, V92).
+     * 남의 그룹·없는 그룹은 똑같이 NoSuchElementException(404, security-review H6).
+     *
+     * JPA가 아니라 JDBC로 지운다 — 엔티티를 읽어 cascade로 항목을 하나씩 지우는 대신 한 문장으로 지우고, 같은 SQL을 통합 테스트가
+     * 실제 Postgres에서 트리거와 함께 검증한다. 이 트랜잭션은 그룹 엔티티를 읽지 않으므로 영속성 컨텍스트와 어긋날 것이 없다.
+     */
+    fun deleteGroup(userId: Long, groupId: Long) {
+        val itemIds = orderRepository.deleteGroup(userId, groupId)
+            ?: throw NoSuchElementException("Watchlist group not found: $groupId")
+        // ADR-042: 색인 삭제도 이벤트 — 트랜잭션이 롤백되면 함께 사라진다
+        itemIds.forEach { events.publishEvent(SearchIndexEvent.delete(WatchlistIndexer.INDEX, it.toString())) }
+    }
+
+    /**
      * 그룹 안에서 [itemId]를 [targetIndex](0부터) 자리로 옮기고 실제로 놓인 자리를 돌려준다.
      * 남의 항목·없는 항목은 똑같이 NoSuchElementException(404).
      */

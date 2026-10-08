@@ -418,7 +418,7 @@ GET    /api/stocks/{stockId}/investor-flow    # 투자자 동향 (국내 한정,
 # 관심종목 · 알림 · 디바이스
 GET    /api/watchlists | /api/watchlists/search
 POST   /api/watchlists/groups | /api/watchlists/groups/{groupId}/items
-DELETE /api/watchlists/items/{itemId}
+DELETE /api/watchlists/items/{itemId} | /api/watchlists/groups/{groupId}  (그룹 삭제 → 대상 Watch Rule 꺼짐, ADR-095/098)
 GET    /api/alerts/rules | /api/alerts/stats | /api/alerts/history/search
 POST   /api/alerts/rules
 DELETE /api/alerts/rules/{ruleId}

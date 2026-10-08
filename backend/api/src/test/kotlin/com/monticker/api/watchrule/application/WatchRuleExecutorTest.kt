@@ -37,6 +37,7 @@ class WatchRuleExecutorTest {
     private val guards = mockk<WatchRuleGuards>(relaxed = true)
     private val signalAccess = mockk<com.monticker.api.quant.application.StrategySignalAccess>()
     private val planner = mockk<WatchRuleOrderPlanner>()
+    private val outcomes = mockk<WatchRuleOrderOutcomes>(relaxed = true)
     private lateinit var executor: WatchRuleExecutor
 
     private val userId = 7L
@@ -45,7 +46,7 @@ class WatchRuleExecutorTest {
 
     @BeforeEach
     fun setUp() {
-        executor = WatchRuleExecutor(ruleRepo, execRepo, submitter, SimpleMeterRegistry(), guards, signalAccess, planner)
+        executor = WatchRuleExecutor(ruleRepo, execRepo, submitter, SimpleMeterRegistry(), guards, signalAccess, planner, outcomes)
         every { guards.claimFiring(any()) } answers { claimed(firstArg()) }
         // 시장가 + 주 수(기존 규칙)의 계획 — 실제 플래너와 같다(시세·평가자산을 읽지 않는다).
         every { planner.plan(any(), any()) } answers { OrderPlan.Ready(firstArg<WatchRule>().quantity!!, null) }
@@ -507,5 +508,95 @@ class WatchRuleExecutorTest {
         val e = savedExecution()
         assertThat(e.status).isEqualTo(WatchRuleExecutionStatus.SKIPPED)
         assertThat(e.reason).contains("0주")
+    }
+
+    // ── ADR-098 ──────────────────────────────────────────────────────────
+
+    @Test
+    fun `a PLACED limit is reconciled against the order right after it is recorded`() {
+        givenRules(groupRule(orderType = com.monticker.api.watchrule.domain.WatchRuleOrderType.LIMIT, offset = -100))
+        every { planner.plan(any(), stockId) } returns OrderPlan.Ready(4, BigDecimal("990"))
+        every { submitter.submitLimit(any(), any(), any(), any(), any(), any(), any()) } returns
+            com.monticker.api.matching.submit.LimitOrderResult(
+                orderId = 950L, stockId = stockId, side = "BUY", quantity = 4, limitPrice = BigDecimal("990"), status = "PENDING", fill = null,
+            )
+
+        executor.onEvent(event())
+
+        io.mockk.verifyOrder {
+            execRepo.save(match<WatchRuleExecution> { it.status == WatchRuleExecutionStatus.PLACED })
+            outcomes.reconcile(950L)
+        }
+    }
+
+    @Test
+    fun `a failing reconcile does not undo the placed order or give the claim back`() {
+        givenRules(groupRule(orderType = com.monticker.api.watchrule.domain.WatchRuleOrderType.LIMIT, offset = -100))
+        every { planner.plan(any(), stockId) } returns OrderPlan.Ready(4, BigDecimal("990"))
+        every { submitter.submitLimit(any(), any(), any(), any(), any(), any(), any()) } returns
+            com.monticker.api.matching.submit.LimitOrderResult(
+                orderId = 950L, stockId = stockId, side = "BUY", quantity = 4, limitPrice = BigDecimal("990"), status = "PENDING", fill = null,
+            )
+        every { outcomes.reconcile(950L) } throws IllegalStateException("db down")
+
+        executor.onEvent(event())
+
+        verify(exactly = 0) { guards.releaseFiring(any()) }
+        assertThat(savedExecution().status).isEqualTo(WatchRuleExecutionStatus.PLACED)
+    }
+
+    @Test
+    fun `a market fill is not reconciled - only PLACED rows have a later outcome`() {
+        givenRules(rule())
+        every { submitter.submitMarket(any(), any(), any(), any(), any(), any()) } returns fill()
+
+        executor.onEvent(event())
+
+        verify(exactly = 0) { outcomes.reconcile(any()) }
+    }
+
+    private fun shape(
+        targetType: com.monticker.api.watchrule.domain.WatchRuleTargetType = com.monticker.api.watchrule.domain.WatchRuleTargetType.STOCK,
+        stock: Long? = stockId,
+        group: Long? = null,
+        sizeType: com.monticker.api.watchrule.domain.WatchRuleSizeType = com.monticker.api.watchrule.domain.WatchRuleSizeType.SHARES,
+        quantity: Int? = 10,
+        equityPct: BigDecimal? = null,
+    ) = com.monticker.api.watchrule.domain.WatchRuleShapeValues(
+        targetType = targetType, stockId = stock, targetGroupId = group,
+        orderType = com.monticker.api.watchrule.domain.WatchRuleOrderType.MARKET, limitOffsetBps = null,
+        sizeType = sizeType, quantity = quantity, equityPct = equityPct,
+    )
+
+    @Test
+    fun `a rule retargeted between lookup and claim skips this event and gives the claim back`() {
+        givenRules(rule())
+        val claim = claimed(1L).copy(shape = shape(stock = 999L))
+        every { guards.claimFiring(1L) } returns claim
+
+        executor.onEvent(event())
+
+        verify(exactly = 0) { submitter.submitMarket(any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 1) { guards.releaseFiring(claim) }
+        val e = savedExecution()
+        assertThat(e.status).isEqualTo(WatchRuleExecutionStatus.SKIPPED)
+        assertThat(e.reason).contains("대상이 바뀌어")
+    }
+
+    @Test
+    fun `the order is planned from the locked row's size basis not the stale entity`() {
+        givenRules(rule(quantity = 10))
+        every { guards.claimFiring(1L) } returns claimed(1L).copy(
+            shape = shape(sizeType = com.monticker.api.watchrule.domain.WatchRuleSizeType.EQUITY_PCT, quantity = null, equityPct = BigDecimal("5")),
+        )
+        val planned = slot<WatchRule>()
+        every { planner.plan(capture(planned), stockId) } returns OrderPlan.Ready(3, null)
+        every { submitter.submitMarket(userId, stockId, "BUY", 3, OrderOrigin.watchRule(1L), any()) } returns fill()
+
+        executor.onEvent(event())
+
+        assertThat(planned.captured.sizeType).isEqualTo(com.monticker.api.watchrule.domain.WatchRuleSizeType.EQUITY_PCT)
+        assertThat(planned.captured.equityPct).isEqualByComparingTo("5")
+        verify { submitter.submitMarket(userId, stockId, "BUY", 3, OrderOrigin.watchRule(1L), any()) }
     }
 }

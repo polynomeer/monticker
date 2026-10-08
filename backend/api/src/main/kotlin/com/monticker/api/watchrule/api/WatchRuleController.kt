@@ -70,6 +70,8 @@ class WatchRuleController(private val service: WatchRuleService) {
         val rule = service.update(
             userId(), ruleId, req.quantity, req.minImportanceScore, req.cooldownSec, req.isActive, req.name, req.dailyLimit,
             req.limitOffsetBps, req.equityPct,
+            targetType = req.targetType, stockId = req.stockId, targetGroupId = req.targetGroupId,
+            orderType = req.orderType, sizeType = req.sizeType,
         )
         return ResponseEntity.ok(WatchRuleResponse.from(
             rule, service.todayCounts(listOf(rule))[rule.id] ?: 0, service.strategyName(rule.ruleSetId), service.groupNames(userId(), listOf(rule)),
@@ -135,6 +137,17 @@ data class UpdateWatchRuleRequest(
     val limitOffsetBps: Int? = null,
     /** ADR-095 — 계좌 % 규칙의 비율 */
     val equityPct: BigDecimal? = null,
+    /**
+     * ADR-098 — 기준 바꾸기. STOCK | GROUP. 바꾸면 새 대상의 값(stockId 또는 targetGroupId)이 함께 와야 한다.
+     * 기준을 그대로 두고 stockId·targetGroupId만 보내면 같은 유형 안에서 대상을 바꾼다.
+     */
+    val targetType: String? = null,
+    @field:Positive val stockId: Long? = null,
+    @field:Positive val targetGroupId: Long? = null,
+    /** ADR-098 — MARKET | LIMIT. LIMIT으로 바꾸면 limitOffsetBps가 함께 와야 한다. MARKET으로 바꾸면 오프셋은 지워진다. */
+    val orderType: String? = null,
+    /** ADR-098 — SHARES | EQUITY_PCT. 바꾸면 새 기준의 값(quantity 또는 equityPct)이 함께 와야 한다. */
+    val sizeType: String? = null,
 )
 
 data class WatchRuleResponse(
@@ -201,12 +214,14 @@ data class WatchRuleExecutionResponse(
     val stockId: Long? = null,
     /** ADR-095 — 지정가 발동의 지정가 */
     val limitPrice: BigDecimal? = null,
+    /** ADR-098 — PLACED 이후 결과(FILLED·CANCELLED)가 정해진 시각. FILLED면 [fillPrice]가 체결가다. */
+    val resolvedAt: Instant? = null,
 ) {
     companion object {
         fun from(e: WatchRuleExecution) = WatchRuleExecutionResponse(
             id = e.id, watchRuleId = e.watchRuleId, stockEventId = e.stockEventId, quantSignalId = e.quantSignalId, status = e.status.name,
             orderId = e.orderId, fillPrice = e.fillPrice, quantity = e.quantity, reason = e.reason,
-            createdAt = e.createdAt, stockId = e.stockId, limitPrice = e.limitPrice,
+            createdAt = e.createdAt, stockId = e.stockId, limitPrice = e.limitPrice, resolvedAt = e.resolvedAt,
         )
     }
 }

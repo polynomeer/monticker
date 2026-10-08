@@ -219,7 +219,7 @@ class WatchRuleGroupTargetIntegrationTest : PostgresIntegrationTest() {
                 throw UnsupportedOperationException()
         }
         val planner = WatchRuleOrderPlanner(WatchRuleTargets(jdbcTemplate), mockk())
-        val executor = WatchRuleExecutor(ruleRepo, execRepo, submitter, SimpleMeterRegistry(), guards, mockk<StrategySignalAccess>(), planner)
+        val executor = WatchRuleExecutor(ruleRepo, execRepo, submitter, SimpleMeterRegistry(), guards, mockk<StrategySignalAccess>(), planner, mockk(relaxed = true))
         val base = System.nanoTime()
 
         val pool = Executors.newFixedThreadPool(10)

@@ -224,6 +224,7 @@ class MatchingService(
                 stockId      = order.stockId,
                 side         = order.side.name,
                 refundAmount = refundAmount.amount,
+                reason       = USER_CANCEL_REASON,
             )
         )
         return saved.toDto()
@@ -268,4 +269,9 @@ class MatchingService(
         fee = fee.amount,
         filledAt = filledAt,
     )
+
+    companion object {
+        /** ADR-098 — 사용자가 직접 취소한 주문의 OrderCancelledEvent.reason */
+        const val USER_CANCEL_REASON = "사용자 취소"
+    }
 }

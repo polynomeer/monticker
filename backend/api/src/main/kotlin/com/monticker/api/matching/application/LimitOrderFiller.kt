@@ -142,7 +142,7 @@ class LimitOrderFiller(
         runCatching { orderBookService.cancel(order.stockId, order.id, order.side) }
         eventPublisher.publishEvent(OrderCancelledEvent(
             orderId = order.id, userId = order.userId, stockId = order.stockId, side = order.side.name,
-            refundAmount = BigDecimal.ZERO,
+            refundAmount = BigDecimal.ZERO, reason = order.rejectReason,
         ))
         log.warn("[LimitSweep] SELL orderId={} cancelled — position missing (held={}, qty={})", order.id, held, qty)
     }
@@ -160,7 +160,7 @@ class LimitOrderFiller(
         if (refund > BigDecimal.ZERO) adjustCash(order.userId, refund)
         eventPublisher.publishEvent(OrderCancelledEvent(
             orderId = order.id, userId = order.userId, stockId = order.stockId, side = order.side.name,
-            refundAmount = refund,
+            refundAmount = refund, reason = order.rejectReason,
         ))
         log.warn("[LimitSweep] BUY orderId={} cancelled at fill — risk blocked by {}", order.id, blockedBy)
     }

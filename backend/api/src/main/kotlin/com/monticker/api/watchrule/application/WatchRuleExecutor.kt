@@ -43,6 +43,7 @@ class WatchRuleExecutor(
     private val guards: WatchRuleGuards,
     private val signalAccess: StrategySignalAccess,
     private val planner: WatchRuleOrderPlanner,
+    private val outcomes: WatchRuleOrderOutcomes,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -150,8 +151,17 @@ class WatchRuleExecutor(
 
         var placed = false
         try {
+            // ADR-098 — 기준(대상·주문 유형·수량 기준)은 PATCH로 바뀔 수 있다. 잠근 행의 값이 조회 때와 대상이 다르면 이 원인은
+            // 더 이상 이 규칙의 대상이 아닐 수 있으므로 건너뛰고(발동권 반환), 같으면 잠근 행의 주문 유형·수량 기준으로 주문을 정한다.
+            val current = claim.shape?.let { shape ->
+                if (!rule.hasSameTarget(shape)) {
+                    record(rule, trigger, WatchRuleExecutionStatus.SKIPPED, reason = "발동 직전 규칙 대상이 바뀌어 이 원인은 건너뜀")
+                    return
+                }
+                rule.withShape(shape)
+            } ?: rule
             // ADR-095 — 수량·지정가는 발동권을 잡은 뒤 발동 시점 값으로 정한다. 0주 등으로 건너뛰면 finally가 발동권을 돌려준다.
-            val plan = when (val p = planner.plan(rule, trigger.stockId)) {
+            val plan = when (val p = planner.plan(current, trigger.stockId)) {
                 is OrderPlan.Ready -> p
                 is OrderPlan.Skip -> {
                     record(rule, trigger, WatchRuleExecutionStatus.SKIPPED, reason = p.reason)
@@ -191,6 +201,11 @@ class WatchRuleExecutor(
                     record(rule, trigger, WatchRuleExecutionStatus.PLACED,
                         orderId = result.orderId, quantity = result.quantity, limitPrice = result.limitPrice,
                         reason = "지정가 ${result.limitPrice.stripTrailingZeros().toPlainString()} 접수 — 미체결")
+                    // ADR-098 — 접수(사가 트랜잭션)와 이 기록 사이에 체결·취소됐으면 리스너가 이 행을 못 봤다. 주문 행을 잠그고 대조한다.
+                    // 조건부 UPDATE라 재처리(기록 중복)에도 멱등이다. 실패해도 주문은 이미 나갔다 — 삼키고 남긴다(기록은 PLACED로 남고
+                    // 주문·거래 내역이 진실이다).
+                    runCatching { outcomes.reconcile(result.orderId) }
+                        .onFailure { log.warn("watch rule 지정가 결과 대조 실패 ruleId={} orderId={} — 기록이 PLACED로 남을 수 있다", rule.id, result.orderId, it) }
                 }
                 log.info("watch rule 지정가 발동 ruleId={} {} orderId={} status={}", rule.id, trigger, result.orderId, result.status)
             }
@@ -247,7 +262,9 @@ class WatchRuleExecutor(
             WatchRuleExecutionStatus.PLACED -> placedCounter
             WatchRuleExecutionStatus.REJECTED -> rejected
             WatchRuleExecutionStatus.SKIPPED -> skipped
-        }.increment()
+            // 결과 전이는 기록이 아니라 조건부 UPDATE다(WatchRuleOrderOutcomes) — 여기로 오지 않는다.
+            WatchRuleExecutionStatus.FILLED, WatchRuleExecutionStatus.CANCELLED -> null
+        }?.increment()
     }
 
     companion object {
