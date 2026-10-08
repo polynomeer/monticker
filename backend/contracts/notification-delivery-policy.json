@@ -1,5 +1,5 @@
 {
-  "_comment": "ADR-082/093 — 알림 발송 정책의 단일 사례표. worker NotificationPolicy(실제 발송)와 api NotificationDeliveryPolicy(전달 채널 표시)가 서로 다른 빌드라 코드를 공유할 수 없어, 두 구현의 테스트가 모두 이 표를 읽어 같은 답을 내는지 확인한다. 규칙을 바꾸면 이 표부터 고친다. pref는 기본값(V78/V90 DEFAULT)에서 바꿀 필드만 적는다(api NotificationPreferenceRequest·worker NotificationPreference 공통 필드 이름). atKst는 2026-10-08 KST 벽시계 시각. inApp은 알림 이력(/alerts)에 남는 종류.",
+  "_comment": "ADR-082/093/100 — 알림 발송 정책의 단일 사례표. worker NotificationPolicy(실제 발송)와 api NotificationDeliveryPolicy(전달 채널 표시)가 서로 다른 빌드라 코드를 공유할 수 없어, 두 구현의 테스트가 모두 이 표를 읽어 같은 답을 내는지 확인한다. 규칙을 바꾸면 이 표부터 고친다. pref는 기본값(V78/V90 DEFAULT)에서 바꿀 필드만 적는다(api NotificationPreferenceRequest·worker NotificationPreference 공통 필드 이름). atKst는 2026-10-08 KST 벽시계 시각. inApp은 알림 이력(/alerts)에 남는 종류.",
   "categories": [
     { "name": "ORDER_OUTCOME",     "alwaysOn": true,  "inApp": false },
     { "name": "CONDITIONAL_ORDER", "alwaysOn": true,  "inApp": false },
@@ -8,7 +8,8 @@
     { "name": "QUANT_SIGNAL",      "alwaysOn": false, "inApp": true },
     { "name": "STRATEGY_MARKET",   "alwaysOn": false, "inApp": false },
     { "name": "PRICE_ALERT",       "alwaysOn": false, "inApp": true },
-    { "name": "VOLUME_SURGE",      "alwaysOn": false, "inApp": true }
+    { "name": "VOLUME_SURGE",      "alwaysOn": false, "inApp": true },
+    { "name": "NEWS",              "alwaysOn": false, "inApp": true }
   ],
   "cases": [
     { "name": "결과 확인 중은 전부 꺼도, 방해 금지 시간에도 즉시 푸시(닿지 않으면 이메일)",
@@ -87,6 +88,24 @@
     { "name": "광고성 소식도 방해 금지 시간에는 푸시하지 않는다",
       "category": "STRATEGY_MARKET", "atKst": "23:30", "marketingAgreed": true,
       "pref": { "strategyMarketNewsPush": true, "quietHoursEnabled": true },
-      "expect": { "push": false, "email": false, "emailIfPushMissed": false, "quietHoursHeld": true } }
+      "expect": { "push": false, "email": false, "emailIfPushMissed": false, "quietHoursHeld": true } },
+    { "name": "뉴스·공시 기본값 - 푸시, 닿지 않으면 이메일(광고성 아님, ADR-100)",
+      "category": "NEWS", "atKst": "12:00", "pref": {},
+      "expect": { "push": true, "email": false, "emailIfPushMissed": true, "quietHoursHeld": false } },
+    { "name": "뉴스·공시도 방해 금지 시간에는 푸시하지 않는다",
+      "category": "NEWS", "atKst": "23:30", "pref": { "quietHoursEnabled": true },
+      "expect": { "push": false, "email": false, "emailIfPushMissed": false, "quietHoursHeld": true } },
+    { "name": "뉴스·공시 이메일을 고르면 방해 금지 시간에도 이메일은 보낸다",
+      "category": "NEWS", "atKst": "03:00", "pref": { "quietHoursEnabled": true, "newsAlertEmail": true },
+      "expect": { "push": false, "email": true, "emailIfPushMissed": false, "quietHoursHeld": true } },
+    { "name": "뉴스·공시를 끄면 없음",
+      "category": "NEWS", "atKst": "12:00", "pref": { "newsAlertPush": false, "newsAlertEmail": false },
+      "expect": { "push": false, "email": false, "emailIfPushMissed": false, "quietHoursHeld": false } },
+    { "name": "뉴스·공시 이메일만",
+      "category": "NEWS", "atKst": "12:00", "pref": { "newsAlertPush": false, "newsAlertEmail": true },
+      "expect": { "push": false, "email": true, "emailIfPushMissed": false, "quietHoursHeld": false } },
+    { "name": "전체 알림을 끄면 뉴스·공시도 없음",
+      "category": "NEWS", "atKst": "12:00", "pref": { "allEnabled": false },
+      "expect": { "push": false, "email": false, "emailIfPushMissed": false, "quietHoursHeld": false } }
   ]
 }

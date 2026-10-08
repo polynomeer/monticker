@@ -28,4 +28,9 @@ enum class NotificationCategory(val alwaysOn: Boolean = false, val inApp: Boolea
     PRICE_ALERT(inApp = true),
     /** 거래량 급증 — PRICE_ALERT와 같이 worker 자체 경로 전용. */
     VOLUME_SURGE(inApp = true),
+    /**
+     * 관심종목의 뉴스·DART 공시(ADR-100) — worker가 수집 직후 관심종목 주인에게 팬아웃하고 같은 JVM에서 발송한다. 광고성이 아니다.
+     * api는 이 종류로 발행하지 않는다(PRICE_ALERT와 같은 이유로 전달 채널 표시용).
+     */
+    NEWS(inApp = true),
 }
