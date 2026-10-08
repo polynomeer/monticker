@@ -67,6 +67,8 @@ interface Props {
   stockLabel: string;
   onToggle: (rule: WatchRuleResponse) => void;
   onDelete: (rule: WatchRuleResponse) => void;
+  /** ADR-098 — 수정 폼 열기. 없으면 수정 버튼을 그리지 않는다 */
+  onEdit?: (rule: WatchRuleResponse) => void;
   pending: boolean;
   /** 이 규칙의 마지막 발동 시각(표시용 문자열) */
   lastFired?: string | null;
@@ -78,7 +80,7 @@ interface Props {
 }
 
 /** 시안 WatchRules 규칙 카드 — 감지 → 모의 주문 흐름, 마지막 발동, 켜기 토글. */
-export function WatchRuleRow({ rule, stockLabel, onToggle, onDelete, pending, lastFired, todayCount = 0, highlight, realizedPnl }: Props) {
+export function WatchRuleRow({ rule, stockLabel, onToggle, onDelete, onEdit, pending, lastFired, todayCount = 0, highlight, realizedPnl }: Props) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const title = rule.name ? `${rule.name} · ${stockLabel}` : `${stockLabel} · ${EVENT_LABEL[rule.eventType]}`;
   const today = rule.todayExecutions ?? todayCount;
@@ -119,6 +121,14 @@ export function WatchRuleRow({ rule, stockLabel, onToggle, onDelete, pending, la
       <div className="flex items-center gap-1.5">
         {/* 대상 그룹이 지워진 규칙은 다시 켤 수 없다(서버도 거부한다) */}
         <Toggle checked={rule.isActive} label={`${title} 켜기`} disabled={pending || (!!rule.targetGroupMissing && !rule.isActive)} onChange={() => onToggle(rule)} />
+        {onEdit && (
+          <IconBtn
+            name="pencil"
+            label={rule.targetGroupMissing ? `${title} 대상 바꾸기` : `${title} 수정`}
+            size={30}
+            onClick={() => onEdit(rule)}
+          />
+        )}
         {confirmingDelete ? (
           <>
             <Btn kind="danger" size="sm" onClick={() => onDelete(rule)} disabled={pending}>삭제</Btn>

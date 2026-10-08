@@ -1,7 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { CreateWatchRuleRequest, UpdateWatchRuleRequest } from "@monticker/types";
+import type { CreateWatchRuleRequest, UpdateWatchRuleRequest, WatchRuleResponse } from "@monticker/types";
+import { applyOptimisticPatch, isOptimisticSafe } from "@/components/watchrule/watchRulePatch";
 import {
   createWatchRule,
   deleteWatchRule,
@@ -38,11 +39,27 @@ export function useCreateWatchRule() {
   });
 }
 
+/**
+ * 규칙 수정(PATCH). 이름·쿨다운·하루 한도·중요도·같은 기준 안의 값만 바꾸는 요청은 목록에 먼저 반영하고(실패하면 되돌린다),
+ * 대상·주문 유형·수량 기준·켜기를 바꾸는 요청은 서버 응답을 기다린다 — 서버가 소유·존재를 다시 확인하고 거부할 수 있다(ADR-098).
+ */
 export function useUpdateWatchRule() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ ruleId, req }: { ruleId: number; req: UpdateWatchRuleRequest }) => updateWatchRule(ruleId, req),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: RULES_KEY }); },
+    onMutate: async ({ ruleId, req }) => {
+      if (!isOptimisticSafe(req)) return { previous: undefined };
+      await qc.cancelQueries({ queryKey: RULES_KEY, exact: true });
+      const previous = qc.getQueryData<WatchRuleResponse[]>(RULES_KEY);
+      if (previous) {
+        qc.setQueryData<WatchRuleResponse[]>(RULES_KEY, previous.map((r) => (r.id === ruleId ? applyOptimisticPatch(r, req) : r)));
+      }
+      return { previous };
+    },
+    onError: (_e, _vars, ctx) => {
+      if (ctx?.previous) qc.setQueryData(RULES_KEY, ctx.previous);
+    },
+    onSettled: () => { qc.invalidateQueries({ queryKey: RULES_KEY }); },
   });
 }
 
