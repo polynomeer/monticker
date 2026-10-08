@@ -24,6 +24,26 @@ export const DEFAULT_CRITERIA: ScreenerCriteria = {
   sort: "amount",
 };
 
+/** 시장 세그먼트 — 위 칸(전체/국내/해외)과 국내일 때만 보이는 아래 칸(국내 전체/코스피/코스닥). 서버 ScreenerCriteria.MARKETS와 같다. */
+export const MARKET_GROUPS = [
+  { value: "all",      label: "전체" },
+  { value: "domestic", label: "국내" },
+  { value: "overseas", label: "해외" },
+] as const;
+export type MarketGroup = (typeof MARKET_GROUPS)[number]["value"];
+
+export const DOMESTIC_SEGMENTS = [
+  { value: "domestic", label: "국내 전체" },
+  { value: "kospi",    label: "코스피" },
+  { value: "kosdaq",   label: "코스닥" },
+] as const;
+
+/** market 값이 속한 위 칸. kospi/kosdaq은 국내 */
+export function marketGroup(market: string): MarketGroup {
+  if (market === "kospi" || market === "kosdaq" || market === "domestic") return "domestic";
+  return market === "overseas" ? "overseas" : "all";
+}
+
 export const EVENT_OPTIONS: { key: ScreenerEvent; label: string; sub?: string }[] = [
   { key: "NEWS", label: "뉴스 동반" },
   { key: "DISCLOSURE", label: "공시 동반" },

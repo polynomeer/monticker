@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  CHANGE_STOPS, DEFAULT_CRITERIA, changeRangeLabel, changeToStops, fromServer, sameCriteria, stopsToChange, toQuery, volMultToStop,
+  CHANGE_STOPS, DEFAULT_CRITERIA, marketGroup, changeRangeLabel, changeToStops, fromServer, sameCriteria, stopsToChange, toQuery, volMultToStop,
 } from "@/components/screener/criteria";
 
 describe("screener criteria", () => {
@@ -45,5 +45,14 @@ describe("screener criteria", () => {
     const b = { ...DEFAULT_CRITERIA, sectors: ["b", "a"] };
     expect(sameCriteria(a, b)).toBe(true);
     expect(fromServer({ market: "domestic" })).toEqual({ ...DEFAULT_CRITERIA, market: "domestic" });
+  });
+
+  it("groups kospi and kosdaq under the domestic segment", () => {
+    expect(marketGroup("kospi")).toBe("domestic");
+    expect(marketGroup("kosdaq")).toBe("domestic");
+    expect(marketGroup("domestic")).toBe("domestic");
+    expect(marketGroup("overseas")).toBe("overseas");
+    expect(marketGroup("all")).toBe("all");
+    expect(new URLSearchParams(toQuery("realtime", { ...DEFAULT_CRITERIA, market: "kosdaq" }, 50, 0)).get("market")).toBe("kosdaq");
   });
 });
