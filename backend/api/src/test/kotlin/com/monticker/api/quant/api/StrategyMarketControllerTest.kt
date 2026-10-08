@@ -3,6 +3,8 @@ package com.monticker.api.quant.api
 import com.monticker.api.auth.infrastructure.JwtTokenProvider
 import com.monticker.api.quant.domain.RuleSetDocument
 import com.monticker.api.quant.domain.RuleSetStatus
+import com.monticker.api.quant.infrastructure.MARKET_VISIBLE_FROM
+import com.monticker.api.quant.infrastructure.RuleSetNameView
 import com.monticker.api.quant.infrastructure.RuleSetRepository
 import com.monticker.api.settlement.creator.application.CreatorEarningsService
 import io.mockk.every
@@ -24,7 +26,8 @@ class StrategyMarketControllerTest {
     private val creatorEarningsService = mockk<CreatorEarningsService>()
     private val ruleSetRepository = mockk<RuleSetRepository>()
     private val performanceQuery = mockk<com.monticker.api.quant.application.StrategyPerformanceQuery>()
-    private val controller = StrategyMarketController(jdbc, jwtTokenProvider, creatorEarningsService, ruleSetRepository, performanceQuery)
+    private val searchRepository = mockk<com.monticker.api.quant.infrastructure.StrategyMarketSearchRepository>()
+    private val controller = StrategyMarketController(jdbc, jwtTokenProvider, creatorEarningsService, ruleSetRepository, performanceQuery, searchRepository)
 
     private fun doc(userId: Long, status: String) =
         RuleSetDocument(id = "rs1", userId = userId, name = "test", status = status)
@@ -202,5 +205,66 @@ class StrategyMarketControllerTest {
         every { jdbc.queryForObject(any<String>(), Long::class.java) } returns null
 
         assertThat(controller.count().body).isEqualTo(mapOf("total" to 0L))
+    }
+
+    // ── search — 서버 측 전략 검색 ────────────────────────────────────────────────
+
+    private fun nameView(id: String, name: String) = object : RuleSetNameView {
+        override val id: String? = id
+        override val name: String = name
+    }
+
+    @Test
+    fun `search rejects blank, too long, oversized and too deep queries before touching storage`() {
+        val bad = listOf(
+            Triple("   ", 0, 20),
+            Triple("x".repeat(StrategyMarketController.MAX_SEARCH_QUERY_LENGTH + 1), 0, 20),
+            Triple("a", 0, 0),
+            Triple("a", 0, StrategyMarketController.MAX_SEARCH_SIZE + 1),
+            Triple("a", -1, 20),
+            Triple("a", StrategyMarketController.MAX_SEARCH_OFFSET / 20 + 1, 20),
+            Triple("a", Int.MAX_VALUE, 50),
+        )
+        bad.forEach { (q, page, size) ->
+            assertThrows<IllegalArgumentException>("q=$q page=$page size=$size") { controller.search(null, q, page, size) }
+        }
+        verify(exactly = 0) { searchRepository.visibleRulesetIds(any()) }
+        verify(exactly = 0) { searchRepository.search(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `search matches names among visible strategies only and pages the result`() {
+        every { searchRepository.visibleRulesetIds(any()) } returns listOf("rs1", "rs2")
+        // rs1만 이름이 맞는다(대소문자 무시). 공개 목록에 없는 룰셋은 애초에 후보로 조회하지 않는다.
+        every { ruleSetRepository.findByIdIn(listOf("rs1", "rs2")) } returns listOf(nameView("rs1", "Momentum Alpha"), nameView("rs2", "가치투자"))
+        val row = mapOf<String, Any?>("id" to 5L, "ruleset_id" to "rs1", "description" to null, "price" to BigDecimal.ZERO,
+            "subscribe_count" to 3, "created_at" to null, "author_nickname" to "kim")
+        every { searchRepository.search("moment", listOf("rs1"), 20, 20) } returns listOf(row)
+        every { searchRepository.count("moment", listOf("rs1")) } returns 21L
+        every { ruleSetRepository.findAllById(listOf("rs1")) } returns listOf(RuleSetDocument(id = "rs1", userId = 9L, name = "Momentum Alpha"))
+        every { performanceQuery.summarize(listOf("rs1")) } returns emptyMap()
+
+        val body = controller.search(null, "  moment ", page = 1, size = 20).body!!
+
+        @Suppress("UNCHECKED_CAST")
+        val items = body["items"] as List<Map<String, Any?>>
+        assertThat(items.single()["name"]).isEqualTo("Momentum Alpha")
+        assertThat(items.single()["isSubscribed"]).isEqualTo(false)
+        assertThat(body["total"]).isEqualTo(21L)
+        assertThat(body["hasMore"]).isEqualTo(false)   // 20 + 1 = 21
+    }
+
+    @Test
+    fun `search skips the name lookup when no strategy is visible`() {
+        every { searchRepository.visibleRulesetIds(any()) } returns emptyList()
+        every { searchRepository.search("a", emptyList(), 20, 0) } returns emptyList()
+        every { searchRepository.count("a", emptyList()) } returns 0L
+        every { ruleSetRepository.findAllById(emptyList()) } returns emptyList()
+        every { performanceQuery.summarize(emptyList()) } returns emptyMap()
+
+        val body = controller.search(null, "a", 0, 20).body!!
+
+        assertThat(body["total"]).isEqualTo(0L)
+        verify(exactly = 0) { ruleSetRepository.findByIdIn(any()) }
     }
 }
