@@ -19,7 +19,8 @@ class ReceiptServiceTest {
     private val tradeQueryService = mockk<PaperTradeQueryService>()
     private val ledgerRepo = mockk<LedgerEventRepository>()
     private val jdbc = mockk<JdbcTemplate>()
-    private val service = ReceiptService(tradeQueryService, ledgerRepo, jdbc)
+    private val orderTimeline = mockk<ReceiptOrderTimelineQuery>().also { every { it.find(any(), any()) } returns null }
+    private val service = ReceiptService(tradeQueryService, ledgerRepo, jdbc, orderTimeline)
 
     @Test
     fun `getReceipt computes fee as 0_015 percent of the trade amount`() {

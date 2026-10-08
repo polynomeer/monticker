@@ -4,6 +4,7 @@ import com.monticker.api.common.exception.GlobalExceptionHandler
 import com.monticker.api.paper.application.PaperTradeQueryService
 import com.monticker.api.paper.application.PaperTradeSummary
 import com.monticker.api.wallet.application.EmotionTagService
+import com.monticker.api.wallet.application.ReceiptOrderTimelineQuery
 import com.monticker.api.wallet.application.ReceiptService
 import com.monticker.api.wallet.infrastructure.LedgerEventRepository
 import io.mockk.every
@@ -33,7 +34,8 @@ class TradeReceiptControllerTest {
     private val tradeQueryService = mockk<PaperTradeQueryService>()
     private val ledgerRepo = mockk<LedgerEventRepository>()
     private val jdbc = mockk<JdbcTemplate>()
-    private val receiptService = ReceiptService(tradeQueryService, ledgerRepo, jdbc)
+    private val orderTimeline = mockk<ReceiptOrderTimelineQuery>()
+    private val receiptService = ReceiptService(tradeQueryService, ledgerRepo, jdbc, orderTimeline)
     private val controller = TradeReceiptController(receiptService, mockk<EmotionTagService>())
 
     private val mockMvc: MockMvc = MockMvcBuilders.standaloneSetup(controller)
@@ -58,6 +60,7 @@ class TradeReceiptControllerTest {
         every { tradeQueryService.findById(404L) } returns null
         every { jdbc.queryForMap(any<String>(), eq(100L)) } returns mapOf("symbol" to "005930", "name" to "삼성전자")
         every { ledgerRepo.findTopByPaperTradeIdOrderByIdDesc(tradeId) } returns null
+        every { orderTimeline.find(owner, tradeId) } returns null
     }
 
     @AfterEach
@@ -83,6 +86,8 @@ class TradeReceiptControllerTest {
 
         verify(exactly = 0) { jdbc.queryForMap(any<String>(), *anyVararg()) }
         verify(exactly = 0) { ledgerRepo.findTopByPaperTradeIdOrderByIdDesc(any()) }
+        // ADR-096 — 주문 진행 기록(예약 잠금·체결 목록)도 소유 확인 뒤에만 읽는다
+        verify(exactly = 0) { orderTimeline.find(any(), any()) }
     }
 
     @Test
