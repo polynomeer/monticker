@@ -146,4 +146,45 @@ class MockPriceGeneratorTest {
         assertThat(ticks).hasSize(1)
         assertThat(ticks.first().stockId).isEqualTo(4L)
     }
+
+    private fun samsungJdbc(lastClose: String?, market: String = "KOSPI") = mockk<JdbcTemplate> {
+        every { query(any<String>(), any<RowMapper<Any>>()) } answers {
+            val mapper = secondArg<RowMapper<Any>>()
+            val rs = mockk<ResultSet>()
+            every { rs.getLong("id") } returns 1L
+            every { rs.getString("symbol") } returns "005930"
+            every { rs.getString("market") } returns market
+            listOf(mapper.mapRow(rs, 0))
+        }
+        every { queryForList(MockPriceGenerator.LAST_PRICE_SQL) } returns
+            if (lastClose == null) emptyList() else listOf(mapOf("stock_id" to 1L, "close" to java.math.BigDecimal(lastClose)))
+    }
+
+    // 로컬 점검(2026-10-09) — 재기동마다 seed(71,000)에서 다시 시작해 40,000원대 봉 다음 틱이 +77%였다
+    @Test
+    fun `기동 시 DB의 마지막 시세에서 이어서 시작한다`() {
+        val g = MockPriceGenerator(samsungJdbc("40450.0000"), noKisCoverage, noTossCoverage).apply { loadStocks() }
+
+        val price = g.generate().single().price.toDouble()
+
+        assertThat(price).isBetween(40450 * 0.99, 40450 * 1.01)
+    }
+
+    @Test
+    fun `마지막 시세를 모르면 seed 기준가로 시작한다`() {
+        val g = MockPriceGenerator(samsungJdbc(null), noKisCoverage, noTossCoverage).apply { loadStocks() }
+
+        assertThat(g.generate().single().price.toDouble()).isBetween(71_000 * 0.99, 71_000 * 1.01)
+    }
+
+    @Test
+    fun `평균 회귀로 하루치 틱이 쌓여도 기준가에서 크게 벗어나지 않는다`() {
+        // 시장 코드가 KRX·미국이 아니면 MarketSchedule이 항상 OPEN·배율 1.0이다 — 요일·시각과 무관하게 최대 변동성으로 본다
+        val g = MockPriceGenerator(samsungJdbc("50000", market = "TEST"), noKisCoverage, noTossCoverage).apply { loadStocks() }
+
+        // 정규장 6시간 30분 × 1초 틱. 회귀가 없으면 이 정도 틱에 표준편차가 40%를 넘는다.
+        val prices = (1..23_400).map { g.generate().single().price.toDouble() }
+
+        assertThat(prices.maxOf { kotlin.math.abs(it / 50_000 - 1) }).isLessThan(0.15)
+    }
 }

@@ -16,6 +16,7 @@ import {
   Pill, PreviewTag, Stat, TerminalPage, fmtNum, fmtPct, type Column,
 } from "@/components/terminal";
 import { MonthlyHeatmap, TradeHistogram, fmtMatch, fmtMdd, matchTone, rulesetStatus } from "@/components/quant/parts";
+import { defaultBacktestRange } from "@/lib/backtestRange";
 
 type BacktestResult = QuantBacktestResult;
 type Trade = BacktestResult["trades"][number];
@@ -57,11 +58,13 @@ export default function QuantLabDetailPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const [stockId, setStockId] = useState(1);
-  const [startDate, setStartDate] = useState("2024-01-01");
-  const [endDate, setEndDate] = useState("2026-06-01");
+  // 종목은 고르기 전까지 비워 둔다 — 예전 기본값 1은 화면엔 빈칸인데 실행하면 그 id로 돌았다(로컬엔 없는 종목)
+  const [stockId, setStockId] = useState<number | null>(null);
+  const [{ startDate: defaultStart, endDate: defaultEnd }] = useState(() => defaultBacktestRange(730));
+  const [startDate, setStartDate] = useState(defaultStart);
+  const [endDate, setEndDate] = useState(defaultEnd);
   const [capital, setCapital] = useState(10_000_000);
-  const [fwStockId, setFwStockId] = useState(1);
+  const [fwStockId, setFwStockId] = useState<number | null>(null);
   const [fwCapital, setFwCapital] = useState(10_000_000);
   const [chartTab, setChartTab] = useState("equity");
   const [shareDesc, setShareDesc] = useState("");
@@ -102,6 +105,8 @@ export default function QuantLabDetailPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["quant", "backtest", id] });
       qc.invalidateQueries({ queryKey: ["quant", "rulesets"] });
+      // 상태가 초안 → 백테스트 완료로 바뀐다 — 이 키를 빼먹어 새로고침 전까지 포워드 테스트·마켓 공유가 "백테스트를 먼저"로 막혀 있었다
+      qc.invalidateQueries({ queryKey: ["quant", "ruleset", id] });
       toast({ type: "success", title: "백테스트 완료", message: "결과가 저장되었습니다." });
     },
     onError: (e: Error) => toast({ type: "error", title: "백테스트 실패", message: e.message }),
@@ -113,7 +118,7 @@ export default function QuantLabDetailPage() {
   });
 
   const startFwMutation = useMutation({
-    mutationFn: () => startForwardTest(id, fwStockId, fwCapital),
+    mutationFn: () => startForwardTest(id, fwStockId!, fwCapital),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["quant", "forward-test", id] });
       qc.invalidateQueries({ queryKey: ["quant", "ruleset", id] });
@@ -227,7 +232,7 @@ export default function QuantLabDetailPage() {
           <Field label="시작일" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="flex-[1_1_150px]" />
           <Field label="종료일" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="flex-[1_1_150px]" />
           <Field label="초기 자본" unit="원" type="number" value={capital} onChange={e => setCapital(+e.target.value)} className="flex-[1_1_170px]" />
-          <Btn icon="play" size="xl" className="h-[52px]" onClick={() => runMutation.mutate()} disabled={runMutation.isPending}>
+          <Btn icon="play" size="xl" className="h-[52px]" onClick={() => runMutation.mutate()} disabled={runMutation.isPending || stockId == null} title={stockId == null ? "종목을 먼저 고르세요" : undefined}>
             {runMutation.isPending ? "실행 중..." : "백테스트 실행"}
           </Btn>
         </div>
@@ -337,7 +342,7 @@ export default function QuantLabDetailPage() {
               <>
                 <StockPicker market={universeMarket} marketCapTier={universeMarketCapTier} value={fwStockId} onChange={setFwStockId} />
                 <Field label="초기 자본" unit="원" type="number" value={fwCapital} onChange={e => setFwCapital(+e.target.value)} />
-                <Btn icon="play" full onClick={() => startFwMutation.mutate()} disabled={startFwMutation.isPending}>
+                <Btn icon="play" full onClick={() => startFwMutation.mutate()} disabled={startFwMutation.isPending || fwStockId == null} title={fwStockId == null ? "종목을 먼저 고르세요" : undefined}>
                   {startFwMutation.isPending ? "시작 중..." : "포워드 테스트 시작"}
                 </Btn>
                 <span className="text-center text-2xs text-tm-muted">시작하면 룰셋 수정이 잠기고, 매일 장 마감 후 자동 평가합니다.</span>
