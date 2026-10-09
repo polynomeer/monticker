@@ -64,6 +64,32 @@ class MockPriceGenerator(
 
     private val stocks = mutableListOf<StockMeta>()
     private val currentPrice = ConcurrentHashMap<Long, BigDecimal>()
+    /** 기동 시 기준가 — 랜덤 워크가 이 값 근처를 맴돌게 당긴다(평균 회귀) */
+    private val anchorPrice = ConcurrentHashMap<Long, BigDecimal>()
+
+    companion object {
+        /**
+         * 틱마다 기준가 쪽으로 차이의 이만큼을 당긴다. 틱 변동(±0.5%, 균등)만 있으면 1초 틱이 하루 수만 번 쌓여 하루 수십 %씩
+         * 표류했다(로컬 점검 2026-10-09: 하루 +77%, 20일 σ 34%, VaR 55%라 모의 매수가 리스크 게이트에 막혔다).
+         * 0.005면 정상 분포의 표준편차가 약 3%다 — 순간 급등락(스파이크 감지는 직전 변동의 EMA 대비라 그대로 잡힌다)은 남는다.
+         */
+        const val MEAN_REVERSION = 0.005
+
+        /** 종목별 마지막 시세 — 최근 1분봉이 있으면 그것, 없으면 마지막 일봉. */
+        const val LAST_PRICE_SQL = """
+            SELECT s.id AS stock_id, COALESCE(m.close, d.close) AS close
+            FROM stocks s
+            LEFT JOIN LATERAL (
+                SELECT close FROM candles_1m
+                WHERE stock_id = s.id AND candle_time >= now() - interval '7 days'
+                ORDER BY candle_time DESC LIMIT 1
+            ) m ON true
+            LEFT JOIN LATERAL (
+                SELECT close FROM candles_1d WHERE stock_id = s.id ORDER BY candle_time DESC LIMIT 1
+            ) d ON true
+            WHERE s.is_active = true
+        """
+    }
 
     @PostConstruct
     fun loadStocks() {
@@ -74,19 +100,36 @@ class MockPriceGenerator(
         stocks.clear()
         stocks.addAll(loaded)
 
-        // 기준가 초기화 (seed → 섹터별 기본값 → 랜덤)
+        // 기준가 초기화 (DB의 마지막 시세 → seed → 섹터별 기본값 → 랜덤).
+        // 예전엔 DB를 보지 않아 worker를 재기동할 때마다 차트의 직전 봉과 상관없는 값(seed·랜덤)에서 다시 시작해
+        // 전일 대비가 수십 %씩 튀었다(삼성전자 40,000원대 봉 다음에 71,000원).
+        val last = lastKnownPrices()
         for (s in stocks) {
             val seed = SEED_PRICES[s.symbol]
             val base = when {
+                last[s.id] != null -> last.getValue(s.id)
                 seed != null    -> BigDecimal(seed)
                 s.market == "NASDAQ" || s.market == "NYSE" -> BigDecimal(Random.nextInt(20, 500))
                 s.market == "KOSPI"  -> BigDecimal(Random.nextInt(5_000, 300_000))
                 else                 -> BigDecimal(Random.nextInt(1_000, 100_000))
             }
             currentPrice[s.id] = base
+            anchorPrice[s.id] = base
         }
 
-        log.info("MockPriceGenerator loaded {} stocks", stocks.size)
+        log.info("MockPriceGenerator loaded {} stocks ({} from last known prices)", stocks.size, stocks.count { it.id in last })
+    }
+
+    /** 실패해도 기동은 계속한다 — 시세 테이블을 못 읽으면 예전처럼 seed·랜덤으로 시작한다. */
+    private fun lastKnownPrices(): Map<Long, BigDecimal> = runCatching {
+        jdbc.queryForList(LAST_PRICE_SQL).mapNotNull { row ->
+            val id = (row["stock_id"] as? Number)?.toLong() ?: return@mapNotNull null
+            val close = (row["close"] as? BigDecimal)?.takeIf { it > BigDecimal.ZERO } ?: return@mapNotNull null
+            id to close
+        }.toMap()
+    }.getOrElse {
+        log.warn("MockPriceGenerator: 마지막 시세를 읽지 못해 seed·랜덤 기준가로 시작한다: {}", it.message)
+        emptyMap()
     }
 
     fun generate(): List<GeneratedTick> {
@@ -104,7 +147,9 @@ class MockPriceGenerator(
 
             val prev  = currentPrice[s.id] ?: return@mapNotNull null
             val range = 0.005 * effectiveMultiplier
-            val change = prev.multiply(BigDecimal(Random.nextDouble(-range, range)))
+            val anchor = anchorPrice[s.id] ?: prev
+            val pull = (anchor - prev).multiply(BigDecimal(MEAN_REVERSION))
+            val change = (prev.multiply(BigDecimal(Random.nextDouble(-range, range))) + pull)
                 .setScale(if (s.market == "NASDAQ" || s.market == "NYSE") 2 else 0, RoundingMode.HALF_UP)
             val next = (prev + change).coerceAtLeast(BigDecimal("0.01"))
             currentPrice[s.id] = next
@@ -125,4 +170,5 @@ class MockPriceGenerator(
     }
 
     private operator fun BigDecimal.plus(other: BigDecimal) = this.add(other)
+    private operator fun BigDecimal.minus(other: BigDecimal) = this.subtract(other)
 }
