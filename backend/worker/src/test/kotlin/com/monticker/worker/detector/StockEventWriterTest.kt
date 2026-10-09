@@ -103,4 +103,30 @@ class StockEventWriterTest {
         assertThat(result).isTrue()
         verify(exactly = 1) { jdbcTemplate.query(match<String> { it.contains("INSERT INTO stock_events") }, any<RowMapper<Long>>(), *anyVararg()) }
     }
+    // 운영 스위치 — 끄면 이벤트는 그대로 기록하고 관심종목 기기 토큰 조회·푸시만 하지 않는다.
+    @Test
+    fun `관심종목 이벤트 푸시 스위치를 끄면 이벤트는 기록하고 푸시는 보내지 않는다`() {
+        val switchedOff = StockEventWriter(
+            jdbcTemplate, io.micrometer.core.instrument.simple.SimpleMeterRegistry(), pushSender, eventKafkaProducer, events, tx, preferences,
+            pushEnabled = false,
+        )
+        every { jdbcTemplate.queryForObject(match<String> { it.contains("COUNT") }, Int::class.java, *anyVararg()) } returns 0
+        every { jdbcTemplate.query(match<String> { it.contains("INSERT INTO stock_events") }, any<RowMapper<Long>>(), *anyVararg()) } returns listOf(500L)
+
+        assertThat(switchedOff.write(makeEvent())).isTrue()
+
+        Thread.sleep(200)   // 켜져 있으면 이 사이에 별도 스레드가 토큰을 조회한다
+        verify(exactly = 0) { jdbcTemplate.query(StockEventWriter.WATCHER_DEVICE_TOKENS_SQL, any<RowMapper<Any>>(), *anyVararg()) }
+        verify(exactly = 0) { pushSender.send(any()) }
+    }
+
+    @Test
+    fun `관심종목 이벤트 푸시 스위치가 켜져 있으면 관심종목 기기 토큰을 조회한다`() {
+        every { jdbcTemplate.queryForObject(match<String> { it.contains("COUNT") }, Int::class.java, *anyVararg()) } returns 0
+        every { jdbcTemplate.query(match<String> { it.contains("INSERT INTO stock_events") }, any<RowMapper<Long>>(), *anyVararg()) } returns listOf(500L)
+
+        writer.write(makeEvent())
+
+        verify(timeout = 2000) { jdbcTemplate.query(StockEventWriter.WATCHER_DEVICE_TOKENS_SQL, any<RowMapper<Any>>(), *anyVararg()) }
+    }
 }

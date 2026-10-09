@@ -114,6 +114,21 @@ class NewsAlertFanoutIntegrationTest : PostgresIntegrationTest() {
     }
 
     @Test
+    fun `with the ops switch off nothing is recorded or notified`() {
+        val stock = newStock()
+        val watcher = newUser().also { watch(it, stock) }
+        val switchedOff = NewsAlertFanout(
+            jdbcTemplate, publisher, TransactionTemplate(DataSourceTransactionManager(dataSource)), ObjectMapper(), SimpleMeterRegistry(),
+            enabled = false,
+        )
+
+        assertThat(switchedOff.fanOut(article(stock), now)).isZero()
+
+        assertThat(rows(watcher)).isEmpty()
+        assertThat(publisher.events).isEmpty()
+    }
+
+    @Test
     fun `redelivery of the same article writes nothing and notifies nobody again`() {
         val stock = newStock()
         val watcher = newUser().also { watch(it, stock) }
