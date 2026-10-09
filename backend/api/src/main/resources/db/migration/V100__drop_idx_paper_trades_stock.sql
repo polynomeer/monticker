@@ -1,0 +1,12 @@
+-- flyway:executeInTransaction=false
+-- V98 후속 — 중복 인덱스 정리 2/2.
+--
+-- idx_paper_trades_stock (user_id, stock_id)(V11)는 V98의 idx_paper_trades_user_stock_traded
+-- (user_id, stock_id, traded_at DESC, id DESC)의 앞머리라 그 인덱스가 같은 조회를 모두 받는다.
+-- 지우면 사용자 보유 집계·매수 평균가·실현손익 라인이 V98 인덱스나 idx_paper_trades_user_traded(V25)로 옮겨 가고,
+-- 예상 비용은 최대 7% 오른다(Seq Scan으로 떨어지는 쿼리 없음 — PaperTradesIndexPlanIntegrationTest).
+--
+-- paper_trades는 체결 리스너가 계속 쓰는 테이블이라 CONCURRENTLY로 지운다 — 그래서 이 스크립트는 트랜잭션 밖에서 돌고
+-- 문장이 하나뿐이다(V84·V98 참고, V99와 같은 이유로 파일을 나눴다). 중간에 실패하면 인덱스가 INVALID로 남을 수 있다 —
+-- 같은 문장을 다시 실행한 뒤 `flyway repair`.
+DROP INDEX CONCURRENTLY IF EXISTS idx_paper_trades_stock;

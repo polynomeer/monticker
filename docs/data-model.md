@@ -444,22 +444,26 @@ CREATE TABLE simulation_trades (
 `(user_id, origin, origin_ref) WHERE origin IS NOT NULL AND origin <> 'MANUAL'`.
 `order_emotion_tags.emotion`은 CHECK 없는 VARCHAR(30)이라 `PLANNED`·`IMPATIENT` 추가에 스키마 변경이 없다(V82가 데이터만 이관).
 
-### paper_trades 종목·시각 인덱스 (V98 — done, 중복 인덱스 정리는 후속)
+### paper_trades 종목·시각 인덱스 (V98 — done, 중복 인덱스 정리 V99·V100 — done)
 
 `GET /api/paper/history?stockId&from&to`(PR #177)는 `user_id = ? AND stock_id = ? [AND traded_at 범위] ORDER BY traded_at DESC, id DESC`이다.
 V11·V25 인덱스로는 사용자 전체 구간이나 그 종목 전체를 읽고 정렬했다. V98이 `idx_paper_trades_user_stock_traded (user_id, stock_id, traded_at DESC, id DESC)`를
 `CREATE INDEX CONCURRENTLY`(단일 문장, 트랜잭션 밖 — V84와 같은 규칙)로 만든다. 감정 태그의 다음 매도가(`LATERAL … LIMIT 1`)도 이 인덱스를 탄다.
-근거: `PaperTradesIndexPlanIntegrationTest`(V97·V98·정리 후 세 상태의 EXPLAIN).
-주의: 종목별 최근 매수 출처(`latestEntryOrigins`, `DISTINCT ON (stock_id) … stock_id IN (…)`)는 TimescaleDB SkipScan이 이 인덱스를 고르면서
-`stock_id IN`을 필터로 돌려 사용자 범위를 읽는다(합성 데이터 2만 건에서 버퍼 1,840 → 5,901, 실행 4.5ms → 6.1ms). 종목별 `LATERAL … LIMIT 1`로
-쓰면 종목마다 한 행만 읽는다 — 후속 쿼리 정리 대상.
+근거: `PaperTradesIndexPlanIntegrationTest`(V97·V98·현재(V100) 세 상태의 EXPLAIN).
 
-정리 대상인 중복 인덱스 두 개는 아직 남아 있다. CONCURRENTLY 마이그레이션은 파일 하나에 한 문장이라 아래 두 파일로 따로 낸다.
-- `idx_paper_trades_user (user_id, traded_at DESC)`(V11): `idx_paper_trades_user_traded`(V25)와 컬럼·순서가 같다.
-  `-- flyway:executeInTransaction=false` + `DROP INDEX CONCURRENTLY IF EXISTS idx_paper_trades_user;`
-- `idx_paper_trades_stock (user_id, stock_id)`(V11): V98 인덱스의 앞머리라 대체된다. 지우면 사용자 보유 집계·매수 평균가·실현손익 라인이
-  V98 인덱스나 `idx_paper_trades_user_traded`로 옮겨 가고, 예상 비용은 최대 7% 오른다(Seq Scan으로 떨어지는 쿼리 없음).
-  `-- flyway:executeInTransaction=false` + `DROP INDEX CONCURRENTLY IF EXISTS idx_paper_trades_stock;`
+종목별 최근 매수 출처(`PaperPortfolioQueryService.latestEntryOrigins`)는 `unnest(?::bigint[]) AS s(stock_id) CROSS JOIN LATERAL (… WHERE user_id = ?
+AND stock_id = s.stock_id AND side = 'BUY' ORDER BY traded_at DESC, id DESC LIMIT 1)`로 종목마다 V98 인덱스를 한 번씩 짚는다. 예전
+`DISTINCT ON (stock_id) … stock_id IN (…)`은 TimescaleDB SkipScan이 이 인덱스를 고르면서 `stock_id IN`을 필터로 돌려 사용자 범위를 읽었다
+(합성 데이터 2만 건, 8종목에서 버퍼 약 5,900 → 732). 결과(매도 제외, 같은 시각이면 id가 큰 행, 매수 없는 종목은 출처 없음)는 같다 —
+`PaperLatestEntryOriginIntegrationTest`가 예전 쿼리와 비교한다.
+
+중복 인덱스 두 개는 각각 단일 문장 CONCURRENTLY 마이그레이션(`-- flyway:executeInTransaction=false`)으로 지웠다.
+- V99 `DROP INDEX CONCURRENTLY IF EXISTS idx_paper_trades_user;` — `(user_id, traded_at DESC)`(V11)는 `idx_paper_trades_user_traded`(V25)와 컬럼·순서가 같다.
+- V100 `DROP INDEX CONCURRENTLY IF EXISTS idx_paper_trades_stock;` — `(user_id, stock_id)`(V11)는 V98 인덱스의 앞머리라 대체된다. 사용자 보유 집계·매수
+  평균가·실현손익 라인이 V98 인덱스나 `idx_paper_trades_user_traded`로 옮겨 가고, 예상 비용은 최대 7% 오른다(Seq Scan으로 떨어지는 쿼리 없음).
+
+현재 paper_trades 인덱스: PK `id`, `fill_id` UNIQUE(V44), `idx_paper_trades_user_traded (user_id, traded_at DESC)`(V25),
+`idx_paper_trades_user_origin`(V81, 부분), `idx_paper_trades_user_stock_traded (user_id, stock_id, traded_at DESC, id DESC)`(V98).
 
 ### orders 접수 시점 호가·시각 (V88 — done)
 
@@ -1119,7 +1123,7 @@ stocks
 | `orders` | V15 | ✅ |
 | `paper_accounts` | V11 (+V86 `initial_capital`) | ✅ |
 | `paper_settlements` | V27 | — |
-| `paper_trades` | V11 (+V44 `fill_id`, +V81 `origin`, +V98 종목·시각 인덱스) | — |
+| `paper_trades` | V11 (+V44 `fill_id`, +V81 `origin`, +V98 종목·시각 인덱스, V99·V100 중복 인덱스 삭제) | — |
 | `payment_records` | V27 | — |
 | `portfolio_optimizations` | V16 | ✅ |
 | `portfolio_positions` | V21 | ✅ |
