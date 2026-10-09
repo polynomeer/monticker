@@ -29,7 +29,7 @@ const RULE_LABEL: Record<string, string> = {
   QuantityRule: "주문 수량",
 };
 
-function ruleValue(r: RuleResult) {
+export function ruleValue(r: RuleResult) {
   switch (r.rule) {
     case "VaRRule":
     case "ConcentrationRule":
@@ -39,7 +39,8 @@ function ruleValue(r: RuleResult) {
     case "TradingFrequencyRule":
       return `${fmtNum(r.current)}건 / ${fmtNum(r.limit)}건`;
     case "DailyLossRule":
-      return `${fmtNum(r.current)} / ${fmtNum(r.limit)}원`;
+      // 서버는 손익(이익 +, 손실 −)과 음수 한도를 보낸다 — 화면에는 손실 크기로 보여 준다("0 / -298,786원"으로 읽히지 않게)
+      return `손실 ${fmtNum(Math.max(0, -r.current))} / ${fmtNum(Math.abs(r.limit))}원`;
     default:
       return r.passed ? "통과" : "차단";
   }

@@ -122,9 +122,10 @@ export function AvgPriceOverlay({ holding }: { holding: Holding | null }) {
     [fillData, stockId],
   );
   const avg = holding?.avgPrice;
-  // 포트폴리오는 5초마다 새 객체로 오므로 평균단가 값이 바뀔 때만 선을 새로 만든다(차트 재생성 방지)
+  // 포트폴리오는 5초마다 새 객체로 오므로 평균단가 값이 바뀔 때만 선을 새로 만든다(차트 재생성 방지).
+  // 가격은 차트 어댑터가 라벨 뒤에 붙인다 — 여기서도 넣으면 "내 평균단가 40,453 40,453"으로 두 번 보였다
   const lines: OrderLine[] = useMemo(
-    () => (avg != null ? [{ id: -1, price: avg, side: "BUY", label: `내 평균단가 ${Math.round(avg).toLocaleString("ko-KR")}` }] : []),
+    () => (avg != null ? [{ id: -1, price: avg, side: "BUY", label: "내 평균단가" }] : []),
     [avg],
   );
   if (!holding) return <EmptyNote>보유 종목을 고르면 평균단가선을 겹쳐 보여 줍니다.</EmptyNote>;
