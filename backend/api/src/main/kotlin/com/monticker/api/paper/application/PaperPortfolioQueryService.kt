@@ -4,6 +4,7 @@ import com.monticker.api.common.domain.Price
 import com.monticker.api.paper.infrastructure.PaperAccountRepository
 import com.monticker.api.paper.infrastructure.PaperTradeRepository
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.jdbc.core.PreparedStatementSetter
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -68,17 +69,30 @@ class PaperPortfolioQueryService(
 
     /**
      * ADR-085 — 종목별 가장 최근 매수 체결의 진입 출처(한 번의 쿼리). 출처를 판정할 수 없던 거래(V82 백필 불가)는
-     * origin이 null이고 화면에 "—"로 보인다.
+     * origin이 null이고 화면에 "—"로 보인다. 매수가 없는 종목은 결과에 없다.
+     *
+     * 종목마다 `LATERAL … LIMIT 1`로 V98 인덱스(user_id, stock_id, traded_at DESC, id DESC)를 한 번씩 짚는다.
+     * 예전 `DISTINCT ON (stock_id) … stock_id IN (…)`은 TimescaleDB SkipScan이 같은 인덱스를 고르면서 `stock_id IN`을
+     * 필터로 돌려 사용자 범위 전체를 읽었다(docs/data-model.md). 정렬·동률 규칙(traded_at DESC, id DESC)은 그대로다.
      */
     private fun latestEntryOrigins(userId: Long, stockIds: List<Long>): Map<Long, Pair<String?, Long?>> {
         if (stockIds.isEmpty()) return emptyMap()
+        val ids = stockIds.distinct()
         return jdbc.query(
-            """SELECT DISTINCT ON (stock_id) stock_id, origin, origin_ref
-               FROM paper_trades
-               WHERE user_id = ? AND side = 'BUY' AND stock_id IN (${stockIds.joinToString(",") { "?" }})
-               ORDER BY stock_id, traded_at DESC, id DESC""",
+            """SELECT s.stock_id, t.origin, t.origin_ref
+               FROM unnest(?::bigint[]) AS s(stock_id)
+               CROSS JOIN LATERAL (
+                   SELECT origin, origin_ref
+                   FROM paper_trades
+                   WHERE user_id = ? AND stock_id = s.stock_id AND side = 'BUY'
+                   ORDER BY traded_at DESC, id DESC
+                   LIMIT 1
+               ) t""",
+            PreparedStatementSetter { ps ->
+                ps.setArray(1, ps.connection.createArrayOf("bigint", ids.toTypedArray()))
+                ps.setLong(2, userId)
+            },
             { rs, _ -> rs.getLong("stock_id") to (rs.getString("origin") to (rs.getObject("origin_ref") as Number?)?.toLong()) },
-            userId, *stockIds.toTypedArray(),
         ).toMap()
     }
 
