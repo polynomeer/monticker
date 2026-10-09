@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import java.math.BigDecimal
+import java.sql.Connection
 import java.time.Instant
 
 /**
@@ -111,7 +112,7 @@ class JsonbColumnPersistenceIntegrationTest : PostgresIntegrationTest() {
             session.flush()
 
             // 아직 커밋 전이라 같은 커넥션으로 읽어야 보인다
-            val stored = session.doReturningWork { conn ->
+            val stored = session.doReturningWork { conn: Connection ->
                 conn.createStatement().use { st ->
                     st.executeQuery("SELECT features::text AS j, pg_typeof(features)::text AS t FROM subscription_plans WHERE code = 'QUANT'").use { rs ->
                         rs.next(); rs.getString("j") to rs.getString("t")
