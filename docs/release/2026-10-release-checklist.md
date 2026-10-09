@@ -102,7 +102,7 @@ Flyway가 api 기동 시 자동 적용한다. **V89는 비어 있다**(정상). 
 ## 9. 배포 후 남은 일
 
 - [ ] 스크린샷 다시 찍기 — [manual/README.md](../manual/README.md) 목록.
-- [ ] 후속 마이그레이션: 중복 인덱스 `idx_paper_trades_user`, `idx_paper_trades_stock` 삭제(각각 별도 파일, SQL은 [data-model.md](../data-model.md)).
+- [ ] 후속 마이그레이션: 중복 인덱스 `idx_paper_trades_user`, `idx_paper_trades_stock` 삭제 — V99·V100(각각 단일 문장 `DROP INDEX CONCURRENTLY`, 근거는 [data-model.md](../data-model.md)). 배포 후 두 인덱스가 사라졌는지 확인.
 - [ ] `LegacyOutboxDrain` 제거 — 모든 환경에서 구버전 worker가 내려간 뒤 한 릴리스(ADR-094).
 - [ ] 운영 `candles_1d`의 하루 2행 중복 여부 확인.
 - [ ] 연말(11월) 전에 다음 해 KRX 휴장일 마이그레이션 — `MarketCalendarNextYearMissing` 경보가 알려 준다.
