@@ -6,6 +6,7 @@ import BacktestResultView, { type BacktestResult } from "@/components/backtest/B
 import { StockPicker } from "@/components/quant/StockPicker";
 import { getScreenerQuotes } from "@/services/screener";
 import { Btn, Checkbox, Field, Notice, Panel, PanelCol, PanelRow, SelectBox, TerminalPage } from "@/components/terminal";
+import { defaultBacktestRange } from "@/lib/backtestRange";
 
 // ADR-079 — 비용 가정값(%). 세율은 시기·시장별로 달라 서버가 단정하지 않고 이 값을 그대로 쓴다.
 // 국내(KOSPI·KOSDAQ) 종목 매도에만 세금을 적용한다.
@@ -23,8 +24,9 @@ const STRATEGIES = [
 export default function BacktestPage() {
   const [stockId,    setStockId]    = useState(DEFAULT_STOCK_ID);
   const [strategy,   setStrategy]   = useState("MA_CROSSOVER");
-  const [fromDate,   setFromDate]   = useState("2026-05-24");
-  const [toDate,     setToDate]     = useState("2026-06-22");
+  const [{ startDate: defaultFrom, endDate: defaultTo }] = useState(() => defaultBacktestRange(30));
+  const [fromDate,   setFromDate]   = useState(defaultFrom);
+  const [toDate,     setToDate]     = useState(defaultTo);
   const [capital,    setCapital]    = useState(10000000);
   const [stopLoss,   setStopLoss]   = useState(5);
   const [takeProfit, setTakeProfit] = useState(10);
