@@ -156,6 +156,7 @@ KIS API는 계좌별 앱 키/시크릿으로 OAuth2 토큰을 발급받아 사�
 | `DB_USER` | DB 사용자 | ✅ |
 | `DB_PASSWORD` | DB 비밀번호 | ✅ |
 | `JWT_SECRET` | JWT 서명 키 (32바이트 이상) | ✅ |
+| `UNSUBSCRIBE_TOKEN_SECRET` | 이메일 원클릭 수신 거부 링크 서명 키 (32바이트 이상, `JWT_SECRET`과 다른 값, ADR-102) | ✅ |
 | `APP_BASE_URL` | 서비스 기본 URL | ✅ |
 | `ALLOWED_ORIGINS` | CORS 허용 도메인 | ✅ |
 | `GOOGLE_CLIENT_ID` | Google OAuth2 | ✅ |
