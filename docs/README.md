@@ -57,6 +57,8 @@ monticker의 모든 문서를 **독자별 · 주제별**로 정리한 색인입�
 | [product.md](product.md) | 제품 정체성, 8개 기능 축, Quant Lab·Investment Wallet·Quant Analytics 개념, 상용화 로드맵 상태표, 핵심 설계 원칙 |
 | [portfolio.md](portfolio.md) | 채용·리뷰용 기술 요약 — 문제 정의, 핵심 결정, 규모 |
 | [launch-plan.md](launch-plan.md) | 상용 출시 체크리스트 — Phase 0(기술 부채) ~ 7(퍼블릭 출시), 각 Phase는 게이트 |
+| [release/2026-10-release-checklist.md](release/2026-10-release-checklist.md) | 2026-10 릴리스 배포 체크리스트 — 게이트(휴장일·공지·프록시 CIDR), 마이그레이션 V57~V98 주의(V82 대량 UPDATE, CONCURRENTLY 3건), 배포 순서 api→worker→web, 알림 증가, 스모크, 롤백 |
+| [release/2026-10-user-notice-draft.md](release/2026-10-user-notice-draft.md) | 2026-10 릴리스 사용자 공지 초안 — 업데이트·알림 변경·정정 안내(운영·법무 검토 표시 포함) |
 | [human-action-items.md](human-action-items.md) | 코드로 못 끝내는 일만 모은 목록 — 법무, 계정 발급, 사업자 등록 |
 | [engineering-backlog.md](engineering-backlog.md) | 코드로 할 수 있는 남은 일 — 완료 항목은 근거 커밋과 함께 체크 |
 | [legal-review-brief.md](legal-review-brief.md) | 변호사에게 전달할 브리핑 팩 — 사실관계 + 질문 목록 (법률 자문 아님) |
