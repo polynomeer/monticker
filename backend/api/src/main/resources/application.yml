@@ -235,6 +235,9 @@ app:
       enabled: ${RISK_NEAR_LIMIT_ENABLED:true}
       threshold: ${RISK_NEAR_LIMIT_THRESHOLD:0.8}
       interval-ms: ${RISK_NEAR_LIMIT_INTERVAL_MS:300000}
+  # ADR-090 — 퀀트 시그널 알림(룰셋 주인 + 마켓 구독자)의 운영 스위치. 끄면 알림함 이력은 남기고 푸시·메일 명령만 내지 않는다.
+  quant-signal-push:
+    enabled: ${QUANT_SIGNAL_PUSH_ENABLED:true}
   # ADR-101 — 주간 투자 행동 리포트(이메일). 월요일 08:00~20:30 KST 30분마다, (사용자, 주) 한 번(weekly_report_sends).
   # 한 실행은 max-per-run명·time-budget까지 — 남은 사용자는 다음 실행이 이어 받는다.
   weekly-report:

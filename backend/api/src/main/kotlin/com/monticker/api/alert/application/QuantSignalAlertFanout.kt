@@ -8,6 +8,7 @@ import com.monticker.api.common.search.SearchIndexEvent
 import com.monticker.api.quant.application.StrategySignalAccess
 import com.monticker.api.quant.events.QuantSignalEmittedEvent
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.modulith.events.ApplicationModuleListener
 import org.springframework.stereotype.Component
@@ -23,6 +24,8 @@ import org.springframework.stereotype.Component
  *   새로 볼 수 있게 된 사용자가 있으면 그 사람만 받는다.
  * - 발송 여부는 여기서 정하지 않는다: 명령의 category=QUANT_SIGNAL을 worker가 사용자 알림 설정으로 거른다(ADR-082).
  *   이력은 설정과 무관하게 남는다 — 알림을 꺼도 알림함(/alerts 시그널 탭)에서는 볼 수 있어야 한다.
+ * - 운영 스위치 `app.quant-signal-push.enabled=false`(QUANT_SIGNAL_PUSH_ENABLED)면 이력·색인은 그대로 쓰고 알림 명령만 내지 않는다.
+ *   끄기 전에 이미 나간 명령은 멈추지 않고, 꺼 둔 동안의 신호는 다시 켜도 소급 발송하지 않는다.
  */
 @Component
 class QuantSignalAlertFanout(
@@ -30,6 +33,7 @@ class QuantSignalAlertFanout(
     private val histories: UserAlertHistoryRepository,
     private val events: ApplicationEventPublisher,
     private val objectMapper: ObjectMapper,
+    @Value("\${app.quant-signal-push.enabled:true}") private val pushEnabled: Boolean = true,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -81,6 +85,7 @@ class QuantSignalAlertFanout(
                 "deliveryStatus" to DELIVERY_STATUS,
                 "triggeredAt"    to event.signalTime.toEpochMilli(),
             )))
+            if (!pushEnabled) continue
             val owner = userId == audience.ownerId
             events.publishEvent(UserNotificationCommand(
                 userId = userId,
@@ -95,8 +100,8 @@ class QuantSignalAlertFanout(
                 ),
             ))
         }
-        log.info("[QuantSignalAlert] signalId={} ruleSetId={} audience={} newlyRecorded={}",
-            event.signalId, event.ruleSetId, audience.userIds.size, inserted)
+        log.info("[QuantSignalAlert] signalId={} ruleSetId={} audience={} newlyRecorded={} push={}",
+            event.signalId, event.ruleSetId, audience.userIds.size, inserted, pushEnabled)
         return inserted
     }
 }

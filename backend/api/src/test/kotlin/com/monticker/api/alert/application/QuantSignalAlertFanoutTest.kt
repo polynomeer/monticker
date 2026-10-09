@@ -90,4 +90,17 @@ class QuantSignalAlertFanoutTest {
 
         verify { histories.insertIfAbsent(1L, "QUANT_SIGNAL", "quant-signal:42", 5L, sell.signalTime, "모멘텀 매도 신호 (종가 71,500원, 2026-10-08)", "QUEUED", any()) }
     }
+
+    @Test
+    fun `with the ops switch off history rows and index events are still written but no notification command`() {
+        val switchedOff = QuantSignalAlertFanout(access, histories, events, ObjectMapper(), pushEnabled = false)
+        every { access.audienceOf("rs1") } returns SignalAudience("골든크로스", ownerId = 1, userIds = linkedSetOf(1L, 7L))
+        stubInsert(1L, 100L)
+        stubInsert(7L, 101L)
+
+        assertThat(switchedOff.fanOut(event)).isEqualTo(2)
+
+        assertThat(published.filterIsInstance<SearchIndexEvent>().map { it.docId }).containsExactly("100", "101")
+        assertThat(published.filterIsInstance<UserNotificationCommand>()).isEmpty()
+    }
 }
