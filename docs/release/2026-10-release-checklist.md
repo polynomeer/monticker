@@ -19,6 +19,7 @@
 | 1-3 | `APP_HTTP_TRUSTED_PROXIES`를 **실제 ingress-nginx 파드 CIDR**로 좁힌 값 | 지금 값(RFC1918 전체)이면 클러스터 안 아무 파드가 X-Forwarded-For를 위조할 수 있다. **비우면 모든 요청이 ingress IP 하나로 보여 전면 429** | ADR-084, `infra/k8s/base/configmap.yaml` |
 | 1-4 | `ANALYTICS_RISK_FREE_RATE` 값(기본 0, −0.05~0.2 밖이면 기동 실패) | 분석 화면 샤프 비율 | ADR-097 |
 | 1-5 | 실주문 리스크 게이트 추정가에 시세 신선도 검사를 넣을지 | 지금은 오래된 시세로도 추정한다(실주문 동작 변경이라 미적용) | #128 PR 본문 |
+| 1-6 | **`UNSUBSCRIBE_TOKEN_SECRET`을 운영 시크릿 저장소에 등록**(JWT_SECRET과 다른 값) | 없으면 prod api가 기동하지 않는다 | ADR-102, §4 |
 
 ## 2. 데이터베이스 마이그레이션 (V57 → V100)
 
@@ -52,7 +53,8 @@ Flyway가 api 기동 시 자동 적용한다. **V89는 비어 있다**(정상). 
 |---|---|---|
 | `APP_HTTP_TRUSTED_PROXIES` | 1-3에서 정한 CIDR | **비우지 말 것**. 오버레이가 ConfigMap을 덮어쓸 때 빠지지 않는지 확인 |
 | `ANALYTICS_RISK_FREE_RATE` | 1-4 | |
-| `APP_BASE_URL` | `https://monticker.io` | 주간 리포트·인증 메일의 링크 |
+| **`UNSUBSCRIBE_TOKEN_SECRET`** (시크릿) | `openssl rand -base64 48`, **JWT_SECRET과 다른 값** | **필수 — 없으면 prod api가 기동하지 않는다**(ADR-102). 교체하면 이미 보낸 메일의 수신 거부 링크가 모두 무효 |
+| `APP_BASE_URL` | `https://monticker.io` | 주간 리포트·인증 메일의 링크, 수신 거부 링크(`/unsubscribe`, `/api/unsubscribe`)도 이 주소를 쓴다 |
 | `MAIL_FROM` | 발신 주소 | SPF/DKIM이 이 도메인으로 설정됐는지 |
 | `WEEKLY_REPORT_ENABLED` | `true` (첫 월요일을 피하려면 `false`로 배포 후 켠다) | api. 주간 리포트 이메일 |
 | `WATCHLIST_EVENT_PUSH_ENABLED` | `true` (단계적으로 내보내려면 `false`로 배포 후 켠다) | worker. 관심종목 급등·급락·거래량 급증 푸시만 멈춘다(이벤트 기록·색인은 계속) |

@@ -247,6 +247,12 @@ app:
     time-budget: ${WEEKLY_REPORT_TIME_BUDGET:PT20M}
   mail:
     from: ${MAIL_FROM:noreply@monticker.io}
+  unsubscribe:
+    # ADR-102 — 이메일 원클릭 수신 거부(RFC 8058) 토큰의 HMAC-SHA256 서명 키(최소 32바이트, jwt.secret과 달라야 한다).
+    # 아래 기본값은 로컬 개발 전용이며 공개돼 있다 — InsecureSecretGuard가 이 값 그대로 기동하는 걸 막는다
+    # (ALLOW_INSECURE_DEV_SECRETS=true일 때만 허용). 프로덕션은 application-prod.yml에서 기본값 없이 필수.
+    # 교체하면 이미 보낸 메일의 수신 거부 링크가 전부 무효가 된다(메일의 '알림 설정' 링크는 계속 동작).
+    secret: ${UNSUBSCRIBE_TOKEN_SECRET:monticker-dev-unsubscribe-secret-not-for-production}
   base-url: ${APP_BASE_URL:http://localhost:3000}
   cors:
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost:3000,https://*.monticker.io}

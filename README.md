@@ -285,6 +285,7 @@ pnpm --filter @monticker/web test:e2e            # Playwright (API·Web 기동 �
 | `ELASTICSEARCH_URI` | `http://localhost:9200` | 검색 인덱스 (없으면 DB 폴백) |
 | `JWT_SECRET` | (개발용 기본값) | JWT 서명 키, 32바이트 이상. 프로덕션은 반드시 교체 |
 | `CREDENTIAL_ENCRYPTION_KEY` | (개발용 기본값) | 브로커 자격증명 AES-256-GCM 키. 프로덕션은 반드시 별도 키 |
+| `UNSUBSCRIBE_TOKEN_SECRET` | (개발용 기본값) | 이메일 원클릭 수신 거부 토큰 서명 키(ADR-102), 32바이트 이상·`JWT_SECRET`과 다른 값. 프로덕션 필수 |
 | `ALLOW_INSECURE_DEV_SECRETS` | `false` | 개발용 기본 시크릿으로 기동 허용 여부. 프로덕션은 `false` 유지 |
 | `ALLOWED_ORIGINS` | `http://localhost:3000` | CORS 허용 Origin (쉼표 구분) |
 | `APP_BASE_URL` | `http://localhost:3000` | 이메일 링크 등에 쓰는 웹 앱 URL |

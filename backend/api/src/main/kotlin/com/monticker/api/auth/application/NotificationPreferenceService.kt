@@ -7,6 +7,7 @@ import com.monticker.api.auth.api.NotificationPreferenceRequest
 import com.monticker.api.auth.api.QuietHoursView
 import com.monticker.api.common.consent.ConsentService
 import com.monticker.api.common.consent.ConsentType
+import com.monticker.api.common.exception.ExternalServiceUnavailableException
 import com.monticker.api.common.notification.NotificationCategory
 import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.StringRedisTemplate
@@ -86,6 +87,41 @@ class NotificationPreferenceService(
         // 옛 키가 남아 있으면 worker가 행보다 먼저 볼 일은 없지만(행 우선), 이전이 끝났으니 지운다. 실패해도 행이 이긴다.
         runCatching { redis.delete(legacyKey(userId)) }
         return p
+    }
+
+    /**
+     * ADR-102 — 이메일 원클릭 수신 거부. 주간 리포트 이메일만 끈다(다른 설정은 그대로). 여러 번 불러도 결과가 같다.
+     *
+     * - 탈퇴했거나 없는 사용자면 아무것도 하지 않는다(호출자는 성공과 같은 응답을 준다 — 존재 여부를 드러내지 않는다).
+     * - 행이 있으면 그 컬럼만 원자적으로 바꾼다(설정 화면 저장과 경합해도 다른 필드를 덮지 않는다).
+     * - 행이 없으면 옛 Redis 설정(ADR-082 지연 이전)을 바탕으로 행을 만든다. 이때 Redis를 읽지 못하면 기본값(전부 켜짐)으로
+     *   덮어 사용자가 꺼 둔 다른 알림을 되살리는 대신 503으로 실패한다 — 메일 클라이언트·사용자가 다시 시도한다.
+     *
+     * @return 이번 호출로 꺼졌으면 true(이미 꺼져 있었거나 대상이 아니면 false) — 지표용
+     */
+    @Transactional
+    fun disableWeeklyReportEmail(userId: Long): Boolean {
+        val active = jdbc.query("SELECT 1 FROM users WHERE id = ? AND deleted_at IS NULL", { _, _ -> 1 }, userId).isNotEmpty()
+        if (!active) return false
+        val turnedOff = jdbc.update(
+            "UPDATE notification_preferences SET weekly_report_email = false, updated_at = now() WHERE user_id = ? AND weekly_report_email",
+            userId,
+        )
+        if (turnedOff > 0) return true
+        val hasRow = jdbc.query("SELECT 1 FROM notification_preferences WHERE user_id = ?", { _, _ -> 1 }, userId).isNotEmpty()
+        if (hasRow) return false // 이미 꺼져 있다
+        val legacyJson = try {
+            redis.opsForValue().get(legacyKey(userId))
+        } catch (e: Exception) {
+            throw ExternalServiceUnavailableException("redis", "잠시 후 다시 시도해주세요", e)
+        }
+        val base = legacyJson?.let { json ->
+            runCatching { objectMapper.readValue(json, NotificationPreferenceRequest::class.java) }
+                .onFailure { log.warn("옛 알림 설정 해석 실패 — 기본값: userId={}", userId) }
+                .getOrNull()
+        } ?: NotificationPreferenceRequest()
+        save(userId, base.copy(weeklyReportEmail = false))
+        return base.weeklyReportEmail
     }
 
     /**

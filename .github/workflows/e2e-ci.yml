@@ -77,6 +77,7 @@ jobs:
         run: |
           export JWT_SECRET="$(openssl rand -base64 48)"
           export CREDENTIAL_ENCRYPTION_KEY="$(openssl rand -base64 32)"
+          export UNSUBSCRIBE_TOKEN_SECRET="$(openssl rand -base64 48)"
           nohup ./gradlew bootRun --console=plain -q > /tmp/api.log 2>&1 &
           for i in $(seq 1 60); do
             if grep -q "Started ApiApplication" /tmp/api.log 2>/dev/null; then

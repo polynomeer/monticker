@@ -1,6 +1,7 @@
 package com.monticker.api.wallet.report
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.api.common.notification.UnsubscribeTokenService
 import com.monticker.api.common.time.KstPeriod
 import com.monticker.api.wallet.application.Ratio
 import com.monticker.api.wallet.application.WeeklyRatio
@@ -94,7 +95,7 @@ class WeeklyBehaviorReportTest {
 
     @Test
     fun `content summarizes behavior with week-over-week deltas`() {
-        val mail = WeeklyBehaviorReportRenderer.render(report(), "투자자", "https://app.monticker.io/")
+        val mail = WeeklyBehaviorReportRenderer.render(report(), "투자자", "https://app.monticker.io/", TOKEN)
 
         assertThat(mail.subject).isEqualTo("[monticker] 주간 투자 행동 리포트 · 10/5(월) ~ 10/11(일)")
         assertThat(mail.text)
@@ -110,11 +111,23 @@ class WeeklyBehaviorReportTest {
     }
 
     @Test
+    fun `body links to the login-free unsubscribe page and keeps the settings link as secondary`() {
+        val mail = WeeklyBehaviorReportRenderer.render(report(), "투자자", "https://app.monticker.io/", TOKEN)
+        val page = "https://app.monticker.io/unsubscribe?token=$TOKEN"
+        assertThat(mail.text).contains(page).contains("https://app.monticker.io/settings/notifications")
+        assertThat(mail.html).contains("href=\"$page\"").contains("https://app.monticker.io/settings/notifications")
+        // 본문 링크는 화면(확인 버튼)이다 — 메일 스캐너가 열어도 끄지 않는 GET. 원클릭 API는 헤더에만 둔다.
+        assertThat(mail.text + mail.html).doesNotContain("/api/unsubscribe")
+        assertThat(WeeklyBehaviorReportRenderer.oneClickUrl("https://app.monticker.io/", TOKEN))
+            .isEqualTo("https://app.monticker.io/api/unsubscribe?token=$TOKEN")
+    }
+
+    @Test
     fun `missing values render as a dash, never a made-up number`() {
         val mail = WeeklyBehaviorReportRenderer.render(
             report(plan = WeeklyRatio(Ratio(0, 0), Ratio(0, 0)), stop = WeeklyRatio(Ratio(0, 0), Ratio(0, 0)),
                 score = WeeklyScore(null, null, 0, 0), emotions = emptyList()),
-            "a", "http://localhost:3000",
+            "a", "http://localhost:3000", TOKEN,
         )
         assertThat(mail.text).contains("계획 준수율: —").contains("손절 준수율: —").contains("행동 점수(주간 평균): —")
             .contains("감정 태그를 남긴 체결이 없습니다")
@@ -122,7 +135,7 @@ class WeeklyBehaviorReportTest {
 
     @Test
     fun `content has no investment advice or stock recommendation wording`() {
-        val mail = WeeklyBehaviorReportRenderer.render(report(), "투자자", "http://localhost:3000")
+        val mail = WeeklyBehaviorReportRenderer.render(report(), "투자자", "http://localhost:3000", TOKEN)
         val forbidden = listOf(
             "추천", "매수하세요", "매도하세요", "사세요", "파세요", "유망", "목표가", "수익 보장", "확실한 수익",
             "종목", "급등", "지금 사", "지금 팔", "매수 타이밍", "매도 타이밍",
@@ -134,7 +147,7 @@ class WeeklyBehaviorReportTest {
 
     @Test
     fun `user-controlled nickname is html escaped`() {
-        val mail = WeeklyBehaviorReportRenderer.render(report(), "<script>alert(1)</script>&\"'", "http://localhost:3000")
+        val mail = WeeklyBehaviorReportRenderer.render(report(), "<script>alert(1)</script>&\"'", "http://localhost:3000", TOKEN)
         assertThat(mail.html).doesNotContain("<script>").contains("&lt;script&gt;alert(1)&lt;/script&gt;&amp;&quot;&#39;")
         // 평문 본문은 이스케이프하지 않는다(HTML이 아니다)
         assertThat(mail.text).startsWith("<script>alert(1)</script>&\"'님")
@@ -143,5 +156,10 @@ class WeeklyBehaviorReportTest {
     private fun job(redis: StringRedisTemplate) = WeeklyBehaviorReportJob(
         jdbc = mockk(), scoreDetails = mockk(), emotions = mockk(), mailSender = mockk(), redis = redis,
         objectMapper = ObjectMapper(), registry = SimpleMeterRegistry(),
+        unsubscribeTokens = UnsubscribeTokenService("x".repeat(32)),
     )
+
+    private companion object {
+        const val TOKEN = "v1.weekly_report.42.1700000000.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    }
 }

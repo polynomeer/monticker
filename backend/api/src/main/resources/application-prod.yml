@@ -27,6 +27,8 @@ jwt:
 
 app:
   base-url: ${APP_BASE_URL}
+  unsubscribe:
+    secret: ${UNSUBSCRIBE_TOKEN_SECRET}    # ADR-102 — openssl rand -base64 48, jwt.secret과 다른 값
   cors:
     allowed-origins: ${ALLOWED_ORIGINS}
   cookie-secure: true                     # 절대 false로 변경 금지 — https 전제

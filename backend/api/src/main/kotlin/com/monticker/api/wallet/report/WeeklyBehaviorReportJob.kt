@@ -1,6 +1,8 @@
 package com.monticker.api.wallet.report
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.api.common.notification.UnsubscribeScope
+import com.monticker.api.common.notification.UnsubscribeTokenService
 import com.monticker.api.common.time.KstPeriod
 import com.monticker.api.wallet.application.EmotionTagService
 import com.monticker.api.wallet.application.ScoreDetailService
@@ -41,6 +43,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * - **범위**: 사용자 id 키셋 페이지([pageSize])로 후보를 한 쿼리씩 읽는다. 한 번 실행은 [maxPerRun]명·[timeBudget]까지만 —
  *   남은 사용자는 다음 실행(30분 뒤)이 이어 받는다. 지표 계산은 사용자마다 ADR-091 서비스(점수 카드·감정 분포와 같은 함수)를 부른다.
  * - 로그·sent-log에 이메일 주소나 리포트 내용을 남기지 않는다(userId만).
+ * - 수신 거부: 본문 링크와 `List-Unsubscribe`(+`List-Unsubscribe-Post`, RFC 8058) 헤더에 로그인 없이 쓰는 서명 토큰을 넣는다(ADR-102).
  */
 @Component
 class WeeklyBehaviorReportJob(
@@ -51,6 +54,7 @@ class WeeklyBehaviorReportJob(
     private val redis: StringRedisTemplate,
     private val objectMapper: ObjectMapper,
     private val registry: MeterRegistry,
+    private val unsubscribeTokens: UnsubscribeTokenService,
     @Value("\${app.weekly-report.enabled:true}") private val enabled: Boolean = true,
     @Value("\${app.mail.from:noreply@monticker.io}") private val from: String = "noreply@monticker.io",
     @Value("\${app.base-url:http://localhost:3000}") private val baseUrl: String = "http://localhost:3000",
@@ -189,6 +193,7 @@ class WeeklyBehaviorReportJob(
             registry.counter("weekly_behavior_report_total", "outcome", "not_claimed").increment()
             return Outcome.NOT_CLAIMED
         }
+        val unsubscribeToken = unsubscribeTokens.issue(c.userId, UnsubscribeScope.WEEKLY_REPORT)
         val email = try {
             val report = build(c.userId, week)
             if (report == null) {
@@ -196,13 +201,13 @@ class WeeklyBehaviorReportJob(
                 skip("no_trades")
                 return Outcome.SKIPPED
             }
-            WeeklyBehaviorReportRenderer.render(report, c.nickname, baseUrl)
+            WeeklyBehaviorReportRenderer.render(report, c.nickname, baseUrl, unsubscribeToken)
         } catch (e: Exception) {
             // 보내기 전 실패(DB 등) — 보내지 않았음이 확실하다
             return failed(c.userId, week, attempt, e, retry = true)
         }
         try {
-            send(c.email, email)
+            send(c.email, email, unsubscribeToken)
         } catch (e: MailException) {
             return failed(c.userId, week, attempt, e, retry = isTransient(e))
         }
@@ -246,7 +251,7 @@ class WeeklyBehaviorReportJob(
         )
     }
 
-    private fun send(to: String, email: RenderedEmail) {
+    private fun send(to: String, email: RenderedEmail, unsubscribeToken: String) {
         val msg = mailSender.createMimeMessage()
         MimeMessageHelper(msg, true, "UTF-8").apply {
             setFrom(from)
@@ -254,8 +259,10 @@ class WeeklyBehaviorReportJob(
             setSubject(email.subject)
             setText(email.text, email.html)
         }
-        // 메일 클라이언트의 "수신 거부" 버튼 — 설정 화면(로그인 후 토글)으로 보낸다
-        msg.setHeader("List-Unsubscribe", "<${WeeklyBehaviorReportRenderer.settingsUrl(baseUrl)}>")
+        // ADR-102 — 메일 클라이언트의 "수신 거부" 버튼(RFC 8058 원클릭). 클라이언트가 이 URL로 로그인 없이 POST한다.
+        // mailto는 두지 않는다 — 수신 거부 메일을 처리할 받은편지함이 없다.
+        msg.setHeader("List-Unsubscribe", "<${WeeklyBehaviorReportRenderer.oneClickUrl(baseUrl, unsubscribeToken)}>")
+        msg.setHeader("List-Unsubscribe-Post", "List-Unsubscribe=One-Click")
         mailSender.send(msg)
     }
 

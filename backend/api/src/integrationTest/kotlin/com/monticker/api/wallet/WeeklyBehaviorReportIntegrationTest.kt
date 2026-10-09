@@ -1,6 +1,8 @@
 package com.monticker.api.wallet
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.api.common.notification.UnsubscribeScope
+import com.monticker.api.common.notification.UnsubscribeTokenService
 import com.monticker.api.common.time.KstPeriod
 import com.monticker.api.paper.application.PaperRealizedPnlService
 import com.monticker.api.paper.application.PaperTradeQueryService
@@ -81,6 +83,7 @@ class WeeklyBehaviorReportIntegrationTest : PostgresIntegrationTest() {
     /** 보낸 메일을 기록하는 SMTP 대역. [failFor]의 주소는 [failures]번 실패한다. */
     private class RecordingMailSender(private val delay: Duration = Duration.ZERO) : JavaMailSenderImpl() {
         val sent = CopyOnWriteArrayList<String>()
+        val messages = CopyOnWriteArrayList<MimeMessage>()
         val failFor = ConcurrentHashMap<String, Int>()
         var permanent = false
 
@@ -97,6 +100,7 @@ class WeeklyBehaviorReportIntegrationTest : PostgresIntegrationTest() {
                     throw MailSendException("421 try again later")
                 }
                 sent += to
+                messages += m
             }
         }
     }
@@ -123,11 +127,14 @@ class WeeklyBehaviorReportIntegrationTest : PostgresIntegrationTest() {
         redis = redis,
         objectMapper = ObjectMapper(),
         registry = SimpleMeterRegistry(),
+        unsubscribeTokens = tokens,
         baseUrl = "https://app.test",
         pageSize = pageSize,
         maxAttempts = 3,
         retryBackoff = Duration.ofMinutes(30),
     ).apply { clock = Clock.fixed(at, ZoneOffset.UTC) }
+
+    private val tokens = UnsubscribeTokenService("integration-test-unsubscribe-secret-0123456789")
 
     private fun emailOf(user: Long): String = jdbcTemplate.queryForList("SELECT email FROM users WHERE id = ?", String::class.java, user).single()
 
@@ -211,6 +218,35 @@ class WeeklyBehaviorReportIntegrationTest : PostgresIntegrationTest() {
         job(bounceMail, at = runAt.plus(Duration.ofHours(5))).run()
         assertThat(sendLog(bounced)!!["attempts"]).isEqualTo(1)
         assertThat(bounceMail.sent).doesNotContain(emailOf(bounced))
+    }
+
+    @Test
+    fun `sent mail carries RFC 8058 one-click unsubscribe headers with a token for that user`() {
+        val u = user().also { trade(it, "BUY", kst("2031-03-05T10:00:00")) }
+        val mail = RecordingMailSender()
+        job(mail).run()
+
+        val msg = mail.messages.single { it.allRecipients.single().toString() == emailOf(u) }
+        val listUnsubscribe = msg.getHeader("List-Unsubscribe").single()
+        assertThat(msg.getHeader("List-Unsubscribe-Post").single()).isEqualTo("List-Unsubscribe=One-Click")
+        val m = Regex("""^<https://app\.test/api/unsubscribe\?token=([^>]+)>$""").matchEntire(listUnsubscribe)
+        assertThat(m).describedAs(listUnsubscribe).isNotNull
+        val token = m!!.groupValues[1]
+        assertThat(tokens.verify(token, UnsubscribeScope.WEEKLY_REPORT)).isEqualTo(u)
+        // 토큰에 이메일 주소가 드러나지 않는다
+        assertThat(token).doesNotContain(emailOf(u)).doesNotContain("@")
+        // HTML 본문은 웹 확인 화면으로 보낸다(GET으로는 끄지 않는다)
+        msg.saveChanges() // 실제 발송처럼 본문 파트의 Content-Type 헤더를 채운다
+        assertThat(htmlOf(msg)).contains("https://app.test/unsubscribe?token=$token")
+    }
+
+    private fun htmlOf(part: jakarta.mail.Part): String {
+        val content = part.content
+        if (part.isMimeType("text/html")) return content as String
+        if (content is jakarta.mail.Multipart) {
+            return (0 until content.count).joinToString("") { htmlOf(content.getBodyPart(it)) }
+        }
+        return ""
     }
 
     @Test
