@@ -20,7 +20,7 @@
 | 1-4 | `ANALYTICS_RISK_FREE_RATE` 값(기본 0, −0.05~0.2 밖이면 기동 실패) | 분석 화면 샤프 비율 | ADR-097 |
 | 1-5 | 실주문 리스크 게이트 추정가에 시세 신선도 검사를 넣을지 | 지금은 오래된 시세로도 추정한다(실주문 동작 변경이라 미적용) | #128 PR 본문 |
 
-## 2. 데이터베이스 마이그레이션 (V57 → V98)
+## 2. 데이터베이스 마이그레이션 (V57 → V100)
 
 Flyway가 api 기동 시 자동 적용한다. **V89는 비어 있다**(정상). 아래 셋은 주의한다.
 
@@ -28,10 +28,11 @@ Flyway가 api 기동 시 자동 적용한다. **V89는 비어 있다**(정상). 
 |---|---|---|
 | **V82** | `orders`·`paper_trades` **전체 UPDATE**(진입 출처 백필) | 트래픽이 적은 시간에. 큰 테이블이면 소요 시간을 스테이징에서 먼저 잰다 |
 | **V84**, **V96**, **V98** | `CREATE INDEX CONCURRENTLY` — 트랜잭션 밖, 쓰기를 막지 않는다 | **Flyway 세션 lock 설정**(`spring.flyway.postgresql.transactional-lock: false`)이 운영 설정에도 있는지 확인. 없으면 마이그레이션이 영원히 멈춘다. 중간에 실패하면 INVALID 인덱스가 남으므로 `DROP INDEX CONCURRENTLY IF EXISTS <이름>;` 후 `flyway repair` → 재기동 |
+| **V99**, **V100** | `DROP INDEX CONCURRENTLY` — paper_trades 중복 인덱스 2개 삭제, 트랜잭션 밖 | 위와 같은 세션 lock 필요. 중간에 실패하면 같은 DROP 문을 다시 실행한 뒤 `flyway repair` |
 | **V91** | worker outbox를 `worker_outbox` 스키마로 분리하고 미완료 worker 행을 옮긴다 | §3 배포 순서(api → worker)를 반드시 지킨다 |
 
 - [ ] 운영 DB 백업(스냅샷) — 롤백 시 필요. 마이그레이션은 되돌리는 스크립트가 없다.
-- [ ] 스테이징에서 V57~V98 전체 적용 시간 측정(특히 V82).
+- [ ] 스테이징에서 V57~V100 전체 적용 시간 측정(특히 V82).
 - [ ] 적용 후 `SELECT version, success FROM flyway_schema_history WHERE version::int >= 57 ORDER BY installed_rank;` 전부 `t`.
 - [ ] `SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid;` 결과 없음(INVALID 인덱스 없음).
 
