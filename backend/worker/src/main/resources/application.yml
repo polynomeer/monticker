@@ -161,6 +161,15 @@ kafka:
     session-timeout-ms: ${KAFKA_SESSION_TIMEOUT_MS:10000}
     heartbeat-interval-ms: ${KAFKA_HEARTBEAT_INTERVAL_MS:3000}
 
+# 운영 스위치 — 배포 직후 알림이 과하거나 잘못 나가면 코드를 되돌리지 않고 끈다(환경변수 변경 후 재기동).
+notify:
+  # 관심종목 급등·급락·거래량 급증 푸시(StockEventWriter). 이벤트 기록·색인은 계속된다.
+  watchlist-event-push:
+    enabled: ${WATCHLIST_EVENT_PUSH_ENABLED:true}
+  # 관심종목 뉴스·공시 알림(ADR-100). 끄면 이력 행도 만들지 않고, 쌓인 발송 기록도 보내지 않는다.
+  news-alert:
+    enabled: ${NEWS_ALERT_ENABLED:true}
+
 worker:
   # 역할: all(단일 프로세스, 기본값) | market | event | alert
   role: ${WORKER_ROLE:all}

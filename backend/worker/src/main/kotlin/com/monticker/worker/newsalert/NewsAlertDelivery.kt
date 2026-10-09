@@ -1,6 +1,8 @@
 package com.monticker.worker.newsalert
 
 import com.monticker.worker.notification.UserNotificationDispatcher
+import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.modulith.events.ApplicationModuleListener
 import org.springframework.stereotype.Component
 
@@ -10,12 +12,22 @@ import org.springframework.stereotype.Component
  *
  * 실패하면 발행 기록이 미완료로 남아 재전송된다. 디스패처는 dedupKey(사건×사용자)로 중복을 막고, 발송 예외면 표시를 지워
  * 재전송이 다시 보낼 수 있게 한다.
+ *
+ * 운영 스위치(`notify.news-alert.enabled`)가 꺼져 있으면 보내지 않고 버린다 — 끄기 전에 팬아웃이 쌓아 둔 발행 기록도 나가지 않게.
  */
 @Component
-class NewsAlertDelivery(private val dispatcher: UserNotificationDispatcher) {
+class NewsAlertDelivery(
+    private val dispatcher: UserNotificationDispatcher,
+    @Value("\${notify.news-alert.enabled:true}") private val enabled: Boolean = true,
+) {
+    private val log = LoggerFactory.getLogger(javaClass)
 
     @ApplicationModuleListener
     fun on(event: NewsAlertNotifyEvent) {
+        if (!enabled) {
+            log.debug("[NewsAlert] 운영 스위치가 꺼져 있어 보내지 않음: historyId={}", event.historyId)
+            return
+        }
         dispatcher.dispatch(event.toMessage())
     }
 }

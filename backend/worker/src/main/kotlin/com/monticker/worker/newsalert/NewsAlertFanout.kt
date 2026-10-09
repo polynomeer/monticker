@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.worker.search.SearchIndexEvent
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.core.RowCallbackHandler
@@ -35,6 +36,8 @@ import java.time.Instant
  * - **채널·방해 금지 시간은 여기서 정하지 않는다.** 발송 시점에 `NotificationPolicy`가 NEWS 종류로 정한다(ADR-082/093). 여기서는
  *   "이 종류를 받겠다"(news_alert_push 또는 news_alert_email)만 본다 — 뉴스는 양이 많아 끈 사람의 알림함까지 채우지 않는다.
  * - 소유: 받는 사람은 **그 사용자 자신의 관심종목**에서만 나온다. 다른 사람의 관심종목·보유 종목은 보지 않는다.
+ * - 운영 스위치: `notify.news-alert.enabled=false`(NEWS_ALERT_ENABLED)면 팬아웃 자체를 하지 않는다 — 이력 행도 알림도 없다.
+ *   꺼 둔 동안 들어온 기사는 다시 켜도 소급하지 않는다(발행 기록은 완료 처리된다).
  */
 @Component
 class NewsAlertFanout(
@@ -43,6 +46,7 @@ class NewsAlertFanout(
     private val tx: TransactionTemplate,
     private val objectMapper: ObjectMapper,
     private val meterRegistry: MeterRegistry,
+    @Value("\${notify.news-alert.enabled:true}") private val enabled: Boolean = true,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -66,6 +70,10 @@ class NewsAlertFanout(
 
     /** 새로 적재한 사용자 수를 돌려준다(재전송·지난 기사면 0). */
     fun fanOut(event: NewsAlertCandidateEvent, now: Instant): Int {
+        if (!enabled) {
+            meterRegistry.counter("news_alert_skipped_total", "reason", "disabled").increment()
+            return 0
+        }
         if (!NewsAlertRules.importanceQualifies(event.kind, event.importanceScore)) return 0
         if (!NewsAlertRules.fresh(event.kind, event.publishedAt(), now)) {
             meterRegistry.counter("news_alert_skipped_total", "reason", "stale").increment()

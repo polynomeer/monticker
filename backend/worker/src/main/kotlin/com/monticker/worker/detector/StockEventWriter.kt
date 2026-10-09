@@ -2,6 +2,7 @@ package com.monticker.worker.detector
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import com.monticker.worker.search.SearchIndexEvent
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.context.ApplicationEventPublisher
@@ -35,6 +36,8 @@ class StockEventWriter(
     private val events: ApplicationEventPublisher,
     private val tx: TransactionTemplate,
     private val preferences: com.monticker.worker.notification.NotificationPreferenceReader,
+    // 관심종목 급등·급락·거래량 급증 푸시의 운영 스위치(WATCHLIST_EVENT_PUSH_ENABLED). 끄면 이벤트 행·색인·Kafka는 그대로, 푸시만 안 나간다.
+    @Value("\${notify.watchlist-event-push.enabled:true}") private val pushEnabled: Boolean = true,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val objectMapper = ObjectMapper()
@@ -135,6 +138,7 @@ class StockEventWriter(
     }
 
     private fun sendEventPush(event: DetectedEvent) {
+        if (!pushEnabled) return
         // hot path 탈출 — collect() 스레드를 블로킹하지 않음
         pushExecutor.submit {
             runCatching { sendEventPushAsync(event) }
