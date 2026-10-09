@@ -12,6 +12,16 @@ import java.math.RoundingMode
 import java.time.Instant
 import java.time.ZoneId
 
+/**
+ * 미체결 BUY 주문의 예약금(ADR-043) — OrderSagaOrchestrator.reserveCash가 제출 시점에 limit_price × 수량을 현금에서 떼어 둔다.
+ * 총자산은 어디서든 `현금 + 예약금 + 보유 평가액`이다(/wallet, /paper/portfolio, 대사·일별 수익률).
+ */
+const val RESERVED_CASH_SQL = """
+    SELECT COALESCE(SUM(limit_price * (quantity - filled_qty)), 0)
+    FROM orders
+    WHERE user_id = ? AND side = 'BUY' AND status IN ('PENDING', 'PARTIALLY_FILLED')
+"""
+
 @Service
 @Transactional(readOnly = true)
 class PaperPortfolioQueryService(
@@ -102,7 +112,9 @@ class PaperPortfolioQueryService(
         }
         val holdings  = buildHoldings(userId)
         val evalValue = holdings.fold(BigDecimal.ZERO) { acc, h -> acc + h.value }
-        val totalValue = account.cash.amount + evalValue
+        // 예약금을 빼면 지정가 매수를 걸자마자 총 평가금액이 그만큼 줄어 손실처럼 보였다(/wallet 총자산과도 달랐다)
+        val reserved   = jdbc.queryForObject(RESERVED_CASH_SQL, BigDecimal::class.java, userId) ?: BigDecimal.ZERO
+        val totalValue = account.cash.amount + reserved + evalValue
         val invested   = holdings.fold(BigDecimal.ZERO) { acc, h -> acc + h.avgPrice.multiply(BigDecimal(h.quantity)) }
         val pnl        = evalValue - invested
         val pnlRate    = if (invested > BigDecimal.ZERO)
