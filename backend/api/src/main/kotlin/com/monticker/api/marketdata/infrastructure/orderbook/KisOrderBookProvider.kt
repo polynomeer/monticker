@@ -20,7 +20,13 @@ class KisOrderBookProvider(
     private val log = LoggerFactory.getLogger(javaClass)
 
     override fun getOrderBook(symbol: String, market: String, refPrice: BigDecimal): OrderBookSnapshot? {
-        val json = redisTemplate.opsForValue().get("orderbook:$symbol") ?: return null
+        // Redis 장애·타임아웃이면 이 공급자를 건너뛴다 — 예외가 새면 Yahoo·Mock 대체로 가지 못하고 호가 API가 500이었다
+        val json = try {
+            redisTemplate.opsForValue().get("orderbook:$symbol")
+        } catch (e: Exception) {
+            log.warn("KIS orderbook Redis read failed for {}: {}", symbol, e.message)
+            null
+        } ?: return null
         return try {
             val root = mapper.readTree(json)
             OrderBookSnapshot(

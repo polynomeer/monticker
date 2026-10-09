@@ -1,6 +1,7 @@
 package com.monticker.api.wallet.application
 
 import com.monticker.api.paper.application.PaperAccountQueryService
+import com.monticker.api.paper.application.RESERVED_CASH_SQL
 import com.monticker.api.wallet.equity.PaperEquityQuery
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
@@ -9,12 +10,6 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 
 /** 미체결 BUY 주문 예약금 — WalletService와 LedgerReconciliationService가 같은 정의를 써야 한다. */
-const val RESERVED_CASH_SQL = """
-    SELECT COALESCE(SUM(limit_price * (quantity - filled_qty)), 0)
-    FROM orders
-    WHERE user_id = ? AND side = 'BUY' AND status IN ('PENDING', 'PARTIALLY_FILLED')
-"""
-
 data class WalletMapResponse(
     val availableCash: BigDecimal,
     val reservedCash: BigDecimal,

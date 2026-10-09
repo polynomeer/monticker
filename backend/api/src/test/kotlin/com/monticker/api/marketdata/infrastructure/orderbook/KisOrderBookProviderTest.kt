@@ -91,4 +91,15 @@ class KisOrderBookProviderTest {
 
         io.mockk.verify { valueOps.get("orderbook:AAPL") }
     }
+
+    // 로컬 점검(2026-10-09) — Redis 200ms 타임아웃이 그대로 새서 호가 API가 500이었다. null이면 OrderBookService가 Yahoo·Mock으로 넘어간다.
+    @Test
+    fun `returns null instead of throwing when Redis times out`() {
+        every { redisTemplate.opsForValue() } returns valueOps
+        every { valueOps.get("orderbook:005930") } throws org.springframework.dao.QueryTimeoutException("Redis command timed out")
+
+        val result = provider.getOrderBook("005930", "KOSPI", BigDecimal("70000"))
+
+        assertThat(result).isNull()
+    }
 }

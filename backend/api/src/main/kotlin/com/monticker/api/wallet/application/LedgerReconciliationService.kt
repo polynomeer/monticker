@@ -1,5 +1,6 @@
 package com.monticker.api.wallet.application
 
+import com.monticker.api.paper.application.RESERVED_CASH_SQL
 import com.monticker.api.common.domain.Money
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
