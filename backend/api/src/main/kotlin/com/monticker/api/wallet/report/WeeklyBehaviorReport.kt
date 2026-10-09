@@ -85,9 +85,14 @@ object WeeklyBehaviorReportRenderer {
 
     private val DAY = DateTimeFormatter.ofPattern("M/d", Locale.KOREAN)
 
-    fun render(report: WeeklyBehaviorReport, nickname: String, baseUrl: String): RenderedEmail {
+    /**
+     * @param unsubscribeToken ADR-102 수신 거부 토큰. 본문 링크는 웹 확인 화면(`/unsubscribe`)으로 보낸다 — 누르면 바로 끄지 않고
+     *   버튼으로 POST한다(메일 스캐너의 미리 열기로 꺼지지 않게). 로그인 후 설정 화면 링크도 함께 둔다.
+     */
+    fun render(report: WeeklyBehaviorReport, nickname: String, baseUrl: String, unsubscribeToken: String): RenderedEmail {
         val range = "${report.week.from.format(DAY)}(월) ~ ${report.week.to.format(DAY)}(일)"
         val settingsUrl = settingsUrl(baseUrl)
+        val unsubscribeUrl = unsubscribePageUrl(baseUrl, unsubscribeToken)
         val walletUrl = "${baseUrl.trimEnd('/')}/wallet"
         val rows = listOf(
             Line("모의 체결", "${report.tradeCount}건 (매수 ${report.buyCount} · 매도 ${report.sellCount})", tradeDelta(report)),
@@ -109,7 +114,8 @@ object WeeklyBehaviorReportRenderer {
             appendLine(NOTES.joinToString("\n") { "* $it" })
             appendLine()
             appendLine("지갑에서 자세히 보기: $walletUrl")
-            appendLine("이 메일을 그만 받으려면 알림 설정에서 '주간 투자 행동 리포트'를 끄세요: $settingsUrl")
+            appendLine("이 메일을 그만 받으려면(로그인 없이 수신 거부): $unsubscribeUrl")
+            appendLine("알림 설정에서 다른 알림과 함께 관리하기: $settingsUrl")
             appendLine()
             append(DISCLAIMER)
         }
@@ -135,8 +141,8 @@ object WeeklyBehaviorReportRenderer {
             append(NOTES.joinToString("<br>") { e(it) })
             append("</p>")
             append("<p><a href=\"${e(walletUrl)}\">지갑에서 자세히 보기</a></p>")
-            append("<p style=\"color:#888;font-size:12px;\">이 메일을 그만 받으려면 <a href=\"${e(settingsUrl)}\">알림 설정</a>에서 ")
-            append("‘주간 투자 행동 리포트’를 끄세요.</p>")
+            append("<p style=\"color:#888;font-size:12px;\">이 메일을 그만 받으려면 <a href=\"${e(unsubscribeUrl)}\">수신 거부</a>")
+            append("(로그인 필요 없음) · 다른 알림과 함께 관리하려면 <a href=\"${e(settingsUrl)}\">알림 설정</a></p>")
             append("<p style=\"color:#888;font-size:11px;\">${e(DISCLAIMER)}</p>")
             append("</div>")
         }
@@ -144,6 +150,12 @@ object WeeklyBehaviorReportRenderer {
     }
 
     fun settingsUrl(baseUrl: String) = "${baseUrl.trimEnd('/')}/settings/notifications"
+
+    /** 웹 확인 화면(사람이 누르는 링크). 토큰은 base64url·점·숫자뿐이라 URL 인코딩이 필요 없다. */
+    fun unsubscribePageUrl(baseUrl: String, token: String) = "${baseUrl.trimEnd('/')}/unsubscribe?token=$token"
+
+    /** RFC 8058 원클릭 POST 대상(메일 클라이언트가 부른다) — `List-Unsubscribe` 헤더에 들어간다. */
+    fun oneClickUrl(baseUrl: String, token: String) = "${baseUrl.trimEnd('/')}/api/unsubscribe?token=$token"
 
     private val NOTES = listOf(
         "계획 준수율: 판정 가능한 체결 중 미리 정한 규칙(조건부 주문·Watch Rule·전략)이 낸 주문과 ‘계획대로’ 태그의 비율",

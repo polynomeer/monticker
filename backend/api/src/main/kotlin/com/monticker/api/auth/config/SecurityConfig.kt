@@ -56,6 +56,9 @@ class SecurityConfig(
                     // JWT가 아니라 그게 이 엔드포인트의 진짜 보안 경계다.
                     .requestMatchers("/api/subscription/payment/webhook").permitAll()
                     .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
+                    // ADR-102 — 이메일 원클릭 수신 거부(RFC 8058). 메일 클라이언트가 로그인 없이 POST한다. 인증은 서명 토큰이
+                    // 한다(UnsubscribeController). GET 매핑은 없어 405다 — 메일 스캐너의 미리 열기로는 끄지 않는다.
+                    .requestMatchers("/api/unsubscribe").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/stocks/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/events/**").permitAll()
                     // ADR-072 — 저장 스크린은 사용자 데이터라 아래 /api/screener/** 공개 규칙보다 먼저 막는다
