@@ -106,6 +106,8 @@ Flyway가 api 기동 시 자동 적용한다. **V89는 비어 있다**(정상). 
 
 - [ ] 스크린샷 다시 찍기 — [manual/README.md](../manual/README.md) 목록.
 - [ ] 후속 마이그레이션: 중복 인덱스 `idx_paper_trades_user`, `idx_paper_trades_stock` 삭제 — V99·V100(각각 단일 문장 `DROP INDEX CONCURRENTLY`, 근거는 [data-model.md](../data-model.md)). 배포 후 두 인덱스가 사라졌는지 확인.
+- [ ] Next 16.4·ESLint 9 업그레이드([#160](https://github.com/polynomeer/monticker/pull/160), 트랙 W1) — **이번 릴리스에서 뺐다**(웹 전체 영향). 배포가 안정된 뒤 rebase → web tsc·vitest(KST·UTC)·lint·build·e2e → 로컬 스택에서 전 화면 점검 후 머지.
+- [ ] 주간 리포트 첫 월요일: 실제 발송(`weekly_behavior_report_total`)과 원클릭 수신 거부(`email_unsubscribe_total`, ADR-102) 동작 확인.
 - [ ] `LegacyOutboxDrain` 제거 — 모든 환경에서 구버전 worker가 내려간 뒤 한 릴리스(ADR-094).
 - [ ] 운영 `candles_1d`의 하루 2행 중복 여부 확인.
 - [ ] 연말(11월) 전에 다음 해 KRX 휴장일 마이그레이션 — `MarketCalendarNextYearMissing` 경보가 알려 준다.
