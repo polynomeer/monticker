@@ -55,6 +55,7 @@ Flyway가 api 기동 시 자동 적용한다. **V89는 비어 있다**(정상). 
 | `MAIL_FROM` | 발신 주소 | SPF/DKIM이 이 도메인으로 설정됐는지 |
 | `WEEKLY_REPORT_ENABLED` | `true` (첫 월요일을 피하려면 `false`로 배포 후 켠다) | api. 주간 리포트 이메일 |
 | `WATCHLIST_EVENT_PUSH_ENABLED` | `true` (단계적으로 내보내려면 `false`로 배포 후 켠다) | worker. 관심종목 급등·급락·거래량 급증 푸시만 멈춘다(이벤트 기록·색인은 계속) |
+| `QUANT_SIGNAL_PUSH_ENABLED` | `true` | api. 퀀트 시그널 푸시·메일만 멈춘다(알림함 이력은 계속) |
 | `NEWS_ALERT_ENABLED` | `true` | worker. 뉴스·공시 알림을 멈춘다(이력 행도 만들지 않고 outbox에 남은 발송도 버린다) |
 | `WEEKLY_REPORT_CRON` 등 | 기본값(`0 0/30 8-20 * * MON`, 2000명/회, 20분) | ADR-101 |
 | `market-calendar.refresh-ms` | 기본 1시간 | ADR-086 |
@@ -75,12 +76,11 @@ Flyway가 api 기동 시 자동 적용한다. **V89는 비어 있다**(정상). 
 |---|---|---|---|
 | 관심종목 급등·급락·거래량 급증 푸시 | **지금까지 SQL 오류로 한 번도 발송되지 않았다**(#188에서 수정) — 배포하면 처음으로 나간다 | 가격·거래량 알림 켬 | `WATCHLIST_EVENT_PUSH_ENABLED=false` (worker 재기동) |
 | 관심종목 뉴스·공시 알림 | 새 기능(#183) | 켬(V78 기본값) | `NEWS_ALERT_ENABLED=false` (worker 재기동) |
-| 퀀트 시그널 푸시 | 구독자도 받게 됨(#167, 이전엔 전략 주인만) | 켬 | 없음 |
+| 퀀트 시그널 푸시 | 구독자도 받게 됨(#167, 이전엔 전략 주인만) | 켬 | `QUANT_SIGNAL_PUSH_ENABLED=false` (api 재기동, 알림함 이력은 계속 남음) |
 | 주간 행동 리포트 이메일 | 새 기능(#184), 매주 월요일 | 켬 | `WEEKLY_REPORT_ENABLED=false` |
 
 - 상한: 뉴스·공시는 사용자당 1시간 5건(넘으면 알림 없이 이력만), 공시는 중요도 70 이상, 뉴스는 발행 6시간 이내.
-- 운영 스위치는 환경변수라 바꾸면 **worker를 재기동**해야 적용된다. 꺼 둔 동안의 이벤트·기사는 다시 켜도 소급 발송하지 않는다. 뉴스 스위치 동작은 `news_alert_skipped_total{reason="disabled"}`로 확인한다.
-- 퀀트 시그널 푸시에는 아직 스위치가 없다 — 구독자 수가 적어 영향이 작다고 보고 이번에는 넣지 않았다.
+- 운영 스위치는 환경변수라 바꾸면 **해당 서비스(api 또는 worker)를 재기동**해야 적용된다. 꺼 둔 동안의 이벤트·기사는 다시 켜도 소급 발송하지 않는다. 뉴스 스위치 동작은 `news_alert_skipped_total{reason="disabled"}`로 확인한다.
 - [ ] 배포 후 1시간: 푸시 발송 수, 푸시 제공자 오류율, 사용자 알림 끔 비율(급증하면 공지 보강).
 
 ## 7. 배포 후 확인 (스모크)
