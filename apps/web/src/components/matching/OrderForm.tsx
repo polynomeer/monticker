@@ -5,7 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
 import { Btn, BuySell, Field, Icon, KV, Seg, SelectBox, fmtNum } from "@/components/terminal";
 import { cn } from "@/lib/utils";
-import { STOCKS, estimateMarketFill, type FillDto, type OrderBookData, type OrderDto } from "./data";
+import { estimateMarketFill, type FillDto, type OrderBookData, type OrderDto } from "./data";
 
 // V-L7 — 주문 폼에 수량 상한이 전혀 없어 1e9 같은 값이 클라 검사를 그대로 통과했다.
 const MAX_ORDER_QUANTITY = 1_000_000;
@@ -46,9 +46,11 @@ function RiskPreview({ result }: { result: RiskCheckResult }) {
 }
 
 /** 시안 Matching "주문 입력" — 모의투자 CLOB 엔진으로 주문을 낸다. */
-export function OrderForm({ stockId, setStockId, presetSide, book }: {
+export function OrderForm({ stockId, setStockId, stocks, presetSide, book }: {
   stockId: number;
   setStockId: (id: number) => void;
+  /** 고를 수 있는 종목(useFeaturedStocks) — id는 종목 코드로 찾은 값이다 */
+  stocks: { id: number; label: string }[];
   presetSide?: "BUY" | "SELL";
   book: OrderBookData | null | undefined;
 }) {
@@ -115,7 +117,7 @@ export function OrderForm({ stockId, setStockId, presetSide, book }: {
   return (
     <>
       <SelectBox label="종목" value={stockId} onChange={(e) => setStockId(+e.target.value)} aria-label="종목">
-        {STOCKS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+        {stocks.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
       </SelectBox>
       <BuySell value={side} onChange={setSide} />
       <Seg options={ORDER_TYPES} value={orderType} onChange={setOrderType} full size="lg" />

@@ -15,6 +15,7 @@ import { kstToday } from "@/components/wallet/insights";
 import { usePaperPortfolio } from "@/hooks/usePaperTrade";
 import { getScreenerQuotes } from "@/services/screener";
 import { saveRebalanceDraft, toDraftWeights } from "@/lib/rebalanceDraft";
+import { useFeaturedStocks } from "@/hooks/useFeaturedStocks";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -71,11 +72,6 @@ interface RegimeResult {
   explanation: string; error: string | null;
 }
 
-const STOCKS = [
-  { id: 2,  label: "삼성전자" }, { id: 3,  label: "SK하이닉스" },
-  { id: 9,  label: "현대차" },   { id: 10, label: "NAVER" },
-  { id: 5,  label: "AAPL" },    { id: 6,  label: "NVDA" },
-];
 
 const PATTERN_LABEL: Record<string, string> = {
   HEAD_AND_SHOULDERS: "헤드앤숄더", DOUBLE_BOTTOM: "이중 바닥", DOUBLE_TOP: "이중 천장",
@@ -93,10 +89,11 @@ function pct(n: number) { return (n * 100).toFixed(2) + "%"; }
 /** 샤프 = (연 수익 − 연 무위험 수익률) / 연 변동성. 무위험 수익률은 서버 설정값(응답의 riskFreeRate) */
 function sharpe(ret: number, risk: number, rf = 0) { return risk > 0 ? (ret - rf) / risk : null; }
 
-function StockTabs({ value, onChange }: { value: number; onChange: (id: number) => void }) {
+function StockTabs({ value, onChange }: { value: number | null; onChange: (id: number) => void }) {
+  const { stocks } = useFeaturedStocks();
   return (
     <div className="flex flex-wrap gap-1.5">
-      {STOCKS.map(s => (
+      {stocks.map(s => (
         <Chip key={s.id} active={value === s.id} onClick={() => onChange(s.id)}>{s.label}</Chip>
       ))}
     </div>
@@ -233,13 +230,16 @@ function KellyPanel() {
 // ── 4. Pattern / 5. Regime — 시안에 없는 기존 도구, 같은 화면 아래에 둔다 ──────
 
 function PatternPanel() {
-  const [stockId, setStockId] = useState(2);
+  const { defaultId } = useFeaturedStocks();
+  const [picked, setStockId] = useState<number | null>(null);
+  const stockId = picked ?? defaultId;
   const { data, isLoading } = useQuery<PatternMatch[]>({
     queryKey: ["analytics", "patterns", stockId],
     queryFn: async () => {
       const res = await authFetch(`/api/stocks/${stockId}/patterns`);
       return res.json();
     },
+    enabled: stockId != null,
   });
 
   return (
@@ -268,13 +268,16 @@ function PatternPanel() {
 }
 
 function RegimePanel() {
-  const [stockId, setStockId] = useState(2);
+  const { defaultId } = useFeaturedStocks();
+  const [picked, setStockId] = useState<number | null>(null);
+  const stockId = picked ?? defaultId;
   const { data, isLoading } = useQuery<RegimeResult>({
     queryKey: ["analytics", "regime", stockId],
     queryFn: async () => {
       const res = await authFetch(`/api/stocks/${stockId}/regime`);
       return res.json();
     },
+    enabled: stockId != null,
   });
   const meta = data ? REGIME_META[data.regime] : undefined;
 
@@ -303,10 +306,17 @@ function RegimePanel() {
 // ── Page ────────────────────────────────────────────────────────────────────
 
 const MAX_STOCKS = 20;
+/** 처음 열었을 때 분석 대상 — 국내 2 + 미국 2 */
+const DEFAULT_ANALYSIS_SYMBOLS = ["005930", "000660", "AAPL", "NVDA"];
 
 export default function AnalyticsPage() {
-  const [selected, setSelected] = useState<number[]>([2, 3, 5, 6]);
-  // 보유 종목에서 불러온 종목은 고정 목록(STOCKS)에 없을 수 있다 — 이름을 따로 기억한다.
+  // 처음 분석 대상은 종목 코드로 정한다(useFeaturedStocks) — 사용자가 바꾸기 전까지는 찾은 id를 그대로 쓴다
+  const { stocks: featured } = useFeaturedStocks();
+  const [picked, setPicked] = useState<number[] | null>(null);
+  const selected = picked ?? featured.filter(s => DEFAULT_ANALYSIS_SYMBOLS.includes(s.symbol)).map(s => s.id);
+  const setSelected = (next: number[] | ((prev: number[]) => number[])) =>
+    setPicked(typeof next === "function" ? next(selected) : next);
+  // 보유 종목에서 불러온 종목은 빠른 선택 목록(featured)에 없을 수 있다 — 이름을 따로 기억한다.
   const [names, setNames] = useState<Record<number, string>>({});
   const [period, setPeriod] = useState<AnalysisPeriodSel>({ kind: "1Y" });
   const today = kstToday();
@@ -321,8 +331,8 @@ export default function AnalyticsPage() {
   const holdings = (paper?.holdings ?? []).filter(h => h.value > 0);
   const data = opt.data;
   const held = data?.current ?? null;
-  const unselected = STOCKS.filter(s => !selected.includes(s.id));
-  const labelOf = (id: number) => STOCKS.find(x => x.id === id)?.label ?? names[id] ?? `#${id}`;
+  const unselected = featured.filter(s => !selected.includes(s.id));
+  const labelOf = (id: number) => featured.find(x => x.id === id)?.label ?? names[id] ?? `#${id}`;
 
   const loadHoldings = () => {
     const top = [...holdings].sort((a, b) => b.value - a.value).slice(0, MAX_STOCKS);

@@ -7,13 +7,11 @@ import { StockPicker } from "@/components/quant/StockPicker";
 import { getScreenerQuotes } from "@/services/screener";
 import { Btn, Checkbox, Field, Notice, Panel, PanelCol, PanelRow, SelectBox, TerminalPage } from "@/components/terminal";
 import { defaultBacktestRange } from "@/lib/backtestRange";
+import { useFeaturedStocks } from "@/hooks/useFeaturedStocks";
 
 // ADR-079 — 비용 가정값(%). 세율은 시기·시장별로 달라 서버가 단정하지 않고 이 값을 그대로 쓴다.
 // 국내(KOSPI·KOSDAQ) 종목 매도에만 세금을 적용한다.
 const COST = { commissionPct: 0.015, sellTaxPct: 0.18, slippagePct: 0.05 } as const;
-
-/** 처음 열었을 때 고른 종목(삼성전자). 이후로는 종목 검색으로 바꾼다. */
-const DEFAULT_STOCK_ID = 2;
 
 const STRATEGIES = [
   { key: "MA_CROSSOVER", label: "이동평균 크로스오버", desc: "단기MA가 장기MA를 상향돌파할 때 매수" },
@@ -22,7 +20,10 @@ const STRATEGIES = [
 ];
 
 export default function BacktestPage() {
-  const [stockId,    setStockId]    = useState(DEFAULT_STOCK_ID);
+  // 처음엔 기본 종목(삼성전자 — 종목 코드로 찾는다, useFeaturedStocks). 이후로는 종목 검색으로 바꾼다.
+  const { defaultId } = useFeaturedStocks();
+  const [picked,     setStockId]    = useState<number | null>(null);
+  const stockId = picked ?? defaultId;
   const [strategy,   setStrategy]   = useState("MA_CROSSOVER");
   const [{ startDate: defaultFrom, endDate: defaultTo }] = useState(() => defaultBacktestRange(30));
   const [fromDate,   setFromDate]   = useState(defaultFrom);
@@ -64,7 +65,8 @@ export default function BacktestPage() {
   // 상단 "종목" 칸 표시용 이름 — StockPicker와 같은 시세 API(이미 캐시되면 재사용)
   const { data: stock } = useQuery({
     queryKey: ["screener", "quote", stockId],
-    queryFn: async () => (await getScreenerQuotes([stockId]))[0] ?? null,
+    queryFn: async () => (await getScreenerQuotes([stockId!]))[0] ?? null,
+    enabled: stockId != null,
     staleTime: 60_000,
   });
   const strat = STRATEGIES.find(s => s.key === strategy);
@@ -99,7 +101,7 @@ export default function BacktestPage() {
           </div>
           <Checkbox checked={applyFees} onChange={setApplyFees} label={`수수료 ${COST.commissionPct}% · 세금 ${COST.sellTaxPct}% 반영`} sub="세금은 국내 종목 매도에만 · 세율은 가정값" />
           <Checkbox checked={applySlip} onChange={setApplySlip} label={`슬리피지 ${COST.slippagePct}% 반영`} sub="매수는 비싸게, 매도는 싸게 체결된 것으로 계산" />
-          <Btn icon="play" full size="lg" onClick={handleRun} disabled={isLoading}>
+          <Btn icon="play" full size="lg" onClick={handleRun} disabled={isLoading || stockId == null}>
             {isLoading ? "시뮬레이션 중..." : "백테스트 실행"}
           </Btn>
           {error && <Notice tone="danger">{(error as Error).message}</Notice>}
