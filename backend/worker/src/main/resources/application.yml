@@ -170,6 +170,10 @@ notify:
   news-alert:
     enabled: ${NEWS_ALERT_ENABLED:true}
 
+# 종목 마스터 동기화(KRX 전 종목, 매일 06시). 기본 꺼짐 — 켜면 첫 실행에 약 2,700개가 들어온다(배포 체크리스트 참고).
+stock-master:
+  sync-enabled: ${STOCK_MASTER_SYNC_ENABLED:false}
+
 worker:
   # 역할: all(단일 프로세스, 기본값) | market | event | alert
   role: ${WORKER_ROLE:all}

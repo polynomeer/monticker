@@ -8,7 +8,7 @@ class StockMasterCollectorTest {
 
     private val krxClient = mockk<KrxStockClient>()
     private val jdbc      = mockk<JdbcTemplate>(relaxed = true)
-    private val collector = StockMasterCollector(krxClient, jdbc)
+    private val collector = StockMasterCollector(krxClient, jdbc, enabled = true)
 
     @Test
     fun `upserts stocks returned by KRX client`() {
@@ -19,7 +19,9 @@ class StockMasterCollectorTest {
 
         collector.collect()
 
-        verify(exactly = 2) { jdbc.update(any<String>(), *anyVararg()) }
+        verify(exactly = 2) { jdbc.update(match<String> { it.contains("INSERT INTO stocks") }, *anyVararg()) }
+        // 국내 종목은 다른 국내 시장의 같은 코드 행(이전상장 전 행)을 끈다
+        verify(exactly = 2) { jdbc.update(match<String> { it.contains("SET is_active = false") }, *anyVararg()) }
     }
 
     @Test
@@ -28,8 +30,7 @@ class StockMasterCollectorTest {
 
         collector.collect()
 
-        // MockStockData has 20 entries
-        verify(exactly = MockStockData.stocks.size) { jdbc.update(any<String>(), *anyVararg()) }
+        verify(exactly = MockStockData.stocks.size) { jdbc.update(match<String> { it.contains("INSERT INTO stocks") }, *anyVararg()) }
     }
 
     @Test
@@ -49,5 +50,16 @@ class StockMasterCollectorTest {
         collector.collectOnStartup()
 
         verify { krxClient.fetchStocks() }
+    }
+
+    @Test
+    fun `does nothing while the ops switch is off`() {
+        val off = StockMasterCollector(krxClient, jdbc)
+
+        off.collect()
+        off.collectOnStartup()
+
+        verify(exactly = 0) { krxClient.fetchStocks() }
+        verify(exactly = 0) { jdbc.update(any<String>(), *anyVararg()) }
     }
 }
