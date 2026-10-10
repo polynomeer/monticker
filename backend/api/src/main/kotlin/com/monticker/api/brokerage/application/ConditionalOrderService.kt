@@ -151,7 +151,7 @@ class ConditionalOrderService(
 
     private fun resolveStockId(symbol: String): Long? =
         runCatching {
-            jdbc.queryForObject("SELECT id FROM stocks WHERE symbol = ?", Long::class.java, symbol)
+            jdbc.queryForObject(STOCK_ID_BY_SYMBOL_SQL, Long::class.java, symbol)
         }.getOrNull()
 
     /**

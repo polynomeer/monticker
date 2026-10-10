@@ -35,7 +35,7 @@ class RebalanceExecutionServiceTest {
         BrokerageBalance(cash = cash, totalEvaluated = totalEvaluated, holdings = holdings)
 
     private fun stubStockId(symbol: String, id: Long) {
-        every { jdbc.queryForObject("SELECT id FROM stocks WHERE symbol = ?", Long::class.java, symbol) } returns id
+        every { jdbc.queryForObject(STOCK_ID_BY_SYMBOL_SQL, Long::class.java, symbol) } returns id
     }
 
     private fun makeOrder(id: Long, status: BrokerageOrderStatus, rejectReason: String? = null) =

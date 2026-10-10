@@ -15,6 +15,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import com.monticker.api.brokerage.application.LATEST_CLOSE_BY_SYMBOL_SQL
 
 /**
  * KIS Open API Mock 구현체.
@@ -192,9 +193,7 @@ class MockBrokerageClient(
     private fun getCurrentPrice(symbol: String): BigDecimal? =
         runCatching {
             jdbc.queryForObject(
-                """SELECT c.close FROM candles_1m c
-                   JOIN stocks s ON s.id = c.stock_id
-                   WHERE s.symbol = ? ORDER BY c.candle_time DESC LIMIT 1""",
+                LATEST_CLOSE_BY_SYMBOL_SQL,
                 BigDecimal::class.java, symbol,
             )
         }.getOrNull()

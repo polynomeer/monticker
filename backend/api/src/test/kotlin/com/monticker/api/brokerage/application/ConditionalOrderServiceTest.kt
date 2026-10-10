@@ -37,7 +37,7 @@ class ConditionalOrderServiceTest {
 
     private fun stubAccountAndStock() {
         every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(makeAccount())
-        every { jdbc.queryForObject("SELECT id FROM stocks WHERE symbol = ?", Long::class.java, "005930") } returns 1L
+        every { jdbc.queryForObject(STOCK_ID_BY_SYMBOL_SQL, Long::class.java, "005930") } returns 1L
         every { jdbc.queryForList("SELECT market FROM stocks WHERE id = ?", String::class.java, 1L) } returns listOf("KOSPI")
     }
 
@@ -53,7 +53,7 @@ class ConditionalOrderServiceTest {
     @Test
     fun `존재하지 않는 종목이면 등록할 수 없다`() {
         every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(makeAccount())
-        every { jdbc.queryForObject("SELECT id FROM stocks WHERE symbol = ?", Long::class.java, "999999") } throws IllegalStateException("not found")
+        every { jdbc.queryForObject(STOCK_ID_BY_SYMBOL_SQL, Long::class.java, "999999") } throws IllegalStateException("not found")
 
         assertThatThrownBy {
             service.create(1L, "999999", OrderSide.SELL, 10, ConditionalOrderLeg(ConditionalTriggerType.STOP_LOSS, BigDecimal("70000"), OrderType.MARKET))
