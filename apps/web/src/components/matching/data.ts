@@ -5,12 +5,6 @@ import { authFetch } from "@/services/api";
 import { mergeLevels } from "@/components/stock/OrderBook";
 import type { ExecutionQuality } from "@/components/wallet/insights";
 
-export const STOCKS = [
-  { id: 2, label: "삼성전자" }, { id: 3, label: "SK하이닉스" },
-  { id: 9, label: "현대차" },   { id: 10, label: "NAVER" },
-  { id: 5, label: "AAPL" },       { id: 6, label: "NVDA" },
-];
-
 export interface OrderDto {
   id: number; stockId: number; side: string; orderType: string;
   quantity: number; limitPrice: number | null; filledQty: number;

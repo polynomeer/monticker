@@ -7,10 +7,11 @@ import { ClobBook } from "@/components/matching/ClobBook";
 import RecentTrades from "@/components/stock/RecentTrades";
 import { OrderForm } from "@/components/matching/OrderForm";
 import { OrdersPanel } from "@/components/matching/OrdersPanel";
-import { QUEUE_DEFINITION, STOCKS, useActiveOrders, useExecutionQuality, useMyFills, useOrderQueue, useOrderbook } from "@/components/matching/data";
+import { QUEUE_DEFINITION, useActiveOrders, useExecutionQuality, useMyFills, useOrderQueue, useOrderbook } from "@/components/matching/data";
 import { LATENCY_DEFINITION, SLIPPAGE_DEFINITION, bpsText, msText, type ExecutionQuality } from "@/components/wallet/insights";
 import { useStockMeta } from "@/components/portfolio/useStockMeta";
 import { fmtTime } from "@/components/portfolio/format";
+import { useFeaturedStocks, type FeaturedStock } from "@/hooks/useFeaturedStocks";
 import { Panel, PanelCol, PanelRow, TerminalPage, fmtNum, type TopStat } from "@/components/terminal";
 
 function slippageHint(q: ExecutionQuality | null | undefined) {
@@ -27,8 +28,23 @@ function latencyHint(q: ExecutionQuality | null | undefined) {
   return `${LATENCY_DEFINITION} (${parts.join(", ")})`;
 }
 
+/** 기본 종목은 종목 코드로 찾는다(useFeaturedStocks) — 찾기 전엔 화면 틀만 보여 준다. */
 export default function MatchingPage() {
-  const [stockId, setStockId] = useState(2);
+  const { stocks, defaultId, isLoading } = useFeaturedStocks();
+  if (defaultId == null) {
+    return (
+      <TerminalPage title="체결 엔진" crumb="모의투자">
+        <Panel tabs={["주문 입력"]} actions={[]}>
+          <p className="m-0 py-6 text-center text-13 text-tm-muted">{isLoading ? "불러오는 중..." : "종목 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."}</p>
+        </Panel>
+      </TerminalPage>
+    );
+  }
+  return <MatchingBody initialStockId={defaultId} featured={stocks} />;
+}
+
+function MatchingBody({ initialStockId, featured }: { initialStockId: number; featured: FeaturedStock[] }) {
+  const [stockId, setStockId] = useState(initialStockId);
   const [presetSide, setPresetSide] = useState<"BUY" | "SELL" | undefined>(undefined);
   const [tapeTab, setTapeTab] = useState<"market" | "mine">("market");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -41,7 +57,7 @@ export default function MatchingPage() {
   const { data: queue } = useOrderQueue(stockId, isLoggedIn);
 
   const meta = useStockMeta([...orders.map((o) => o.stockId), ...fills.map((f) => f.stockId)]);
-  const stockName = (id: number) => STOCKS.find((s) => s.id === id)?.label ?? meta.get(id)?.name ?? `종목 #${id}`;
+  const stockName = (id: number) => featured.find((s) => s.id === id)?.label ?? meta.get(id)?.name ?? `종목 #${id}`;
 
   const today = new Date().toDateString();
   const todayFills = fills.filter((f) => new Date(f.filledAt).toDateString() === today).length;
@@ -72,7 +88,7 @@ export default function MatchingPage() {
       <PanelRow>
         <PanelCol className="flex-[0_1_300px]">
           <Panel tabs={["주문 입력"]} actions={[]}>
-            <OrderForm stockId={stockId} setStockId={setStockId} presetSide={presetSide} book={book} />
+            <OrderForm stockId={stockId} setStockId={setStockId} stocks={featured} presetSide={presetSide} book={book} />
           </Panel>
           <OrderProposalCard stockId={stockId} onApprove={setPresetSide} />
         </PanelCol>
