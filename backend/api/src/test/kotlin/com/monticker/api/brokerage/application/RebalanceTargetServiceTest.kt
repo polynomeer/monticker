@@ -26,7 +26,7 @@ class RebalanceTargetServiceTest {
     private fun makeAccount() = BrokerageAccount(id = 1L, userId = 1L, provider = BrokerageProvider.MOCK, accountNumber = "12345678")
 
     private fun stubStock(symbol: String, id: Long = 1L) {
-        every { jdbc.queryForObject("SELECT id FROM stocks WHERE symbol = ?", Long::class.java, symbol) } returns id
+        every { jdbc.queryForObject(STOCK_ID_BY_SYMBOL_SQL, Long::class.java, symbol) } returns id
     }
 
     @Test
@@ -53,7 +53,7 @@ class RebalanceTargetServiceTest {
     @Test
     fun `존재하지 않는 종목이 포함되면 저장할 수 없다`() {
         every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(makeAccount())
-        every { jdbc.queryForObject("SELECT id FROM stocks WHERE symbol = ?", Long::class.java, "999999") } throws IllegalStateException("not found")
+        every { jdbc.queryForObject(STOCK_ID_BY_SYMBOL_SQL, Long::class.java, "999999") } throws IllegalStateException("not found")
 
         assertThatThrownBy {
             service.save(1L, mapOf("999999" to BigDecimal("0.5")), BigDecimal("5.00"), RebalanceTargetSource.MANUAL)

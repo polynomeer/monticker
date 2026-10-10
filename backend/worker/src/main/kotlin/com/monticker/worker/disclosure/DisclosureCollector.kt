@@ -63,7 +63,8 @@ class DisclosureCollector(
         if (symbols.isEmpty()) return emptyMap()
         val placeholders = symbols.joinToString(",") { "?" }
         return jdbc.query(
-            "SELECT id, symbol FROM stocks WHERE symbol IN ($placeholders)",
+            // 같은 코드가 두 행이면(이전상장) toMap()은 마지막 행을 남긴다 — 활성 행 중 가장 최근 행이 마지막에 오게 정렬한다
+            "SELECT id, symbol FROM stocks WHERE symbol IN ($placeholders) ORDER BY is_active, id",
             { rs, _ -> rs.getString("symbol") to rs.getLong("id") },
             *symbols.toTypedArray(),
         ).toMap()

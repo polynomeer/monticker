@@ -809,9 +809,7 @@ class BrokerageService(
     private fun currentPrice(symbol: String): BigDecimal? =
         runCatching {
             jdbc.queryForObject(
-                """SELECT c.close FROM candles_1m c
-                   JOIN stocks s ON s.id = c.stock_id
-                   WHERE s.symbol = ? ORDER BY c.candle_time DESC LIMIT 1""",
+                LATEST_CLOSE_BY_SYMBOL_SQL,
                 BigDecimal::class.java, symbol,
             )
         }.getOrNull()
@@ -846,7 +844,7 @@ class BrokerageService(
 
     private fun resolveStockId(symbol: String): Long? =
         runCatching {
-            jdbc.queryForObject("SELECT id FROM stocks WHERE symbol = ?", Long::class.java, symbol)
+            jdbc.queryForObject(STOCK_ID_BY_SYMBOL_SQL, Long::class.java, symbol)
         }.getOrNull()
 
     companion object {

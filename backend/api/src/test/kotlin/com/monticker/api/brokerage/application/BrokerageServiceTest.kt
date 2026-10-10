@@ -81,7 +81,7 @@ class BrokerageServiceTest {
      * 안 해두면 relaxed 목이 Long으로 캐스팅 불가능한 값을 돌려줘서 ClassCastException이 난다.
      */
     private fun stubStockLookup(stockId: Long = 1L) {
-        every { jdbc.queryForObject("SELECT id FROM stocks WHERE symbol = ?", Long::class.java, any()) } returns stockId
+        every { jdbc.queryForObject(STOCK_ID_BY_SYMBOL_SQL, Long::class.java, any()) } returns stockId
         every { jdbc.queryForObject(any<String>(), eq(Long::class.java), any(), any()) } returns 0L
         // ADR-062 — 일간 실현손익 조회(사용자, KST 오늘 시작). 기본 0.
         every { jdbc.queryForObject(match<String> { it.contains("cost_basis_price") }, eq(BigDecimal::class.java), any(), any()) } returns BigDecimal.ZERO
@@ -210,7 +210,7 @@ class BrokerageServiceTest {
     fun `종목을 찾을 수 없으면 리스크 체크를 건너뛰지 않고 주문을 거부한다`() {
         val account = makeAccount()
         every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(account)
-        every { jdbc.queryForObject("SELECT id FROM stocks WHERE symbol = ?", Long::class.java, any()) } throws RuntimeException("not found")
+        every { jdbc.queryForObject(STOCK_ID_BY_SYMBOL_SQL, Long::class.java, any()) } throws RuntimeException("not found")
 
         assertThrows<IllegalArgumentException> {
             service.submitOrder(1L, BrokerageOrderRequest("999999", "BUY", "MARKET", 10))

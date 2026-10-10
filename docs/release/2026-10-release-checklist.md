@@ -60,6 +60,7 @@ Flyway가 api 기동 시 자동 적용한다. **V89는 비어 있다**(정상). 
 | `WATCHLIST_EVENT_PUSH_ENABLED` | `true` (단계적으로 내보내려면 `false`로 배포 후 켠다) | worker. 관심종목 급등·급락·거래량 급증 푸시만 멈춘다(이벤트 기록·색인은 계속) |
 | `QUANT_SIGNAL_PUSH_ENABLED` | `true` | api. 퀀트 시그널 푸시·메일만 멈춘다(알림함 이력은 계속) |
 | `NEWS_ALERT_ENABLED` | `true` | worker. 뉴스·공시 알림을 멈춘다(이력 행도 만들지 않고 outbox에 남은 발송도 버린다) |
+| `STOCK_MASTER_SYNC_ENABLED` | `false` (그대로 둔다) | worker. KRX 종목 마스터 매일 06시 동기화. 이 동기화는 지금까지 SQL 오류로 한 번도 반영되지 않았다(#198에서 수정). 켜면 첫 실행에 KRX 전 종목(약 2,700개)이 한꺼번에 들어온다 — 켜는 시점은 §9 |
 | `WEEKLY_REPORT_CRON` 등 | 기본값(`0 0/30 8-20 * * MON`, 2000명/회, 20분) | ADR-101 |
 | `market-calendar.refresh-ms` | 기본 1시간 | ADR-086 |
 | GitHub 저장소 시크릿 `ANTHROPIC_API_KEY` | 선택 | PR 자동 리뷰. 없으면 리뷰를 건너뛸 뿐 |
@@ -108,6 +109,7 @@ Flyway가 api 기동 시 자동 적용한다. **V89는 비어 있다**(정상). 
 - [ ] 후속 마이그레이션: 중복 인덱스 `idx_paper_trades_user`, `idx_paper_trades_stock` 삭제 — V99·V100(각각 단일 문장 `DROP INDEX CONCURRENTLY`, 근거는 [data-model.md](../data-model.md)). 배포 후 두 인덱스가 사라졌는지 확인.
 - [ ] Next 16.4·ESLint 9 업그레이드([#160](https://github.com/polynomeer/monticker/pull/160), 트랙 W1) — **이번 릴리스에서 뺐다**(웹 전체 영향). 배포가 안정된 뒤 rebase → web tsc·vitest(KST·UTC)·lint·build·e2e → 로컬 스택에서 전 화면 점검 후 머지.
 - [ ] 주간 리포트 첫 월요일: 실제 발송(`weekly_behavior_report_total`)과 원클릭 수신 거부(`email_unsubscribe_total`, ADR-102) 동작 확인.
+- [ ] 종목 마스터 동기화(`STOCK_MASTER_SYNC_ENABLED`) 켤지 결정 — 켜면 신규 상장·종목명 변경이 반영되지만, 첫 실행에 약 2,700개 종목이 봉·차트 없이 들어오고 검색·스크리너 결과가 바뀐다. 이전상장된 종목의 옛 시장 행은 이때 비활성화된다.
 - [ ] `LegacyOutboxDrain` 제거 — 모든 환경에서 구버전 worker가 내려간 뒤 한 릴리스(ADR-094).
 - [ ] 운영 `candles_1d`의 하루 2행 중복 여부 확인.
 - [ ] 연말(11월) 전에 다음 해 KRX 휴장일 마이그레이션 — `MarketCalendarNextYearMissing` 경보가 알려 준다.
