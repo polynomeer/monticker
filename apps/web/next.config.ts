@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-// P2-1 — 'unsafe-eval'은 개발 서버(webpack HMR)에만 필요해 프로덕션에서는 뺀다(실측:
+// P2-1 — 'unsafe-eval'은 개발 서버(HMR)에만 필요해 프로덕션에서는 뺀다(실측:
 // 프로덕션 빌드+standalone 서버로 전 페이지를 훑어도 eval 관련 CSP 위반은 한 건도 없었다).
 // script-src의 'unsafe-inline'은 이 값과 달리 못 뺀다 — Next.js App Router가 하이드레이션
 // 페이로드(self.__next_f.push(...))를 인라인 <script>로 주입하는데, 이 앱의 페이지 대부분이
@@ -42,7 +42,6 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  eslint: { ignoreDuringBuilds: true },
   transpilePackages: ["@monticker/types"],
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
