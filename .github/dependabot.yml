@@ -20,13 +20,9 @@ updates:
     ignore:
       - dependency-name: "eslint"               # W1 후속 — 9로 올렸다. 10은 eslint-config-next·플러그인 호환 확인 후
         update-types: ["version-update:semver-major"]
-      - dependency-name: "typescript"           # W3
+      - dependency-name: "typescript"           # W3 후속 — 6.0으로 올렸다. 7은 typescript-eslint가 지원한 뒤
         update-types: ["version-update:semver-major"]
-      - dependency-name: "vitest"               # W3
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "jsdom"                # W3
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@types/node"          # W3 — 런타임 Node 메이저를 올릴 때 함께
+      - dependency-name: "@types/node"          # 런타임 Node 메이저(.nvmrc, 지금 24)를 올릴 때 함께
         update-types: ["version-update:semver-major"]
       - dependency-name: "@babel/core"          # M1 — Expo 프리셋을 따른다
         update-types: ["version-update:semver-major"]
