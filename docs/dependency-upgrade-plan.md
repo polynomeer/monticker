@@ -143,7 +143,7 @@ Kotlin 컴파일러 플러그인(`plugin.spring`·`plugin.jpa`)은 `kotlin("jvm"
 - 요구 사항: Node 20.9+(CI 22, Docker `node:20-alpine`), TypeScript 5.1+(5.9), React 19.2+(19.3) — 모두 충족.
 - 우리에게 해당한 변경:
   - `next lint` 제거, `next.config`의 `eslint` 옵션 제거 → `eslint.config.mjs`(flat config) + `lint: "eslint ."`. eslint-config-next 16은 ESLint 9 이상을 요구해 **ESLint 9.39**로 올렸다(10은 별도 확인 후).
-  - eslint-config-next 16이 가져온 `eslint-plugin-react-hooks` 7의 **React Compiler 규칙**이 기존 코드 61곳(42개 파일, 50곳이 `set-state-in-effect`)을 잡는다. 동작 변경을 섞지 않으려고 warn으로 두었다 → **후속: 고치고 error로 되돌리기**.
+  - eslint-config-next 16이 가져온 `eslint-plugin-react-hooks` 7의 **React Compiler 규칙**이 기존 코드 74곳(54개 파일, 61곳이 `set-state-in-effect`, 2026-10-13 main 기준 — 처음 쟀을 때 61곳에서 그 사이 새 코드로 늘었다)을 잡는다. 동작 변경을 섞지 않으려고 warn으로 두었다 → **후속: 고치고 error로 되돌리기**.
   - **Turbopack이 dev·build 기본값**이 됐다. 커스텀 webpack 설정이 없어 그대로 동작한다. standalone 출력(`.next/standalone/apps/web/server.js`)도 같다.
   - `html`의 `scroll-behavior: smooth`를 Next가 라우트 전환 때 더 이상 덮어쓰지 않는다 → `<html data-scroll-behavior="smooth">`로 15와 같은 동작 유지.
   - 빌드가 `tsconfig.json`을 자동 갱신한다(`jsx: react-jsx`, `.next/dev/types` 포함) — 그대로 커밋.
@@ -210,5 +210,5 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 | B1 Kotlin 2 | 완료 | #154 | 2.3.21 (Boot 4.1 BOM과 같은 버전) |
 | B0 Gradle 9 | 완료 | #156 | 9.8.0. wrapper만 변경 |
 | B3 jjwt 0.13 | 완료 | #158 | 0.13.0. 0.12.7 토큰 호환 테스트 추가 |
-| W1 Next 16 | PR | — | 16.4.0 + ESLint 9 flat config. React Compiler 린트 61곳은 warn(후속) |
+| W1 Next 16 | 완료 | #160 | 16.4.0 + ESLint 9 flat config. React Compiler 린트 74곳은 warn(후속) |
 | B4, W2, W3, M1 | 시작 전 | — | |
