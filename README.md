@@ -183,7 +183,7 @@ POST /api/matching/orders
 | **Realtime** | Apache Kafka(KRaft) · STOMP over SockJS · Go 1.22 market-gateway(goroutine-per-stock) |
 | **Data** | PostgreSQL 16 + TimescaleDB(hypertable, continuous aggregate) · Redis 7 · MongoDB 7(룰셋·알림 이력) · Elasticsearch(검색, DB 폴백) |
 | **Frontend** | Next.js 16(App Router) · React 19 · TypeScript · TanStack Query · Zustand · Tailwind CSS(Dracula 팔레트, 라이트/다크/고대비) · Apache ECharts(어댑터 패턴으로 차트 라이브러리 격리) · TanStack Virtual · Toss Payments SDK |
-| **Mobile** | Expo 52 · React Native 0.76 · expo-router · Expo Push Notifications |
+| **Mobile** | Expo 57 · React Native 0.86 · expo-router · Expo Push Notifications |
 | **External API** | 한국투자증권 Open API · 토스증권 Open API · 네이버 뉴스 · DART · Yahoo Finance · Anthropic Claude · 토스페이먼츠 · SMTP |
 | **Infra / Ops** | Docker Compose(프로파일 `full`/`kafka`/`msa`/`pinpoint`) · Kubernetes(kustomize, dev/prod overlay) · Nginx · Prometheus · Grafana · Alertmanager → Slack · Jaeger · Pinpoint APM · pg_dump 백업 CronJob + 복구 리허설 |
 | **Testing** | JUnit 5 · MockK · MockMvc · Testcontainers(Postgres/Kafka) · Vitest · Playwright(E2E) · k6(부하) |

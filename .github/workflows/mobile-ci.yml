@@ -26,22 +26,27 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
           cache-dependency-path: apps/mobile/package.json
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # image-size: GHSA-w3rx-r6r6-pgpr / GHSA-5p2g-fcmc-qvqq는 patched_versions가
-      # "<0.0.0"(업스트림 패치 없음)라 override로 해결 불가. Metro가 개발자 자신의
-      # 로컬 에셋만 처리하는 빌드 경로라 실질 위험이 낮아 예외 처리.
+      # Expo SDK는 RN·React·expo-* 버전을 한 세트로 고정한다. 워크스페이스가 lockfile 하나라 dependabot의 react 그룹이
+      # 웹과 함께 모바일 React를 SDK 밖 버전으로 올릴 수 있다 — 설치된 버전이 SDK와 다르면 여기서 실패한다.
+      - name: Expo SDK version check
+        env:
+          CI: "1"
+        run: pnpm exec expo install --check
+
       - name: Audit dependencies (high+ severity, apps/mobile scope)
         working-directory: .
-        # braces·node-forge도 같은 이유(업스트림 패치 없음). braces는 react-native codegen > jscodeshift > micromatch,
-        # node-forge는 @react-native/dev-middleware > selfsigned(로컬 개발 서버 인증서 생성) — 둘 다 앱 번들에 들어가지 않는
-        # 개발 도구 경로다. web-ci 주석 참고. 패치가 나오면 --allow를 지울 것.
-        run: node scripts/ci/audit-scope.js apps/mobile --allow image-size --allow braces --allow node-forge
+        # braces·node-forge는 업스트림 패치가 없어 override로 해결할 수 없다(patched_versions "<0.0.0"). Expo SDK 57 기준
+        # braces는 @expo/cli > metro > metro-file-map > micromatch, node-forge는 @expo/cli > @expo/code-signing-certificates
+        # — 둘 다 앱 번들에 들어가지 않는 개발 도구(CLI·번들러) 경로다. web-ci 주석 참고. 패치가 나오면 --allow를 지울 것.
+        # (image-size 예외는 SDK 57로 올리며 경로가 사라져 지웠다.)
+        run: node scripts/ci/audit-scope.js apps/mobile --allow braces --allow node-forge
 
       - name: TypeScript check
         run: pnpm exec tsc --noEmit

@@ -15,7 +15,7 @@ updates:
         patterns: ["expo", "expo-*", "react-native"]
       dev-dependencies:
         dependency-type: "development"
-    # docs/dependency-upgrade-plan.md — 트랙(W1~W3, M1)을 시작하기 전까지 메이저는 받지 않는다.
+    # docs/dependency-upgrade-plan.md — 트랙 결과 남긴 보류. 트랙이 끝난 항목은 지웠다.
     # 트랙이 끝나면 해당 항목을 지운다.
     ignore:
       - dependency-name: "eslint"               # W1 후속 — 9로 올렸다. 10은 eslint-config-next·플러그인 호환 확인 후
@@ -24,17 +24,20 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "@types/node"          # 런타임 Node 메이저(.nvmrc, 지금 24)를 올릴 때 함께
         update-types: ["version-update:semver-major"]
-      - dependency-name: "@babel/core"          # M1 — Expo 프리셋을 따른다
+      - dependency-name: "@babel/core"          # Expo 프리셋(babel-preset-expo)을 따른다
         update-types: ["version-update:semver-major"]
-      - dependency-name: "expo"                 # M1
+      # Expo SDK 업그레이드는 dependabot이 아니라 수동으로(expo install --fix). dependabot은 npm 배포 태그를 보지 않아
+      # 베타 SDK(next 태그)도 제안한다 — 2026-10에 SDK 58 베타를 제안했다. 정식(latest)인지 확인하고 올린다.
+      - dependency-name: "expo"
         update-types: ["version-update:semver-major"]
       # Expo SDK가 고정한 버전 밖으로 나가면 안 된다. expo-notifications(0.x)·react-native(0.x)는 minor가 SDK를
       # 바꾸므로 minor도 막는다(#139: react-native 0.76 → 0.87). SDK 안의 패치만 받는다.
-      - dependency-name: "expo-*"               # M1
+      - dependency-name: "expo-*"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
-      - dependency-name: "react-native"         # M1
+      - dependency-name: "react-native"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
-      # 모바일 react 18 → 19는 Expo SDK 업그레이드(M1)에서 함께 — 웹은 이미 19다
+      # react 메이저는 웹·모바일(Expo SDK가 고정)을 함께 봐야 한다. minor·patch도 모바일은 SDK 밖으로 나가면 안 되는데,
+      # 그건 mobile-ci의 expo install --check가 잡는다.
       - dependency-name: "react"
         update-types: ["version-update:semver-major"]
       - dependency-name: "@types/react"

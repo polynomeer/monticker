@@ -102,7 +102,7 @@ monticker가 쓰는 **모든 기술**에 대해 무엇을 골랐고, 무엇과 �
 
 | 기술 | 버전 | 역할 | 근거 | 등급 |
 |------|------|------|------|------|
-| Expo + expo-router + React Native | Expo 52, RN 0.76 | 모바일 앱 (스크리너·종목 상세·관심종목·알림 룰·Expo 푸시 토큰 등록) | 근거 없음 (`04218d6`). 현황: 커밋 5개, ~690 LOC, 로그인·인증 헤더·WebSocket 없음, `@monticker/types` 미사용, CI는 타입체크만 | 없음 |
+| Expo + expo-router + React Native | Expo 57, RN 0.86, React 19.2 (SDK가 버전을 고정 — mobile-ci가 `expo install --check`로 검사) | 모바일 앱 (스크리너·종목 상세·관심종목·알림 룰·Expo 푸시 토큰 등록) | 근거 없음 (`04218d6`). 현황: 커밋 5개, ~690 LOC, 로그인·인증 헤더·WebSocket 없음, `@monticker/types` 미사용, CI는 타입체크만 | 없음 |
 | Expo Push Notifications | — | 푸시 | FCM 직접 연동은 문서에 "권장"으로만 있고 미구현 | 없음 |
 
 ## 6. 인프라·CI·관측성
