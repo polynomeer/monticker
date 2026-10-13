@@ -155,11 +155,15 @@ Kotlin 컴파일러 플러그인(`plugin.spring`·`plugin.jpa`)은 `kotlin("jvm"
 
 설정 방식이 바뀌는 메이저다(JS 설정 → CSS 우선, PostCSS 플러그인 분리, autoprefixer 불필요). 디자인 토큰(Dracula 팔레트, 터미널 디자인 ADR-066)이 `tailwind.config.ts`(106줄)에 있어서 **화면 전체의 시각 회귀**가 위험이다.
 
-1. 공식 업그레이드 도구로 설정을 변환하고, 토큰이 같은 값으로 옮겨졌는지 diff로 확인한다.
-2. `postcss.config.mjs`를 갱신하고 `autoprefixer`를 제거한다.
-3. 다크 모드 전략(`next-themes`, class 기반)이 그대로 동작하는지 확인한다.
+**확인 결과**(2026-10-13, **4.3.3**으로 올림, [업그레이드 가이드](https://tailwindcss.com/docs/upgrade-guide)):
+- 공식 도구(`@tailwindcss/upgrade`)는 **템플릿·패키지·PostCSS만 받았다**: 클래스 이름 58곳(`outline-none`→`outline-hidden` 27, `rounded`→`rounded-sm` 15, `rounded-sm`→`rounded-xs`, 임의값→표준 클래스 등), `@tailwindcss/postcss` 추가, `autoprefixer` 제거. main과 개수를 대조해 클래스로 쓰인 `rounded` 15곳이 모두 바뀐 것을 확인했다(남은 12개는 JS 변수명).
+- 도구의 CSS 변환은 버렸다 — ① 토큰을 CSS `@theme`에 복제하고 JS 설정을 지워 `designTokens.ts`(캔버스 차트도 읽는다)와 값이 두 벌이 된다, ② 일부러 언레이어드로 둔 접근성(고대비·글자 크기) 규칙을 `@layer utilities`로 옮겨 우선순위가 바뀐다, ③ `.dark .glass-surface`를 `@utility dark`로 만들어 html의 `dark` 클래스와 겹친다. 대신 `globals.css`를 직접 고쳤다: `@import "tailwindcss"` + `@config "../../tailwind.config.ts"` + `@custom-variant dark (&:is(.dark *))`(v3 `darkMode: "class"`와 같은 선택자).
+- **v3 기본값을 호환 스타일로 유지**: 테두리 기본색(gray-200), placeholder 색(gray-400), 버튼 `cursor: pointer`, `hover`를 항상 적용(v4는 hover 가능한 기기만), **글자 크기별 줄 높이를 절대값으로**(v4는 비율이라 글자 크기를 따로 준 자식의 줄 높이가 커진다 — 로그인 로고 20px → 27px). 지우는 건 별도 결정.
+- **JS 설정의 `<alpha-value>`는 v4에서 깨진다**: 호환 계층이 1로 바꾸고 투명도 수식어를 버린다(`bg-up/5` → 불투명). `up`/`down` 색에서 자리표시자를 빼 v4가 `color-mix`로 투명도를 입히게 했다.
+- 해당 없음: `ring` 기본색(모든 ring에 색을 명시), `<dialog>`(없음), 커스텀 클래스에 variant(없음), `shadow`·`blur` 이름 변경(안 씀). 테마는 `forcedTheme="dark"`라 라이트 모드는 없다.
 
-**검증**: 캡처 스크립트로 전 화면을 전후 비교한다(라이트·다크). e2e-ci도 함께 본다.
+**검증**: main과 이 브랜치의 운영 빌드를 나란히 띄워 Playwright로 전체 페이지 스크린샷을 비교했다(허용 오차 0) — 12개 화면(홈·로그인·가입·스크리너·종목·설정·퀀트랩·구독·포트폴리오·관심종목·알림·모의투자)과 고대비+큰 글씨 6개 화면 모두 **픽셀 단위로 같다**(main끼리 반복해도 같아 측정이 안정적임을 먼저 확인). `scripts/check.sh web --full`, `tsc`.
+- 후속: v4의 OKLCH 기본 팔레트로 `gray-*` 등이 아주 조금 다르다(`gray-200` rgb(229,231,235) → lab(91.6 …)). 스크린샷 비교에서는 차이가 나오지 않았다.
 
 ### W3. TypeScript 7 · vitest 5 · jsdom 30 · @types/node
 
@@ -211,4 +215,5 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 | B0 Gradle 9 | 완료 | #156 | 9.8.0. wrapper만 변경 |
 | B3 jjwt 0.13 | 완료 | #158 | 0.13.0. 0.12.7 토큰 호환 테스트 추가 |
 | W1 Next 16 | 완료 | #160 | 16.4.0 + ESLint 9 flat config. React Compiler 린트 74곳은 warn(후속) |
-| B4, W2, W3, M1 | 시작 전 | — | |
+| W2 Tailwind 4 | PR | — | 4.3.3. JS 설정 유지(@config), v3 기본값 호환 스타일, 스크린샷 18장 픽셀 일치 |
+| B4, W3, M1 | 시작 전 | — | |
