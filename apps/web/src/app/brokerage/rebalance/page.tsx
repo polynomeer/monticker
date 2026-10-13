@@ -265,7 +265,7 @@ export default function RebalancePage() {
       <label className="inline-flex h-8 items-center gap-1.5 rounded-md border border-tm-line2 bg-tm-inner px-2.5">
         <span className="sr-only">{r.name} 목표 비중</span>
         <input
-          className="num w-12 bg-transparent text-right text-13 text-dracula-fg outline-none"
+          className="num w-12 bg-transparent text-right text-13 text-dracula-fg outline-hidden"
           type="number" min={0} max={100} step={0.1} inputMode="decimal"
           value={r.weightPct}
           placeholder="0.0"
@@ -282,7 +282,7 @@ export default function RebalancePage() {
       return (
         <div className="relative h-2.5 w-[200px] rounded-full bg-tm-inner" aria-hidden>
           {r.currentPct != null && <div className="absolute left-0 h-full rounded-full bg-tm-line2" style={{ width: `${Math.min(100, r.currentPct * 2.5)}%` }} />}
-          <div className="absolute -top-[3px] h-4 w-0.5 bg-dracula-purple" style={{ left: `${Math.min(100, tgt * 2.5)}%` }} />
+          <div className="absolute top-[-3px] h-4 w-0.5 bg-dracula-purple" style={{ left: `${Math.min(100, tgt * 2.5)}%` }} />
         </div>
       );
     } },
@@ -349,7 +349,7 @@ export default function RebalancePage() {
             <label className="inline-flex h-8 items-center gap-1.5 rounded-md border border-tm-line2 bg-tm-inner px-2.5">
               <span className="sr-only">실행 임계값 직접 입력</span>
               <input
-                className="num w-12 bg-transparent text-right text-13 text-dracula-fg outline-none"
+                className="num w-12 bg-transparent text-right text-13 text-dracula-fg outline-hidden"
                 type="number" min={0} max={100} step={0.1}
                 value={thresholdPct}
                 onChange={e => updateThreshold(e.target.value)}
@@ -462,7 +462,7 @@ export default function RebalancePage() {
                     <span className="text-xs text-tm-muted">서버가 실행 시점의 잔고로 다시 계산하므로 수량은 미리보기와 다를 수 있습니다.</span>
                     <div className="flex gap-2">
                       <Btn kind="ghost" className="flex-1" onClick={() => setConfirming(false)} disabled={executeMutation.isPending}>취소</Btn>
-                      <Btn kind="warn" className="flex-[2]" onClick={handleExecute} disabled={executeMutation.isPending || isDirty}>
+                      <Btn kind="warn" className="flex-2" onClick={handleExecute} disabled={executeMutation.isPending || isDirty}>
                         {executeMutation.isPending ? "실행 중..." : `주문 ${legs.length}건 실행`}
                       </Btn>
                     </div>

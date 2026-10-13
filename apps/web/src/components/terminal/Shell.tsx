@@ -116,7 +116,7 @@ export function SymbolPill({ name, code, market }: { name: string; code?: string
       <span className="grid h-5 w-5 place-items-center rounded-md bg-dracula-purple text-2xs font-bold text-tm-page">{name.slice(0, 1)}</span>
       <h1 className="m-0 text-sm font-bold">{name}</h1>
       {code && <span className="num text-2xs text-tm-muted">{code}</span>}
-      {market && <span className="rounded bg-tm-raised px-1.5 py-px text-2xs text-tm-soft">{market}</span>}
+      {market && <span className="rounded-sm bg-tm-raised px-1.5 py-px text-2xs text-tm-soft">{market}</span>}
       <span className="num ml-1.5 text-2xs text-tm-muted">⌘K</span>
     </Link>
   );

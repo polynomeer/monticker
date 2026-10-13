@@ -107,7 +107,7 @@ function DayTimeline({ events }: { events: ReplayEvent[] }) {
               key={i}
               title={`${fmtTime(e.time, false)} ${e.stockName ?? e.stockSymbol ?? ""} ${TYPE_LABEL[e.type]}`}
               className={cn(
-                "absolute grid h-[18px] w-[18px] -translate-x-1/2 place-items-center rounded text-2xs font-bold text-tm-page",
+                "absolute grid h-[18px] w-[18px] -translate-x-1/2 place-items-center rounded-sm text-2xs font-bold text-tm-page",
                 buy ? "bg-up" : "bg-down",
               )}
               style={{ left: `${x(e.time)}%`, bottom: `${32 + (i % 6) * 26}px` }}
@@ -239,7 +239,7 @@ export default function ReplayPage() {
               value={date}
               max={ymd(new Date())}
               onChange={(e) => { if (e.target.value) { setDate(e.target.value); setAnchor(e.target.value); } }}
-              className="w-[118px] bg-transparent text-xs text-tm-muted outline-none [color-scheme:dark]"
+              className="w-[118px] bg-transparent text-xs text-tm-muted outline-hidden scheme-dark"
             />
           </label>
         </div>

@@ -149,7 +149,7 @@ export default function PortfolioPage() {
                 aria-label="평균단가를 볼 종목"
                 value={selected?.stockId ?? ""}
                 onChange={(e) => setSelectedId(Number(e.target.value))}
-                className="h-[30px] rounded-md bg-tm-raised px-2 text-13 text-dracula-fg outline-none [&>option]:bg-tm-panel"
+                className="h-[30px] rounded-md bg-tm-raised px-2 text-13 text-dracula-fg outline-hidden [&>option]:bg-tm-panel"
               >
                 {holdings.map((h) => <option key={h.stockId} value={h.stockId}>{h.name}</option>)}
               </select>

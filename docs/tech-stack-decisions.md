@@ -82,7 +82,7 @@ monticker가 쓰는 **모든 기술**에 대해 무엇을 골랐고, 무엇과 �
 | TanStack Query | 5 | 서버 상태, 폴링 single-flight 중복 제거 | [request-deduplication.md](technical/request-deduplication.md). SWR 등과의 비교 없음 | 문서 |
 | Zustand | 5 | 클라이언트 전용 상태 (테마·접근성·토스트) | "서버 상태를 복제하지 않는다"는 역할 규칙은 `.claude/agents/frontend-reviewer.md`. 다른 라이브러리 대비 근거 없음 | 없음 |
 | Apache ECharts (어댑터 경유) | 6.1 | 모든 차트 | lightweight-charts를 대체(`49b7d8b`). D3·Recharts·직접 Canvas는 기각. 근거로 든 (1) 라이선스, (2) 명령형 API 교체 비용 **둘 다 검증 필요** — §10 참고. 5 → 6은 XSS 수정 목적 | 문서 ([chart-adapter-pattern.md](technical/chart-adapter-pattern.md)) |
-| Tailwind CSS | 3.4, `darkMode: "class"` | 스타일 | — | 없음 |
+| Tailwind CSS | 4.3 (`@tailwindcss/postcss`). 토큰은 JS 설정(`tailwind.config.ts` → `designTokens.ts`)을 `@config`로 읽는다 | 스타일 | v4로 올리며 v3 기본값(테두리·placeholder 색, 버튼 커서, hover, 글자별 줄 높이)을 호환 스타일로 유지 — [dependency-upgrade-plan.md](dependency-upgrade-plan.md) W2 | 없음 |
 | Dracula 팔레트 + 디자인 토큰 | `tailwind.config.ts` | 테마 | Bybit 테마에서 교체(`2d64715`, 색상 나열만 있음). 토큰화는 유지보수성(`cb9c39c`) | 없음 / 커밋 |
 | Pretendard self-host | 1.3.9 dynamic subset | 한국어 타이포그래피 | "한국어 타이포그래피용 self-host"(`cb9c39c`). CDN 대신 self-host한 이유가 CSP(`font-src 'self'`)라는 연결은 기록에 없음 | 커밋 |
 | Phosphor Icons | 2.1 | 아이콘 | 이모지 아이콘이 플랫폼마다 다르게 그려지고 접근성이 나쁨(`c60b0cb`). Lucide 등과의 비교 없음 | 커밋 |

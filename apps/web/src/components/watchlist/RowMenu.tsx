@@ -14,7 +14,7 @@ interface Props {
   disabled?: boolean;
 }
 
-const itemClass = "flex w-full items-center gap-2.5 px-3.5 py-2 text-13 hover:bg-tm-raised focus:bg-tm-raised focus:outline-none disabled:cursor-not-allowed disabled:opacity-50";
+const itemClass = "flex w-full items-center gap-2.5 px-3.5 py-2 text-13 hover:bg-tm-raised focus:bg-tm-raised focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50";
 
 /**
  * 행 끝의 ⋯ 메뉴 — 위로/아래로 이동, 관심종목에서 제거.

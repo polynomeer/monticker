@@ -20,7 +20,7 @@ export function InterestOrderingToggle({ active, onChange }: { active: boolean; 
 /** 관심 분야에 해당하는 항목 옆의 작은 표시 — 색만으로 구분하지 않게 글자로 쓴다. */
 export function InterestMark({ className }: { className?: string }) {
   return (
-    <span className={cn("inline-flex h-4 flex-none items-center rounded px-1 text-[0.625rem] font-semibold text-[#e2d0ff] ring-1 ring-dracula-purple/60", className)}>
+    <span className={cn("inline-flex h-4 flex-none items-center rounded-sm px-1 text-[0.625rem] font-semibold text-[#e2d0ff] ring-1 ring-dracula-purple/60", className)}>
       관심
     </span>
   );

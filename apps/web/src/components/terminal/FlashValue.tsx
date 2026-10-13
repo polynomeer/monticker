@@ -30,7 +30,7 @@ export function FlashValue({ value, children, className }: { value: number | nul
     <span
       key={tick}
       data-flash={dir ?? undefined}
-      className={cn("rounded-sm", enabled && dir === "up" && "tm-flash-up", enabled && dir === "down" && "tm-flash-down", className)}
+      className={cn("rounded-xs", enabled && dir === "up" && "tm-flash-up", enabled && dir === "down" && "tm-flash-down", className)}
     >
       {children}
     </span>

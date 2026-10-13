@@ -15,7 +15,7 @@ export const LEVELS = [
   { name: "안전", text: "text-dracula-green", bg: "bg-dracula-green" },
   { name: "보통", text: "text-dracula-yellow", bg: "bg-dracula-yellow" },
   { name: "주의", text: "text-dracula-orange", bg: "bg-dracula-orange" },
-  { name: "위험", text: "text-[#ff5555]", bg: "bg-[#ff5555]" },
+  { name: "위험", text: "text-dracula-red", bg: "bg-dracula-red" },
 ] as const;
 
 /** 한도 사용률 → 단계: 50% 미만 안전, 80% 미만 보통, 한도 미만 주의, 넘으면 위험 */
@@ -36,7 +36,7 @@ export function RiskLevel({ level }: { level: number }) {
           {LEVELS.map((x, i) => (
             <div
               key={x.name}
-              className={cn("flex-1", x.bg, i === 0 && "rounded-l-full", i === LEVELS.length - 1 && "rounded-r-full", i === level && "outline outline-2 outline-offset-1 outline-dracula-fg")}
+              className={cn("flex-1", x.bg, i === 0 && "rounded-l-full", i === LEVELS.length - 1 && "rounded-r-full", i === level && "outline-solid outline-2 outline-offset-1 outline-dracula-fg")}
             />
           ))}
         </div>

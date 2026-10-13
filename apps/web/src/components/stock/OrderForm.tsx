@@ -252,7 +252,7 @@ export default function OrderForm({ stock, currentPrice, brokerageConnected }: P
           <div className="flex flex-col gap-1.5">
             <div className="relative h-1 rounded-full bg-tm-inner">
               <div className={cn("h-full rounded-full", isBuy ? "bg-up" : "bg-down")} style={{ width: `${ratio}%` }} />
-              <span aria-hidden className="absolute -top-[5px] -ml-[7px] h-3.5 w-3.5 rounded-full bg-dracula-fg" style={{ left: `${ratio}%` }} />
+              <span aria-hidden className="absolute top-[-5px] ml-[-7px] h-3.5 w-3.5 rounded-full bg-dracula-fg" style={{ left: `${ratio}%` }} />
               <input
                 type="range"
                 aria-label="주문 가능 수량 대비 비율"

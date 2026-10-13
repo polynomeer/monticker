@@ -122,7 +122,7 @@ export default function AlertsPage() {
         </div>
         {actionError && <Notice tone="warn" className="m-3.5 mb-0">{actionError.message}</Notice>}
         {loadingHistory ? (
-          <div className="m-3.5 h-32 animate-shimmer rounded-lg bg-gradient-to-r from-tm-inner via-tm-raised to-tm-inner bg-[length:200%_100%]" />
+          <div className="m-3.5 h-32 animate-shimmer rounded-lg bg-linear-to-r from-tm-inner via-tm-raised to-tm-inner bg-size-[200%_100%]" />
         ) : shown.length === 0 ? (
           <div className="flex flex-col items-center gap-1.5 px-4 py-16 text-center">
             <span className="text-sm font-semibold text-tm-soft">알림 이력이 없습니다</span>

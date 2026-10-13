@@ -9,7 +9,7 @@ import { Field, Icon, IconBtn } from "@/components/terminal";
 export function ChipSelect({ className, colorClass = "text-dracula-fg", children, ...rest }: { colorClass?: string } & ComponentProps<"select">) {
   return (
     <span className={cn("relative inline-flex h-9 items-center rounded-lg border border-tm-line2 bg-tm-inner", className)}>
-      <select className={cn("h-full appearance-none bg-transparent pl-3 pr-8 text-13 outline-none [&>option]:bg-tm-panel [&>option]:text-dracula-fg", colorClass)} {...rest}>
+      <select className={cn("h-full appearance-none bg-transparent pl-3 pr-8 text-13 outline-hidden [&>option]:bg-tm-panel [&>option]:text-dracula-fg", colorClass)} {...rest}>
         {children}
       </select>
       <Icon name="chev" size={13} className="pointer-events-none absolute right-2.5 text-tm-muted" />
@@ -21,7 +21,7 @@ export function ChipSelect({ className, colorClass = "text-dracula-fg", children
 export function ChipNumber({ suffix, className, ...rest }: { suffix?: string } & ComponentProps<"input">) {
   return (
     <span className={cn("inline-flex h-9 items-center gap-1 rounded-lg border border-tm-line2 bg-tm-inner px-3 focus-within:border-dracula-purple", className)}>
-      <input type="number" className="num w-14 bg-transparent text-13 text-dracula-fg outline-none" {...rest} />
+      <input type="number" className="num w-14 bg-transparent text-13 text-dracula-fg outline-hidden" {...rest} />
       {suffix && <span className="text-xs text-tm-muted">{suffix}</span>}
     </span>
   );

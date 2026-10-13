@@ -84,7 +84,7 @@ function PlanCard({
   const kind: BtnKind = isCurrent ? "soft" : hot ? "primary" : free ? "soft" : "ghost";
   const label = isCurrent ? "현재 플랜" : isPending ? "처리 중..." : free ? "무료로 시작" : `${plan.code} 시작하기`;
   return (
-    <section className={cn("flex min-w-0 flex-col gap-4 rounded-[14px] bg-tm-panel p-[22px]", hot && "outline outline-2 outline-dracula-purple")}>
+    <section className={cn("flex min-w-0 flex-col gap-4 rounded-[14px] bg-tm-panel p-[22px]", hot && "outline-solid outline-2 outline-dracula-purple")}>
       <div className="flex items-center justify-between gap-2">
         <span className={cn("font-bold tracking-[0.06em]", hot ? "text-dracula-purple" : "text-tm-soft")}>{plan.code}</span>
         <span className="flex gap-1.5">

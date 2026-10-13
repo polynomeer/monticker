@@ -87,7 +87,7 @@ export function WatchRuleRow({ rule, stockLabel, onToggle, onDelete, onEdit, pen
   const limitReached = rule.dailyLimit != null && today >= rule.dailyLimit;
 
   return (
-    <li className={cn("flex flex-wrap items-center gap-3.5 rounded-[10px] bg-tm-inner p-3.5", highlight && "outline outline-1 outline-dracula-purple", !rule.isActive && "opacity-70")}>
+    <li className={cn("flex flex-wrap items-center gap-3.5 rounded-[10px] bg-tm-inner p-3.5", highlight && "outline-solid outline-1 outline-dracula-purple", !rule.isActive && "opacity-70")}>
       <div className="flex min-w-0 flex-[1_1_280px] flex-col gap-1.5">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-bold">{title}</span>

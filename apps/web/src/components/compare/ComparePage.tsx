@@ -297,7 +297,7 @@ export default function ComparePage() {
                 onBlur={() => setTimeout(() => setAdding(false), 150)}
                 aria-label="비교할 종목 코드"
                 placeholder="종목명 또는 코드"
-                className="h-[34px] w-52 rounded-lg border border-dracula-purple bg-tm-inner px-3 text-13 text-dracula-fg outline-none placeholder:text-[#8b92b8]"
+                className="h-[34px] w-52 rounded-lg border border-dracula-purple bg-tm-inner px-3 text-13 text-dracula-fg outline-hidden placeholder:text-[#8b92b8]"
               />
               {suggestions.length > 0 && (
                 <ul className="absolute left-0 top-full z-20 mt-1 max-h-64 w-64 list-none overflow-y-auto rounded-[10px] border border-tm-line2 bg-tm-panel p-1 shadow-glow-line">

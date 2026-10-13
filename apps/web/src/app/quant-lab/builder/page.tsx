@@ -430,7 +430,7 @@ export default function BuilderPage() {
               placeholder="지표 검색"
               value={blockQuery}
               onChange={e => setBlockQuery(e.target.value)}
-              className="min-w-0 flex-1 bg-transparent text-13 text-dracula-fg outline-none"
+              className="min-w-0 flex-1 bg-transparent text-13 text-dracula-fg outline-hidden"
             />
           </label>
           <div className="grid grid-cols-2 gap-1.5">
