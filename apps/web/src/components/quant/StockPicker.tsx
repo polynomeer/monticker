@@ -73,7 +73,7 @@ export function StockPicker({
           value={open ? query : selected ? `${selected.name} (${selected.symbol})` : ""}
           onFocus={() => { setOpen(true); setQuery(""); }}
           onChange={e => setQuery(e.target.value)}
-          className="w-full bg-transparent p-0 text-sm text-dracula-fg outline-none placeholder:text-[#8b92b8]"
+          className="w-full bg-transparent p-0 text-sm text-dracula-fg outline-hidden placeholder:text-[#8b92b8]"
         />
       </label>
       {open && (

@@ -111,7 +111,7 @@ export default function TradeModal({ stock, currentPrice, side, maxQuantity, onC
               <IconBtn name="minus" label="수량 줄이기" size={36} className="bg-tm-raised" onClick={() => setQuantity(q => Math.max(1, q - 1))} />
               <input id="trade-modal-qty" type="number" min={1} max={max} value={quantity}
                 onChange={e => setQuantity(Math.min(max, Math.max(1, Number(e.target.value))))}
-                className="num h-10 min-w-0 flex-1 rounded-lg border border-tm-line bg-tm-inner text-center text-base font-semibold text-dracula-fg outline-none focus:border-dracula-purple" />
+                className="num h-10 min-w-0 flex-1 rounded-lg border border-tm-line bg-tm-inner text-center text-base font-semibold text-dracula-fg outline-hidden focus:border-dracula-purple" />
               <IconBtn name="plus" label="수량 늘리기" size={36} className="bg-tm-raised" onClick={() => setQuantity(q => Math.min(max, q + 1))} />
             </div>
             <div className="flex gap-1.5">

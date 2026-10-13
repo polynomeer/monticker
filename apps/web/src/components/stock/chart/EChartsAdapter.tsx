@@ -858,7 +858,7 @@ export default function EChartsAdapter({
           aria-label="차트에 넣을 텍스트 (Enter 추가, Esc 취소)"
           maxLength={DRAWING_LIMITS.maxText}
           placeholder="텍스트 입력 후 Enter"
-          className="absolute z-10 w-44 rounded border border-tm-line2 bg-tm-panel px-1.5 py-0.5 text-xs text-dracula-fg outline-none focus:border-dracula-purple"
+          className="absolute z-10 w-44 rounded-sm border border-tm-line2 bg-tm-panel px-1.5 py-0.5 text-xs text-dracula-fg outline-hidden focus:border-dracula-purple"
           style={{ left: Math.max(0, textDraft.left - 4), top: Math.max(0, textDraft.top - 24) }}
           onKeyDown={(e) => {
             if (e.key === "Enter") { e.preventDefault(); commitText(e.currentTarget.value); }

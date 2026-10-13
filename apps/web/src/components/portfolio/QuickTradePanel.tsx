@@ -115,7 +115,7 @@ export function QuickTradePanel({ portfolio, meta, sectorValue }: {
                 onChange={(e) => setQuery(e.target.value)}
                 aria-label="종목 매수 검색"
                 placeholder="종목명 또는 티커 검색"
-                className="w-full bg-transparent p-0 text-sm text-dracula-fg outline-none placeholder:text-[#8b92b8]"
+                className="w-full bg-transparent p-0 text-sm text-dracula-fg outline-hidden placeholder:text-[#8b92b8]"
               />
             </span>
             <Icon name="search" size={16} className="text-tm-muted" />

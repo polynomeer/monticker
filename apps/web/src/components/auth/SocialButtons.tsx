@@ -43,7 +43,7 @@ export function SocialButtons({ onError }: { onError?: (msg: string) => void }) 
       <div className="flex flex-wrap gap-2">
         {PROVIDERS.map((p) => (
           <button key={p.id} type="button" onClick={() => handle(p.mock, p.label)} className={BTN}>
-            <span className="num rounded bg-tm-raised px-1 text-2xs text-tm-muted">DEV</span>
+            <span className="num rounded-sm bg-tm-raised px-1 text-2xs text-tm-muted">DEV</span>
             {p.label} (Mock)
           </button>
         ))}

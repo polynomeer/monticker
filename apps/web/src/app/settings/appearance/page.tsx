@@ -31,9 +31,9 @@ function ThemeCard({
       className={cn("flex flex-col gap-2.5 rounded-xl bg-tm-inner p-3 text-left text-dracula-fg disabled:cursor-not-allowed disabled:opacity-60", choiceBorder(on))}
     >
       <span className="flex h-[84px] gap-1.5 rounded-lg p-2" style={{ background: bg }} aria-hidden>
-        <span className="w-3.5 rounded" style={{ background: rail }} />
-        <span className="flex-1 rounded" style={{ background: panel }} />
-        <span className="flex-[2] rounded" style={{ background: panel }} />
+        <span className="w-3.5 rounded-sm" style={{ background: rail }} />
+        <span className="flex-1 rounded-sm" style={{ background: panel }} />
+        <span className="flex-2 rounded-sm" style={{ background: panel }} />
       </span>
       <span className="flex items-center gap-2 font-semibold">{name}</span>
     </button>

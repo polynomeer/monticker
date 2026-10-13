@@ -132,7 +132,7 @@ export function Panel({
     <>
     {expanded && (
       // 배경 — 클릭하면 닫힌다. 확대된 패널은 원래 자리를 비우므로 자리 표시를 남겨 레이아웃이 튀지 않게 한다
-      <div aria-hidden className="fixed inset-0 z-[60] bg-black/60" onClick={close} />
+      <div aria-hidden className="fixed inset-0 z-60 bg-black/60" onClick={close} />
     )}
     {expanded && <div aria-hidden className={cn("min-h-[120px] rounded-[10px] border border-dashed border-tm-line", className)} />}
     <section
@@ -144,7 +144,7 @@ export function Panel({
       className={cn(
         "flex min-w-0 flex-col rounded-[10px] bg-tm-panel",
         expanded
-          ? "fixed inset-2 z-[61] overflow-auto shadow-glow-line sm:inset-6"
+          ? "fixed inset-2 z-61 overflow-auto shadow-glow-line sm:inset-6"
           : className,
       )}
     >

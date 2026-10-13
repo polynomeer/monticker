@@ -45,8 +45,8 @@ export default function PriceCard({ symbol }: Props) {
   if (loading) {
     return (
       <div className={box} aria-busy="true" aria-label="시세 불러오는 중">
-        <div className="h-8 w-36 animate-pulse rounded bg-tm-raised" />
-        <div className="h-4 w-24 animate-pulse rounded bg-tm-raised" />
+        <div className="h-8 w-36 animate-pulse rounded-sm bg-tm-raised" />
+        <div className="h-4 w-24 animate-pulse rounded-sm bg-tm-raised" />
       </div>
     );
   }

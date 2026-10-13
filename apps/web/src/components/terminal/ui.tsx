@@ -127,7 +127,7 @@ export function Field({ label, unit, className, inputClassName, mono = true, ...
     <label className={cn("flex min-h-[52px] min-w-0 flex-1 items-center gap-2 rounded-lg border border-tm-line bg-tm-inner px-3 py-1.5", className)}>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-2xs text-tm-muted">{label}</span>
-        <input className={cn("w-full bg-transparent p-0 text-sm text-dracula-fg outline-none placeholder:text-[#8b92b8]", mono && "num", inputClassName)} {...rest} />
+        <input className={cn("w-full bg-transparent p-0 text-sm text-dracula-fg outline-hidden placeholder:text-[#8b92b8]", mono && "num", inputClassName)} {...rest} />
       </span>
       {unit && <span className="text-xs text-tm-muted">{unit}</span>}
     </label>
@@ -141,7 +141,7 @@ export function TextField({ label, icon, hint, error, className, ...rest }: { la
       {label}
       <span className={cn("flex h-[46px] items-center gap-2.5 rounded-[10px] border bg-tm-inner px-3.5 focus-within:border-dracula-purple", error ? "border-[#ff8a8a]" : "border-tm-line2")}>
         {icon && <Icon name={icon} size={16} className="text-tm-muted" />}
-        <input className="min-w-0 flex-1 bg-transparent text-15 text-dracula-fg outline-none placeholder:text-[#8b92b8]" {...rest} />
+        <input className="min-w-0 flex-1 bg-transparent text-15 text-dracula-fg outline-hidden placeholder:text-[#8b92b8]" {...rest} />
       </span>
       {error ? <span className="text-xs text-[#ff8a8a]">{error}</span> : hint ? <span className="text-xs text-tm-muted">{hint}</span> : null}
     </label>
@@ -153,7 +153,7 @@ export function SelectBox({ label, className, children, ...rest }: { label?: str
   return (
     <label className={cn("relative flex min-h-10 w-full flex-col justify-center gap-0.5 rounded-lg border border-tm-line bg-tm-inner px-3 py-1.5", className)}>
       {label && <span className="text-2xs text-tm-muted">{label}</span>}
-      <select className="w-full appearance-none bg-transparent pr-6 text-sm text-dracula-fg outline-none [&>option]:bg-tm-panel" {...rest}>
+      <select className="w-full appearance-none bg-transparent pr-6 text-sm text-dracula-fg outline-hidden [&>option]:bg-tm-panel" {...rest}>
         {children}
       </select>
       <Icon name="chev" size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-tm-muted" />
@@ -379,5 +379,5 @@ export function EventBadge({ type }: { type?: string | null }) {
 
 /** 시안에만 있고 아직 백엔드가 없는 기능 — 화면은 그대로 그리되 이 표식으로 구분한다(docs/design-rollout-plan.md). */
 export function PreviewTag({ className }: { className?: string }) {
-  return <span className={cn("inline-flex h-[18px] items-center rounded px-1.5 text-[0.625rem] font-semibold tracking-wide text-tm-muted ring-1 ring-tm-line2", className)}>준비 중</span>;
+  return <span className={cn("inline-flex h-[18px] items-center rounded-sm px-1.5 text-[0.625rem] font-semibold tracking-wide text-tm-muted ring-1 ring-tm-line2", className)}>준비 중</span>;
 }

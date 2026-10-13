@@ -7,7 +7,7 @@ const config: Config = {
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
-  darkMode: "class",
+  // darkMode는 globals.css의 @custom-variant dark로 옮겼다(Tailwind v4).
   theme: {
     extend: {
       colors: {
@@ -19,9 +19,11 @@ const config: Config = {
         },
         // 터미널 디자인 시안(ADR-066) 표면 토큰 — 페이지 < 패널 < 인셋/강조 순서로 밝아진다
         tm: { ...tm },
-        // 상승/하락 색 — 사용자 차트 테마(themeStore)를 따라 CSS 변수로 바뀐다
-        up: "rgb(var(--mt-up) / <alpha-value>)",
-        down: "rgb(var(--mt-down) / <alpha-value>)",
+        // 상승/하락 색 — 사용자 차트 테마(themeStore)를 따라 CSS 변수로 바뀐다.
+        // <alpha-value>는 쓰지 않는다: Tailwind v4 호환 계층은 이를 1로 바꾸고 투명도 수식어(bg-up/5)를 버린다.
+        // 자리표시자가 없으면 v4가 color-mix로 투명도를 입힌다.
+        up: "rgb(var(--mt-up))",
+        down: "rgb(var(--mt-down))",
       },
       fontFamily: {
         sans: [

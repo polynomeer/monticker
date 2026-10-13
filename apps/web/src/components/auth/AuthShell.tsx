@@ -85,7 +85,7 @@ export function AuthField({
           id={id}
           aria-invalid={!!error}
           aria-describedby={descId}
-          className="min-w-0 flex-1 bg-transparent text-15 text-dracula-fg outline-none placeholder:text-[#8b92b8]"
+          className="min-w-0 flex-1 bg-transparent text-15 text-dracula-fg outline-hidden placeholder:text-[#8b92b8]"
           {...rest}
         />
       </span>

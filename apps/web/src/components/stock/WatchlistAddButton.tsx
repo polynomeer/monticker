@@ -61,7 +61,7 @@ export default function WatchlistAddButton({ stockId }: Props) {
         aria-label="관심 그룹"
         value={selectedGroup ?? ""}
         onChange={e => setSelectedGroup(Number(e.target.value))}
-        className="h-9 max-w-[140px] rounded-lg border border-tm-line2 bg-tm-page px-2.5 text-13 text-dracula-fg outline-none focus:border-dracula-purple [&>option]:bg-tm-panel"
+        className="h-9 max-w-[140px] rounded-lg border border-tm-line2 bg-tm-page px-2.5 text-13 text-dracula-fg outline-hidden focus:border-dracula-purple [&>option]:bg-tm-panel"
       >
         {groups.map(g => (
           <option key={g.id} value={g.id}>{g.name}</option>

@@ -40,7 +40,7 @@ export default function IndexCards() {
                   {ix?.isMocked && <MockTag />}
                 </span>
                 {isLoading ? (
-                  <span className="h-7 w-28 animate-pulse rounded bg-tm-inner" />
+                  <span className="h-7 w-28 animate-pulse rounded-sm bg-tm-inner" />
                 ) : ix ? (
                   <>
                     <span className="num text-xl font-semibold">{fmtIndexValue(ix.value)}</span>

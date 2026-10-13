@@ -365,7 +365,7 @@ export default function QuantLabDetailPage() {
                 value={shareDesc}
                 onChange={e => setShareDesc(e.target.value)}
                 placeholder="이 전략을 소개해주세요 (선택)"
-                className="resize-y rounded-[10px] border border-tm-line2 bg-tm-inner p-3 text-sm leading-relaxed text-dracula-fg outline-none placeholder:text-[#8b92b8] focus:border-dracula-purple"
+                className="resize-y rounded-[10px] border border-tm-line2 bg-tm-inner p-3 text-sm leading-relaxed text-dracula-fg outline-hidden placeholder:text-[#8b92b8] focus:border-dracula-purple"
               />
             </label>
             <Field label="월 구독료 (0이면 무료)" unit="원" type="number" min={0} max={1000000} step={1000} value={sharePrice} onChange={e => setSharePrice(Math.min(1_000_000, Math.max(0, Math.floor(+e.target.value))))} />

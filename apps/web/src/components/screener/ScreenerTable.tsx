@@ -103,7 +103,7 @@ export default function ScreenerTable({
     <div className="flex flex-col gap-1 p-2" aria-busy="true" aria-label="스크리너 불러오는 중">
       {Array.from({ length: 12 }).map((_, i) => (
         <div key={i}
-          className="h-[40px] animate-shimmer rounded-lg bg-gradient-to-r from-tm-inner via-tm-raised to-tm-inner bg-[length:200%_100%]"
+          className="h-[40px] animate-shimmer rounded-lg bg-linear-to-r from-tm-inner via-tm-raised to-tm-inner bg-size-[200%_100%]"
           style={{ animationDelay: `${i * 40}ms` }}
         />
       ))}

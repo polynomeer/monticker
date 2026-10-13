@@ -88,7 +88,7 @@ export function VersionPanel({ ruleset, onRestore, restoreBlockedReason }: {
               >
                 <span className="flex items-center gap-2 text-13">
                   <b className="num text-dracula-purple">v{r.version}</b>
-                  {r.isCurrent && <span className="rounded bg-tm-raised px-1.5 text-2xs text-dracula-green">현재</span>}
+                  {r.isCurrent && <span className="rounded-sm bg-tm-raised px-1.5 text-2xs text-dracula-green">현재</span>}
                   <span className="num ml-auto text-2xs text-tm-muted">{fmtAt(r.at)}</span>
                 </span>
                 <span className="text-2xs text-tm-soft">

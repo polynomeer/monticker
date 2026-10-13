@@ -448,7 +448,7 @@ export function WatchRuleForm(props: Props) {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="종목명 또는 코드 검색"
-                className="min-w-0 flex-1 bg-transparent text-sm text-dracula-fg outline-none placeholder:text-[#8b92b8]"
+                className="min-w-0 flex-1 bg-transparent text-sm text-dracula-fg outline-hidden placeholder:text-[#8b92b8]"
               />
             </label>
             {results.length > 0 && (

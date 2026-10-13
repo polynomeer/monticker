@@ -4,7 +4,7 @@ import { useEffect, useState, type KeyboardEvent } from "react";
 import { capRangeError, capToEokText, parseCapEok } from "./criteria";
 
 const inputCls =
-  "h-8 w-full min-w-0 rounded-lg border border-tm-line2 bg-tm-inner px-2.5 text-13 text-dracula-fg outline-none focus:border-dracula-purple aria-[invalid=true]:border-[#ff8a8a]";
+  "h-8 w-full min-w-0 rounded-lg border border-tm-line2 bg-tm-inner px-2.5 text-13 text-dracula-fg outline-hidden focus:border-dracula-purple aria-invalid:border-[#ff8a8a]";
 
 /**
  * 시가총액 범위(억원) — 입력 중에는 조회하지 않고 포커스를 벗어나거나 Enter를 누를 때 적용한다.

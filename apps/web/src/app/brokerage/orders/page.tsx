@@ -393,7 +393,7 @@ export default function BrokerageOrderPage() {
               tabIndex={-1}
               role="region"
               aria-label="실제 주문 확인"
-              className="flex flex-col gap-3.5 rounded-xl border-[1.5px] border-dracula-orange bg-tm-inner p-5 outline-none"
+              className="flex flex-col gap-3.5 rounded-xl border-[1.5px] border-dracula-orange bg-tm-inner p-5 outline-hidden"
             >
               <div className="flex items-center gap-2.5">
                 <Icon name="alert" size={20} className="text-dracula-orange" />
@@ -412,7 +412,7 @@ export default function BrokerageOrderPage() {
               </div>
               <div className="flex gap-2">
                 <Btn kind="ghost" size="lg" className="flex-1" onClick={() => setDraft(null)} disabled={submitOrder.isPending}>취소</Btn>
-                <Btn kind={draft.side === "BUY" ? "buy" : "sell"} size="lg" className="flex-[2]" onClick={handleSubmit} disabled={!isValid || submitOrder.isPending}>
+                <Btn kind={draft.side === "BUY" ? "buy" : "sell"} size="lg" className="flex-2" onClick={handleSubmit} disabled={!isValid || submitOrder.isPending}>
                   {submitOrder.isPending ? "전송 중..." : `${sideLabel(draft.side)} 주문 전송`}
                 </Btn>
               </div>

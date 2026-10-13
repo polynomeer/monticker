@@ -23,10 +23,10 @@ export default function RangeSlider({
   const pa = (Math.min(a, hi) / max) * 100;
   const pb = (hi / max) * 100;
   const thumb =
-    "pointer-events-none absolute inset-x-0 -top-[5px] h-3.5 w-full appearance-none bg-transparent " +
+    "pointer-events-none absolute inset-x-0 top-[-5px] h-3.5 w-full appearance-none bg-transparent " +
     "[&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-dracula-fg " +
     "[&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-dracula-fg " +
-    "focus-visible:outline-none [&:focus-visible::-webkit-slider-thumb]:ring-2 [&:focus-visible::-webkit-slider-thumb]:ring-dracula-purple";
+    "focus-visible:outline-hidden [&:focus-visible::-webkit-slider-thumb]:ring-2 [&:focus-visible::-webkit-slider-thumb]:ring-dracula-purple";
 
   return (
     <div className="flex flex-col gap-2">

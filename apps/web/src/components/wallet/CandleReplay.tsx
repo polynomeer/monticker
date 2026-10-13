@@ -129,7 +129,7 @@ export default function CandleReplay({ date, events }: { date: string; events: R
           value={Math.max(0, cursor)}
           onChange={(e) => { setPlaying(false); setCursor(Number(e.target.value)); }}
           disabled={candles.length === 0}
-          className="min-w-[160px] flex-1 accent-[#bd93f9]"
+          className="min-w-[160px] flex-1 accent-dracula-purple"
           style={{ backgroundSize: `${progress}% 100%` }}
         />
         <span className="num text-xs text-tm-muted">

@@ -34,7 +34,7 @@ export default function ScreenerRow({ item, columns, intraday }: Props) {
             onClick={() => toggle(item.stockId)}
             aria-label={watched ? `${item.name} 관심종목 해제` : `${item.name} 관심종목 추가`}
             aria-pressed={watched}
-            className={cn("grid place-items-center rounded p-0.5 hover:bg-tm-raised", watched ? "text-dracula-yellow" : "text-tm-muted hover:text-dracula-fg")}
+            className={cn("grid place-items-center rounded-sm p-0.5 hover:bg-tm-raised", watched ? "text-dracula-yellow" : "text-tm-muted hover:text-dracula-fg")}
           >
             <Icon name="star" size={16} fill={watched ? "currentColor" : "none"} />
           </button>
@@ -105,7 +105,7 @@ export default function ScreenerRow({ item, columns, intraday }: Props) {
               <Link
                 href={`/stocks/${item.symbol}?openAlert=1`}
                 aria-label={`${item.name} 알림 만들기`}
-                className="grid place-items-center rounded p-0.5 text-tm-muted hover:bg-tm-raised hover:text-dracula-fg"
+                className="grid place-items-center rounded-sm p-0.5 text-tm-muted hover:bg-tm-raised hover:text-dracula-fg"
               >
                 <Icon name="bell" size={15} aria-hidden />
               </Link>
