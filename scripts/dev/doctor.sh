@@ -80,7 +80,8 @@ echo "Tools"
 check "docker 실행 중"             docker_running
 check "docker compose v2"          docker compose version
 check "java 21+"                   bash -c 'java -version 2>&1 | grep -Eq "version \"(2[1-9]|[3-9][0-9])"'
-check "node 20+"                   bash -c 'node -v | grep -Eq "^v(2[0-9]|[3-9][0-9])\."'
+# .nvmrc와 같게 24 이상의 짝수(LTS) — web의 vitest 5·jsdom 30이 22.12+/24+를 요구하고 홀수(23 등)는 지원 범위 밖이다
+check "node 24+ LTS (.nvmrc)"     bash -c 'node -v | grep -Eq "^v(2[4-9]|[3-9][0-9])\." && [ \$(( \$(node -v | sed -E "s/^v([0-9]+).*/\1/") % 2 )) -eq 0 ]'
 check "pnpm"                       pnpm --version
 check "curl, lsof"                 bash -c 'command -v curl && command -v lsof'
 command -v k6 > /dev/null || echo -e "  ${DIM}- k6 없음 (부하 테스트에만 필요: brew install k6)${NC}"

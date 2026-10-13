@@ -199,7 +199,7 @@ POST /api/matching/orders
 |------|------|------|
 | Docker Desktop | 최신 | Postgres·Redis·MongoDB·Elasticsearch·MailHog 등을 컨테이너로 띄웁니다 |
 | JDK | **21** | `backend/api`, `backend/worker` (Gradle wrapper 포함) |
-| Node.js | **22** (20+) | `apps/web` |
+| Node.js | **24** LTS (`.nvmrc`) | `apps/web` |
 | pnpm | **9.x** | 이 레포는 pnpm 워크스페이스입니다. **`npm install`을 쓰지 마세요** — `pnpm-lock.yaml`과 `package.json#pnpm` overrides가 깨집니다 |
 | Go | 1.22 | 선택 — `--kafka` 모드의 market-gateway만 필요 |
 
