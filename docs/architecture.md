@@ -142,7 +142,7 @@ Virtualisation: TanStack Virtual (screener, 500 rows → ~17 DOM nodes)
 ### Mobile
 
 ```
-Framework:   Expo 52 (React Native)
+Framework:   Expo 57 (React Native 0.86)
 Push:        Expo Push Notifications
 ```
 

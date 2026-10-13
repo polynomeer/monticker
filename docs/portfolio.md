@@ -8,7 +8,7 @@
 
 - **기간**: 2026-01 ~ (진행 중, MVP 완료 → 상용화 단계)
 - **규모**: 커밋 739 · ADR 52건 · Flyway 마이그레이션 49개 · 백엔드 모듈 27개 · 웹 라우트 38개 · 테스트 756 (api 604 · worker 102 · web 50, 2026-09-30 기준)
-- **스택**: Kotlin 2.3 / Spring Boot 3.5 / Spring Modulith · Next.js 16 / React 19 · Expo 52 · Go 1.22 · PostgreSQL 16 + TimescaleDB · Redis 7 · MongoDB 7 · Elasticsearch · Kafka · Docker Compose / Kubernetes · Prometheus / Grafana / Jaeger / Pinpoint
+- **스택**: Kotlin 2.3 / Spring Boot 3.5 / Spring Modulith · Next.js 16 / React 19 · Expo 57 · Go 1.22 · PostgreSQL 16 + TimescaleDB · Redis 7 · MongoDB 7 · Elasticsearch · Kafka · Docker Compose / Kubernetes · Prometheus / Grafana / Jaeger / Pinpoint
 - **개발 방식**: 1인 개발 + Claude Code(서브에이전트 6종, 자동 리뷰 워크플로). 주차별 수직 슬라이스로 항상 동작하는 상태 유지.
 
 ## 문제 정의

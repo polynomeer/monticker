@@ -178,7 +178,7 @@ Kotlin 컴파일러 플러그인(`plugin.spring`·`plugin.jpa`)은 `kotlin("jvm"
 
 **검증**: `tsc`(web·types), `scripts/check.sh web --full`(vitest 480 통과), web Docker 이미지를 Node 24.21로 빌드해 컨테이너에서 페이지 응답(200) 확인, CI(Node 24).
 
-### M1. Expo SDK 52 → 58
+### M1. Expo SDK 52 → 57(계획은 58)
 
 Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정한다. 그래서 dependabot의 개별 PR(#113 #114 #120)과 #121의 모바일 React 19는 하나의 작업이다. Babel 8(#112)도 Expo 프리셋을 따라 여기서 정해진다.
 
@@ -186,8 +186,20 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 2. React 19와 New Architecture 전환 시점의 경고를 정리한다.
 3. 푸시 알림(`expo-notifications`)이 `device_tokens` 등록과 worker의 Expo 발송(ADR-065)과 계속 맞는지 확인한다. 토큰 형식과 권한 요청 흐름이 대상이다.
 
-**확인할 것**: 각 SDK의 RN·React 버전과 New Architecture 의무화 시점. 최소 iOS·Android 버전 변경(스토어 배포 영향).
-**검증**: mobile-ci(typecheck, audit). 시뮬레이터에서 로그인, 알림 권한, 푸시 수신을 수동으로 확인한다.
+**확인 결과**(2026-10-13, **SDK 57**로 올림):
+- **목표를 58이 아니라 57로 바꿨다.** SDK 58은 npm `next` 태그(베타)이고 react-native `0.88.0-rc.4`(릴리스 후보)를 묶는다. 정식(`latest`)은 57.0.28(RN 0.86.3, React 19.2.3). dependabot은 배포 태그를 보지 않아 58을 제안했다. 58이 `latest`가 되면 다시 올린다.
+- **단계별(53, 54, …)이 아니라 한 번에 올렸다.** 네이티브 폴더가 없는 관리형(CNG) 앱이고 소스가 7개라 단계마다 바뀌는 것은 버전 숫자뿐이다. 대신 `expo-doctor` 21개 검사·타입 검사·iOS/Android 번들 export로 확인했다.
+- 바뀐 것:
+  - `expo install --fix`로 짝 버전(expo-router·notifications·device·constants 57, RN 0.86.3, React 19.2.3)을 맞췄다.
+  - expo-router 57의 네이티브 피어(`expo-linking`·`react-native-safe-area-context`·`react-native-screens`·`@expo/metro-runtime`)를 직접 설치했다. 예전엔 pnpm 자동 피어로 SDK 52용이 깔려 `expo-constants` 17이 중복됐다.
+  - **`react`·`react-dom`을 19.2.3으로 정확히 고정** — 범위(`~19.2.3`)면 lockfile 재생성 때 19.2.8로 올라가고, react-dom 피어가 웹의 19.3.0으로 묶여 React가 중복됐다.
+  - 쓰지 않던 `@react-navigation/native` 제거(expo-router 57은 `standard-navigation`을 쓴다).
+  - `app.json`의 최상위 `notification`이 스키마에서 빠져 `expo-notifications` 플러그인 옵션으로 옮겼다.
+  - `setNotificationHandler`의 `shouldShowAlert`(deprecated)를 `shouldShowBanner`·`shouldShowList`(둘 다 true, 예전과 같음)로.
+  - mobile-ci: Node 20 → 24, **`expo install --check` 단계 추가**(워크스페이스 lockfile이 하나라 dependabot의 react 그룹이 모바일 React를 SDK 밖으로 올릴 수 있다 — 설치된 버전이 SDK와 다르면 실패. 틀린 버전을 설치해 실패하는 것까지 확인했다), audit의 `image-size` 예외 제거(경로가 사라짐).
+- **기존 문제(이번에 만든 것 아님)**: `assets/`가 비어 있어 알림 아이콘 `./assets/notification-icon.png`가 없다 — 네이티브 빌드(prebuild) 전에 넣어야 한다. 푸시 토큰은 EAS `projectId`가 없으면 등록을 건너뛴다(코드가 그렇게 돼 있다).
+
+**검증**: `expo-doctor` 21/21, `tsc`, `expo export --platform ios --platform android`(번들 성공), mobile audit. **실기기·시뮬레이터 확인은 못 했다** — 이 맥에 Xcode가 없다(Command Line Tools만). 로그인·알림 권한·푸시 수신은 사람이 확인해야 한다.
 
 ---
 
@@ -222,4 +234,5 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 | W1 Next 16 | 완료 | #160 | 16.4.0 + ESLint 9 flat config. React Compiler 린트 74곳은 warn(후속) |
 | W2 Tailwind 4 | PR | — | 4.3.3. JS 설정 유지(@config), v3 기본값 호환 스타일, 스크린샷 18장 픽셀 일치 |
 | W3 TS 6 · vitest 5 · Node 24 | PR | — | TS 7은 typescript-eslint 지원 대기. Node 24 LTS로 통일(web Docker의 EOL Node 20 교체) |
-| B4, M1 | 시작 전 | — | |
+| M1 Expo SDK 57 | PR | — | 58은 베타라 57(정식)로. mobile-ci에 SDK 버전 검사 추가. 실기기 확인 필요 |
+| B4 | 시작 전 | — | |
