@@ -23,7 +23,7 @@ Write spec / issue
 ```
 monticker/
 ├── apps/
-│   ├── web/          # Next.js 15
+│   ├── web/          # Next.js 16
 │   └── mobile/       # Expo (React Native)
 ├── backend/
 │   ├── api/          # Spring Boot API (Spring Modulith, 26 modules)

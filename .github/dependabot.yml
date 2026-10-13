@@ -18,11 +18,7 @@ updates:
     # docs/dependency-upgrade-plan.md — 트랙(W1~W3, M1)을 시작하기 전까지 메이저는 받지 않는다.
     # 트랙이 끝나면 해당 항목을 지운다.
     ignore:
-      - dependency-name: "next"                 # W1
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "eslint-config-next"   # W1
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "eslint"               # W1
+      - dependency-name: "eslint"               # W1 후속 — 9로 올렸다. 10은 eslint-config-next·플러그인 호환 확인 후
         update-types: ["version-update:semver-major"]
       - dependency-name: "tailwindcss"          # W2
         update-types: ["version-update:semver-major"]
