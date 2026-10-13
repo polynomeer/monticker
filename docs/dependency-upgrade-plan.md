@@ -171,7 +171,12 @@ Kotlin 컴파일러 플러그인(`plugin.spring`·`plugin.jpa`)은 `kotlin("jvm"
 2. **TypeScript 7**: 제거된 옵션(`tsconfig.json`)과 `next build`의 타입 검사 호환을 확인한다. 모바일(`typescript ~5.3`)은 M1에서 Expo가 요구하는 버전을 따른다.
 3. vitest·jsdom: 설정 경고(`vitest.config.ts` ESM 경고가 이미 나고 있다)를 정리하고 올린다.
 
-**검증**: `scripts/check.sh web --full`.
+**확인 결과**(2026-10-13):
+- **TypeScript 7은 보류, 6.0.3으로 올렸다.** TS 7(Go 네이티브)은 안정된 JS API가 없고, eslint-config-next가 쓰는 typescript-eslint(8.71)는 `typescript >=4.8.4 <6.1.0`만 받는다 — TS 7을 깔면 lint가 실패한다. typescript-eslint는 TS 7.1(새 API)이 나온 뒤 지원할 예정이다. 6.0은 그 범위 안이고 우리 `tsconfig`(target ES2017, moduleResolution bundler)에는 제거된 옵션이 없다. `packages/types`도 함께. → **후속: typescript-eslint가 TS 7을 받으면 7로**.
+- **vitest 5·jsdom 30은 Node `^22.12 || ^24 || >=26`을 요구**한다(jsdom은 22.22.2+). 그래서 **Node 24 LTS로 통일**했다: `.nvmrc`, `apps/web` `engines`, web·e2e CI, web Docker(`node:20-alpine` → `node:24-alpine` — Node 20은 2026-04 EOL이었다). `@types/node`도 24. 모바일 CI(20)는 M1에서.
+- **jest-dom 7.0.1의 vitest 타입 확장이 vitest 5와 안 맞는다**: vitest 5의 `Assertion<R, T>`(타입 인자 2개)와 jest-dom의 `Assertion<T>`가 병합되지 않아 `toBeInTheDocument` 등이 타입에서 사라진다(런타임은 정상, `skipLibCheck`가 오류를 숨김). `src/test/jest-dom-vitest5.d.ts`로 같은 시그니처를 맞춰 덮었다 → jest-dom이 지원하면 지운다.
+
+**검증**: `tsc`(web·types), `scripts/check.sh web --full`(vitest 480 통과), web Docker 이미지를 Node 24.21로 빌드해 컨테이너에서 페이지 응답(200) 확인, CI(Node 24).
 
 ### M1. Expo SDK 52 → 58
 
@@ -216,4 +221,5 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 | B3 jjwt 0.13 | 완료 | #158 | 0.13.0. 0.12.7 토큰 호환 테스트 추가 |
 | W1 Next 16 | 완료 | #160 | 16.4.0 + ESLint 9 flat config. React Compiler 린트 74곳은 warn(후속) |
 | W2 Tailwind 4 | PR | — | 4.3.3. JS 설정 유지(@config), v3 기본값 호환 스타일, 스크린샷 18장 픽셀 일치 |
-| B4, W3, M1 | 시작 전 | — | |
+| W3 TS 6 · vitest 5 · Node 24 | PR | — | TS 7은 typescript-eslint 지원 대기. Node 24 LTS로 통일(web Docker의 EOL Node 20 교체) |
+| B4, M1 | 시작 전 | — | |

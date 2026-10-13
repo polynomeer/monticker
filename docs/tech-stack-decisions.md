@@ -78,7 +78,7 @@ monticker가 쓰는 **모든 기술**에 대해 무엇을 골랐고, 무엇과 �
 |------|------|------|-------------------|------|
 | Next.js App Router | 16.4.0 (정확히 고정, Turbopack 빌드) | 웹 프레임워크. 페이지 39개 중 35개가 `"use client"` — 사실상 클라이언트 렌더링 | 선택 근거 없음. 15.1.0 → 15.5.25는 CVE 75건(치명 5건) 해소 목적([engineering-backlog.md](engineering-backlog.md)). 16 업그레이드 경위는 [dependency-upgrade-plan.md](dependency-upgrade-plan.md) W1. `pnpm.packageExtensions`는 예전엔 `next@15.5.25` 정확한 키라 패치만 올라가도 `@types/react`가 두 벌 섞였다(#142) — 지금은 `next@16` 범위 키 | 없음 / 문서 |
 | React | 19 (web), 18.3 (mobile) | UI | 근거 없음. 한 워크스페이스에 두 메이저가 공존해 `@types/react` 팬텀 호이스트 버그가 났음([troubleshooting-casebook.md](technical/troubleshooting-casebook.md)) | 없음 |
-| TypeScript | 5.9 (web), 5.3 (mobile) | 언어 | — | 없음 |
+| TypeScript | 6.0 (web·types), 5.3 (mobile, Expo가 정함) | 언어 | 7은 typescript-eslint가 아직 받지 않아 보류 — [dependency-upgrade-plan.md](dependency-upgrade-plan.md) W3 | 없음 |
 | TanStack Query | 5 | 서버 상태, 폴링 single-flight 중복 제거 | [request-deduplication.md](technical/request-deduplication.md). SWR 등과의 비교 없음 | 문서 |
 | Zustand | 5 | 클라이언트 전용 상태 (테마·접근성·토스트) | "서버 상태를 복제하지 않는다"는 역할 규칙은 `.claude/agents/frontend-reviewer.md`. 다른 라이브러리 대비 근거 없음 | 없음 |
 | Apache ECharts (어댑터 경유) | 6.1 | 모든 차트 | lightweight-charts를 대체(`49b7d8b`). D3·Recharts·직접 Canvas는 기각. 근거로 든 (1) 라이선스, (2) 명령형 API 교체 비용 **둘 다 검증 필요** — §10 참고. 5 → 6은 XSS 수정 목적 | 문서 ([chart-adapter-pattern.md](technical/chart-adapter-pattern.md)) |
@@ -89,7 +89,7 @@ monticker가 쓰는 **모든 기술**에 대해 무엇을 골랐고, 무엇과 �
 | next-themes | 0.4 | 다크/라이트 전환 | — | 없음 |
 | STOMP (`@stomp/stompjs`) + SockJS | `>=7.0.0`, `>=1.6.1` (**상한 없는 범위**) | 실시간 시세 수신 | 순수 WebSocket 대비 재연결·라우팅·구독 수명주기, 프록시 뒤 폴백, Spring 브로커와의 정합 ([realtime-price-architecture.md](technical/realtime-price-architecture.md)) | 문서 |
 | TanStack Virtual | 3 | 스크리너 가상 스크롤 (500행 → DOM ~17개) | DOM 노드 과다([screener-virtualization.md](technical/screener-virtualization.md)). react-window 등과의 비교 없음 | 문서 |
-| Vitest + Testing Library + jsdom | Vitest 4 | 단위·컴포넌트 테스트 | — | 없음 |
+| Vitest + Testing Library + jsdom | Vitest 5, jsdom 30 (Node 24 LTS) | 단위·컴포넌트 테스트 | — | 없음 |
 | Playwright | 1.62 | E2E (실 API + Next.js) | 목 단위 테스트로 못 잡는 실제 경계 버그(CSP, 실 API)를 잡기 위함 (`playwright.config.ts` 주석, `a523f41`) | 문서 |
 | ESLint | 9, flat config(`eslint.config.mjs`, `eslint-config-next` core-web-vitals·typescript) | 린트. Next 16부터 `next build`는 린트하지 않고 `pnpm lint`(= `eslint .`)로 따로 돈다. react-hooks 7의 React Compiler 규칙은 기존 위반 때문에 warn | — | 없음 |
 | 토큰 저장 | 액세스 = localStorage, 리프레시 = HttpOnly 쿠키 (`SameSite=Lax`, `Path=/api/auth`) | 인증 | 리프레시만 쿠키로 옮김. 액세스 토큰은 TTL 15분·사용처 19곳(WebSocket 인증 포함)이라 "이득 대비 위험이 과도"하다고 판단해 보류 (`df86b22`) | 커밋 / [security-review.md](security-review.md) C2 |

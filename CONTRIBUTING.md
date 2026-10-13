@@ -27,7 +27,7 @@
 |------|------|
 | Docker Desktop | 최신 |
 | JDK | 21 |
-| Node.js | 22 (20 이상) |
+| Node.js | 24 LTS (`.nvmrc`). web의 vitest 5·jsdom 30이 22.12+/24+를 요구하고, Node 23처럼 홀수 버전은 지원 범위 밖 |
 | pnpm | 9.x (`corepack enable` 권장 — `package.json#packageManager`가 `pnpm@9.15.9`로 고정) |
 | Go | 1.22 (선택 — `--kafka` 모드) |
 
