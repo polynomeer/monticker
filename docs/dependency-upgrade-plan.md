@@ -102,29 +102,41 @@ Kotlin 컴파일러 플러그인(`plugin.spring`·`plugin.jpa`)은 `kotlin("jvm"
 
 **검증**: 인증 단위·통합 테스트, e2e 로그인 흐름(CI).
 
-### B4. Spring Boot 3.5 → 4.x
+### B4. Spring Boot 3.5 → 4.1
 
-가장 큰 트랙이다. Boot 4는 Spring Framework 7 위에 있고, 그 생태계(Data, Batch, Kafka, Security, Modulith, Integration)가 함께 메이저를 올린다. 실거래 주문 경로(ADR-055~063)가 전부 이 위에 있으므로 **B1·B2·B3를 끝내고 시작한다.**
+가장 큰 트랙이다. 실거래 주문 경로(ADR-055~063)가 전부 이 위에 있다. B0~B3·W·M을 마친 뒤 2026-10-13에 0단계(영향 조사)를 했다.
 
-0. **영향 조사 (코드 변경 전).** 아래 "확인할 것"을 하나씩 사실로 바꾸고, 막히는 의존성이 있으면 여기서 멈춘다.
-1. **막히는 의존성부터 해결한다.**
-   - **Spring Statemachine 4.0.0**: 주문 상태 머신(`matching/statemachine/OrderStateMachineConfig`)이 쓴다. Framework 7을 지원하는 릴리스가 없으면, 직접 구현으로 바꾸는 별도 PR을 먼저 머지한다. 상태 전이 표가 작아서 가능할 것으로 본다. 이 경우 대안 비교를 ADR로 남긴다.
-   - **springdoc-openapi 2.5.0**: Boot 4 대응 메이저가 필요하다. 코드 사용처(어노테이션)는 0곳이니, 쓰지 않으면 제거하는 것도 선택지다.
-   - **spring-retry**: 10개 파일이 쓴다. Framework 7에 들어온 재시도 기능으로 옮길지, 그대로 둘지 결정한다.
-   - **Modulith 1.3 → 2.x**: Boot 4 짝 버전이다. `event_publication` 스키마 변경 여부를 확인한다. 아웃박스(ADR-042·065)가 이 테이블에 의존하고, 바뀌면 Flyway 마이그레이션이 필요하다.
-2. **Jackson 2 → 3.** Boot 4의 기본 JSON이 Jackson 3라면, 직접 Jackson을 쓰는 60개 파일(`com.fasterxml.jackson` → `tools.jackson`)이 영향을 받는다. 전부 옮길지, Jackson 2 호환 모드로 먼저 올리고 나중에 옮길지 정한다(**ADR**). 어느 쪽이든 **와이어 포맷은 바뀌면 안 된다.** Kafka 메시지(`notify.user`, `search.index`, `trading.*`), Redis 캐시, API 응답이 대상이다. 직렬화 결과를 고정하는 테스트를 먼저 추가한다.
-3. **스타터 재편·설정 키 변경**을 따라간다. `application.yml`의 바뀐 키는 Boot의 properties migrator로 찾는다.
-4. **Spring Batch 6.** 잡 저장소 스키마가 바뀌는지 확인한다. 정산·결제 청소·구독 갱신 잡과 `KeysetItemReader`의 `ItemStreamReader` 계약이 대상이다.
-5. **logstash-logback-encoder 9** (#104)를 함께 올린다. Jackson 3에 맞춘 버전일 가능성이 높아 B4와 묶었다. `logback-spring.xml`의 운영 로그 필드 이름이 바뀌지 않는지 본다. 로그 기반 알람과 대시보드가 필드 이름에 의존한다.
-6. Hibernate 7 / Spring Data의 쿼리 파생·`@Query` 동작 차이. `JsonbEntityPersistenceIntegrationTest`처럼 실제 DB로 매핑을 보는 테스트가 기준이다.
+**목표 버전**: Spring Boot **4.1.1** — Framework 7.0.9, Batch 6.0.5, Kafka 4.1.1, Security 7.1.1, Integration 7.1.1, Data 2026.0.1, Hibernate 7.4.5, Flyway 12.4.0, Jackson **3.1.5**(Jackson 2 BOM 2.21.5도 계속 관리), Elasticsearch Java client **9.4.5**, JUnit Jupiter 6, Tomcat 11, Kotlin 2.3.21(B1에서 맞춤), Modulith **2.1.x**.
 
-**확인할 것**: Boot 4가 요구하는 Kotlin·Java 최저 버전(현재 Java 21이라 문제없을 것으로 본다). Jackson 3 기본 여부와 Jackson 2 호환 수단. Spring Statemachine·springdoc의 Boot 4 지원 버전. Modulith 2의 `event_publication` 스키마. Batch 6의 메타데이터 스키마. Elasticsearch 클라이언트 버전 변경 여부(2026-10-05에 서버를 클라이언트 8.18.1에 맞췄다. 클라이언트가 9.x로 가면 서버도 함께 올린다, docs/elasticsearch.md).
-**검증**:
-- `scripts/check.sh --full`, e2e-ci
-- **L-05 order-burst + 정합성 검증**(`bench/scenarios/order-burst.js`, `bench/consistency/verify.py`). 원장 드리프트 0을 유지해야 한다.
-- 카오스 CH-05(Kafka 정지)와 CH-13(PG 정지)로 아웃박스 재전송과 결과 불명 주문(ADR-056) 경로를 다시 확인한다.
-- 직렬화 고정 테스트 통과(와이어 포맷 불변).
-- 운영 배포는 카나리 → 전체. 킬 스위치(ADR-057) 런북을 준비해 둔다.
+#### 조사 결과 — 빌드는 되는데 조용히 깨지는 것(가장 위험)
+- **Flyway가 안 돈다**: Boot 4는 `spring-boot-starter-flyway`가 있어야 Flyway를 자동 구성한다. 지금처럼 `flyway-core`만 있으면 마이그레이션이 실행되지 않는다(api·worker).
+- **Batch 이력이 메모리로 간다**: `spring-boot-starter-batch`는 이제 메모리 저장소다. `spring-boot-starter-batch-jdbc`로 바꾸고 `@EnableBatchProcessing`에 `@EnableJdbcJobRepository`(또는 `JdbcDefaultBatchConfiguration`)를 둔다. 그렇지 않으면 정산·결제 청소 잡의 실행 이력이 BATCH_* 테이블에 남지 않는다.
+- **ES 클라이언트 9 vs 서버 8.18**: Elastic은 클라이언트 ≤ 서버 버전만 보장한다. 실패해도 검색이 DB 폴백으로 넘어가 드러나지 않는다(CH-04와 같은 유형). **서버를 먼저 9로** 올린다(클라이언트 8.18 → 서버 9는 REST 호환 헤더로 동작해야 하지만 확인할 것).
+
+#### 조사 결과 — 막히는 것과 반드시 할 것
+| 항목 | 결과 | 처리 |
+|---|---|---|
+| spring-statemachine 4.0.2 | **유지보수 종료·Boot 4 미지원**(저장소 archived, 5.x 없음) | **B4-1에서 제거 완료** — 순수 전이표로 교체([ADR-103](decisions/103-replace-spring-statemachine.md)) |
+| spring-retry | 저장소 archived, Boot 4.1 BOM에서 빠짐(버전 없이 선언하면 해석 실패) | 쓰는 곳은 `@RetryableTopic(backoff = @Backoff)` 5곳뿐 → Spring Kafka 4의 `backOff = @BackOff`로 바꾸고 의존성 제거. 4.1에서 `sameIntervalTopicReuseStrategy` 기본값이 바뀌었으니 재시도 토픽 이름이 KafkaTopicConfig 선언과 맞는지 확인 |
+| Modulith 1.4 → 2.1 | `event_publication`(·archive)에 `status`·`completion_attempts`·`last_resubmission_date` 컬럼 추가. api는 `ddl-auto: validate`라 없으면 기동 실패 | Flyway로 컬럼 추가(public, `worker_outbox` 둘 다). nullable 추가라 **Boot 3.5에서 먼저 넣어도 무해** |
+| Spring Batch 6 | 시퀀스 `BATCH_JOB_SEQ` → `BATCH_JOB_INSTANCE_SEQ`, 패키지 이동(`batch.item.*` → `batch.infrastructure.item.*` 등 ~19파일), `chunk(n, tx)` → `.chunk(n).transactionManager(tx)` 8곳, `JobLauncher` → `JobOperator` | 업그레이드 PR에서. 배포 전 FAILED 상태의 v5 잡 인스턴스를 정리(6은 재시작 못 함) |
+| Jackson 3 | 커스텀 직렬화기·`ObjectMapper` 빈 없음. Boot 매퍼 주입 ~26곳, 직접 만든 매퍼 ~30곳. 기본값 변경(날짜 ISO 문자열, 속성 알파벳 정렬, primitive null 거부, Kotlin StrictNullChecks) | 아래 B4-3·B4-6 |
+| 시작 starter 이름 | web → `webmvc`, aop → `aspectj`, oauth2-client → `security-oauth2-client`, + `flyway`, batch → `batch-jdbc`, 기술별 test starter | 업그레이드 PR |
+| springdoc 2.5 | 3.1.1이 Boot 4.1 기준 | 업그레이드 PR(쓰는 곳은 `OpenApiConfig` 1파일) |
+| logstash-logback-encoder 7.4 | 9.0은 Jackson 3 기반 | 업그레이드 PR(`logback-spring.xml` 필드 이름 불변 확인) |
+| 테스트 | `@MockBean` 제거 → `@MockitoBean`(4파일), `@SpringBootTest`가 MockMvc를 자동 구성하지 않음(16파일 확인) | 업그레이드 PR |
+| Hibernate 7·Flyway 12·Security 7·Integration 7 | 우리 사용 범위에서 깨지는 API는 찾지 못함(Session API 미사용, lambda DSL 사용 중) | 통합 테스트로 확인. `spring.flyway.postgresql.transactional-lock` 키가 4.1에 남았는지 확인(CONCURRENTLY 마이그레이션 6개가 의존) |
+| resilience4j 2.4·anthropic-java | 문제 없음(Jackson 2와 공존) | — |
+
+#### 작업 단위 (PR 하나씩, 위에서부터)
+- **B4-1** ✅ spring-statemachine 제거 — ADR-103. Boot 3.5에서 먼저.
+- **B4-2** Modulith v2 컬럼 Flyway 마이그레이션(Boot 3.5에서 먼저, nullable 추가).
+- **B4-3** 직렬화 결과 고정 테스트(Boot 3.5에서 먼저): Kafka 페이로드(`@Externalized` 5종 + worker 프로듀서 — 지금 `Instant`가 숫자로 나간다), `event_publication.serialized_event`·`worker_outbox`의 기존 형식 행을 새 버전이 읽는지, Redis 캐시(`@class` 타입 정보 — TTL ≤ 1시간이라 키 접두사 변경으로 끊어도 된다), Redis 문자열 키, REST 응답 표본.
+- **B4-4** Elasticsearch 서버 9로(로컬 이미지 + 운영). 클라이언트 8.18로 서버 9를 먼저 확인.
+- **B4-5** Boot 4.1 업그레이드 본체: starter 이름, Flyway·Batch-JDBC 명시, Batch 6 시퀀스 마이그레이션·패키지·API, Kafka `@BackOff`·spring-retry 제거, Modulith 2.1, springdoc 3.1, logstash 9, `@MockitoBean`. Jackson은 Boot 매퍼를 주입받는 곳만 `JsonMapper`로(B4-3 테스트가 초록이어야 한다), 직접 만든 매퍼는 그대로 둔다. Jackson 전환 방식은 **ADR**로 남긴다.
+- **B4-6** 직접 만든 Jackson 2 매퍼를 `tools.jackson`으로 한 PR씩(날짜·정렬 설정을 명시해 B4-3이 초록인 채로).
+
+**검증(B4-5)**: `scripts/check.sh --full`, e2e-ci, L-05 order-burst + 정합성 검증(원장 드리프트 0), 카오스 CH-05(Kafka 정지)·CH-13(PG 정지), B4-3 고정 테스트, 운영은 카나리 → 전체(킬 스위치 런북 준비).
 
 ---
 
@@ -232,7 +244,8 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 | B0 Gradle 9 | 완료 | #156 | 9.8.0. wrapper만 변경 |
 | B3 jjwt 0.13 | 완료 | #158 | 0.13.0. 0.12.7 토큰 호환 테스트 추가 |
 | W1 Next 16 | 완료 | #160 | 16.4.0 + ESLint 9 flat config. React Compiler 린트 74곳은 warn(후속) |
-| W2 Tailwind 4 | PR | — | 4.3.3. JS 설정 유지(@config), v3 기본값 호환 스타일, 스크린샷 18장 픽셀 일치 |
-| W3 TS 6 · vitest 5 · Node 24 | PR | — | TS 7은 typescript-eslint 지원 대기. Node 24 LTS로 통일(web Docker의 EOL Node 20 교체) |
-| M1 Expo SDK 57 | PR | — | 58은 베타라 57(정식)로. mobile-ci에 SDK 버전 검사 추가. 실기기 확인 필요 |
-| B4 | 시작 전 | — | |
+| W2 Tailwind 4 | 완료 | #207 | 4.3.3. JS 설정 유지(@config), v3 기본값 호환 스타일, 스크린샷 18장 픽셀 일치 |
+| W3 TS 6 · vitest 5 · Node 24 | 완료 | #208 | TS 7은 typescript-eslint 지원 대기. Node 24 LTS로 통일(web Docker의 EOL Node 20 교체) |
+| M1 Expo SDK 57 | 완료 | #209 | 58은 베타라 57(정식)로. mobile-ci에 SDK 버전 검사 추가. 실기기 확인 필요 |
+| B4-1 statemachine 제거 | PR | — | ADR-103. 50조합 동작 일치 |
+| B4-2~6 | 시작 전 | — | 위 작업 단위 |
