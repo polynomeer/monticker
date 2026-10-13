@@ -4,11 +4,10 @@
     "slug": "monticker",
     "version": "0.1.0",
     "orientation": "portrait",
-    "platforms": ["ios", "android"],
-    "notification": {
-      "icon": "./assets/notification-icon.png",
-      "androidMode": "default"
-    },
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "android": {
       "package": "com.augboot.monticker",
       "adaptiveIcon": {
@@ -21,7 +20,12 @@
     },
     "plugins": [
       "expo-router",
-      "expo-notifications"
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png"
+        }
+      ]
     ]
   }
 }

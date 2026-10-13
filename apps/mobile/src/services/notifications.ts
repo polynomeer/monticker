@@ -6,7 +6,9 @@ import { getApiBase } from "./api";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    // SDK 53+: shouldShowAlert(deprecated)를 배너·알림 목록 두 가지로 나눴다 — 예전 true와 같게 둘 다 켠다.
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),
