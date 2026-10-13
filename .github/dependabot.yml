@@ -20,8 +20,6 @@ updates:
     ignore:
       - dependency-name: "eslint"               # W1 후속 — 9로 올렸다. 10은 eslint-config-next·플러그인 호환 확인 후
         update-types: ["version-update:semver-major"]
-      - dependency-name: "tailwindcss"          # W2
-        update-types: ["version-update:semver-major"]
       - dependency-name: "typescript"           # W3
         update-types: ["version-update:semver-major"]
       - dependency-name: "vitest"               # W3
