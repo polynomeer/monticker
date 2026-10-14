@@ -19,7 +19,7 @@
     "@phosphor-icons/react": "^2.1.10",
     "@stomp/stompjs": ">=7.0.0",
     "@tanstack/react-query": "^5.104.1",
-    "@tanstack/react-virtual": "^3.14.13",
+    "@tanstack/react-virtual": "^3.14.15",
     "@tosspayments/tosspayments-sdk": "^2.9.0",
     "clsx": "^2.1.1",
     "echarts": "^6.1.0",
