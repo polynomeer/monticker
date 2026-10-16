@@ -1,6 +1,6 @@
 package com.monticker.worker.kafka
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.worker.common.WireJson
 import com.monticker.worker.marketdata.GeneratedTick
 import jakarta.annotation.PreDestroy
 import org.apache.kafka.clients.producer.KafkaProducer
@@ -37,7 +37,7 @@ class TickKafkaProducer(
     @Value("\${kafka.brokers:localhost:9092}") brokers: String,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val objectMapper = ObjectMapper().findAndRegisterModules()
+    private val objectMapper = WireJson.mapper
 
     private val producer = KafkaProducer<String, String>(
         Properties().apply {

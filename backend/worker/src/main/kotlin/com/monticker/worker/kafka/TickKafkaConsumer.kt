@@ -1,7 +1,7 @@
 package com.monticker.worker.kafka
 
+import com.monticker.worker.common.WireJson
 import io.micrometer.core.instrument.MeterRegistry
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.worker.alert.TickProcessedEvent
 import com.monticker.worker.detector.EventDetector
 import com.monticker.worker.marketdata.CandleAggregator
@@ -62,7 +62,7 @@ class TickKafkaConsumer(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     init { meterRegistry.counter("dlt_messages_total", "topic", "market.ticks") }   // 0으로 미리 등록 — DltMessagesGrowing이 처음부터 검증 가능
-    private val objectMapper = ObjectMapper().findAndRegisterModules()
+    private val objectMapper = WireJson.mapper
 
     // role=event 에서만 Bean이 존재한다.
     // role=all 에서는 null — Spring Event가 AlertEvaluator에 전파한다.

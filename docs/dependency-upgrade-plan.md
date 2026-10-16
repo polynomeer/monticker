@@ -132,6 +132,9 @@ Kotlin 컴파일러 플러그인(`plugin.spring`·`plugin.jpa`)은 `kotlin("jvm"
 - **B4-1** ✅ spring-statemachine 제거 — ADR-103. Boot 3.5에서 먼저.
 - **B4-2** ✅ Modulith v2 컬럼 Flyway 마이그레이션(V101, Boot 3.5에서 먼저, nullable 추가). **값 채우기는 필요 없다**: Modulith 2.1.1 소스의 재전송 쿼리가 `status = FAILED or (status is null and completionDate is null)`이라 마이그레이션 전에 쓰인 미완료 행도 집는다. B4-5에서 볼 것: 2.x의 `resubmitIncompletePublicationsOlderThan`이 처리 중(PUBLISHED) 행을 어떻게 다루는지(Staleness Monitor가 오래된 행을 FAILED로 표시한다) — `OutboxResubmissionConfig`와 맞춰야 한다.
 - **B4-3** 직렬화 결과 고정 테스트(Boot 3.5에서 먼저): Kafka 페이로드(`@Externalized` 5종 + worker 프로듀서 — 지금 `Instant`가 숫자로 나간다), `event_publication.serialized_event`·`worker_outbox`의 기존 형식 행을 새 버전이 읽는지, Redis 캐시(`@class` 타입 정보 — TTL ≤ 1시간이라 키 접두사 변경으로 끊어도 된다), Redis 문자열 키, REST 응답 표본.
+  - ✅ 고정 완료: `backend/worker/.../common/WireFormatGoldenTest`(worker 프로듀서 6종 — 직접 만든 매퍼를 `WireJson.mapper` 하나로 모았다), `backend/api/.../common/WireFormatGoldenTest`(Boot 매퍼로 쓰는 `@Externalized` 이벤트, worker·Go 틱과 Redis 시세를 api가 읽는 경로), `services/market-gateway/internal/tick/tick_test.go`(Go 틱, 새 `gateway-ci`). 같은 JSON 문자열을 생산자·소비자 양쪽 테스트에 둔다.
+  - 고정하며 확인한 지금 형식: worker는 `Instant`를 초.나노초 **숫자**로, api(Boot 매퍼)와 Go는 ISO **문자열**로 쓴다 — 소비자는 둘 다 읽는다. Go 틱엔 `marketStatus`가 없다(api는 null → 조건부 주문 미발동, ADR-055). Redis 시세는 Map으로 읽어 가격 소수 자릿수가 줄어든다(71200.50 → 71200.5).
+  - Redis 캐시(`@class` 타입 정보)는 테스트로 고정하지 않는다 — B4-5 배포 때 캐시 키 접두사를 바꿔 끊는다(TTL ≤ 1시간).
 - **B4-4** Elasticsearch 서버 9로(로컬 이미지 + 운영). 클라이언트 8.18로 서버 9를 먼저 확인.
 - **B4-5** Boot 4.1 업그레이드 본체: starter 이름, Flyway·Batch-JDBC 명시, Batch 6 시퀀스 마이그레이션·패키지·API, Kafka `@BackOff`·spring-retry 제거, Modulith 2.1, springdoc 3.1, logstash 9, `@MockitoBean`. Jackson은 Boot 매퍼를 주입받는 곳만 `JsonMapper`로(B4-3 테스트가 초록이어야 한다), 직접 만든 매퍼는 그대로 둔다. Jackson 전환 방식은 **ADR**로 남긴다.
 - **B4-6** 직접 만든 Jackson 2 매퍼를 `tools.jackson`으로 한 PR씩(날짜·정렬 설정을 명시해 B4-3이 초록인 채로).
@@ -247,6 +250,7 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 | W2 Tailwind 4 | 완료 | #207 | 4.3.3. JS 설정 유지(@config), v3 기본값 호환 스타일, 스크린샷 18장 픽셀 일치 |
 | W3 TS 6 · vitest 5 · Node 24 | 완료 | #208 | TS 7은 typescript-eslint 지원 대기. Node 24 LTS로 통일(web Docker의 EOL Node 20 교체) |
 | M1 Expo SDK 57 | 완료 | #209 | 58은 베타라 57(정식)로. mobile-ci에 SDK 버전 검사 추가. 실기기 확인 필요 |
-| B4-1 statemachine 제거 | PR | — | ADR-103. 50조합 동작 일치 |
-| B4-2 Modulith v2 컬럼 | PR | — | V101, nullable 추가·backfill 불필요(소스 확인) |
-| B4-3~6 | 시작 전 | — | 위 작업 단위 |
+| B4-1 statemachine 제거 | 완료 | #213 | ADR-103. 50조합 동작 일치 |
+| B4-2 Modulith v2 컬럼 | 완료 | #223 | V101, nullable 추가·backfill 불필요(소스 확인) |
+| B4-3 직렬화 고정 테스트 | PR | #225 | worker·api·Go 양쪽에 같은 JSON 고정, gateway-ci 신설 |
+| B4-4~6 | 시작 전 | — | 위 작업 단위. B4-4(ES 9 서버)는 운영 일정 필요 |

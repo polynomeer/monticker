@@ -1,0 +1,30 @@
+name: gateway-ci
+
+# Go market-gateway. market.ticks 와이어 형식은 Go(이 서비스)와 Kotlin(worker·api 컨슈머)이 스키마 레지스트리 없이
+# 문자열로 맞춘다 — internal/tick/tick_test.go와 backend/worker WireFormatGoldenTest가 같은 JSON을 양쪽에서 고정한다.
+on:
+  pull_request:
+    paths:
+      - "services/market-gateway/**"
+      - ".github/workflows/gateway-ci.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: services/market-gateway
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: services/market-gateway/go.mod
+          cache-dependency-path: services/market-gateway/go.sum
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
