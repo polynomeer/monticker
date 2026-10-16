@@ -5,6 +5,9 @@ on:
     paths:
       - "apps/web/**"
       - "packages/**"
+      - "pnpm-lock.yaml"
+      - "package.json"
+      - "pnpm-workspace.yaml"
       - ".github/workflows/web-ci.yml"
 
 jobs:
