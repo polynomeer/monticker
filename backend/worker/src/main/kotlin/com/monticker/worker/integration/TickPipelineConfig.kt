@@ -1,7 +1,7 @@
 package com.monticker.worker.integration
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.worker.alert.TickProcessedEvent
+import com.monticker.worker.common.WireJson
 import com.monticker.worker.detector.EventDetector
 import com.monticker.worker.marketdata.CandleAggregator
 import com.monticker.worker.marketdata.GeneratedTick
@@ -63,7 +63,7 @@ class TickPipelineConfig(
     @Value("\${spring.kafka.bootstrap-servers:localhost:9092}") private val bootstrapServers: String,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val objectMapper = ObjectMapper().findAndRegisterModules()
+    private val objectMapper = WireJson.mapper
 
     // ── 채널 정의 ──────────────────────────────────────────────────────────────
 

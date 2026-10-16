@@ -1,7 +1,7 @@
 package com.monticker.worker.kafka
 
+import com.monticker.worker.common.WireJson
 import io.micrometer.core.instrument.MeterRegistry
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.worker.alert.AlertEvaluator
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.slf4j.LoggerFactory
@@ -26,7 +26,7 @@ class AlertKafkaConsumer(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     init { meterRegistry.counter("dlt_messages_total", "topic", TICK_PROCESSED_TOPIC) }   // 0으로 미리 등록 — DltMessagesGrowing이 처음부터 검증 가능
-    private val objectMapper = ObjectMapper().findAndRegisterModules()
+    private val objectMapper = WireJson.mapper
 
     @RetryableTopic(
         attempts = "3",

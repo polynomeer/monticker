@@ -1,6 +1,6 @@
 package com.monticker.worker.summary
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.worker.common.WireJson
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.clients.producer.ProducerRecord
@@ -39,7 +39,7 @@ class MarketSummaryPublisher(
     @Value("\${kafka.brokers:localhost:9092}") brokers: String,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val objectMapper = ObjectMapper().findAndRegisterModules()
+    private val objectMapper = WireJson.mapper
     private val producer = KafkaProducer<String, String>(Properties().apply {
         put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, brokers)
         put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer::class.java)

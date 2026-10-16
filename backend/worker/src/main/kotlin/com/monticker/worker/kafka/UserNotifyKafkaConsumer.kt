@@ -1,6 +1,6 @@
 package com.monticker.worker.kafka
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.worker.common.WireJson
 import com.monticker.worker.notification.UserNotificationDispatcher
 import com.monticker.worker.notification.UserNotificationMessage
 import io.micrometer.core.instrument.MeterRegistry
@@ -30,7 +30,7 @@ class UserNotifyKafkaConsumer(
     private val log = LoggerFactory.getLogger(javaClass)
     init { meterRegistry.counter("dlt_messages_total", "topic", NOTIFY_USER_TOPIC) }   // 0으로 미리 등록 — DltMessagesGrowing이 처음부터 검증 가능
     // 모르는 필드는 무시한다 — api가 와이어에 필드를 더해도(ADR-082 category처럼) 이 소비자가 메시지를 DLT로 버리지 않게.
-    private val objectMapper = ObjectMapper().findAndRegisterModules()
+    private val objectMapper = WireJson.mapper
         .configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
 
     @RetryableTopic(

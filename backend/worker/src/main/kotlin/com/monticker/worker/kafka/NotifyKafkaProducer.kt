@@ -1,7 +1,7 @@
 package com.monticker.worker.kafka
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.worker.alert.AlertRuleRow
+import com.monticker.worker.common.WireJson
 import io.micrometer.core.instrument.MeterRegistry
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerConfig
@@ -36,7 +36,7 @@ class NotifyKafkaProducer(
     meterRegistry: MeterRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val objectMapper = ObjectMapper().findAndRegisterModules()
+    private val objectMapper = WireJson.mapper
     private val failed = meterRegistry.counter("alert_notify_publish_failed_total")
     private val producer = KafkaProducer<String, String>(Properties().apply {
         put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, brokers)
