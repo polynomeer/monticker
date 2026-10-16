@@ -10,6 +10,9 @@ on:
       - "backend/api/**"
       - "apps/web/**"
       - "packages/**"
+      - "pnpm-lock.yaml"
+      - "package.json"
+      - "pnpm-workspace.yaml"
       - ".github/workflows/e2e-ci.yml"
 
 jobs:
