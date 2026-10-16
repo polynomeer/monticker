@@ -5,10 +5,12 @@ on:
     paths:
       - "apps/mobile/**"
       - "packages/types/**"
+      - ".github/workflows/mobile-ci.yml"
   pull_request:
     paths:
       - "apps/mobile/**"
       - "packages/types/**"
+      - ".github/workflows/mobile-ci.yml"
 
 jobs:
   typecheck:
