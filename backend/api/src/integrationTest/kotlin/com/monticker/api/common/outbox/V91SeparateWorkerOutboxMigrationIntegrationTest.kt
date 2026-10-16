@@ -62,7 +62,9 @@ class V91SeparateWorkerOutboxMigrationIntegrationTest : PostgresIntegrationTest(
         jdbc.update(insert, workerDone, workerType, """{"docId":"3"}""", "2 days", "2026-10-01T00:00:00Z")
         jdbc.update(insert, apiStuck, apiType, """{"userId":42}""", "3 hours", null)
 
-        migrate(ds, null)
+        // V91까지만 — 뒤 마이그레이션(V101: Modulith v2 컬럼)이 같은 테이블에 컬럼을 더하므로 "V91이 구조를 안 바꾼다"는
+        // 단언은 V91 시점에서 본다.
+        migrate(ds, "91")
 
         assertThat(jdbc.queryForList("SELECT id FROM event_publication", UUID::class.java))
             // 막 기록된(1분 미만) worker 행은 구버전 worker가 지금 완료 표시할 수 있어 남긴다 — 새 worker의 LegacyOutboxDrain이 옮긴다

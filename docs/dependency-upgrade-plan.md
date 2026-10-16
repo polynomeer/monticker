@@ -130,7 +130,7 @@ Kotlin 컴파일러 플러그인(`plugin.spring`·`plugin.jpa`)은 `kotlin("jvm"
 
 #### 작업 단위 (PR 하나씩, 위에서부터)
 - **B4-1** ✅ spring-statemachine 제거 — ADR-103. Boot 3.5에서 먼저.
-- **B4-2** Modulith v2 컬럼 Flyway 마이그레이션(Boot 3.5에서 먼저, nullable 추가).
+- **B4-2** ✅ Modulith v2 컬럼 Flyway 마이그레이션(V101, Boot 3.5에서 먼저, nullable 추가). **값 채우기는 필요 없다**: Modulith 2.1.1 소스의 재전송 쿼리가 `status = FAILED or (status is null and completionDate is null)`이라 마이그레이션 전에 쓰인 미완료 행도 집는다. B4-5에서 볼 것: 2.x의 `resubmitIncompletePublicationsOlderThan`이 처리 중(PUBLISHED) 행을 어떻게 다루는지(Staleness Monitor가 오래된 행을 FAILED로 표시한다) — `OutboxResubmissionConfig`와 맞춰야 한다.
 - **B4-3** 직렬화 결과 고정 테스트(Boot 3.5에서 먼저): Kafka 페이로드(`@Externalized` 5종 + worker 프로듀서 — 지금 `Instant`가 숫자로 나간다), `event_publication.serialized_event`·`worker_outbox`의 기존 형식 행을 새 버전이 읽는지, Redis 캐시(`@class` 타입 정보 — TTL ≤ 1시간이라 키 접두사 변경으로 끊어도 된다), Redis 문자열 키, REST 응답 표본.
   - ✅ 고정 완료: `backend/worker/.../common/WireFormatGoldenTest`(worker 프로듀서 6종 — 직접 만든 매퍼를 `WireJson.mapper` 하나로 모았다), `backend/api/.../common/WireFormatGoldenTest`(Boot 매퍼로 쓰는 `@Externalized` 이벤트, worker·Go 틱과 Redis 시세를 api가 읽는 경로), `services/market-gateway/internal/tick/tick_test.go`(Go 틱, 새 `gateway-ci`). 같은 JSON 문자열을 생산자·소비자 양쪽 테스트에 둔다.
   - 고정하며 확인한 지금 형식: worker는 `Instant`를 초.나노초 **숫자**로, api(Boot 매퍼)와 Go는 ISO **문자열**로 쓴다 — 소비자는 둘 다 읽는다. Go 틱엔 `marketStatus`가 없다(api는 null → 조건부 주문 미발동, ADR-055). Redis 시세는 Map으로 읽어 가격 소수 자릿수가 줄어든다(71200.50 → 71200.5).
@@ -243,7 +243,7 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 | (선행) react-query packageExtensions 범위화 | 완료 | #117 | 고정 버전 키 때문에 타입 검사가 깨졌던 것 |
 | (선행) dependabot ignore·groups | 완료 | #130 | §5 |
 | B2 Testcontainers 2 | 완료 | #143 | 2.0.5. 위 확인 결과 참고 |
-| B1 Kotlin 2 | 완료 | #154 | 2.3.21 (Boot 4.1 BOM과 같은 버전) |
+| B1 Kotlin 2 | 완료 | #154 | 2.3.21로 올렸고, 이후 dependabot Kotlin 그룹(minor)으로 2.4.x가 됐다(Boot 4.1 BOM은 2.3.21 — B4-5에서 Boot 플러그인이 플러그인 버전을 따르므로 문제 없음) |
 | B0 Gradle 9 | 완료 | #156 | 9.8.0. wrapper만 변경 |
 | B3 jjwt 0.13 | 완료 | #158 | 0.13.0. 0.12.7 토큰 호환 테스트 추가 |
 | W1 Next 16 | 완료 | #160 | 16.4.0 + ESLint 9 flat config. React Compiler 린트 74곳은 warn(후속) |
@@ -251,4 +251,5 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 | W3 TS 6 · vitest 5 · Node 24 | 완료 | #208 | TS 7은 typescript-eslint 지원 대기. Node 24 LTS로 통일(web Docker의 EOL Node 20 교체) |
 | M1 Expo SDK 57 | 완료 | #209 | 58은 베타라 57(정식)로. mobile-ci에 SDK 버전 검사 추가. 실기기 확인 필요 |
 | B4-1 statemachine 제거 | PR | — | ADR-103. 50조합 동작 일치 |
-| B4-2~6 | 시작 전 | — | 위 작업 단위 |
+| B4-2 Modulith v2 컬럼 | PR | — | V101, nullable 추가·backfill 불필요(소스 확인) |
+| B4-3~6 | 시작 전 | — | 위 작업 단위 |
