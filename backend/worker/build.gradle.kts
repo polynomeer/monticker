@@ -1,9 +1,9 @@
 plugins {
-	kotlin("jvm") version "2.4.20"
-	kotlin("plugin.spring") version "2.4.20"
+	kotlin("jvm") version "2.4.21"
+	kotlin("plugin.spring") version "2.4.21"
 	id("org.springframework.boot") version "3.5.16"
 	id("io.spring.dependency-management") version "1.1.7"
-	kotlin("plugin.jpa") version "2.4.20"
+	kotlin("plugin.jpa") version "2.4.21"
 }
 
 dependencyManagement {
@@ -56,7 +56,7 @@ dependencies {
 	implementation("org.flywaydb:flyway-database-postgresql")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	implementation("com.google.guava:guava:33.7.2-jre")
-	implementation("com.anthropic:anthropic-java:2.68.0")
+	implementation("com.anthropic:anthropic-java:2.71.0")
 	implementation("org.springframework.boot:spring-boot-starter-mail")
 	runtimeOnly("org.postgresql:postgresql")
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
