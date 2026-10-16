@@ -5,10 +5,12 @@ on:
     paths:
       - "apps/mobile/**"
       - "packages/types/**"
+      - ".github/workflows/mobile-ci.yml"
   pull_request:
     paths:
       - "apps/mobile/**"
       - "packages/types/**"
+      - ".github/workflows/mobile-ci.yml"
 
 jobs:
   typecheck:
@@ -35,9 +37,13 @@ jobs:
 
       # Expo SDK는 RN·React·expo-* 버전을 한 세트로 고정한다. 워크스페이스가 lockfile 하나라 dependabot의 react 그룹이
       # 웹과 함께 모바일 React를 SDK 밖 버전으로 올릴 수 있다 — 설치된 버전이 SDK와 다르면 여기서 실패한다.
+      # EXPO_OFFLINE: 온라인이면 Expo 서버의 "그 SDK 최신 패치"와 비교해 Expo가 패치(57.0.29 → 57.0.30)를 낼 때마다
+      # 아무것도 안 바꾼 PR까지 실패했다(2026-10-14). 오프라인은 설치된 expo의 bundledNativeModules 기준이라
+      # SDK가 허용하는 범위를 벗어난 버전(예: react 19.3 on SDK 57)만 잡는다.
       - name: Expo SDK version check
         env:
           CI: "1"
+          EXPO_OFFLINE: "1"
         run: pnpm exec expo install --check
 
       - name: Audit dependencies (high+ severity, apps/mobile scope)

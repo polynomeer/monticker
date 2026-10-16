@@ -36,6 +36,12 @@ updates:
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "react-native"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # Expo SDK가 버전을 고정하는 나머지 패키지. 처음엔 expo-*·react-native만 막아 react-native-screens·
+      # safe-area-context·@expo/metro-runtime이 SDK 밖 버전으로 올라왔다(#211 #212 #215 — mobile-ci가 막았다).
+      - dependency-name: "react-native-*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "@expo/*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       # react 메이저는 웹·모바일(Expo SDK가 고정)을 함께 봐야 한다. minor·patch도 모바일은 SDK 밖으로 나가면 안 되는데,
       # 그건 mobile-ci의 expo install --check가 잡는다.
       - dependency-name: "react"
