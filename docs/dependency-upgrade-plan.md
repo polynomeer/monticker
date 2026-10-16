@@ -250,6 +250,7 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 | W2 Tailwind 4 | 완료 | #207 | 4.3.3. JS 설정 유지(@config), v3 기본값 호환 스타일, 스크린샷 18장 픽셀 일치 |
 | W3 TS 6 · vitest 5 · Node 24 | 완료 | #208 | TS 7은 typescript-eslint 지원 대기. Node 24 LTS로 통일(web Docker의 EOL Node 20 교체) |
 | M1 Expo SDK 57 | 완료 | #209 | 58은 베타라 57(정식)로. mobile-ci에 SDK 버전 검사 추가. 실기기 확인 필요 |
-| B4-1 statemachine 제거 | PR | — | ADR-103. 50조합 동작 일치 |
-| B4-2 Modulith v2 컬럼 | PR | — | V101, nullable 추가·backfill 불필요(소스 확인) |
-| B4-3~6 | 시작 전 | — | 위 작업 단위 |
+| B4-1 statemachine 제거 | 완료 | #213 | ADR-103. 50조합 동작 일치 |
+| B4-2 Modulith v2 컬럼 | 완료 | #223 | V101, nullable 추가·backfill 불필요(소스 확인) |
+| B4-3 직렬화 고정 테스트 | PR | #225 | worker·api·Go 양쪽에 같은 JSON 고정, gateway-ci 신설 |
+| B4-4~6 | 시작 전 | — | 위 작업 단위. B4-4(ES 9 서버)는 운영 일정 필요 |
