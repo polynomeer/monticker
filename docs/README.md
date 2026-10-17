@@ -77,12 +77,13 @@ monticker의 모든 문서를 **독자별 · 주제별**로 정리한 색인입�
 | [data-model.md](data-model.md) | PostgreSQL/TimescaleDB 전체 스키마, Redis 키 규칙 |
 | [elasticsearch.md](elasticsearch.md) | ES 인덱스 6개·도메인 8개 적용 현황, 파이프라인, DB 폴백 |
 | [external-apis.md](external-apis.md) | 시세·뉴스·공시·AI 외부 API 후보와 설정 |
-| [decisions/](decisions/) | ADR 001~104. 형식과 작성 규칙은 [../CLAUDE.md](../CLAUDE.md#architecture-decision-records-adrs) |
+| [decisions/](decisions/) | ADR 001~105. 형식과 작성 규칙은 [../CLAUDE.md](../CLAUDE.md#architecture-decision-records-adrs) |
 
 **ADR 빠른 지도**
 
 | 범위 | ADR |
 |------|-----|
+| 제품 방향 | [105 핵심 사용자·정체성 재정의 (검증 전 가설)](decisions/105-target-user-and-core-loop-redefinition.md) · [023 상용화 전환](decisions/023-commercialization-pivot.md) |
 | 구조 | [001 모듈러 모놀리스](decisions/001-modular-monolith.md) · [019 Modulith 경계 규약](decisions/019-spring-modulith-boundary-conventions.md) · [009 K8s 서비스 디스커버리](decisions/009-kubernetes-service-discovery-nginx-gateway.md) · [048](decisions/048-retire-trading-service.md)/[049](decisions/049-retire-quant-engine.md) MSA 서비스 폐기 · [064 초기 스택 근거(사후 재구성)](decisions/064-initial-stack-rationale.md) |
 | 데이터 | [002 TimescaleDB](decisions/002-timescaledb.md) · [003 stock_events 중심](decisions/003-stock-events-central.md) · [021 일봉 실시간 upsert](decisions/021-candles-1d-realtime-upsert.md) · [041 hypertable 승격](decisions/041-timescale-hypertable-promotion.md) · [042 Outbox 기반 ES 색인](decisions/042-outbox-based-es-indexing.md) · [071 지수·환율 시세(Mock 공급자·모의 표시)](decisions/071-market-index-quotes.md) · [072 스크리너 조건·저장 스크린·장중 시계열](decisions/072-screener-criteria-and-saved-screens.md) · [076 3분·15분·1시간 봉 조회 시점 집계](decisions/076-intraday-candle-buckets-at-query-time.md) · [086 KRX 거래일 캘린더·정산일 재정렬](decisions/086-krx-trading-calendar.md) · [087 이벤트·섹터 집계(조회 시점 SQL + 캐시)](decisions/087-event-and-sector-aggregates-at-query-time.md) · [088 관심종목 순서(그룹 행 잠금 + 재번호)](decisions/088-watchlist-order-group-row-lock.md) |
 | 메시징·실시간 | [004 Redis Streams vs Kafka](decisions/004-redis-streams-over-kafka.md) · [005 Kafka + Go 게이트웨이](decisions/005-kafka-go-gateway-netty-broadcast.md) · [006 DLT 재시도](decisions/006-kafka-dlt-retry-strategy.md) · [008 Outbox](decisions/008-outbox-pattern-spring-modulith.md) · [029 시세 브로드캐스트](decisions/029-price-broadcast-pipeline.md) · [030 KIS](decisions/030-kis-realtime-tick-ingestion.md)/[031 Toss](decisions/031-toss-realtime-tick-ingestion.md) 실시간 체결가 · [033 Netty 게이트웨이 제거](decisions/033-remove-netty-broadcast-gateway.md) · [038 파티션 배정](decisions/038-broadcast-consumer-partition-assignment.md) · [039 전역 토픽 제거](decisions/039-drop-global-market-topic.md) · [040 토픽 선언](decisions/040-kafka-topic-declaration.md) · [050 부하테스트 기반 기본값](decisions/050-realtime-pipeline-defaults-from-load-tests.md) · [094 api·worker Outbox 테이블 분리](decisions/094-separate-outbox-tables-per-app.md) · [104 Boot 4 전환: Jackson 3(Jackson 2 기본값)·Modulith 2 아웃박스 상태 이행](decisions/104-jackson3-with-jackson2-defaults-and-outbox-status.md) |
