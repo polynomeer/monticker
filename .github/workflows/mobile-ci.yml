@@ -5,11 +5,15 @@ on:
     paths:
       - "apps/mobile/**"
       - "packages/types/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       - ".github/workflows/mobile-ci.yml"
   pull_request:
     paths:
       - "apps/mobile/**"
       - "packages/types/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       - ".github/workflows/mobile-ci.yml"
 
 jobs:

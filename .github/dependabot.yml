@@ -120,6 +120,10 @@ updates:
     directory: "/apps/web"
     schedule:
       interval: "weekly"
+    ignore:
+      # Node 메이저는 .nvmrc(지금 24 LTS)와 함께 수동으로 올린다. 홀수 메이저(25 등)는 LTS가 되지 않는다(#218)
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "docker"
     directory: "/services/market-gateway"
     schedule:
