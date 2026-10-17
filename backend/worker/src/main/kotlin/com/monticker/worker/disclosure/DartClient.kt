@@ -1,7 +1,7 @@
 package com.monticker.worker.disclosure
 
 import com.monticker.worker.common.HttpTimeouts
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.worker.common.PlainJson
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import org.slf4j.LoggerFactory
@@ -31,7 +31,7 @@ class DartClient(
     private val log = LoggerFactory.getLogger(javaClass)
     private val cb = cbRegistry.circuitBreaker("dartApi")
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
-    private val mapper = ObjectMapper()
+    private val mapper = PlainJson.mapper
     private val dateFmt = DateTimeFormatter.ofPattern("yyyyMMdd")
 
     val isConfigured: Boolean get() = apiKey.isNotBlank()
@@ -71,21 +71,26 @@ class DartClient(
             return emptyList()
         }
 
-        val root = mapper.readTree(res.body())
-        if (root["status"]?.asText() != "000") {
-            log.warn("DART API non-ok status: {}", root["message"]?.asText())
+        return parseList(res.body())
+    }
+
+    /** 응답 본문 → 공시 목록. 테스트가 실제 응답 모양으로 고정한다(B4-6) */
+    internal fun parseList(body: String): List<DartDisclosure> {
+        val root = mapper.readTree(body)
+        if (root["status"]?.asString("") != "000") {
+            log.warn("DART API non-ok status: {}", root["message"]?.asString(""))
             return emptyList()
         }
 
         return root["list"]?.mapNotNull { item ->
-            val stockCode = item["stock_code"]?.asText()?.trim() ?: return@mapNotNull null
+            val stockCode = item["stock_code"]?.asString("")?.trim() ?: return@mapNotNull null
             if (stockCode.isBlank()) return@mapNotNull null
             DartDisclosure(
-                rceptNo    = item["rcept_no"]?.asText() ?: "",
-                corpName   = item["corp_name"]?.asText() ?: "",
+                rceptNo    = item["rcept_no"]?.asString("") ?: "",
+                corpName   = item["corp_name"]?.asString("") ?: "",
                 stockCode  = stockCode,
-                reportName = item["report_nm"]?.asText() ?: "",
-                rceptDate  = item["rcept_dt"]?.asText() ?: "",
+                reportName = item["report_nm"]?.asString("") ?: "",
+                rceptDate  = item["rcept_dt"]?.asString("") ?: "",
             )
         } ?: emptyList()
     }

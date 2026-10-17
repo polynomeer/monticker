@@ -1,6 +1,6 @@
 package com.monticker.worker.toss
 
-import com.fasterxml.jackson.databind.JsonNode
+import tools.jackson.databind.JsonNode
 import com.monticker.worker.kafka.TickKafkaProducer
 import com.monticker.worker.marketdata.GeneratedTick
 import com.monticker.worker.marketdata.MarketSchedule
@@ -34,13 +34,13 @@ class TossExecutionTickHandler(
         val symbol = parts[2]
         val target = coverage.bySymbol[symbol] ?: return
 
-        val price = data["price"]?.asText()?.toBigDecimalOrNull()
+        val price = data["price"]?.asString("")?.toBigDecimalOrNull()
         if (price == null) {
             log.warn("Toss trade 가격 파싱 실패: symbol={} raw={}", symbol, data["price"])
             return
         }
-        val volume = data["volume"]?.asText()?.toLongOrNull() ?: 0L
-        val tradeTime = parseTradeTime(data["timestamp"]?.asText())
+        val volume = data["volume"]?.asString("")?.toLongOrNull() ?: 0L
+        val tradeTime = parseTradeTime(data["timestamp"]?.asString(""))
 
         producer.publish(
             GeneratedTick(

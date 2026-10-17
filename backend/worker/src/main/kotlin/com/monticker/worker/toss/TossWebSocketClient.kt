@@ -1,6 +1,6 @@
 package com.monticker.worker.toss
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.worker.common.PlainJson
 import org.slf4j.LoggerFactory
 import java.net.URI
 import java.net.http.HttpClient
@@ -26,7 +26,7 @@ class TossWebSocketClient(
     private val wsUrl: String,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val mapper = ObjectMapper()
+    private val mapper = PlainJson.mapper
 
     private val wsRef = AtomicReference<WebSocket?>()
     private val connected = AtomicBoolean(false)
@@ -97,7 +97,7 @@ class TossWebSocketClient(
 
 // ── Shared helpers ─────────────────────────────────────────────────────────────
 
-private val declareMessageMapper = ObjectMapper()
+private val declareMessageMapper = PlainJson.mapper
 
 private fun buildDeclareMessage(channel: String, codes: List<String>): String =
     declareMessageMapper.writeValueAsString(listOf(mapOf("type" to channel, "codes" to codes)))
@@ -112,7 +112,7 @@ private class TossWebSocketListener(
 ) : WebSocket.Listener {
 
     private val log = LoggerFactory.getLogger(javaClass)
-    private val mapper = ObjectMapper()
+    private val mapper = PlainJson.mapper
     private val sb = StringBuilder()
 
     override fun onOpen(webSocket: WebSocket) {
@@ -148,13 +148,13 @@ private class TossWebSocketListener(
     private fun handleMessage(raw: String) {
         try {
             val root = mapper.readTree(raw)
-            val type = root["type"]?.asText()
+            val type = root["type"]?.asString("")
             if (type != "message") {
                 // control 프레임(구독 ack, rate-limit-exceeded 등) — 별도 처리 없이 로그만 남긴다.
                 log.debug("Toss WebSocket[{}] non-data message: {}", label, raw.take(200))
                 return
             }
-            val topic = root["topic"]?.asText() ?: return
+            val topic = root["topic"]?.asString("") ?: return
             val channel = topic.substringBefore(":")
             val handler = handlersByChannel[channel] ?: return
             val data = root["data"] ?: return

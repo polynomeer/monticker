@@ -1,7 +1,7 @@
 package com.monticker.worker.kis
 
 import com.monticker.worker.common.HttpTimeouts
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.worker.common.PlainJson
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -48,7 +48,7 @@ class KisClient(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
-    private val mapper = ObjectMapper()
+    private val mapper = PlainJson.mapper
     private val BASE = "https://openapi.koreainvestment.com:9443"
 
     val isConfigured: Boolean get() = appKey.isNotBlank() && appSecret.isNotBlank()
@@ -84,9 +84,9 @@ class KisClient(
                 return null
             }
             val root = mapper.readTree(res.body())
-            val token = root["access_token"]?.asText() ?: return null
+            val token = root["access_token"]?.asString("") ?: return null
             accessToken = token
-            tokenExpiry = Instant.now().plusSeconds(root["expires_in"]?.asLong() ?: 86400L)
+            tokenExpiry = Instant.now().plusSeconds(root["expires_in"]?.asLong(0L) ?: 86400L)
             log.info("KIS access token issued, expires at {}", tokenExpiry)
             token
         } catch (e: Exception) {
@@ -116,26 +116,31 @@ class KisClient(
                 .build()
             val res = http.send(req, HttpResponse.BodyHandlers.ofString())
             if (res.statusCode() != 200) return null
-            val root = mapper.readTree(res.body())
-            if (root["rt_cd"]?.asText() != "0") return null
-            val out = root["output"] ?: return null
-            KisPrice(
-                symbol = symbol,
-                price  = out["stck_prpr"]?.asText()?.toBigDecimalOrNull() ?: return null,
-                volume = out["acml_vol"]?.asText()?.toLongOrNull() ?: 0L,
-                high   = out["stck_hgpr"]?.asText()?.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO,
-                low    = out["stck_lwpr"]?.asText()?.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO,
-                open   = out["stck_oprc"]?.asText()?.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO,
-                per          = out["per"]?.asText()?.toBigDecimalOrNull(),
-                pbr          = out["pbr"]?.asText()?.toBigDecimalOrNull(),
-                eps          = out["eps"]?.asText()?.toBigDecimalOrNull(),
-                bps          = out["bps"]?.asText()?.toBigDecimalOrNull(),
-                marketCapEok = out["hts_avls"]?.asText()?.toLongOrNull(),
-            )
+            parsePrice(symbol, res.body())
         } catch (e: Exception) {
             log.error("KIS fetchPrice failed for {}: {}", symbol, e.message)
             null
         }
+    }
+
+    /** 현재가 응답 본문 → 시세. 테스트가 실제 응답 모양으로 고정한다(B4-6) */
+    internal fun parsePrice(symbol: String, body: String): KisPrice? {
+        val root = mapper.readTree(body)
+        if (root["rt_cd"]?.asString("") != "0") return null
+        val out = root["output"] ?: return null
+        return KisPrice(
+                symbol = symbol,
+                price  = out["stck_prpr"]?.asString("")?.toBigDecimalOrNull() ?: return null,
+                volume = out["acml_vol"]?.asString("")?.toLongOrNull() ?: 0L,
+                high   = out["stck_hgpr"]?.asString("")?.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO,
+                low    = out["stck_lwpr"]?.asString("")?.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO,
+                open   = out["stck_oprc"]?.asString("")?.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO,
+                per          = out["per"]?.asString("")?.toBigDecimalOrNull(),
+                pbr          = out["pbr"]?.asString("")?.toBigDecimalOrNull(),
+                eps          = out["eps"]?.asString("")?.toBigDecimalOrNull(),
+                bps          = out["bps"]?.asString("")?.toBigDecimalOrNull(),
+                marketCapEok = out["hts_avls"]?.asString("")?.toLongOrNull(),
+            )
     }
 
     /**
@@ -163,26 +168,31 @@ class KisClient(
                 .build()
             val res = http.send(req, HttpResponse.BodyHandlers.ofString())
             if (res.statusCode() != 200) return null
-            val root = mapper.readTree(res.body())
-            if (root["rt_cd"]?.asText() != "0") return null
-            val out = root["output"] ?: return null
-            out.mapNotNull { row ->
-                val date = row["stck_bsop_date"]?.asText()?.let {
-                    runCatching { java.time.LocalDate.parse(it, java.time.format.DateTimeFormatter.BASIC_ISO_DATE) }.getOrNull()
-                } ?: return@mapNotNull null
-                KisInvestorDay(
-                    tradeDate            = date,
-                    individualNetQty     = row["prsn_ntby_qty"]?.asText()?.toLongOrNull() ?: 0L,
-                    foreignNetQty        = row["frgn_ntby_qty"]?.asText()?.toLongOrNull() ?: 0L,
-                    institutionNetQty    = row["orgn_ntby_qty"]?.asText()?.toLongOrNull() ?: 0L,
-                    individualNetAmount  = row["prsn_ntby_tr_pbmn"]?.asText()?.toLongOrNull() ?: 0L,
-                    foreignNetAmount     = row["frgn_ntby_tr_pbmn"]?.asText()?.toLongOrNull() ?: 0L,
-                    institutionNetAmount = row["orgn_ntby_tr_pbmn"]?.asText()?.toLongOrNull() ?: 0L,
-                )
-            }
+            parseInvestorTrend(res.body())
         } catch (e: Exception) {
             log.error("KIS fetchInvestorTrend failed for {}: {}", symbol, e.message)
             null
         }
+    }
+
+    /** 투자자 매매동향 응답 본문 → 일별 목록. 테스트가 실제 응답 모양으로 고정한다(B4-6) */
+    internal fun parseInvestorTrend(body: String): List<KisInvestorDay>? {
+        val root = mapper.readTree(body)
+        if (root["rt_cd"]?.asString("") != "0") return null
+        val out = root["output"] ?: return null
+        return out.mapNotNull { row ->
+                val date = row["stck_bsop_date"]?.asString("")?.let {
+                    runCatching { java.time.LocalDate.parse(it, java.time.format.DateTimeFormatter.BASIC_ISO_DATE) }.getOrNull()
+                } ?: return@mapNotNull null
+                KisInvestorDay(
+                    tradeDate            = date,
+                    individualNetQty     = row["prsn_ntby_qty"]?.asString("")?.toLongOrNull() ?: 0L,
+                    foreignNetQty        = row["frgn_ntby_qty"]?.asString("")?.toLongOrNull() ?: 0L,
+                    institutionNetQty    = row["orgn_ntby_qty"]?.asString("")?.toLongOrNull() ?: 0L,
+                    individualNetAmount  = row["prsn_ntby_tr_pbmn"]?.asString("")?.toLongOrNull() ?: 0L,
+                    foreignNetAmount     = row["frgn_ntby_tr_pbmn"]?.asString("")?.toLongOrNull() ?: 0L,
+                    institutionNetAmount = row["orgn_ntby_tr_pbmn"]?.asString("")?.toLongOrNull() ?: 0L,
+                )
+            }
     }
 }

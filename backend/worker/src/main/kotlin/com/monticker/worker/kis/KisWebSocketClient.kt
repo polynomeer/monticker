@@ -1,6 +1,6 @@
 package com.monticker.worker.kis
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.worker.common.PlainJson
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
@@ -24,7 +24,7 @@ class KisWebSocketClient(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
-    private val mapper = ObjectMapper()
+    private val mapper = PlainJson.mapper
     private val handlersByTrId = handlers.associateBy { it.trId }
 
     private val WS_URL = "ws://ops.koreainvestment.com:21000"
@@ -76,7 +76,7 @@ class KisWebSocketClient(
                 return null
             }
             val root = mapper.readTree(res.body())
-            val key = root["approval_key"]?.asText() ?: return null
+            val key = root["approval_key"]?.asString("") ?: return null
             approvalKey.set(key)
             // WebSocket approval key expires in 24h
             approvalKeyExpiry.set(Instant.now().plusSeconds(82800L))
@@ -146,7 +146,7 @@ class KisWebSocketClient(
 
 // ── Shared helpers ─────────────────────────────────────────────────────────────
 
-private val subscribeMessageMapper = ObjectMapper()
+private val subscribeMessageMapper = PlainJson.mapper
 
 private fun buildSubscribeMessage(approvalKey: String, trId: String, symbol: String): String =
     subscribeMessageMapper.writeValueAsString(mapOf(

@@ -1,7 +1,7 @@
 package com.monticker.worker.toss
 
 import com.monticker.worker.common.HttpTimeouts
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.worker.common.PlainJson
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
@@ -31,7 +31,7 @@ class TossTokenIssuer(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
-    private val mapper = ObjectMapper()
+    private val mapper = PlainJson.mapper
     private val token = AtomicReference<String?>()
     private val tokenExpiry = AtomicReference(Instant.EPOCH)
 
@@ -65,8 +65,8 @@ class TossTokenIssuer(
                 return null
             }
             val root = mapper.readTree(res.body())
-            val accessToken = root["access_token"]?.asText() ?: return null
-            val expiresIn = root["expires_in"]?.asLong() ?: 3600L
+            val accessToken = root["access_token"]?.asString("") ?: return null
+            val expiresIn = root["expires_in"]?.asLong(0L) ?: 3600L
             token.set(accessToken)
             // 만료 60초 전부터는 갱신 대상으로 취급 — 발급 직후 바로 다음 호출에서 임박 판정되는 걸 방지.
             tokenExpiry.set(Instant.now().plusSeconds((expiresIn - 60).coerceAtLeast(60)))

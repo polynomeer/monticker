@@ -1,6 +1,6 @@
 package com.monticker.worker.detector
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.worker.common.PlainJson
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import com.monticker.worker.search.SearchIndexEvent
@@ -40,7 +40,7 @@ class StockEventWriter(
     @Value("\${notify.watchlist-event-push.enabled:true}") private val pushEnabled: Boolean = true,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val objectMapper = ObjectMapper()
+    private val objectMapper = PlainJson.mapper
     // Push 알림은 hot path 밖에서 처리 — 별도 스레드 풀로 비동기 처리
     private val pushExecutor = Executors.newCachedThreadPool()
 
