@@ -1,7 +1,7 @@
 package com.monticker.worker.stock
 
 import com.monticker.worker.common.HttpTimeouts
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.worker.common.PlainJson
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.net.URI
@@ -21,7 +21,7 @@ data class KrxStockItem(
 class KrxStockClient {
     private val log = LoggerFactory.getLogger(javaClass)
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
-    private val mapper = ObjectMapper()
+    private val mapper = PlainJson.mapper
 
     fun fetchStocks(): List<KrxStockItem> {
         val kospi  = fetchMarket("STK", "KOSPI")
@@ -62,14 +62,14 @@ class KrxStockClient {
         val root = mapper.readTree(body)
         val items = root["OutBlock_1"] ?: return emptyList()
         return items.mapNotNull { item ->
-                val symbol = item["ISU_SRT_CD"]?.asText()?.trim() ?: return@mapNotNull null
-                val name   = item["ISU_NM"]?.asText()?.trim()     ?: return@mapNotNull null
+                val symbol = item["ISU_SRT_CD"]?.asString("")?.trim() ?: return@mapNotNull null
+                val name   = item["ISU_NM"]?.asString("")?.trim()     ?: return@mapNotNull null
                 if (symbol.isBlank() || name.isBlank()) return@mapNotNull null
                 KrxStockItem(
                     symbol = symbol,
                     name   = name,
                     market = marketName,
-                    sector = item["SECT_TP_NM"]?.asText()?.trim()?.takeIf { it.isNotBlank() },
+                    sector = item["SECT_TP_NM"]?.asString("")?.trim()?.takeIf { it.isNotBlank() },
                 )
             }
     }

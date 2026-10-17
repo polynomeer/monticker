@@ -149,8 +149,11 @@ class ExternalApiParsingGoldenTest {
     }
 
     companion object {
-        /** JSON null 필드를 asText()로 읽은 결과 — Jackson 2는 문자열 "null"을 돌려준다 */
-        const val NULL_TEXT = "null"
-        val NULL_SECTOR: String? = "null"
+        /**
+         * JSON null 필드의 문자열 — B4-6에서 **의도적으로 바뀐 유일한 동작**이다. Jackson 2의 `asText()`는 문자열 "null"을 돌려줘
+         * DART 회사명·Naver 요약에 "null"이 그대로 저장되고 KRX 업종이 "null"이 됐다. Jackson 3의 `asString("")`은 빈 문자열이다.
+         */
+        const val NULL_TEXT = ""
+        val NULL_SECTOR: String? = null   // 빈 업종은 null로 둔다(takeIf { isNotBlank() })
     }
 }

@@ -1,6 +1,6 @@
 package com.monticker.worker.marketdata
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.worker.common.PlainJson
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Component
 
@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component
 class RedisTickWriter(
     private val redisTemplate: StringRedisTemplate,
 ) {
-    private val objectMapper = ObjectMapper()
+    private val objectMapper = PlainJson.mapper
     fun write(tick: GeneratedTick) {
         val key = "stock:price:${tick.market}:${tick.symbol}"
         val value = objectMapper.writeValueAsString(

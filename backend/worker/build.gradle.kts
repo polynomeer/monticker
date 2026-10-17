@@ -56,9 +56,6 @@ dependencies {
 	implementation("org.flywaydb:flyway-database-postgresql")
 	// Boot 매퍼(Modulith 아웃박스 직렬화·Kafka 외부화)는 Jackson 3다(ADR-104). Kotlin 모듈은 Jackson 3용을 따로 받는다
 	implementation("tools.jackson.module:jackson-module-kotlin")
-	// 직접 만든 매퍼(WireJson 등)는 B4-6까지 Jackson 2로 남는다 — Boot 4는 Jackson 2를 끌어오지 않으니 명시한다
-	implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
-	implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	implementation("com.google.guava:guava:33.7.2-jre")
 	implementation("com.anthropic:anthropic-java:2.71.0")

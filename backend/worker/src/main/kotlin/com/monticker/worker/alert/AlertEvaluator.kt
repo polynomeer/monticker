@@ -1,7 +1,7 @@
 package com.monticker.worker.alert
 
-import com.fasterxml.jackson.core.type.TypeReference
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.core.type.TypeReference
+import com.monticker.worker.common.PlainJson
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.context.event.EventListener
@@ -42,7 +42,7 @@ class AlertEvaluator(
         listOf("_fetch", "PRICE_ABOVE", "PRICE_BELOW", "VOLUME_SURGE", "RSI_BELOW", "RSI_ABOVE", "PRICE_BELOW_MA", "PRICE_ABOVE_MA", "HOLDING_DROP")
             .forEach { meterRegistry.counter("alert_rule_eval_failed_total", "ruleType", it) }
     }
-    private val objectMapper = ObjectMapper()
+    private val objectMapper = PlainJson.mapper
 
     @EventListener
     @Async("alertDispatchExecutor")

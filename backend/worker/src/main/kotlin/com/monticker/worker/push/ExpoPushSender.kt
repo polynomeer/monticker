@@ -1,7 +1,7 @@
 package com.monticker.worker.push
 
 import com.monticker.worker.common.HttpTimeouts
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.worker.common.PlainJson
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -32,7 +32,7 @@ class ExpoPushSender(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
-    private val mapper = ObjectMapper()
+    private val mapper = PlainJson.mapper
     private val EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 
     fun send(messages: List<PushMessage>): List<PushResult> {
@@ -87,8 +87,8 @@ class ExpoPushSender(
             messages.zip(items).map { (msg, item) ->
                 PushResult(
                     token   = msg.to,
-                    status  = item["status"]?.asText() ?: "error",
-                    message = item["message"]?.asText(),
+                    status  = item["status"]?.asString("") ?: "error",
+                    message = item["message"]?.asString(""),
                 )
             }
         } catch (e: Exception) {

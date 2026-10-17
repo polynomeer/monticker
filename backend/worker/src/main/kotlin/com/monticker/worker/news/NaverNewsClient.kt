@@ -1,7 +1,7 @@
 package com.monticker.worker.news
 
 import com.monticker.worker.common.HttpTimeouts
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.worker.common.PlainJson
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -31,7 +31,7 @@ class NaverNewsClient(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val http = HttpClient.newBuilder().connectTimeout(HttpTimeouts.CONNECT).build()
-    private val mapper = ObjectMapper()
+    private val mapper = PlainJson.mapper
     private val pubDateFormatter = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH)
 
     val isConfigured: Boolean get() = clientId.isNotBlank() && clientSecret.isNotBlank()
@@ -68,13 +68,14 @@ class NaverNewsClient(
     /** 응답 본문 → 기사 목록. 테스트가 실제 응답 모양으로 고정한다(B4-6) */
     internal fun parseItems(body: String): List<NaverNewsItem> {
         val root = mapper.readTree(body)
-        return root["items"]?.map { item ->
+        // values() — Jackson 3.1의 JsonNode.map(Function)은 배열 자체에 적용된다(원소마다가 아니다)
+        return root["items"]?.values()?.map { item ->
             NaverNewsItem(
-                title       = item["title"].asText().stripHtmlTags(),
-                description = item["description"].asText().stripHtmlTags(),
-                link        = item["link"].asText(),
-                pubDate     = item["pubDate"].asText(),
-                source      = item["originallink"].asText().extractDomain(),
+                title       = item["title"].asString("").stripHtmlTags(),
+                description = item["description"].asString("").stripHtmlTags(),
+                link        = item["link"].asString(""),
+                pubDate     = item["pubDate"].asString(""),
+                source      = item["originallink"].asString("").extractDomain(),
             )
         } ?: emptyList()
     }

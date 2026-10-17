@@ -1,7 +1,6 @@
 package com.monticker.worker.notification
 
-import com.fasterxml.jackson.databind.DeserializationFeature
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.worker.common.WireJson
 import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.jdbc.core.JdbcTemplate
@@ -22,7 +21,7 @@ class NotificationPreferenceReader(
     private val redis: StringRedisTemplate,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val mapper = ObjectMapper().findAndRegisterModules().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+    private val mapper = WireJson.mapper   // api가 쓴 값을 읽는다 — 프로세스 경계 JSON(모르는 필드 무시, Kotlin 모듈)
 
     fun forUser(userId: Long): NotificationPreference = forUsers(listOf(userId)).getValue(userId)
 

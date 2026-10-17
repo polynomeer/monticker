@@ -1,6 +1,6 @@
 package com.monticker.worker.kis
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.worker.common.PlainJson
 import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Component
@@ -27,7 +27,7 @@ class KisOrderBookHandler(
     override val trId = "H0STASP0"
 
     private val log = LoggerFactory.getLogger(javaClass)
-    private val mapper = ObjectMapper()
+    private val mapper = PlainJson.mapper
 
     // Redis TTL — 호가 데이터는 30초 이상 오래되면 신뢰 불가
     private val TTL = Duration.ofSeconds(30)
