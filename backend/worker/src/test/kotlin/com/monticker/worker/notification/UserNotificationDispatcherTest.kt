@@ -1,5 +1,6 @@
 package com.monticker.worker.notification
 
+import java.time.Duration
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.worker.push.ExpoPushSender
 import com.monticker.worker.push.PushMessage
@@ -37,7 +38,7 @@ class UserNotificationDispatcherTest {
     )
 
     private fun firstDelivery(first: Boolean = true) {
-        every { ops.setIfAbsent("notify:user:sent:conditional-order-failed:12", "1", any()) } returns first
+        every { ops.setIfAbsent("notify:user:sent:conditional-order-failed:12", "1", any<Duration>()) } returns first
     }
     private fun tokens(vararg t: String) {
         every { jdbc.queryForList(match<String> { it.contains("device_tokens") }, String::class.java, 7L) } returns t.toList()
@@ -132,7 +133,7 @@ class UserNotificationDispatcherTest {
 
         dispatcher.dispatch(fills())
 
-        verify(exactly = 0) { ops.setIfAbsent(any(), any(), any()) }
+        verify(exactly = 0) { ops.setIfAbsent(any(), any(), any<Duration>()) }
         verify(exactly = 0) { push.send(any()) }
         verify(exactly = 0) { mail.send(any<SimpleMailMessage>()) }
     }
@@ -150,7 +151,7 @@ class UserNotificationDispatcherTest {
     @Test
     fun `이메일을 고른 종류는 푸시가 닿아도 이메일을 함께 보낸다`() {
         every { prefs.forUser(7L) } returns NotificationPreference(fillsPush = true, fillsEmail = true)
-        every { ops.setIfAbsent("notify:user:sent:brokerage-order-filled:3", "1", any()) } returns true
+        every { ops.setIfAbsent("notify:user:sent:brokerage-order-filled:3", "1", any<Duration>()) } returns true
         tokens("tok-a"); email("u@test.local")
         every { push.send(any()) } returns listOf(PushResult("tok-a", "ok", null))
 

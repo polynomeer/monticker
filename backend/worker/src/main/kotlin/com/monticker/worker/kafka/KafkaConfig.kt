@@ -58,7 +58,7 @@ class KafkaConfig(
     @Bean
     fun kafkaListenerContainerFactory(): ConcurrentKafkaListenerContainerFactory<String, String> {
         val factory = ConcurrentKafkaListenerContainerFactory<String, String>()
-        factory.consumerFactory = consumerFactory()
+        factory.setConsumerFactory(consumerFactory())
         // 파티션 수(ADR-040)까지 병렬 소비. 종목별 상태(CandleAggregator, 감지기 EMA)는 키=stockId라
         // 같은 종목이 항상 같은 파티션/스레드로 오므로 스레드 간 공유가 없다.
         factory.setConcurrency(concurrency)

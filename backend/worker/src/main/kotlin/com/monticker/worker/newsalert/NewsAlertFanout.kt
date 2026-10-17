@@ -1,6 +1,6 @@
 package com.monticker.worker.newsalert
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.json.JsonMapper
 import com.monticker.worker.search.SearchIndexEvent
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
@@ -44,7 +44,7 @@ class NewsAlertFanout(
     private val jdbc: JdbcTemplate,
     private val events: ApplicationEventPublisher,
     private val tx: TransactionTemplate,
-    private val objectMapper: ObjectMapper,
+    private val jsonMapper: JsonMapper,
     private val meterRegistry: MeterRegistry,
     @Value("\${notify.news-alert.enabled:true}") private val enabled: Boolean = true,
 ) {
@@ -117,7 +117,7 @@ class NewsAlertFanout(
             .firstOrNull() ?: "관심종목"
         val label = if (event.kind == NewsAlertKind.DISCLOSURE) "공시" else "뉴스"
         val message = if (event.kind == NewsAlertKind.DISCLOSURE) event.title else "[뉴스] ${event.title}"
-        val payload = objectMapper.writeValueAsString(mapOf(
+        val payload = jsonMapper.writeValueAsString(mapOf(
             "kind" to event.kind.name, "sourceId" to event.sourceId, "url" to event.url, "source" to event.source,
             "publishedAt" to event.publishedAt().toString(), "importanceScore" to event.importanceScore,
         ))

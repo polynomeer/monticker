@@ -79,7 +79,7 @@ class AlertDispatcher(
                 "SELECT token FROM device_tokens WHERE user_id = ? AND is_active = true",
                 String::class.java,
                 rule.userId,
-            )
+            ).filterNotNull()   // Spring 7(JSpecify)은 원소를 nullable로 본다. token은 NOT NULL 컬럼이다
             if (tokens.isNotEmpty()) {
                 val results = pushSender.send(tokens.map { token ->
                     PushMessage(

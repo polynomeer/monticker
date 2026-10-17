@@ -14,10 +14,10 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.kafka.annotation.DltHandler
+import org.springframework.kafka.annotation.BackOff
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.kafka.annotation.RetryableTopic
 import org.springframework.kafka.retrytopic.TopicSuffixingStrategy
-import org.springframework.retry.annotation.Backoff
 import org.springframework.stereotype.Component
 
 /**
@@ -75,7 +75,7 @@ class TickKafkaConsumer(
 
     @RetryableTopic(
         attempts = "3",
-        backoff = Backoff(delay = 2_000, multiplier = 2.0),
+        backOff = BackOff(delay = 2_000, multiplier = 2.0),
         topicSuffixingStrategy = TopicSuffixingStrategy.SUFFIX_WITH_INDEX_VALUE,
         dltTopicSuffix = "-dlt",
         autoCreateTopics = "false",
