@@ -116,10 +116,19 @@ class KisClient(
                 .build()
             val res = http.send(req, HttpResponse.BodyHandlers.ofString())
             if (res.statusCode() != 200) return null
-            val root = mapper.readTree(res.body())
-            if (root["rt_cd"]?.asText() != "0") return null
-            val out = root["output"] ?: return null
-            KisPrice(
+            parsePrice(symbol, res.body())
+        } catch (e: Exception) {
+            log.error("KIS fetchPrice failed for {}: {}", symbol, e.message)
+            null
+        }
+    }
+
+    /** 현재가 응답 본문 → 시세. 테스트가 실제 응답 모양으로 고정한다(B4-6) */
+    internal fun parsePrice(symbol: String, body: String): KisPrice? {
+        val root = mapper.readTree(body)
+        if (root["rt_cd"]?.asText() != "0") return null
+        val out = root["output"] ?: return null
+        return KisPrice(
                 symbol = symbol,
                 price  = out["stck_prpr"]?.asText()?.toBigDecimalOrNull() ?: return null,
                 volume = out["acml_vol"]?.asText()?.toLongOrNull() ?: 0L,
@@ -132,10 +141,6 @@ class KisClient(
                 bps          = out["bps"]?.asText()?.toBigDecimalOrNull(),
                 marketCapEok = out["hts_avls"]?.asText()?.toLongOrNull(),
             )
-        } catch (e: Exception) {
-            log.error("KIS fetchPrice failed for {}: {}", symbol, e.message)
-            null
-        }
     }
 
     /**
@@ -163,10 +168,19 @@ class KisClient(
                 .build()
             val res = http.send(req, HttpResponse.BodyHandlers.ofString())
             if (res.statusCode() != 200) return null
-            val root = mapper.readTree(res.body())
-            if (root["rt_cd"]?.asText() != "0") return null
-            val out = root["output"] ?: return null
-            out.mapNotNull { row ->
+            parseInvestorTrend(res.body())
+        } catch (e: Exception) {
+            log.error("KIS fetchInvestorTrend failed for {}: {}", symbol, e.message)
+            null
+        }
+    }
+
+    /** 투자자 매매동향 응답 본문 → 일별 목록. 테스트가 실제 응답 모양으로 고정한다(B4-6) */
+    internal fun parseInvestorTrend(body: String): List<KisInvestorDay>? {
+        val root = mapper.readTree(body)
+        if (root["rt_cd"]?.asText() != "0") return null
+        val out = root["output"] ?: return null
+        return out.mapNotNull { row ->
                 val date = row["stck_bsop_date"]?.asText()?.let {
                     runCatching { java.time.LocalDate.parse(it, java.time.format.DateTimeFormatter.BASIC_ISO_DATE) }.getOrNull()
                 } ?: return@mapNotNull null
@@ -180,9 +194,5 @@ class KisClient(
                     institutionNetAmount = row["orgn_ntby_tr_pbmn"]?.asText()?.toLongOrNull() ?: 0L,
                 )
             }
-        } catch (e: Exception) {
-            log.error("KIS fetchInvestorTrend failed for {}: {}", symbol, e.message)
-            null
-        }
     }
 }

@@ -62,7 +62,12 @@ class NaverNewsClient(
             return emptyList()
         }
 
-        val root = mapper.readTree(response.body())
+        return parseItems(response.body())
+    }
+
+    /** 응답 본문 → 기사 목록. 테스트가 실제 응답 모양으로 고정한다(B4-6) */
+    internal fun parseItems(body: String): List<NaverNewsItem> {
+        val root = mapper.readTree(body)
         return root["items"]?.map { item ->
             NaverNewsItem(
                 title       = item["title"].asText().stripHtmlTags(),

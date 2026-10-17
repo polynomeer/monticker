@@ -77,7 +77,7 @@ class ExpoPushSender(
         }
     }
 
-    private fun parseResults(messages: List<PushMessage>, responseBody: String): List<PushResult> {
+    internal fun parseResults(messages: List<PushMessage>, responseBody: String): List<PushResult> {
         return try {
             val root = mapper.readTree(responseBody)
             val dataNode = root["data"] ?: return messages.map { PushResult(it.to, "error", "no data") }

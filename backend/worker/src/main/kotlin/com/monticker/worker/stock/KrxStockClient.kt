@@ -50,10 +50,18 @@ class KrxStockClient {
                 return emptyList()
             }
 
-            val root = mapper.readTree(response.body())
-            val items = root["OutBlock_1"] ?: return emptyList()
+            parseItems(response.body(), marketName)
+        } catch (e: Exception) {
+            log.error("KRX fetch failed for market {}: {}", marketName, e.message)
+            emptyList()
+        }
+    }
 
-            items.mapNotNull { item ->
+    /** 응답 본문 → 종목 목록. 테스트가 실제 응답 모양으로 고정한다(B4-6) */
+    internal fun parseItems(body: String, marketName: String): List<KrxStockItem> {
+        val root = mapper.readTree(body)
+        val items = root["OutBlock_1"] ?: return emptyList()
+        return items.mapNotNull { item ->
                 val symbol = item["ISU_SRT_CD"]?.asText()?.trim() ?: return@mapNotNull null
                 val name   = item["ISU_NM"]?.asText()?.trim()     ?: return@mapNotNull null
                 if (symbol.isBlank() || name.isBlank()) return@mapNotNull null
@@ -64,9 +72,5 @@ class KrxStockClient {
                     sector = item["SECT_TP_NM"]?.asText()?.trim()?.takeIf { it.isNotBlank() },
                 )
             }
-        } catch (e: Exception) {
-            log.error("KRX fetch failed for market {}: {}", marketName, e.message)
-            emptyList()
-        }
     }
 }

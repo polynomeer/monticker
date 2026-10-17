@@ -71,7 +71,12 @@ class DartClient(
             return emptyList()
         }
 
-        val root = mapper.readTree(res.body())
+        return parseList(res.body())
+    }
+
+    /** 응답 본문 → 공시 목록. 테스트가 실제 응답 모양으로 고정한다(B4-6) */
+    internal fun parseList(body: String): List<DartDisclosure> {
+        val root = mapper.readTree(body)
         if (root["status"]?.asText() != "000") {
             log.warn("DART API non-ok status: {}", root["message"]?.asText())
             return emptyList()
