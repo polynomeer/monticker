@@ -1,14 +1,14 @@
 plugins {
 	kotlin("jvm") version "2.4.21"
 	kotlin("plugin.spring") version "2.4.21"
-	id("org.springframework.boot") version "3.5.16"
+	id("org.springframework.boot") version "4.1.1"
 	id("io.spring.dependency-management") version "1.1.7"
 	kotlin("plugin.jpa") version "2.4.21"
 }
 
 dependencyManagement {
 	imports {
-		mavenBom("org.springframework.modulith:spring-modulith-bom:1.4.13")
+		mavenBom("org.springframework.modulith:spring-modulith-bom:2.1.1")
 		mavenBom("org.testcontainers:testcontainers-bom:2.0.5")
 	}
 }
@@ -31,10 +31,10 @@ dependencies {
 	// actuator는 HTTP 서버가 있어야 /actuator/*를 노출한다. 이 의존이 없어서 server.port=8081은 죽은 설정이었고,
 	// K8s의 readiness/liveness 프로브(worker:8081)가 영원히 실패하며 Prometheus도 워커를 못 긁었다 —
 	// 운영 배포 시 liveness가 워커 pod를 주기적으로 죽였을 상황. L-03 부하 기준선 준비 중 발견 (resilience-plan §5.6).
-	implementation("org.springframework.boot:spring-boot-starter-web")
-	implementation("io.micrometer:micrometer-tracing-bridge-otel")
+	implementation("org.springframework.boot:spring-boot-starter-webmvc")
+	// Boot 4는 자동 구성이 기술별 모듈로 나뉘었다 — 라이브러리만 두면 자동 구성이 붙지 않는다. starter로 받는다
+	implementation("org.springframework.boot:spring-boot-starter-opentelemetry")
 	implementation("io.micrometer:micrometer-registry-prometheus")
-	implementation("io.opentelemetry:opentelemetry-api")
 	implementation("io.github.resilience4j:resilience4j-kotlin:2.4.0")
 	implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.4.0")
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
@@ -45,15 +45,20 @@ dependencies {
 	implementation("org.springframework.modulith:spring-modulith-starter-jdbc")
 	implementation("org.springframework.modulith:spring-modulith-events-api")
 	implementation("org.springframework.modulith:spring-modulith-events-kafka")
-	implementation("org.springframework.boot:spring-boot-starter-aop")
+	implementation("org.springframework.boot:spring-boot-starter-aspectj")
 	implementation("org.springframework.boot:spring-boot-starter-data-redis")
 	implementation("org.springframework.boot:spring-boot-starter-validation")
-	implementation("org.springframework.kafka:spring-kafka")
-	implementation("org.springframework.retry:spring-retry")
-	implementation("org.springframework.integration:spring-integration-core")
+	implementation("org.springframework.boot:spring-boot-starter-kafka")
+	implementation("org.springframework.boot:spring-boot-starter-integration")
 	implementation("org.springframework.integration:spring-integration-kafka")
-	implementation("org.flywaydb:flyway-core")
+	// Boot 4는 flyway-core만으로는 Flyway를 자동 구성하지 않는다 — starter가 없으면 마이그레이션이 조용히 안 돈다
+	implementation("org.springframework.boot:spring-boot-starter-flyway")
 	implementation("org.flywaydb:flyway-database-postgresql")
+	// Boot 매퍼(Modulith 아웃박스 직렬화·Kafka 외부화)는 Jackson 3다(ADR-104). Kotlin 모듈은 Jackson 3용을 따로 받는다
+	implementation("tools.jackson.module:jackson-module-kotlin")
+	// 직접 만든 매퍼(WireJson 등)는 B4-6까지 Jackson 2로 남는다 — Boot 4는 Jackson 2를 끌어오지 않으니 명시한다
+	implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+	implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	implementation("com.google.guava:guava:33.7.2-jre")
 	implementation("com.anthropic:anthropic-java:2.71.0")

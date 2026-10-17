@@ -3,8 +3,8 @@ package com.monticker.worker.health
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.AdminClientConfig
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.boot.actuate.health.Health
-import org.springframework.boot.actuate.health.HealthIndicator
+import org.springframework.boot.health.contributor.Health
+import org.springframework.boot.health.contributor.HealthIndicator
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.stereotype.Component
 import java.util.concurrent.TimeUnit
@@ -45,7 +45,7 @@ class KafkaHealthIndicator(
         } catch (e: Exception) {
             Health.down()
                 .withDetail("bootstrapServers", bootstrapServers)
-                .withDetail("error", e.message)
+                .withDetail("error", e.message ?: e.javaClass.simpleName)
                 .build()
         }
     }

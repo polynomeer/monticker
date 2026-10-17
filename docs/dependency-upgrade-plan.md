@@ -131,12 +131,22 @@ Kotlin 컴파일러 플러그인(`plugin.spring`·`plugin.jpa`)은 `kotlin("jvm"
 #### 작업 단위 (PR 하나씩, 위에서부터)
 - **B4-1** ✅ spring-statemachine 제거 — ADR-103. Boot 3.5에서 먼저.
 - **B4-2** ✅ Modulith v2 컬럼 Flyway 마이그레이션(V101, Boot 3.5에서 먼저, nullable 추가). **값 채우기는 필요 없다**: Modulith 2.1.1 소스의 재전송 쿼리가 `status = FAILED or (status is null and completionDate is null)`이라 마이그레이션 전에 쓰인 미완료 행도 집는다. B4-5에서 볼 것: 2.x의 `resubmitIncompletePublicationsOlderThan`이 처리 중(PUBLISHED) 행을 어떻게 다루는지(Staleness Monitor가 오래된 행을 FAILED로 표시한다) — `OutboxResubmissionConfig`와 맞춰야 한다.
+  - ⚠️ **정정(B4-5에서 발견)**: "값 채우기 불필요"는 틀렸다. 고르는 SELECT만 보고 판단했는데, 2.1은 고른 행을 `UPDATE … WHERE id = ? AND status != 'RESUBMITTED'`로 가져간다 — status가 NULL인 1.x 행은 이 조건을 통과하지 못해 **영원히 재전송되지 않는다**. 롤링 배포 중 구버전이 계속 NULL 행을 쓰므로 한 번의 Flyway 백필로도 부족하다 → 재전송 주기마다 FAILED로 표시한다(ADR-104 `LegacyPublicationStatusBackfill`). RESUBMITTED에 멈춘 행은 `staleness.resubmitted: 1m`.
 - **B4-3** 직렬화 결과 고정 테스트(Boot 3.5에서 먼저): Kafka 페이로드(`@Externalized` 5종 + worker 프로듀서 — 지금 `Instant`가 숫자로 나간다), `event_publication.serialized_event`·`worker_outbox`의 기존 형식 행을 새 버전이 읽는지, Redis 캐시(`@class` 타입 정보 — TTL ≤ 1시간이라 키 접두사 변경으로 끊어도 된다), Redis 문자열 키, REST 응답 표본.
   - ✅ 고정 완료: `backend/worker/.../common/WireFormatGoldenTest`(worker 프로듀서 6종 — 직접 만든 매퍼를 `WireJson.mapper` 하나로 모았다), `backend/api/.../common/WireFormatGoldenTest`(Boot 매퍼로 쓰는 `@Externalized` 이벤트, worker·Go 틱과 Redis 시세를 api가 읽는 경로), `services/market-gateway/internal/tick/tick_test.go`(Go 틱, 새 `gateway-ci`). 같은 JSON 문자열을 생산자·소비자 양쪽 테스트에 둔다.
   - 고정하며 확인한 지금 형식: worker는 `Instant`를 초.나노초 **숫자**로, api(Boot 매퍼)와 Go는 ISO **문자열**로 쓴다 — 소비자는 둘 다 읽는다. Go 틱엔 `marketStatus`가 없다(api는 null → 조건부 주문 미발동, ADR-055). Redis 시세는 Map으로 읽어 가격 소수 자릿수가 줄어든다(71200.50 → 71200.5).
   - Redis 캐시(`@class` 타입 정보)는 테스트로 고정하지 않는다 — B4-5 배포 때 캐시 키 접두사를 바꿔 끊는다(TTL ≤ 1시간).
 - **B4-4** Elasticsearch 서버 9로(로컬 이미지 + 운영). 클라이언트 8.18로 서버 9를 먼저 확인.
 - **B4-5** Boot 4.1 업그레이드 본체: starter 이름, Flyway·Batch-JDBC 명시, Batch 6 시퀀스 마이그레이션·패키지·API, Kafka `@BackOff`·spring-retry 제거, Modulith 2.1, springdoc 3.1, logstash 9, `@MockitoBean`. Jackson은 Boot 매퍼를 주입받는 곳만 `JsonMapper`로(B4-3 테스트가 초록이어야 한다), 직접 만든 매퍼는 그대로 둔다. Jackson 전환 방식은 **ADR**로 남긴다.
+  - **두 PR로 나눈다**: B4-5a worker(먼저) → B4-5b api. 두 앱은 빌드가 따로고 형식이 B4-3으로 고정돼 있어 섞인 상태(worker Boot 4, api Boot 3.5)가 롤링 배포와 같은 조건이다. Jackson 전환 방식은 [ADR-104](decisions/104-jackson3-with-jackson2-defaults-and-outbox-status.md).
+  - **B4-5a(worker)에서 찾은 것** — 빌드·단위 테스트로는 안 드러나고 통합 테스트·로컬 기동에서 나왔다. api에서도 같은 것을 볼 것:
+    - Modulith 2의 Kafka 외부화는 `KafkaOperations<?, ?>`를 주입받는다(1.x는 `<Object, Object>`) — @Primary String 템플릿이 잡혀 외부화가 전부 `SerializationException`. byte[] 템플릿을 @Primary로, 재시도 템플릿은 `defaultRetryTopicKafkaTemplate` 이름으로.
+    - 1.x 아웃박스 행(status NULL)이 재전송되지 않는다 — 위 B4-2 정정.
+    - 자동 구성이 기술별 모듈로 옮겨졌다: `spring-kafka`·`spring-integration`·`flyway-core`만으로는 자동 구성이 붙지 않는다(starter 필요). 테스트의 자동 구성 클래스 이름 목록(`*.imports`)도 새 패키지로(`org.springframework.boot.<기술>.autoconfigure`) — 틀리면 조용히 빠진다.
+    - 속성 이름: `management.otlp.tracing.endpoint` → `management.opentelemetry.tracing.export.otlp.endpoint`. `management.metrics.export.prometheus.enabled`는 Boot 3.0부터 죽은 키였다. 확인은 실행 클래스패스의 `spring-configuration-metadata.json`과 yml 키를 대조했다.
+    - `spring-boot-starter-opentelemetry`는 trace·지표·로그를 OTLP로 내보낸다(기본 켜짐). **Boot 3.5에는 OTLP exporter가 없어 trace가 Jaeger로 간 적이 없다**(docker-compose 주석과 다르다). 업그레이드로 동작을 바꾸지 않게 셋 다 껐다 → 후속: trace 내보내기를 켤지, sampling(지금 1.0 — 틱마다 Redis span)과 함께 정한다.
+    - Spring 7(JSpecify): `queryForList(…, String::class.java)` 원소가 `String?`, `Health.withDetail`이 null을 거부(런타임엔 원래 거부했다 — 서킷 브레이커가 없을 때 KisApiHealthIndicator가 예외를 낼 수 있었다).
+    - 덤: worker의 `mail.smtp.auth·starttls`가 `spring.kafka` 아래에 잘못 들여쓰여 JavaMail에 닿지 않았다(별도 커밋으로 고침).
 - **B4-6** 직접 만든 Jackson 2 매퍼를 `tools.jackson`으로 한 PR씩(날짜·정렬 설정을 명시해 B4-3이 초록인 채로).
 
 **검증(B4-5)**: `scripts/check.sh --full`, e2e-ci, L-05 order-burst + 정합성 검증(원장 드리프트 0), 카오스 CH-05(Kafka 정지)·CH-13(PG 정지), B4-3 고정 테스트, 운영은 카나리 → 전체(킬 스위치 런북 준비).
@@ -251,6 +261,9 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 | W3 TS 6 · vitest 5 · Node 24 | 완료 | #208 | TS 7은 typescript-eslint 지원 대기. Node 24 LTS로 통일(web Docker의 EOL Node 20 교체) |
 | M1 Expo SDK 57 | 완료 | #209 | 58은 베타라 57(정식)로. mobile-ci에 SDK 버전 검사 추가. 실기기 확인 필요 |
 | B4-1 statemachine 제거 | 완료 | #213 | ADR-103. 50조합 동작 일치 |
-| B4-2 Modulith v2 컬럼 | 완료 | #223 | V101, nullable 추가·backfill 불필요(소스 확인) |
-| B4-3 직렬화 고정 테스트 | PR | #225 | worker·api·Go 양쪽에 같은 JSON 고정, gateway-ci 신설 |
-| B4-4~6 | 시작 전 | — | 위 작업 단위. B4-4(ES 9 서버)는 운영 일정 필요 |
+| B4-2 Modulith v2 컬럼 | 완료 | #223 | V101 nullable 추가. "backfill 불필요"는 틀렸다 — 1.x 행 상태 표시는 B4-5a(ADR-104) |
+| B4-3 직렬화 고정 테스트 | 완료 | #225 | worker·api·Go 양쪽에 같은 JSON 고정, gateway-ci 신설 |
+| B4-4 ES 9 서버 | 시작 전 | — | 운영 일정 필요 |
+| B4-5a worker Boot 4.1 | PR | — | ADR-104. 통합 테스트·로컬 기동(api 3.5와 혼합)으로 확인 |
+| B4-5b api Boot 4.1 | 시작 전 | — | B4-5a에서 찾은 것을 api에도 적용 |
+| B4-6 | 시작 전 | — | 직접 만든 Jackson 2 매퍼 이전 |

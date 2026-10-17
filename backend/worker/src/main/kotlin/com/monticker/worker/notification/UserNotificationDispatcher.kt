@@ -65,7 +65,7 @@ class UserNotificationDispatcher(
             if (plan.push) {
                 val tokens = jdbc.queryForList(
                     "SELECT token FROM device_tokens WHERE user_id = ? AND is_active = true", String::class.java, msg.userId,
-                )
+                ).filterNotNull()   // Spring 7(JSpecify)은 원소를 nullable로 본다. token은 NOT NULL 컬럼이다
                 if (tokens.isNotEmpty()) {
                     val results = pushSender.send(tokens.map { PushMessage(to = it, title = msg.title, body = msg.body, data = msg.data) })
                     // 서킷 OPEN이면 빈 결과, 전송 실패면 전부 error다 — 어느 기기에도 닿지 않았으면 이메일로 보낸다.

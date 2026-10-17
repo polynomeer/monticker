@@ -1,6 +1,11 @@
 spring:
   application:
     name: monticker-worker
+  # ADR-104 — Boot 4의 매퍼는 Jackson 3다(Modulith 아웃박스 직렬화·Kafka 외부화가 이 매퍼를 쓴다). Jackson 3 기본값은
+  # Boot 3(Jackson 2)과 다르다(속성 알파벳 정렬, primitive 자리의 null 거부 등) — 롤링 배포 중 구버전이 쓴 메시지와
+  # 업그레이드 전에 쌓인 아웃박스 행을 읽어야 하므로 Boot 3과 같게 맞춘다. 형식은 BootJsonFormatGoldenTest가 지킨다.
+  jackson:
+    use-jackson2-defaults: true
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/monticker}
     username: ${DB_USER:monticker}
@@ -29,6 +34,11 @@ spring:
         schema: worker_outbox
         schema-initialization:
           enabled: false
+      # ADR-104 — 재전송은 행을 `status != 'RESUBMITTED'` 조건으로 가져간다. 재전송 도중 프로세스가 죽으면 행이
+      # RESUBMITTED에 멈춰 다시는 재전송되지 않는다. 1분이 지나면 FAILED로 바꿔 OutboxResubmissionConfig(5분 주기)가 다시
+      # 집게 한다. PUBLISHED·PROCESSING에 멈춘 행은 "1분 경과 미완료"로 이미 재전송된다 — 따로 설정하지 않는다.
+      staleness:
+        resubmitted: 1m
   # ADR-042 — worker는 더 이상 ES에 쓰지 않는다. 색인은 SearchIndexEvent → Kafka search.index → api 컨슈머.
   data:
     redis:
@@ -41,6 +51,14 @@ spring:
     port: ${MAIL_PORT:587}
     username: ${MAIL_USERNAME:}
     password: ${MAIL_PASSWORD:}
+    # 예전엔 이 블록이 spring.kafka 아래에 잘못 들여쓰여 있어 JavaMail에 닿지 않았다 — SMTP 인증·STARTTLS 없이 587에
+    # 붙고 있었고, Kafka 클라이언트는 모르는 설정 mail.smtp.*를 받았다. api(application.yml)와 같게 맞춘다.
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
   kafka:
     listener:
       # ADR-040 파티션 수까지 병렬 소비. 로컬 12 파티션 기준 4. 운영은 파티션 수에 맞춰 ConfigMap으로.
@@ -52,14 +70,8 @@ spring:
     # spring 네임스페이스)는 TickKafkaProducer/조건부 KafkaConfig에서만 읽는 별도 키라
     # 이것만으로는 커버되지 않는다 — 실제로 이 둘이 어긋나 있던 걸 라이브 테스트로 발견했다.
     bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
-    # producer 직렬화기는 기본(String)을 유지한다 — @RetryableTopic의 재시도/DLT 발행이 기본 KafkaTemplate으로
+    # producer 직렬화기는 기본(String)을 유지한다 — @RetryableTopic의 재시도/DLT 발행이 defaultRetryTopicKafkaTemplate으로
     # String 레코드를 전달한다. Modulith 외부화(byte[] JSON)는 SearchOutboxKafkaConfig의 별도 템플릿을 쓴다.
-    properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
   lifecycle:
     timeout-per-shutdown-phase: 30s
   task:
@@ -91,22 +103,42 @@ management:
           include: livenessState
       show-details: always
       show-components: always
-  metrics:
-    export:
-      prometheus:
+  # Boot 3.0에서 management.metrics.export.prometheus.*가 이 키로 바뀌었다 — 옛 키는 그동안 아무 일도 하지 않았다
+  prometheus:
+    metrics:
+      export:
         enabled: true
+  metrics:
     distribution:
       # Realtime Pipeline 대시보드가 histogram_quantile로 단계별 p99를 그린다 (summary 분위수는 pod 간 합산 불가)
       percentiles-histogram:
         tick.latency: true
     tags:
       application: monticker-worker
+  # Boot 4의 spring-boot-starter-opentelemetry는 trace·지표·로그를 모두 OTLP로 내보낸다(기본 켜짐). Boot 3.5에는
+  # OTLP exporter가 클래스패스에 없어 **아무것도 내보내지 않았다**(span은 만들어져 로그의 traceId·전파에만 쓰였다).
+  # 업그레이드로 동작을 바꾸지 않는다 — 특히 trace는 sampling 1.0이라 틱마다 Redis span을 내보내게 된다.
+  # trace 내보내기를 켜는 건 sampling 비율과 함께 따로 정한다(docs/dependency-upgrade-plan.md B4-5 후속).
   tracing:
     sampling:
       probability: 1.0
-  otlp:
+    export:
+      otlp:
+        enabled: false
+  # Boot 4에서 management.otlp.tracing.*가 이 키로 바뀌었다(켤 때 쓴다)
+  opentelemetry:
     tracing:
-      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+      export:
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+  otlp:
+    metrics:
+      export:
+        enabled: false
+  logging:
+    export:
+      otlp:
+        enabled: false
 
 naver:
   news:

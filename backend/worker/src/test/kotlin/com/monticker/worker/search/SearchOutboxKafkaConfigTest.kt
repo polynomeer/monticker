@@ -1,14 +1,18 @@
 package com.monticker.worker.search
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.apache.kafka.common.serialization.StringSerializer
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
-import org.springframework.boot.autoconfigure.kafka.KafkaProperties
-import org.springframework.kafka.support.converter.ByteArrayJsonMessageConverter
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties
+import org.springframework.boot.test.context.runner.ApplicationContextRunner
+import org.springframework.kafka.core.KafkaOperations
+import org.springframework.kafka.core.KafkaTemplate
+import org.springframework.kafka.retrytopic.RetryTopicBeanNames
+import org.springframework.kafka.support.converter.ByteArrayJacksonJsonMessageConverter
 import org.springframework.modulith.events.Externalized
+import tools.jackson.databind.json.JsonMapper
 
 /**
  * 라이브 검증에서 겪은 사고를 고정한다: 기본 KafkaTemplate을 ByteArraySerializer로 바꾸면 @RetryableTopic의
@@ -16,11 +20,11 @@ import org.springframework.modulith.events.Externalized
  */
 class SearchOutboxKafkaConfigTest {
 
-    private val config = SearchOutboxKafkaConfig(KafkaProperties(), ObjectMapper())
+    private val config = SearchOutboxKafkaConfig(KafkaProperties(), JsonMapper())
 
     @Test
     fun `the default template keeps String serializers for RetryableTopic forwarding`() {
-        val cfg = config.kafkaTemplate().producerFactory.configurationProperties
+        val cfg = config.retryTopicKafkaTemplate().producerFactory.configurationProperties
 
         assertThat(cfg[ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG]).isEqualTo(StringSerializer::class.java)
     }
@@ -32,7 +36,28 @@ class SearchOutboxKafkaConfigTest {
 
         assertThat(cfg[ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG]).isEqualTo(ByteArraySerializer::class.java)
         assertThat(cfg[ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG]).isEqualTo(10_000)
-        assertThat(template.messageConverter).isInstanceOf(ByteArrayJsonMessageConverter::class.java)
+        assertThat(template.messageConverter).isInstanceOf(ByteArrayJacksonJsonMessageConverter::class.java)
+    }
+
+    /** Modulith 2.1의 `KafkaEventExternalizerConfiguration.kafkaEventExternalizer(…, KafkaOperations<?, ?>, …)`와 같은 주입점 */
+    class StarProjectedConsumer(val operations: KafkaOperations<*, *>)
+
+    @Test
+    fun `in a context Modulith gets the byte array template and retry topics get the String one by name`() {
+        ApplicationContextRunner()
+            .withBean(KafkaProperties::class.java)
+            .withBean(JsonMapper::class.java, { JsonMapper() })
+            .withUserConfiguration(SearchOutboxKafkaConfig::class.java)
+            .withBean(StarProjectedConsumer::class.java)
+            .run { ctx ->
+                val modulith = ctx.getBean(StarProjectedConsumer::class.java).operations as KafkaTemplate<*, *>
+                assertThat(modulith.producerFactory.configurationProperties[ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG])
+                    .isEqualTo(ByteArraySerializer::class.java)
+                // Spring Kafka의 RetryableTopicAnnotationProcessor가 이 이름으로 먼저 찾는다
+                val retry = ctx.getBean(RetryTopicBeanNames.DEFAULT_KAFKA_TEMPLATE_BEAN_NAME, KafkaTemplate::class.java)
+                assertThat(retry.producerFactory.configurationProperties[ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG])
+                    .isEqualTo(StringSerializer::class.java)
+            }
     }
 
     // api의 SearchIndexConsumer가 소비한다 — 토픽·키 규칙이 api와 같아야 한다

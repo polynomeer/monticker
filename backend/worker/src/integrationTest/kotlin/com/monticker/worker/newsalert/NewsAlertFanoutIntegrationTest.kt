@@ -1,6 +1,6 @@
 package com.monticker.worker.newsalert
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.json.JsonMapper
 import com.monticker.worker.search.SearchIndexEvent
 import com.monticker.worker.support.PostgresIntegrationTest
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
@@ -33,7 +33,7 @@ class NewsAlertFanoutIntegrationTest : PostgresIntegrationTest() {
     private val publisher = CapturingPublisher()
     private val fanout by lazy {
         NewsAlertFanout(
-            jdbcTemplate, publisher, TransactionTemplate(DataSourceTransactionManager(dataSource)), ObjectMapper(), SimpleMeterRegistry(),
+            jdbcTemplate, publisher, TransactionTemplate(DataSourceTransactionManager(dataSource)), JsonMapper(), SimpleMeterRegistry(),
         )
     }
     private val now: Instant = Instant.now().truncatedTo(ChronoUnit.SECONDS)
@@ -118,7 +118,7 @@ class NewsAlertFanoutIntegrationTest : PostgresIntegrationTest() {
         val stock = newStock()
         val watcher = newUser().also { watch(it, stock) }
         val switchedOff = NewsAlertFanout(
-            jdbcTemplate, publisher, TransactionTemplate(DataSourceTransactionManager(dataSource)), ObjectMapper(), SimpleMeterRegistry(),
+            jdbcTemplate, publisher, TransactionTemplate(DataSourceTransactionManager(dataSource)), JsonMapper(), SimpleMeterRegistry(),
             enabled = false,
         )
 

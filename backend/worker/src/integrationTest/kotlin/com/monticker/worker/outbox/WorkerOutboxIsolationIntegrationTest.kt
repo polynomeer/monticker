@@ -22,6 +22,8 @@ import org.springframework.context.ConfigurableApplicationContext
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Import
+import org.springframework.modulith.events.core.EventPublicationRegistry
+import org.springframework.modulith.events.core.Staleness
 import org.springframework.stereotype.Component
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.event.TransactionalEventListener
@@ -44,7 +46,7 @@ class WorkerOutboxIsolationIntegrationTest : PostgresIntegrationTest() {
     @Configuration(proxyBeanMethods = false)
     @ImportOutboxAutoConfiguration
     @Import(
-        OutboxResubmissionConfig::class, LegacyOutboxDrain::class, OutboxCompletedCleanup::class,
+        OutboxResubmissionConfig::class, LegacyOutboxDrain::class, LegacyPublicationStatusBackfill::class, OutboxCompletedCleanup::class,
         WorkerOutboxSchemaGuard::class, FlakySearchIndexListener::class, FlakyNewsAlertListener::class,
     )
     class OutboxTestApp {
@@ -188,6 +190,65 @@ class WorkerOutboxIsolationIntegrationTest : PostgresIntegrationTest() {
         // 1분 미만(구버전 worker가 지금 완료 표시할 수 있는 행)과 api 행은 남는다
         assertThat(jdbcTemplate.queryForList("SELECT id FROM public.event_publication", UUID::class.java))
             .containsExactlyInAnyOrder(fresh, apiRow)
+    }
+
+    @Test
+    fun `rows Modulith 1 left incomplete (status NULL) are resubmitted after the upgrade`() {
+        // 업그레이드 직전 구버전이 남긴 행(또는 롤링 배포 중 구버전이 쓰는 행) — Modulith 1.x는 status를 모른다
+        val stuck = event()
+        listener.failuresLeft.set(1)
+        runCatching { tx.executeWithoutResult { publisher.publishEvent(stuck) } }
+        jdbcTemplate.update(
+            "UPDATE worker_outbox.event_publication SET status = NULL, completion_attempts = NULL, publication_date = now() - INTERVAL '3 minutes'",
+        )
+        val fresh = insertRaw("worker_outbox.event_publication", SearchIndexEvent::class.java.name, "5 seconds")
+
+        context.getBean(OutboxResubmissionConfig::class.java).resubmit()
+
+        assertThat(listener.received).containsExactly(stuck, stuck)
+        // 1분 미만(구버전이 지금 처리 중일 수 있는 행)은 건드리지 않는다
+        assertThat(jdbcTemplate.queryForList("SELECT status FROM worker_outbox.event_publication WHERE id = ?", String::class.java, fresh))
+            .containsExactly(null)
+        assertThat(count("SELECT count(*) FROM worker_outbox.event_publication WHERE completion_date IS NULL")).isEqualTo(1)
+    }
+
+    @Test
+    fun `rows stuck in PROCESSING after a crash are resubmitted on the next cycle`() {
+        val stuck = event()
+        listener.failuresLeft.set(1)
+        runCatching { tx.executeWithoutResult { publisher.publishEvent(stuck) } }
+        // 리스너 실행 중에 프로세스가 죽은 상태 — 실패 기록(FAILED)이 남지 않았다
+        jdbcTemplate.update("UPDATE worker_outbox.event_publication SET status = 'PROCESSING', publication_date = now() - INTERVAL '3 minutes'")
+
+        context.getBean(OutboxResubmissionConfig::class.java).resubmit()
+
+        assertThat(listener.received).containsExactly(stuck, stuck)
+        assertThat(count("SELECT count(*) FROM worker_outbox.event_publication WHERE completion_date IS NULL")).isZero()
+    }
+
+    @Test
+    fun `rows stuck in RESUBMITTED after a crash during resubmission come back once marked stale`() {
+        val stuck = event()
+        listener.failuresLeft.set(1)
+        runCatching { tx.executeWithoutResult { publisher.publishEvent(stuck) } }
+        // 재전송이 행을 가져간 뒤(RESUBMITTED) 결과를 기록하기 전에 프로세스가 죽은 상태
+        jdbcTemplate.update(
+            """
+            UPDATE worker_outbox.event_publication
+               SET status = 'RESUBMITTED', completion_attempts = 1,
+                   publication_date = now() - INTERVAL '10 minutes', last_resubmission_date = now() - INTERVAL '3 minutes'
+            """.trimIndent(),
+        )
+
+        context.getBean(OutboxResubmissionConfig::class.java).resubmit()
+        assertThat(listener.received).containsExactly(stuck)   // 가져가는 조건이 status != 'RESUBMITTED'라 건너뛴다
+
+        // Staleness Monitor 한 주기(운영은 1분마다 스케줄러가 돈다) — spring.modulith.events.staleness.resubmitted
+        context.getBean(EventPublicationRegistry::class.java).markStalePublicationsFailed(context.getBean(Staleness::class.java))
+        context.getBean(OutboxResubmissionConfig::class.java).resubmit()
+
+        assertThat(listener.received).containsExactly(stuck, stuck)
+        assertThat(count("SELECT count(*) FROM worker_outbox.event_publication WHERE completion_date IS NULL")).isZero()
     }
 
     @Test

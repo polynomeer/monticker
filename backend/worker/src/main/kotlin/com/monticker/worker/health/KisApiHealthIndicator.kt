@@ -3,8 +3,8 @@ package com.monticker.worker.health
 import com.monticker.worker.kis.KisClient
 import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
-import org.springframework.boot.actuate.health.Health
-import org.springframework.boot.actuate.health.HealthIndicator
+import org.springframework.boot.health.contributor.Health
+import org.springframework.boot.health.contributor.HealthIndicator
 import org.springframework.stereotype.Component
 
 /**
@@ -33,20 +33,24 @@ class KisApiHealthIndicator(
         return when (cb?.state) {
             CircuitBreaker.State.OPEN -> Health.down()
                 .withDetail("circuitBreaker", cbState)
-                .withDetail("failureRate", metrics?.failureRate)
-                .withDetail("bufferedCalls", metrics?.numberOfBufferedCalls)
+                .withMetric("failureRate", metrics?.failureRate)
+                .withMetric("bufferedCalls", metrics?.numberOfBufferedCalls)
                 .build()
 
             CircuitBreaker.State.HALF_OPEN -> Health.status("HALF_OPEN")
                 .withDetail("circuitBreaker", cbState)
-                .withDetail("permittedCalls", metrics?.numberOfNotPermittedCalls)
+                .withMetric("permittedCalls", metrics?.numberOfNotPermittedCalls)
                 .build()
 
             else -> Health.up()
                 .withDetail("circuitBreaker", cbState)
-                .withDetail("failureRate", metrics?.failureRate)
-                .withDetail("successfulCalls", metrics?.numberOfSuccessfulCalls)
+                .withMetric("failureRate", metrics?.failureRate)
+                .withMetric("successfulCalls", metrics?.numberOfSuccessfulCalls)
                 .build()
         }
     }
+
+    // 서킷 브레이커가 없으면(레지스트리 조회 실패) 지표가 null이다. withDetail은 null 값을 받지 않는다 — 그런 지표는 뺀다
+    private fun Health.Builder.withMetric(key: String, value: Any?): Health.Builder =
+        if (value == null) this else withDetail(key, value)
 }

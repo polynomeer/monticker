@@ -62,5 +62,5 @@ class KisOrderBookSubscriber(
         jdbc.queryForList(
             "SELECT symbol FROM stocks WHERE market IN ('KOSPI', 'KOSDAQ') AND is_active = true ORDER BY id LIMIT 20",
             String::class.java,
-        )
+        ).filterNotNull()
 }

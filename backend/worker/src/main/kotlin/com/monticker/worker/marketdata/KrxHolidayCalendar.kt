@@ -97,7 +97,7 @@ class KrxHolidayCalendarLoader(
             val holidays = jdbc.query(
                 "SELECT holiday_date, name FROM market_holidays WHERE market = 'KRX'",
             ) { rs, _ -> rs.getDate("holiday_date").toLocalDate() to rs.getString("name") }.toMap()
-            val years = jdbc.queryForList("SELECT year FROM market_calendar_years WHERE market = 'KRX'", Int::class.java).toSet()
+            val years = jdbc.queryForList("SELECT year FROM market_calendar_years WHERE market = 'KRX'", Int::class.java).filterNotNull().toSet()
             KrxHolidayCalendar(holidays, years, ::onUncoveredYear)
         } catch (e: Exception) {
             log.warn("market calendar load failed — keeping previous snapshot (years={}): {}", MarketSchedule.krCalendar.coveredYears, e.message)
