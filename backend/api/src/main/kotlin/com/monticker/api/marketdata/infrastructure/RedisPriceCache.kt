@@ -2,7 +2,7 @@ package com.monticker.api.marketdata.infrastructure
 
 import com.monticker.api.marketdata.domain.PriceTick
 import com.monticker.api.marketdata.domain.StockPriceProvider
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.json.JsonMapper
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Component
 import java.math.BigDecimal
@@ -11,7 +11,7 @@ import java.time.Instant
 @Component
 class RedisPriceCache(
     private val redisTemplate: StringRedisTemplate,
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: JsonMapper,
 ) : StockPriceProvider {
 
     companion object {

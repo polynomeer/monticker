@@ -49,7 +49,10 @@ class KafkaTopicConfig(private val props: KafkaTopicProperties) {
             "market.event-detected" to EVENT_DETECTED_ATTEMPTS,
         )
 
-        /** Spring Kafka SUFFIX_WITH_INDEX_VALUE + dltTopicSuffix "-dlt" 규칙 그대로. */
+        /**
+         * Spring Kafka SUFFIX_WITH_INDEX_VALUE + dltTopicSuffix "-dlt" 규칙 그대로. 재시도 간격이 서로 다를 때(지수 백오프)의
+         * 이름이다 — 고정 백오프로 바꾸면 Spring Kafka 4는 "-retry" 하나만 만든다(SINGLE_TOPIC 기본값).
+         */
         fun names(topic: String, attempts: Int): List<String> =
             (0 until attempts - 1).map { "$topic-retry-$it" } + "$topic-dlt"
     }

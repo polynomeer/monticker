@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/quant/signals")
 class QuantSignalFeedController(private val service: QuantSignalFeedService) {
 
-    private fun userId(): Long = SecurityContextHolder.getContext().authentication.principal as Long
+    private fun userId(): Long = SecurityContextHolder.getContext().authentication!!.principal as Long
 
     @GetMapping("/feed")
     fun feed(@RequestParam(defaultValue = "20") limit: Int): ResponseEntity<List<QuantSignalFeedItem>> =

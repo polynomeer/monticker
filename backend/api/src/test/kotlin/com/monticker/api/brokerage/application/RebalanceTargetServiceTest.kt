@@ -1,6 +1,6 @@
 package com.monticker.api.brokerage.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.api.support.TestJson
 import com.monticker.api.brokerage.domain.BrokerageAccount
 import com.monticker.api.brokerage.domain.BrokerageProvider
 import com.monticker.api.brokerage.domain.RebalanceTarget
@@ -20,7 +20,7 @@ class RebalanceTargetServiceTest {
     private val accountRepo = mockk<BrokerageAccountRepository>()
     private val targetRepo = mockk<RebalanceTargetRepository>()
     private val jdbc = mockk<JdbcTemplate>()
-    private val objectMapper = ObjectMapper()
+    private val objectMapper = TestJson.boot
     private val service = RebalanceTargetService(accountRepo, targetRepo, jdbc, objectMapper)
 
     private fun makeAccount() = BrokerageAccount(id = 1L, userId = 1L, provider = BrokerageProvider.MOCK, accountNumber = "12345678")

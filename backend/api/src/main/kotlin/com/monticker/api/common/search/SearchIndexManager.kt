@@ -83,7 +83,7 @@ class SearchIndexManager(
      * 무시한다 — 설계가 요구하는 것이 만족되는지만 묻는다.
      */
     @Suppress("UNCHECKED_CAST")
-    internal fun compare(expected: Map<String, Any>, actual: Map<String, Any>): List<String> {
+    internal fun compare(expected: Map<String, Any?>, actual: Map<String, Any?>): List<String> {
         val exp = expected["properties"] as? Map<String, Map<String, Any>> ?: return emptyList()
         val act = actual["properties"] as? Map<String, Map<String, Any>> ?: return exp.keys.map { "$it: 실제 매핑에 없음" }
         return exp.flatMap { (field, def) ->

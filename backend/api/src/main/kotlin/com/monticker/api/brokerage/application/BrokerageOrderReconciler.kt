@@ -41,7 +41,7 @@ class BrokerageOrderReconciler(
             LIMIT $BATCH
             """.trimIndent(),
             Long::class.java,
-        )
+        ).filterNotNull()
         ids.forEach { id ->
             runCatching { brokerageService.reconcileUnresolved(id) }
                 .onFailure { log.warn("[BrokerageOrderReconciler] 대조 실패: orderId={} reason={}", id, it.message) }

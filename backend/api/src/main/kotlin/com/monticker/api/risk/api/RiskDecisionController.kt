@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/risk/decisions")
 class RiskDecisionController(private val decisions: RiskDecisionQueryService) {
 
-    private fun userId(): Long = SecurityContextHolder.getContext().authentication.principal as Long
+    private fun userId(): Long = SecurityContextHolder.getContext().authentication!!.principal as Long
 
     @GetMapping
     fun list(

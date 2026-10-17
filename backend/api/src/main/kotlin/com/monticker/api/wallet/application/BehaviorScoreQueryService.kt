@@ -1,6 +1,6 @@
 package com.monticker.api.wallet.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.json.JsonMapper
 import com.monticker.api.wallet.domain.BehaviorGrade
 import com.monticker.api.wallet.infrastructure.BehaviorScoreRepository
 import org.springframework.stereotype.Service
@@ -11,7 +11,7 @@ import java.time.LocalDate
 @Transactional(readOnly = true)
 class BehaviorScoreQueryService(
     private val scoreRepo: BehaviorScoreRepository,
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: JsonMapper,
 ) {
     fun findCached(userId: Long, date: LocalDate): BehaviorScoreResponse? {
         val s = scoreRepo.findByUserIdAndScoreDate(userId, date).orElse(null) ?: return null

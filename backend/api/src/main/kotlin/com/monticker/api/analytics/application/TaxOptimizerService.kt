@@ -1,6 +1,6 @@
 package com.monticker.api.analytics.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.json.JsonMapper
 import com.monticker.api.analytics.domain.TaxHarvestingLog
 import com.monticker.api.analytics.infrastructure.TaxHarvestingLogRepository
 import org.springframework.stereotype.Service
@@ -9,7 +9,7 @@ import org.springframework.transaction.annotation.Transactional
 @Service
 class TaxOptimizerService(
     private val queryService: TaxHarvestingQueryService,
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: JsonMapper,
     private val taxHarvestingLogRepository: TaxHarvestingLogRepository,
 ) {
     @Transactional

@@ -18,15 +18,23 @@ import java.time.Duration
  * ADR-094 — 이 테이블은 **api 전용**이다. Modulith는 미완료 행을 전부 엔티티로 읽어 이벤트 클래스를 해석하므로,
  * 이 프로세스에 없는 클래스(예: worker의 SearchIndexEvent)가 한 행이라도 있으면 재전송 전체가 실패한다.
  * worker는 worker_outbox.event_publication을 쓴다(V91).
+ *
+ * ADR-104 — Modulith 2는 재전송할 행을 `status != RESUBMITTED` 조건으로 가져간다. 1.x가 쓴 행(status NULL)은
+ * [LegacyPublicationStatusBackfill]이, 재전송 도중 프로세스가 죽어 RESUBMITTED에 멈춘 행은 Staleness Monitor
+ * (`spring.modulith.events.staleness.resubmitted` = 1분)가 FAILED로 바꿔 이 재전송이 다시 집게 한다.
  */
 @Component
 class OutboxResubmissionConfig(
     private val incompletePublications: IncompleteEventPublications,
+    private val legacyStatus: LegacyPublicationStatusBackfill,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
     @Scheduled(fixedDelay = 300_000, initialDelay = 60_000)
     fun resubmit() {
+        // 구버전이 쓴 행은 status가 NULL이라 Modulith 2가 가져가지 못한다 — 먼저 FAILED로 표시한다
+        runCatching { legacyStatus.backfill() }
+            .onFailure { log.warn("[Outbox] 구버전 발행 행 상태 표시 실패 — 다음 주기에 재시도: {}", it.message) }
         log.debug("[Outbox] 미완료 이벤트 재전송 시작")
         incompletePublications.resubmitIncompletePublicationsOlderThan(Duration.ofMinutes(1))
     }

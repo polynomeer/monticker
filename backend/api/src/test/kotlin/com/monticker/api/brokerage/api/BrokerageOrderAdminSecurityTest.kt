@@ -19,8 +19,8 @@ import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest
-import org.springframework.boot.test.mock.mockito.MockBean
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.context.annotation.Import
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.http.MediaType
@@ -35,12 +35,12 @@ import org.springframework.test.web.servlet.post
 class BrokerageOrderAdminSecurityTest {
 
     @Autowired lateinit var mvc: MockMvc
-    @MockBean lateinit var brokerageService: BrokerageService
-    @MockBean lateinit var jwtTokenProvider: JwtTokenProvider
-    @MockBean(answer = Answers.RETURNS_DEEP_STUBS) lateinit var redis: StringRedisTemplate
-    @MockBean lateinit var oauth2SuccessHandler: OAuth2SuccessHandler
-    @MockBean lateinit var customOAuth2UserService: CustomOAuth2UserService
-    @MockBean lateinit var cookieAuthorizationRequestRepository: HttpCookieOAuth2AuthorizationRequestRepository
+    @MockitoBean lateinit var brokerageService: BrokerageService
+    @MockitoBean lateinit var jwtTokenProvider: JwtTokenProvider
+    @MockitoBean(answers = Answers.RETURNS_DEEP_STUBS) lateinit var redis: StringRedisTemplate
+    @MockitoBean lateinit var oauth2SuccessHandler: OAuth2SuccessHandler
+    @MockitoBean lateinit var customOAuth2UserService: CustomOAuth2UserService
+    @MockitoBean lateinit var cookieAuthorizationRequestRepository: HttpCookieOAuth2AuthorizationRequestRepository
 
     @Test
     fun `일반 사용자는 결과 불명 주문을 확정할 수 없다 — 403`() {

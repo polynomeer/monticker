@@ -20,7 +20,7 @@ import java.time.Instant
 @RequestMapping("/api/alerts")
 class AlertController(private val alertService: AlertService) {
 
-    private fun userId(): Long = SecurityContextHolder.getContext().authentication.principal as Long
+    private fun userId(): Long = SecurityContextHolder.getContext().authentication!!.principal as Long
 
     /** 기본은 켜진 규칙만. includePaused=true면 꺼 둔 규칙도(삭제한 규칙은 제외) — 알림 화면의 켜기/끄기 토글용 */
     @GetMapping("/rules")

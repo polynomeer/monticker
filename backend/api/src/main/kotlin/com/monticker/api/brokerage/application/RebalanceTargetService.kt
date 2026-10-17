@@ -1,7 +1,7 @@
 package com.monticker.api.brokerage.application
 
-import com.fasterxml.jackson.core.type.TypeReference
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.core.type.TypeReference
+import tools.jackson.databind.json.JsonMapper
 import com.monticker.api.brokerage.domain.RebalanceTarget
 import com.monticker.api.brokerage.domain.RebalanceTargetSource
 import com.monticker.api.brokerage.infrastructure.BrokerageAccountRepository
@@ -22,7 +22,7 @@ class RebalanceTargetService(
     private val accountRepo: BrokerageAccountRepository,
     private val targetRepo: RebalanceTargetRepository,
     private val jdbc: JdbcTemplate,
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: JsonMapper,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 

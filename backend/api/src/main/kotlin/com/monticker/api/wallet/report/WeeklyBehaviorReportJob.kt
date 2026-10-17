@@ -1,6 +1,6 @@
 package com.monticker.api.wallet.report
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.json.JsonMapper
 import com.monticker.api.common.notification.UnsubscribeScope
 import com.monticker.api.common.notification.UnsubscribeTokenService
 import com.monticker.api.common.time.KstPeriod
@@ -52,7 +52,7 @@ class WeeklyBehaviorReportJob(
     private val emotions: EmotionTagService,
     private val mailSender: JavaMailSender,
     private val redis: StringRedisTemplate,
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: JsonMapper,
     private val registry: MeterRegistry,
     private val unsubscribeTokens: UnsubscribeTokenService,
     @Value("\${app.weekly-report.enabled:true}") private val enabled: Boolean = true,

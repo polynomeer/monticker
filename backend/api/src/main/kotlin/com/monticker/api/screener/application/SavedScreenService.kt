@@ -1,7 +1,7 @@
 package com.monticker.api.screener.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.readValue
+import tools.jackson.databind.json.JsonMapper
+import tools.jackson.module.kotlin.readValue
 import com.monticker.api.common.exception.BusinessRuleException
 import com.monticker.api.screener.domain.ScreenerCriteria
 import com.monticker.api.screener.infrastructure.SavedScreenRepository
@@ -26,7 +26,7 @@ data class SavedScreen(
 @Service
 class SavedScreenService(
     private val repo: SavedScreenRepository,
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: JsonMapper,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 

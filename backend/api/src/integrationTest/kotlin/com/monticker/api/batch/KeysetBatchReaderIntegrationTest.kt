@@ -20,7 +20,7 @@ import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
-import org.springframework.batch.item.ExecutionContext
+import org.springframework.batch.infrastructure.item.ExecutionContext
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.jpa.repository.support.JpaRepositoryFactory
 import java.sql.Date

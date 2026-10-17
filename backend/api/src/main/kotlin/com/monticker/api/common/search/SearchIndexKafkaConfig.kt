@@ -5,7 +5,7 @@ import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.kafka.common.serialization.StringSerializer
-import org.springframework.boot.autoconfigure.kafka.KafkaProperties
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory
@@ -31,7 +31,7 @@ import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries
 class SearchIndexKafkaConfig(private val props: KafkaProperties) {
 
     private fun dltTemplate(): KafkaTemplate<Any, Any> {
-        val cfg = props.buildProducerProperties(null).toMutableMap()
+        val cfg = props.buildProducerProperties().toMutableMap()
         cfg[ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG] = StringSerializer::class.java
         cfg[ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG] = StringSerializer::class.java
         return KafkaTemplate(DefaultKafkaProducerFactory(cfg))
@@ -39,7 +39,7 @@ class SearchIndexKafkaConfig(private val props: KafkaProperties) {
 
     @Bean
     fun searchIndexContainerFactory(): ConcurrentKafkaListenerContainerFactory<String, String> {
-        val cfg = props.buildConsumerProperties(null).toMutableMap()
+        val cfg = props.buildConsumerProperties().toMutableMap()
         cfg[ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG] = StringDeserializer::class.java
         cfg[ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG] = StringDeserializer::class.java
         cfg[ConsumerConfig.AUTO_OFFSET_RESET_CONFIG] = "earliest"
@@ -52,8 +52,8 @@ class SearchIndexKafkaConfig(private val props: KafkaProperties) {
         val backoff = ExponentialBackOffWithMaxRetries(3).apply { initialInterval = 2_000; multiplier = 3.0 }
 
         return ConcurrentKafkaListenerContainerFactory<String, String>().apply {
-            consumerFactory = DefaultKafkaConsumerFactory(cfg)
-            isBatchListener = true
+            setConsumerFactory(DefaultKafkaConsumerFactory(cfg))
+            setBatchListener(true)
             setCommonErrorHandler(DefaultErrorHandler(recoverer, backoff).apply { setLogLevel(org.springframework.kafka.KafkaException.Level.ERROR) })
         }
     }

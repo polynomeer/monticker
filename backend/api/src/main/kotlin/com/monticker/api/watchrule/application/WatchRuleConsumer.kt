@@ -1,15 +1,15 @@
 package com.monticker.api.watchrule.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.json.JsonMapper
 import com.monticker.api.watchrule.events.StockEventDetectedEvent
 import io.micrometer.core.instrument.MeterRegistry
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.DltHandler
+import org.springframework.kafka.annotation.BackOff
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.kafka.annotation.RetryableTopic
 import org.springframework.kafka.retrytopic.TopicSuffixingStrategy
-import org.springframework.retry.annotation.Backoff
 import org.springframework.stereotype.Component
 
 /**
@@ -26,7 +26,7 @@ import org.springframework.stereotype.Component
 @Component
 class WatchRuleConsumer(
     private val executor: WatchRuleExecutor,
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: JsonMapper,
     registry: MeterRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -34,7 +34,7 @@ class WatchRuleConsumer(
 
     @RetryableTopic(
         attempts = "3",
-        backoff = Backoff(delay = 2_000, multiplier = 2.0),
+        backOff = BackOff(delay = 2_000, multiplier = 2.0),
         topicSuffixingStrategy = TopicSuffixingStrategy.SUFFIX_WITH_INDEX_VALUE,
         dltTopicSuffix = "-dlt",
         autoCreateTopics = "false",

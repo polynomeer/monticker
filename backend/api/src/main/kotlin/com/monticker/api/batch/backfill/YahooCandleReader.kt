@@ -5,8 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException
 import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import org.slf4j.LoggerFactory
-import org.springframework.batch.item.ExecutionContext
-import org.springframework.batch.item.ItemStreamReader
+import org.springframework.batch.infrastructure.item.ExecutionContext
+import org.springframework.batch.infrastructure.item.ItemStreamReader
 import org.springframework.web.client.RestTemplate
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -24,7 +24,9 @@ open class YahooCandleReader(
     private val fromDate: LocalDate,
     private val toDate: LocalDate,
     private val restTemplate: RestTemplate,
-    private val objectMapper: ObjectMapper,
+    // Jackson 2로 둔다(ADR-104, B4-6에서 옮긴다). Jackson 3의 decimalValue()·longValue()는 null 노드에서 예외를 던져,
+    // 빠진 봉이 null로 오는 Yahoo 응답 전체를 버리게 된다 — Jackson 2는 0을 돌려줘 아래 filter가 그 봉만 뺀다
+    private val objectMapper: ObjectMapper = ObjectMapper(),
     private val circuitBreaker: CircuitBreaker,
 ) : ItemStreamReader<CandleOhlcv> {
 

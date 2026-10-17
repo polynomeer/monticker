@@ -17,7 +17,7 @@ data class ReportCommentRequest(val reason: String)
 @RequestMapping("/api/stocks/{stockId}/comments")
 class StockCommentController(private val stockCommentService: StockCommentService) {
 
-    private fun userId(): Long = SecurityContextHolder.getContext().authentication.principal as Long
+    private fun userId(): Long = SecurityContextHolder.getContext().authentication!!.principal as Long
 
     @PostMapping
     @RateLimited(limit = 5, windowSec = 60, keyPrefix = "community.comment")

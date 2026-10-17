@@ -28,7 +28,7 @@ class PaperController(
     private val accountService: PaperAccountService,
 ) {
     private fun userId(): Long =
-        SecurityContextHolder.getContext().authentication.principal as Long
+        SecurityContextHolder.getContext().authentication!!.principal as Long
 
     @GetMapping("/portfolio")
     fun getPortfolio() = ResponseEntity.ok(portfolioQueryService.getPortfolio(userId()))

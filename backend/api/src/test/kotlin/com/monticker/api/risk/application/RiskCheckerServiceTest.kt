@@ -1,6 +1,6 @@
 package com.monticker.api.risk.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.api.support.TestJson
 import com.monticker.api.risk.domain.RiskLimit
 import com.monticker.api.risk.infrastructure.RiskLimitRepository
 import io.mockk.every
@@ -18,7 +18,7 @@ class RiskCheckerServiceTest {
 
     private val riskLimitRepo = mockk<RiskLimitRepository>()
     private val jdbc = mockk<JdbcTemplate>(relaxed = true)
-    private val objectMapper = ObjectMapper()
+    private val objectMapper = TestJson.boot
     private val riskRuleQueryService = RiskRuleQueryService(jdbc)
     private val auditLogger = RiskCheckAuditLogger(jdbc, objectMapper)
     private val service = RiskCheckerService(RiskLimitService(riskLimitRepo, jdbc), riskRuleQueryService, auditLogger, io.micrometer.core.instrument.simple.SimpleMeterRegistry(), jdbc)

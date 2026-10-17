@@ -1,6 +1,6 @@
 package com.monticker.api.alert.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.json.JsonMapper
 import com.monticker.api.alert.infrastructure.UserAlertHistoryRepository
 import com.monticker.api.common.notification.NotificationCategory
 import com.monticker.api.common.notification.UserNotificationCommand
@@ -32,7 +32,7 @@ class QuantSignalAlertFanout(
     private val access: StrategySignalAccess,
     private val histories: UserAlertHistoryRepository,
     private val events: ApplicationEventPublisher,
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: JsonMapper,
     @Value("\${app.quant-signal-push.enabled:true}") private val pushEnabled: Boolean = true,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)

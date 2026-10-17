@@ -97,7 +97,7 @@ class RiskLimitNearWarningJob(
            ORDER BY c.user_id""",
         Long::class.java,
         Timestamp.from(today.atStartOfDay(KST).toInstant()),
-    )
+    ).filterNotNull()
 
     /** 지난 경고 기록 정리 — 하루 한 번 보장에는 오늘 행만 필요하다. 일주일은 운영 확인용으로 남긴다. */
     @Scheduled(cron = "0 20 4 * * *", zone = "Asia/Seoul")

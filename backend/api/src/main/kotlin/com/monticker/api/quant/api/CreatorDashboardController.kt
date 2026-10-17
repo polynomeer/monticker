@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/quant/market/creator")
 class CreatorDashboardController(private val service: CreatorDashboardService) {
 
-    private fun userId(): Long = SecurityContextHolder.getContext().authentication.principal as Long
+    private fun userId(): Long = SecurityContextHolder.getContext().authentication!!.principal as Long
 
     @GetMapping("/dashboard")
     fun dashboard(): ResponseEntity<CreatorDashboard> = ResponseEntity.ok(service.dashboard(userId()))

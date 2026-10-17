@@ -52,7 +52,7 @@ class StrategySignalAccess(
         ORDER BY ss.user_id
         """.trimIndent(),
         Long::class.java, ruleSetId,
-    )
+    ).filterNotNull()
 }
 
 /** ADR-090 — 신호 하나를 받을 사람들. [userIds]는 주인이 먼저, 중복 없음. */

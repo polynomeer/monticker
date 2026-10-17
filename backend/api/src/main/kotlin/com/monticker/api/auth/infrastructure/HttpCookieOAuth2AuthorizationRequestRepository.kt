@@ -1,6 +1,6 @@
 package com.monticker.api.auth.infrastructure
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.json.JsonMapper
 import jakarta.servlet.http.Cookie
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -17,21 +17,17 @@ private const val COOKIE_MAX_AGE = 180
  */
 @Component
 class HttpCookieOAuth2AuthorizationRequestRepository(
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: JsonMapper,
 ) : AuthorizationRequestRepository<OAuth2AuthorizationRequest> {
 
     override fun loadAuthorizationRequest(request: HttpServletRequest): OAuth2AuthorizationRequest? =
         getCookieValue(request)?.let { deserialize(it) }
 
     override fun saveAuthorizationRequest(
-        authorizationRequest: OAuth2AuthorizationRequest?,
+        authorizationRequest: OAuth2AuthorizationRequest,   // Security 7은 non-null로 선언한다(삭제는 removeAuthorizationRequest)
         request: HttpServletRequest,
         response: HttpServletResponse,
     ) {
-        if (authorizationRequest == null) {
-            deleteCookie(response)
-            return
-        }
         val value = serialize(authorizationRequest)
         val cookie = Cookie(COOKIE_NAME, value).apply {
             isHttpOnly = true

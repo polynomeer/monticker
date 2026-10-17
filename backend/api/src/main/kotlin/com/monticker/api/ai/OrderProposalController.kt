@@ -13,7 +13,7 @@ data class CreateOrderProposalRequest(val stockId: Long)
 @RequestMapping("/api/ai/order-proposals")
 class OrderProposalController(private val orderProposalService: OrderProposalService) {
 
-    private fun userId(): Long = SecurityContextHolder.getContext().authentication.principal as Long
+    private fun userId(): Long = SecurityContextHolder.getContext().authentication!!.principal as Long
 
     @PostMapping
     @RateLimited(limit = 30, windowSec = 3600, keyPrefix = "ai.order-proposal")

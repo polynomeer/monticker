@@ -1,6 +1,6 @@
 package com.monticker.api.wallet
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.api.support.TestJson
 import com.monticker.api.common.notification.UnsubscribeScope
 import com.monticker.api.common.notification.UnsubscribeTokenService
 import com.monticker.api.common.time.KstPeriod
@@ -125,7 +125,7 @@ class WeeklyBehaviorReportIntegrationTest : PostgresIntegrationTest() {
         emotions = EmotionTagService(mockk<EmotionTagRepository>(), mockk<PaperTradeQueryService>(), jdbcTemplate),
         mailSender = mail,
         redis = redis,
-        objectMapper = ObjectMapper(),
+        objectMapper = TestJson.boot,
         registry = SimpleMeterRegistry(),
         unsubscribeTokens = tokens,
         baseUrl = "https://app.test",
@@ -136,7 +136,7 @@ class WeeklyBehaviorReportIntegrationTest : PostgresIntegrationTest() {
 
     private val tokens = UnsubscribeTokenService("integration-test-unsubscribe-secret-0123456789")
 
-    private fun emailOf(user: Long): String = jdbcTemplate.queryForList("SELECT email FROM users WHERE id = ?", String::class.java, user).single()
+    private fun emailOf(user: Long): String = jdbcTemplate.queryForList("SELECT email FROM users WHERE id = ?", String::class.java, user).single()!!
 
     @Test
     fun `only eligible users with trades in the KST week get exactly one report`() {

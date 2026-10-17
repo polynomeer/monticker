@@ -1,7 +1,7 @@
 package com.monticker.api.quant.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.readValue
+import tools.jackson.databind.json.JsonMapper
+import tools.jackson.module.kotlin.readValue
 import com.monticker.api.quant.domain.*
 import com.monticker.api.quant.infrastructure.QuantBacktestResultRepository
 import com.monticker.api.quant.infrastructure.RuleSetRepository
@@ -17,7 +17,7 @@ class RuleSetService(
     private val ruleSetRepository: RuleSetRepository,
     private val backtestResultRepository: QuantBacktestResultRepository,
     private val jdbc: JdbcTemplate,
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: JsonMapper,
     private val performanceQuery: StrategyPerformanceQuery,
 ) {
 
