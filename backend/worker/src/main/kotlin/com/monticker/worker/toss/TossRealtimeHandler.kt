@@ -1,6 +1,6 @@
 package com.monticker.worker.toss
 
-import com.fasterxml.jackson.databind.JsonNode
+import tools.jackson.databind.JsonNode
 
 /**
  * Toss WebSocket 푸시 메시지를 채널별로 처리하는 핸들러.

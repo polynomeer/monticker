@@ -71,6 +71,14 @@ class WireFormatGoldenTest {
         assertThat(mapper.readValue(json, TickProcessedMessage::class.java)).isEqualTo(TickProcessedMessage(5930, BigDecimal("71200.50")))
     }
 
+    @Test
+    fun `모르는 필드는 어노테이션 없는 메시지에서도 무시한다(매퍼 설정 — 컨슈머가 뜨는 순서와 무관)`() {
+        assertThat(mapper.readValue("""{"stockId":5930,"price":71200.50,"someFutureField":1}""", TickProcessedMessage::class.java))
+            .isEqualTo(TickProcessedMessage(5930, BigDecimal("71200.50")))
+        val alert = """{"ruleId":9,"userId":7,"stockId":5930,"ruleType":"PRICE_ABOVE","conditionJson":"{}","price":1,"someFutureField":"x"}"""
+        assertThat(mapper.readValue(alert, AlertTriggeredMessage::class.java).ruleId).isEqualTo(9)
+    }
+
     // ── notify.commands ──────────────────────────────────────────────────────
 
     @Test

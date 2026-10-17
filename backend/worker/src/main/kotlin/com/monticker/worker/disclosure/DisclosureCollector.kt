@@ -1,6 +1,6 @@
 package com.monticker.worker.disclosure
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.worker.common.PlainJson
 import com.monticker.worker.common.DistributedLock
 import org.slf4j.LoggerFactory
 import com.monticker.worker.detector.StockEventWriter
@@ -28,7 +28,7 @@ class DisclosureCollector(
     private val meterRegistry: io.micrometer.core.instrument.MeterRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val mapper = ObjectMapper()
+    private val mapper = PlainJson.mapper
     private val dateFmt = DateTimeFormatter.ofPattern("yyyyMMdd")
 
     @Scheduled(fixedDelay = 600_000) // 10분마다

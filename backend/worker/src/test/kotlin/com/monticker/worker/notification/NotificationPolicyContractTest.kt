@@ -1,8 +1,8 @@
 package com.monticker.worker.notification
 
-import com.fasterxml.jackson.databind.DeserializationFeature
-import com.fasterxml.jackson.databind.JsonNode
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.worker.common.WireJson
+import tools.jackson.databind.DeserializationFeature
+import tools.jackson.databind.JsonNode
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.SoftAssertions
 import org.junit.jupiter.api.Test
@@ -17,8 +17,8 @@ import java.time.ZoneId
  * 시각은 KST 벽시계로 주고 Instant로 바꿔 넘긴다: JVM 시간대(CI는 UTC)와 무관하게 같은 답이어야 한다.
  */
 class NotificationPolicyContractTest {
-    private val mapper = ObjectMapper().findAndRegisterModules()
-        .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, true)   // 표의 필드 이름이 worker 설정과 다르면 실패
+    private val mapper = WireJson.mapper.rebuild()
+        .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build()   // 표의 필드 이름이 worker 설정과 다르면 실패
     private val table: JsonNode = mapper.readTree(
         File(System.getProperty("monticker.contractsDir") ?: "../contracts", "notification-delivery-policy.json"),
     )

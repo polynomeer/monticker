@@ -1,7 +1,7 @@
 package com.monticker.worker.notification
 
 import java.time.Duration
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.worker.common.WireJson
 import com.monticker.worker.push.ExpoPushSender
 import com.monticker.worker.push.PushMessage
 import com.monticker.worker.push.PushResult
@@ -106,7 +106,7 @@ class UserNotificationDispatcherTest {
     fun `api가 외부화한 JSON을 읽는다`() {
         val json = """{"userId":7,"title":"t","body":"b","dedupKey":"k","data":{"type":"CONDITIONAL_ORDER_FAILED","conditionalOrderId":12}}"""
 
-        val read = ObjectMapper().findAndRegisterModules().readValue(json, UserNotificationMessage::class.java)
+        val read = WireJson.mapper.readValue(json, UserNotificationMessage::class.java)
 
         assertThat(read).isEqualTo(UserNotificationMessage(7L, "t", "b", "k", mapOf("type" to "CONDITIONAL_ORDER_FAILED", "conditionalOrderId" to 12)))
     }

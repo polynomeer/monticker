@@ -1,6 +1,6 @@
 package com.monticker.worker.marketdata
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.worker.common.WireJson
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 
@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test
  */
 class GeneratedTickWireTest {
 
-    private val mapper = ObjectMapper().findAndRegisterModules()
+    private val mapper = WireJson.mapper
 
     @Test
     fun `모르는 필드가 있어도 역직렬화한다`() {

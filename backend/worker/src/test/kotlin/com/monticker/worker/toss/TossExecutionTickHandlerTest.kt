@@ -1,6 +1,6 @@
 package com.monticker.worker.toss
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.worker.common.PlainJson
 import com.monticker.worker.kafka.TickKafkaProducer
 import com.monticker.worker.kis.KisCoverageProvider
 import com.monticker.worker.marketdata.GeneratedTick
@@ -18,7 +18,7 @@ import java.sql.ResultSet
 
 class TossExecutionTickHandlerTest {
 
-    private val mapper = ObjectMapper()
+    private val mapper = PlainJson.mapper
     private val noKisCoverage = KisCoverageProvider(mockk(), "internal")
 
     // TossCoverageProvider의 usTargets/krTargets는 val이라 리플렉션 없이 직접 재구성할 수
