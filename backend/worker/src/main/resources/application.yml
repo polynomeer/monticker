@@ -51,6 +51,14 @@ spring:
     port: ${MAIL_PORT:587}
     username: ${MAIL_USERNAME:}
     password: ${MAIL_PASSWORD:}
+    # 예전엔 이 블록이 spring.kafka 아래에 잘못 들여쓰여 있어 JavaMail에 닿지 않았다 — SMTP 인증·STARTTLS 없이 587에
+    # 붙고 있었고, Kafka 클라이언트는 모르는 설정 mail.smtp.*를 받았다. api(application.yml)와 같게 맞춘다.
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
   kafka:
     listener:
       # ADR-040 파티션 수까지 병렬 소비. 로컬 12 파티션 기준 4. 운영은 파티션 수에 맞춰 ConfigMap으로.
@@ -64,12 +72,6 @@ spring:
     bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
     # producer 직렬화기는 기본(String)을 유지한다 — @RetryableTopic의 재시도/DLT 발행이 defaultRetryTopicKafkaTemplate으로
     # String 레코드를 전달한다. Modulith 외부화(byte[] JSON)는 SearchOutboxKafkaConfig의 별도 템플릿을 쓴다.
-    properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
   lifecycle:
     timeout-per-shutdown-phase: 30s
   task:
