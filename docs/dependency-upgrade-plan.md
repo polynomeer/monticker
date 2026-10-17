@@ -148,6 +148,10 @@ Kotlin 컴파일러 플러그인(`plugin.spring`·`plugin.jpa`)은 `kotlin("jvm"
     - Spring 7(JSpecify): `queryForList(…, String::class.java)` 원소가 `String?`, `Health.withDetail`이 null을 거부(런타임엔 원래 거부했다 — 서킷 브레이커가 없을 때 KisApiHealthIndicator가 예외를 낼 수 있었다).
     - 덤: worker의 `mail.smtp.auth·starttls`가 `spring.kafka` 아래에 잘못 들여쓰여 JavaMail에 닿지 않았다(별도 커밋으로 고침).
 - **B4-6** 직접 만든 Jackson 2 매퍼를 `tools.jackson`으로 한 PR씩(날짜·정렬 설정을 명시해 B4-3이 초록인 채로).
+  - ✅ worker(#235·#236): Kafka `WireJson`, 외부 API 클라이언트·Redis/DB JSON(`PlainJson`) 모두 Jackson 3, `configureForJackson2()`로 형식 유지. worker 코드에 Jackson 2 없음(`NoJackson2InMainTest`).
+    - 트리 접근 차이: `asLong()` 등은 숫자 아닌 문자열에서 예외(→ `asLong(0)`), JSON `null`의 텍스트는 `""`(Jackson 2는 `"null"` — **의도적으로 받아들인 유일한 동작 변경**), 3.1의 `JsonNode.map(Function)`이 Kotlin `map`을 가림(→ `values().map`). `ExternalApiParsingGoldenTest`가 전환 전 동작을 실제 응답 모양으로 고정했다.
+    - 공유 Jackson 2 매퍼를 `configure()`로 바꾸던 곳(UserNotifyKafkaConsumer)이 역할별로 다른 동작을 만들고 있었다 — 모르는 필드 무시를 매퍼에 명시했다.
+  - 남은 것: api(#233 머지 뒤) — `YahooCandleReader`(null 노드), Redis 캐시(EVERYTHING 타이핑 — Jackson 3엔 없다), 그 밖의 `ObjectMapper()`.
 
 **검증(B4-5)**: `scripts/check.sh --full`, e2e-ci, L-05 order-burst + 정합성 검증(원장 드리프트 0), 카오스 CH-05(Kafka 정지)·CH-13(PG 정지), B4-3 고정 테스트, 운영은 카나리 → 전체(킬 스위치 런북 준비).
 
@@ -266,4 +270,4 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 | B4-4 ES 9 서버 | 시작 전 | — | 운영 일정 필요 |
 | B4-5a worker Boot 4.1 | PR | — | ADR-104. 통합 테스트·로컬 기동(api 3.5와 혼합)으로 확인 |
 | B4-5b api Boot 4.1 | 시작 전 | — | B4-5a에서 찾은 것을 api에도 적용 |
-| B4-6 | 시작 전 | — | 직접 만든 Jackson 2 매퍼 이전 |
+| B4-6 | 진행 중 | #235 #236 | worker 완료. api는 #233 뒤 |
