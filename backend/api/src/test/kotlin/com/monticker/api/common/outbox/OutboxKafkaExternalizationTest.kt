@@ -1,7 +1,7 @@
 package com.monticker.api.common.outbox
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.api.matching.events.OrderFilledEvent
+import com.monticker.api.support.TestJson
 import org.apache.kafka.clients.producer.MockProducer
 import org.apache.kafka.clients.producer.Producer
 import org.apache.kafka.common.serialization.Serializer
@@ -14,7 +14,7 @@ import org.springframework.core.io.ClassPathResource
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.kafka.core.ProducerFactory
 import org.springframework.kafka.support.KafkaHeaders
-import org.springframework.kafka.support.converter.ByteArrayJsonMessageConverter
+import org.springframework.kafka.support.converter.ByteArrayJacksonJsonMessageConverter
 import org.springframework.messaging.support.MessageBuilder
 import java.math.BigDecimal
 
@@ -34,14 +34,14 @@ class OutboxKafkaExternalizationTest {
         return Class.forName(cls).getDeclaredConstructor().newInstance() as Serializer<Any>
     }
 
-    /** Boot가 자동구성하는 KafkaTemplate과 같은 조합: yml 직렬화기 + Modulith가 등록하는 ByteArrayJsonMessageConverter */
+    /** Boot가 자동구성하는 KafkaTemplate과 같은 조합: yml 직렬화기 + Modulith가 등록하는 ByteArrayJacksonJsonMessageConverter(Boot 매퍼, ADR-104) */
     private fun templateWith(valueSerializer: Serializer<Any>): Pair<KafkaTemplate<Any, Any>, MockProducer<Any, Any>> {
         @Suppress("UNCHECKED_CAST")
-        val producer = MockProducer(true, StringSerializer() as Serializer<Any>, valueSerializer)
+        val producer = MockProducer(true, null, StringSerializer() as Serializer<Any>, valueSerializer)
         val factory = object : ProducerFactory<Any, Any> {
             override fun createProducer(): Producer<Any, Any> = producer
         }
-        val template = KafkaTemplate(factory).apply { setMessageConverter(ByteArrayJsonMessageConverter(ObjectMapper().findAndRegisterModules())) }
+        val template = KafkaTemplate(factory).apply { setMessageConverter(ByteArrayJacksonJsonMessageConverter(TestJson.boot)) }
         return template to producer
     }
 

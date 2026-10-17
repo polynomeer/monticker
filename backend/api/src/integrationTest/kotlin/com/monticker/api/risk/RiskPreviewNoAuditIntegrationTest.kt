@@ -1,6 +1,6 @@
 package com.monticker.api.risk
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.api.support.TestJson
 import com.monticker.api.risk.application.RiskCheckAuditLogger
 import com.monticker.api.risk.application.RiskCheckerService
 import com.monticker.api.risk.application.RiskLimitService
@@ -27,7 +27,7 @@ class RiskPreviewNoAuditIntegrationTest : PostgresIntegrationTest() {
     private val service = RiskCheckerService(
         RiskLimitService(limitRepo, jdbcTemplate),
         RiskRuleQueryService(jdbcTemplate),
-        RiskCheckAuditLogger(jdbcTemplate, ObjectMapper()),
+        RiskCheckAuditLogger(jdbcTemplate, TestJson.boot),
         registry,
         jdbcTemplate,
     )

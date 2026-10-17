@@ -12,7 +12,7 @@ import com.monticker.api.alert.domain.AlertRuleType
 import com.monticker.api.alert.infrastructure.AlertHistoryDocument
 import com.monticker.api.alert.infrastructure.AlertHistorySearchRepository
 import com.monticker.api.alert.infrastructure.AlertRuleRepository
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.json.JsonMapper
 import org.slf4j.LoggerFactory
 import org.springframework.data.elasticsearch.client.elc.NativeQuery
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations
@@ -25,7 +25,7 @@ import java.time.Instant
 @Transactional
 class AlertService(
     private val alertRuleRepository: AlertRuleRepository,
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: JsonMapper,
     private val jdbc: JdbcTemplate,
     private val alertHistorySearchRepository: AlertHistorySearchRepository,
     private val esOps: ElasticsearchOperations,

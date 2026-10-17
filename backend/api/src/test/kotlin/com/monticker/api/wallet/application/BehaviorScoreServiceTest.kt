@@ -1,6 +1,6 @@
 package com.monticker.api.wallet.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.api.support.TestJson
 import com.monticker.api.wallet.domain.BehaviorScore
 import com.monticker.api.wallet.domain.EmotionTag
 import com.monticker.api.wallet.domain.EmotionType
@@ -26,7 +26,7 @@ class BehaviorScoreServiceTest {
     private val scoreRepo = mockk<BehaviorScoreRepository>()
     private val emotionTagRepo = mockk<EmotionTagRepository>()
     private val jdbc = mockk<JdbcTemplate>()
-    private val objectMapper = ObjectMapper()
+    private val objectMapper = TestJson.boot
     private val eventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
     private val scoreQueryService = BehaviorScoreQueryService(scoreRepo, objectMapper)
     private val service = BehaviorScoreService(scoreQueryService, scoreRepo, emotionTagRepo, jdbc, objectMapper, eventPublisher)

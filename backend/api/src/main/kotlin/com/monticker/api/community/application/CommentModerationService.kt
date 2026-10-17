@@ -3,7 +3,7 @@ package com.monticker.api.community.application
 import com.anthropic.client.AnthropicClient
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.Model
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.json.JsonMapper
 import com.monticker.api.common.config.AnthropicConfig
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -27,7 +27,7 @@ internal data class ModerationJudgement(val isRecommendation: Boolean, val reaso
 class CommentModerationService(
     private val anthropicClient: AnthropicClient,
     private val anthropicConfig: AnthropicConfig,
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: JsonMapper,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val jsonPattern = Regex("\\{[\\s\\S]*}")

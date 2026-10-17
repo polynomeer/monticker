@@ -15,7 +15,7 @@ class MarketHolidayRepository(private val jdbc: JdbcTemplate) {
         )
 
     fun findCoveredYears(market: String = KRX): Set<Int> =
-        jdbc.queryForList("SELECT year FROM market_calendar_years WHERE market = ?", Int::class.java, market).toSet()
+        jdbc.queryForList("SELECT year FROM market_calendar_years WHERE market = ?", Int::class.java, market).filterNotNull().toSet()
 
     companion object {
         const val KRX = "KRX"

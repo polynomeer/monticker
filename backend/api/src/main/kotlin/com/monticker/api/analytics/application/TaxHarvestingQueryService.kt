@@ -101,7 +101,7 @@ class TaxHarvestingQueryService(
         // Batch stock info lookup — eliminates N+1
         val validIds = validHoldings.map { it.stockId }
         val infoPlaceholders = validIds.joinToString(",") { "?" }
-        val stockInfoMap: Map<Long, Map<String, Any>> = jdbc.queryForList(
+        val stockInfoMap: Map<Long, Map<String, Any?>> = jdbc.queryForList(
             "SELECT id, symbol, name FROM stocks WHERE id IN ($infoPlaceholders)",
             *validIds.toTypedArray()
         ).associate { (it["id"] as Number).toLong() to it }

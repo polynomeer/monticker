@@ -28,7 +28,7 @@ class AnalyticsController(
     private val holdingsComparisonService: HoldingsComparisonService,
 ) {
     private fun userId(): Long =
-        SecurityContextHolder.getContext().authentication.principal as Long
+        SecurityContextHolder.getContext().authentication!!.principal as Long
 
     /**
      * 분석 기간(ADR-097): `period`=3M·6M·1Y(기본)·2Y, 또는 `period=CUSTOM&from=YYYY-MM-DD&to=YYYY-MM-DD`(KST, 60일~3년).

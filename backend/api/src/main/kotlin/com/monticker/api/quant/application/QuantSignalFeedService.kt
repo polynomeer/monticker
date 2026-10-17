@@ -42,7 +42,7 @@ class QuantSignalFeedService(
             LIMIT ?
             """.trimIndent(),
             String::class.java, userId, MAX_RULESETS,
-        ).filter { it !in mine }
+        ).filterNotNull().filter { it !in mine }
         val subscribed = if (subscribedIds.isEmpty()) emptyMap() else {
             val names = ruleSetRepository.findAllById(subscribedIds).associate { it.id to it.name }
             subscribedIds.associateWith { (names[it] ?: "(삭제된 전략)") to Source.SUBSCRIBED }
@@ -121,7 +121,7 @@ class QuantSignalFeedService(
         return jdbc.queryForList(
             "SELECT DISTINCT stock_id FROM quant_signals WHERE rule_set_id IN ($placeholders) AND signal_time >= ?",
             Long::class.java, *(ids + Timestamp.from(since)).toTypedArray(),
-        ).toSet()
+        ).filterNotNull().toSet()
     }
 }
 

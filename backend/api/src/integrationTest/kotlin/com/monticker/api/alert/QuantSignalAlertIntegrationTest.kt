@@ -1,6 +1,6 @@
 package com.monticker.api.alert
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.api.support.TestJson
 import com.monticker.api.alert.application.AlertService
 import com.monticker.api.alert.application.QuantSignalAlertFanout
 import com.monticker.api.alert.infrastructure.UserAlertHistoryRepository
@@ -46,9 +46,9 @@ class QuantSignalAlertIntegrationTest : PostgresIntegrationTest() {
     private val access by lazy { StrategySignalAccess(ruleSets, jdbcTemplate) }
     private val published: MutableList<Any> = Collections.synchronizedList(mutableListOf())
     private val events = mockk<ApplicationEventPublisher> { every { publishEvent(any<Any>()) } answers { published += firstArg<Any>() } }
-    private val fanout by lazy { QuantSignalAlertFanout(access, histories, events, ObjectMapper()) }
+    private val fanout by lazy { QuantSignalAlertFanout(access, histories, events, TestJson.boot) }
     private val alerts by lazy {
-        AlertService(mockk(), ObjectMapper(), jdbcTemplate, mockk(), mockk(), mockk(), mockk(), mockk())
+        AlertService(mockk(), TestJson.boot, jdbcTemplate, mockk(), mockk(), mockk(), mockk(), mockk())
     }
 
     private fun user(tag: String, deleted: Boolean = false): Long = jdbcTemplate.queryForObject(
@@ -91,7 +91,7 @@ class QuantSignalAlertIntegrationTest : PostgresIntegrationTest() {
 
     private fun historyOwners(signalId: Long): List<Long> = jdbcTemplate.queryForList(
         "SELECT user_id FROM alert_histories WHERE dedup_key = ? ORDER BY user_id", Long::class.java, "quant-signal:$signalId",
-    )
+    ).filterNotNull()
 
     // ── 가시성 ──────────────────────────────────────────────────────
 

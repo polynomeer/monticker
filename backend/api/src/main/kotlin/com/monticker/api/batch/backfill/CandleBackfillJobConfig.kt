@@ -1,10 +1,9 @@
 package com.monticker.api.batch.backfill
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import org.slf4j.LoggerFactory
-import org.springframework.batch.core.Job
-import org.springframework.batch.core.Step
+import org.springframework.batch.core.job.Job
+import org.springframework.batch.core.step.Step
 import org.springframework.batch.core.job.builder.JobBuilder
 import org.springframework.batch.core.partition.PartitionHandler
 import org.springframework.batch.core.partition.support.TaskExecutorPartitionHandler
@@ -26,7 +25,6 @@ class CandleBackfillJobConfig(
     private val transactionManager: PlatformTransactionManager,
     private val dataSource: DataSource,
     private val jdbc: JdbcTemplate,
-    private val objectMapper: ObjectMapper,
     private val cbRegistry: CircuitBreakerRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -58,7 +56,7 @@ class CandleBackfillJobConfig(
 
     // Partitioner는 Job 실행 시점에 파라미터를 받아야 하므로 Step-scoped bean이 필요
     // → JobConfig에서 직접 생성하지 않고 PartitionHandler에서 조립
-    private fun partitioner() = org.springframework.batch.core.partition.support.Partitioner { _ ->
+    private fun partitioner() = org.springframework.batch.core.partition.Partitioner { _ ->
         // 실제 파라미터는 candleBackfillManagerStep Step 실행 시 JobParameters에서 읽음
         // 여기서는 dummy — 실제 partition은 CandleBackfillJobLauncher가 직접 호출
         emptyMap()
@@ -101,7 +99,6 @@ class CandleBackfillJobConfig(
             fromDate       = LocalDate.parse(fromDate),
             toDate         = LocalDate.parse(toDate),
             restTemplate   = candleBackfillRestTemplate(),
-            objectMapper   = objectMapper,
             circuitBreaker = cbRegistry.circuitBreaker("yahooFinance"),
         )
     }

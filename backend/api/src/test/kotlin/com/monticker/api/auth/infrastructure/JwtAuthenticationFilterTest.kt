@@ -47,7 +47,7 @@ class JwtAuthenticationFilterTest {
 
         val auth = SecurityContextHolder.getContext().authentication
         assertThat(auth).isNotNull()
-        assertThat(auth.principal).isEqualTo(1L)
+        assertThat(auth!!.principal).isEqualTo(1L)
         verify { chain.doFilter(any(), any()) }
     }
 

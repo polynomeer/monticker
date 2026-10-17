@@ -1,6 +1,6 @@
 package com.monticker.api.analytics.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.api.support.TestJson
 import com.monticker.api.analytics.infrastructure.PortfolioOptimizationRepository
 import com.monticker.api.backtest.domain.DailyCandle
 import io.mockk.every
@@ -18,7 +18,7 @@ import java.time.LocalDate
 class PortfolioOptimizerServiceTest {
 
     private val jdbc = mockk<JdbcTemplate>()
-    private val objectMapper = ObjectMapper()
+    private val objectMapper = TestJson.boot
     private val optimizationRepo = mockk<PortfolioOptimizationRepository>()
     private val queryService = PortfolioOptimizerQueryService(jdbc)
     private val service = PortfolioOptimizerService(queryService, objectMapper, optimizationRepo)

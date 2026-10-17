@@ -1,6 +1,6 @@
 package com.monticker.api.risk.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.json.JsonMapper
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.modulith.NamedInterface
 import org.springframework.stereotype.Service
@@ -16,7 +16,7 @@ import java.math.BigDecimal
 @Service
 class RiskCheckAuditLogger(
     private val jdbc: JdbcTemplate,
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: JsonMapper,
 ) {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun record(

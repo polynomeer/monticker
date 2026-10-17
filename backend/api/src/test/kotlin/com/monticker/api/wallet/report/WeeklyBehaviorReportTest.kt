@@ -1,6 +1,6 @@
 package com.monticker.api.wallet.report
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.api.support.TestJson
 import com.monticker.api.common.notification.UnsubscribeTokenService
 import com.monticker.api.common.time.KstPeriod
 import com.monticker.api.wallet.application.Ratio
@@ -155,7 +155,7 @@ class WeeklyBehaviorReportTest {
 
     private fun job(redis: StringRedisTemplate) = WeeklyBehaviorReportJob(
         jdbc = mockk(), scoreDetails = mockk(), emotions = mockk(), mailSender = mockk(), redis = redis,
-        objectMapper = ObjectMapper(), registry = SimpleMeterRegistry(),
+        objectMapper = TestJson.boot, registry = SimpleMeterRegistry(),
         unsubscribeTokens = UnsubscribeTokenService("x".repeat(32)),
     )
 

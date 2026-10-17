@@ -3,7 +3,7 @@ package com.monticker.api.ai
 import com.anthropic.client.AnthropicClient
 import com.anthropic.models.messages.MessageCreateParams
 import com.anthropic.models.messages.Model
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.json.JsonMapper
 import com.monticker.api.common.config.AnthropicConfig
 import com.monticker.api.event.application.EventTimelineService
 import com.monticker.api.event.domain.StockEvent
@@ -44,7 +44,7 @@ class OrderProposalService(
     private val stockService: StockService,
     private val anthropicClient: AnthropicClient,
     private val anthropicConfig: AnthropicConfig,
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: JsonMapper,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val jsonPattern = Regex("\\{[\\s\\S]*}")

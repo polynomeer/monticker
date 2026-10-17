@@ -17,6 +17,8 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.ConfigurableApplicationContext
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Import
+import org.springframework.modulith.events.core.EventPublicationRegistry
+import org.springframework.modulith.events.core.Staleness
 import org.springframework.stereotype.Component
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
@@ -40,7 +42,7 @@ class OutboxIsolationIntegrationTest : PostgresIntegrationTest() {
 
     @Configuration(proxyBeanMethods = false)
     @ImportOutboxAutoConfiguration
-    @Import(OutboxResubmissionConfig::class, OutboxCompletedCleanup::class, FlakyNotificationListener::class)
+    @Import(OutboxResubmissionConfig::class, LegacyPublicationStatusBackfill::class, OutboxCompletedCleanup::class, FlakyNotificationListener::class)
     class OutboxTestApp
 
     /** Kafka 외부화 자리를 대신한다 — [failuresLeft]만큼 실패해 발행 기록을 미완료로 남긴다 */
@@ -119,6 +121,37 @@ class OutboxIsolationIntegrationTest : PostgresIntegrationTest() {
         context.getBean(OutboxResubmissionConfig::class.java).resubmit()
 
         assertThat(listener.received).containsExactly(cmd, cmd)   // 최초 실패 + 재전송
+        assertThat(incompleteApiRows()).isZero()
+    }
+
+    @Test
+    fun `rows Modulith 1 left incomplete (status and attempts NULL) are resubmitted after the upgrade`() {
+        // 업그레이드 직전 구버전이 남긴 행(또는 롤링 배포 중 구버전 pod가 쓰는 행) — Modulith 1.x는 두 컬럼을 모른다.
+        // completion_attempts가 NULL이면 JPA 엔티티(primitive int)를 읽지 못해 재전송 조회 전체가 실패했다
+        val cmd = stuckNotification()
+        jdbcTemplate.update("UPDATE event_publication SET status = NULL, completion_attempts = NULL")
+
+        context.getBean(OutboxResubmissionConfig::class.java).resubmit()
+
+        assertThat(listener.received).containsExactly(cmd, cmd)
+        assertThat(incompleteApiRows()).isZero()
+    }
+
+    @Test
+    fun `rows stuck in RESUBMITTED after a crash during resubmission come back once marked stale`() {
+        val cmd = stuckNotification()
+        jdbcTemplate.update(
+            "UPDATE event_publication SET status = 'RESUBMITTED', completion_attempts = 1, last_resubmission_date = now() - INTERVAL '3 minutes'",
+        )
+
+        context.getBean(OutboxResubmissionConfig::class.java).resubmit()
+        assertThat(listener.received).containsExactly(cmd)   // 가져가는 조건이 status != RESUBMITTED라 건너뛴다
+
+        // Staleness Monitor 한 주기(운영은 1분마다 스케줄러가 돈다) — spring.modulith.events.staleness.resubmitted
+        context.getBean(EventPublicationRegistry::class.java).markStalePublicationsFailed(context.getBean(Staleness::class.java))
+        context.getBean(OutboxResubmissionConfig::class.java).resubmit()
+
+        assertThat(listener.received).containsExactly(cmd, cmd)
         assertThat(incompleteApiRows()).isZero()
     }
 

@@ -1,7 +1,10 @@
 package com.monticker.api.common.cache
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo
+import com.fasterxml.jackson.databind.DeserializationFeature
+import com.fasterxml.jackson.databind.MapperFeature
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
@@ -13,6 +16,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.data.redis.cache.RedisCacheConfiguration
 import org.springframework.data.redis.cache.RedisCacheManager
+import org.springframework.data.redis.cache.RedisCacheWriter
 import org.springframework.data.redis.connection.RedisConnectionFactory
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer
 import org.springframework.data.redis.serializer.RedisSerializationContext
@@ -45,11 +49,14 @@ import java.time.Duration
  *    무인자 생성자와 달리 activateDefaultTyping을 직접 호출하지 않으면 값에
  *    `@class` 타입 힌트가 실리지 않아, 캐시 조회 시 LinkedHashMap으로
  *    역직렬화되어 ClassCastException이 발생한다.
+ * 3) ADR-104 — Boot 4의 매퍼는 Jackson 3인데, Jackson 3은 DefaultTyping.EVERYTHING을 없앴다. final인 Kotlin data class는
+ *    루트에 타입 정보가 실리지 않아 2)의 ClassCastException이 다시 난다. 그래서 이 캐시는 **Jackson 2로 직접 만든 매퍼**를
+ *    쓴다(Boot 3.5가 구성하던 매퍼와 같은 설정 + EVERYTHING). 옮기는 건 B4-6에서 따로 정한다.
+ *    키 접두사에 [KEY_VERSION]을 붙인다 — 롤링 배포 중 구버전과 신버전이 서로의 값을 읽지 않게 끊는다(TTL ≤ 1시간).
  */
 @Configuration
 @EnableCaching
 class CacheConfig(
-    private val objectMapper: ObjectMapper,
     private val meterRegistry: MeterRegistry,
 ) : CachingConfigurer {
 
@@ -72,6 +79,19 @@ class CacheConfig(
     }
 
     companion object {
+        /** 캐시 값 형식이 바뀌면 올린다 — 이전 형식의 키는 TTL로 사라진다 */
+        const val KEY_VERSION         = "v2"
+
+        /** Boot 3.5가 구성하던 Jackson 2 매퍼와 같은 설정(모듈 자동 등록, 날짜 ISO 문자열, 모르는 속성 무시)에 타입 정보를 더한다 */
+        fun redisMapper(): ObjectMapper = ObjectMapper().findAndRegisterModules()
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+            .disable(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS)
+            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+            .disable(MapperFeature.DEFAULT_VIEW_INCLUSION)
+            // Kotlin data class는 기본적으로 final이라 NON_FINAL 전략으로는 루트 객체에
+            // 타입 정보가 실리지 않는다(따라서 EVERYTHING을 사용해 항상 @class를 남긴다).
+            .activateDefaultTyping(LaissezFaireSubTypeValidator.instance, ObjectMapper.DefaultTyping.EVERYTHING, JsonTypeInfo.As.PROPERTY)
+
         const val SCREENER            = "screener"
         const val REGIME              = "regime"
         const val PATTERN             = "pattern"
@@ -85,24 +105,21 @@ class CacheConfig(
 
     @Bean
     fun cacheManager(connectionFactory: RedisConnectionFactory): RedisCacheManager {
-        // Kotlin data class는 기본적으로 final이라 NON_FINAL 전략으로는 루트 객체에
-        // 타입 정보가 실리지 않는다(따라서 EVERYTHING을 사용해 항상 @class를 남긴다).
-        val redisMapper = objectMapper.copy().activateDefaultTyping(
-            LaissezFaireSubTypeValidator.instance,
-            ObjectMapper.DefaultTyping.EVERYTHING,
-            JsonTypeInfo.As.PROPERTY,
-        )
-        val jsonSerializer = GenericJackson2JsonRedisSerializer(redisMapper)
+        val jsonSerializer = GenericJackson2JsonRedisSerializer(redisMapper())
         val valueSerializer = RedisSerializationContext.SerializationPair.fromSerializer(jsonSerializer)
         val keySerializer   = RedisSerializationContext.SerializationPair.fromSerializer(StringRedisSerializer())
 
         fun config(ttl: Duration) = RedisCacheConfiguration.defaultCacheConfig()
+            .computePrefixWith { name -> "$KEY_VERSION:$name::" }
             .serializeKeysWith(keySerializer)
             .serializeValuesWith(valueSerializer)
             .entryTtl(ttl)
             .disableCachingNullValues()
 
-        return RedisCacheManager.builder(connectionFactory)
+        // Spring Data Redis 4의 기본 캐시 writer는 Lettuce에서 **비동기로 쓴다** — put 직후 같은 키를 읽으면 비어 있고,
+        // 쓰기 실패가 errorHandler(P0-1, redis_command_failed_total)를 거치지 않는다. Boot 3.5처럼 동기로 쓴다(B4-5).
+        val writer = RedisCacheWriter.create(connectionFactory) { it.immediateWrites() }
+        return RedisCacheManager.builder(writer)
             .withCacheConfiguration(SCREENER,            config(Duration.ofSeconds(5)))
             .withCacheConfiguration(REGIME,              config(Duration.ofHours(1)))
             .withCacheConfiguration(PATTERN,             config(Duration.ofMinutes(30)))

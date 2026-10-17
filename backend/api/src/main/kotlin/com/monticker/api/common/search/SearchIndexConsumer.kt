@@ -2,7 +2,7 @@ package com.monticker.api.common.search
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient
 import co.elastic.clients.elasticsearch.core.BulkRequest
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.json.JsonMapper
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import org.apache.kafka.clients.consumer.ConsumerRecord
@@ -24,7 +24,7 @@ import java.time.Instant
 @Component
 class SearchIndexConsumer(
     private val client: ElasticsearchClient,
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: JsonMapper,
     registry: MeterRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)

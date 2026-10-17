@@ -1,6 +1,6 @@
 package com.monticker.api.alert.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.api.support.TestJson
 import com.monticker.api.alert.infrastructure.UserAlertHistoryRepository
 import com.monticker.api.common.notification.NotificationCategory
 import com.monticker.api.common.notification.UserNotificationCommand
@@ -23,7 +23,7 @@ class QuantSignalAlertFanoutTest {
     private val histories = mockk<UserAlertHistoryRepository>()
     private val published = mutableListOf<Any>()
     private val events = mockk<ApplicationEventPublisher> { every { publishEvent(any<Any>()) } answers { published += firstArg<Any>() } }
-    private val fanout = QuantSignalAlertFanout(access, histories, events, ObjectMapper())
+    private val fanout = QuantSignalAlertFanout(access, histories, events, TestJson.boot)
 
     private val event = QuantSignalEmittedEvent(
         signalId = 42, ruleSetId = "rs1", stockId = 5, direction = "BUY",
@@ -93,7 +93,7 @@ class QuantSignalAlertFanoutTest {
 
     @Test
     fun `with the ops switch off history rows and index events are still written but no notification command`() {
-        val switchedOff = QuantSignalAlertFanout(access, histories, events, ObjectMapper(), pushEnabled = false)
+        val switchedOff = QuantSignalAlertFanout(access, histories, events, TestJson.boot, pushEnabled = false)
         every { access.audienceOf("rs1") } returns SignalAudience("골든크로스", ownerId = 1, userIds = linkedSetOf(1L, 7L))
         stubInsert(1L, 100L)
         stubInsert(7L, 101L)

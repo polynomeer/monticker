@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.*
 @RequestMapping("/api/quant/rulesets")
 class RuleSetController(private val service: RuleSetService) {
 
-    private fun userId(): Long = SecurityContextHolder.getContext().authentication.principal as Long
+    private fun userId(): Long = SecurityContextHolder.getContext().authentication!!.principal as Long
 
     @PostMapping
     fun create(@RequestBody req: CreateRuleSetRequest): ResponseEntity<RuleSetResponse> =

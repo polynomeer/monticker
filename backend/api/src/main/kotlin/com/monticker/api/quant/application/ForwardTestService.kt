@@ -190,7 +190,7 @@ class ForwardTestService(
                     "stockId" to ft.stockId,
                     "price" to price,
                     "evalDate" to asOfDate.toString(),
-                ),
+                ) as Any,
             )
         }
 

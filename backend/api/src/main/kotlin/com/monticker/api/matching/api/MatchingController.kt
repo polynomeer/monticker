@@ -24,7 +24,7 @@ class MatchingController(
     private val orderQueueService: OrderQueueService,
 ) {
 
-    private fun userId(): Long = SecurityContextHolder.getContext().authentication.principal as Long
+    private fun userId(): Long = SecurityContextHolder.getContext().authentication!!.principal as Long
 
     @PostMapping("/orders")
     @RateLimited(limit = 30, windowSec = 60, keyPrefix = "matching.order")

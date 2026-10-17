@@ -1,6 +1,5 @@
 package com.monticker.api.common
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.monticker.api.common.notification.NotificationCategory
 import com.monticker.api.common.notification.UserNotificationCommand
 import com.monticker.api.common.search.SearchIndexEvent
@@ -12,6 +11,7 @@ import com.monticker.api.marketdata.infrastructure.MarketTickBroadcastConsumer
 import com.monticker.api.marketdata.infrastructure.RedisPriceCache
 import com.monticker.api.matching.events.OrderCancelledEvent
 import com.monticker.api.matching.events.OrderFilledEvent
+import com.monticker.api.support.TestJson
 import com.monticker.api.watchrule.events.StockEventDetectedEvent
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every
@@ -20,12 +20,10 @@ import io.mockk.slot
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
-import org.springframework.boot.autoconfigure.AutoConfigurations
-import org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration
-import org.springframework.boot.test.context.runner.ApplicationContextRunner
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.redis.core.StringRedisTemplate
 import java.math.BigDecimal
+import tools.jackson.databind.json.JsonMapper
 import java.time.Instant
 
 /**
@@ -36,15 +34,15 @@ import java.time.Instant
  *   미완료 행을 새 버전이 읽어야 한다. Boot 3.5의 매퍼는 `Instant`를 ISO 문자열로, null 필드도 쓴다.
  * - worker·Go가 쓰는 메시지를 api가 읽는 경로(틱 브로드캐스트, watch rule 이벤트, Redis 시세).
  *
- * Spring Boot 4(Jackson 3)로 올릴 때 이 테스트가 초록이어야 한다. worker 쪽은 backend/worker의 같은 이름 테스트,
+ * Spring Boot 4(Jackson 3)로 올린 뒤에도(ADR-104 — `use-jackson2-defaults`) 이 문자열이 그대로여야 한다. 매퍼는 실제
+ * application.yml로 구성한 Boot 매퍼다([TestJson.boot]). worker 쪽은 backend/worker의 같은 이름 테스트,
  * Go 게이트웨이는 services/market-gateway/internal/tick/tick_test.go가 같은 형식을 고정한다.
  */
 class WireFormatGoldenTest {
 
     /** Unit을 돌려준다 — 표현식 본문 테스트가 값을 반환하면 JUnit이 테스트로 인식하지 않는다 */
-    private fun withBootMapper(block: (ObjectMapper) -> Any?) {
-        ApplicationContextRunner().withConfiguration(AutoConfigurations.of(JacksonAutoConfiguration::class.java))
-            .run { ctx -> block(ctx.getBean(ObjectMapper::class.java)) }
+    private fun withBootMapper(block: (JsonMapper) -> Any?) {
+        block(TestJson.boot)
     }
 
     private val t = Instant.parse("2026-10-16T01:00:00.123456789Z")

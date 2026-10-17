@@ -1,6 +1,6 @@
 package com.monticker.api.wallet.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.json.JsonMapper
 import com.monticker.api.wallet.domain.BehaviorGrade
 import com.monticker.api.wallet.domain.BehaviorScore
 import com.monticker.api.wallet.domain.EmotionType
@@ -43,7 +43,7 @@ class BehaviorScoreService(
     private val scoreRepo: BehaviorScoreRepository,
     private val emotionTagRepo: EmotionTagRepository,
     private val jdbc: JdbcTemplate,
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: JsonMapper,
     private val eventPublisher: ApplicationEventPublisher,
 ) {
 

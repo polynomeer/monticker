@@ -1,8 +1,7 @@
 package com.monticker.api.quant.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.api.support.TestJson
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
-import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import com.monticker.api.quant.domain.ForwardTestStatus
 import com.monticker.api.quant.domain.QuantBacktestResult
 import com.monticker.api.quant.domain.QuantEquityPoint
@@ -22,7 +21,7 @@ class StrategyPerformanceQueryTest {
 
     private val backtests = mockk<QuantBacktestResultRepository>()
     private val forwards = mockk<QuantForwardTestRepository>()
-    private val mapper = ObjectMapper().registerKotlinModule().registerModule(JavaTimeModule())
+    private val mapper = TestJson.boot
     private val query = StrategyPerformanceQuery(backtests, forwards, mapper)
 
     @Test

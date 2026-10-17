@@ -1,5 +1,6 @@
 package com.monticker.api.brokerage
 
+import com.monticker.api.support.TestJson
 import com.monticker.api.brokerage.application.BrokerageService
 import com.monticker.api.brokerage.application.OrderOutcomeNotices
 import com.monticker.api.brokerage.application.OrderPriceGuard
@@ -27,8 +28,8 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
@@ -93,7 +94,7 @@ class BrokerageOrderUnknownOutcomeFlowIntegrationTest {
         RiskCheckerService(
             com.monticker.api.risk.application.RiskLimitService(riskLimitRepo, jdbc), RiskRuleQueryService(jdbc),
             // 운영처럼 트랜잭션 프록시를 씌운다 — record()는 REQUIRES_NEW라 거부와 함께 롤백되지 않고 남아야 한다.
-            ProxyFactory(RiskCheckAuditLogger(jdbc, com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules())).apply {
+            ProxyFactory(RiskCheckAuditLogger(jdbc, TestJson.boot)).apply {
                 isProxyTargetClass = true
                 addAdvice(TransactionInterceptor(txManager, AnnotationTransactionAttributeSource()))
             }.proxy as RiskCheckAuditLogger,

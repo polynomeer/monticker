@@ -560,7 +560,7 @@ class BrokerageService(
         val knownBrokerIds = jdbc.queryForList(
             "SELECT pg_order_id FROM brokerage_orders WHERE account_id = ? AND symbol = ? AND pg_order_id IS NOT NULL AND id <> ?",
             String::class.java, order.accountId, order.symbol, order.id,
-        ).toSet()
+        ).filterNotNull().toSet()
         val intent = UnknownOrderMatcher.Intent(
             order.symbol, order.side.name, order.quantity,
             order.limitPrice.takeIf { order.orderType == OrderType.LIMIT }, order.submittedAt,

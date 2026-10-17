@@ -148,7 +148,7 @@ class ForwardTestServiceTest {
         assertThat(ft.isHolding).isTrue()
         assertThat(ft.lastEvaluatedDate).isEqualTo(today)
         assertThat(signalSlot.captured.direction).isEqualTo(SignalDirection.BUY)
-        verify { messagingTemplate.convertAndSend("/topic/rulesets/rs1/signals", any<Map<String, Any>>()) }
+        verify { messagingTemplate.convertAndSend("/topic/rulesets/rs1/signals", any<Map<String, Any>>() as Any) }
         verify { equityRepository.save(any()) }
         // ADR-090 — 신호 이벤트에 알림 이력 문구용 종가·평가일을 싣고, 알림 명령은 직접 내지 않는다(alert 모듈 팬아웃이 보낸다)
         verify { events.publishEvent(match<Any> { it is com.monticker.api.quant.events.QuantSignalEmittedEvent &&

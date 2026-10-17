@@ -24,7 +24,7 @@ import java.time.Instant
 @RequestMapping("/api/watch-rules")
 class WatchRuleController(private val service: WatchRuleService) {
 
-    private fun userId(): Long = SecurityContextHolder.getContext().authentication.principal as Long
+    private fun userId(): Long = SecurityContextHolder.getContext().authentication!!.principal as Long
 
     @GetMapping
     fun list(): ResponseEntity<List<WatchRuleResponse>> {

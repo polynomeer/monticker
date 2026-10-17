@@ -47,7 +47,7 @@ class AllPartitionsListener(
                 try {
                     val partitions = partitionCount()
                     val props = ContainerProperties(*assignmentsFor(topic, partitions)).apply {
-                        messageListener = MessageListener<String, String> { handler(it) }
+                        setMessageListener(MessageListener<String, String> { handler(it) })
                         ackMode = ContainerProperties.AckMode.MANUAL     // 커밋하지 않는다
                         setMissingTopicsFatal(false)
                     }

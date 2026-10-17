@@ -34,7 +34,7 @@ class WatchlistOrderRepository(private val jdbc: JdbcTemplate) {
      */
     fun deleteGroup(userId: Long, groupId: Long): List<Long>? {
         if (!lockGroup(userId, groupId)) return null
-        val itemIds = jdbc.queryForList("SELECT id FROM watchlist_items WHERE group_id = ?", Long::class.java, groupId)
+        val itemIds = jdbc.queryForList("SELECT id FROM watchlist_items WHERE group_id = ?", Long::class.java, groupId).filterNotNull()
         jdbc.update("DELETE FROM watchlist_groups WHERE id = ? AND user_id = ?", groupId, userId)
         return itemIds
     }
@@ -56,7 +56,7 @@ class WatchlistOrderRepository(private val jdbc: JdbcTemplate) {
         jdbc.queryForList(
             "SELECT id FROM watchlist_items WHERE group_id = ? ORDER BY sort_order, id",
             Long::class.java, groupId,
-        )
+        ).filterNotNull()
 
     /** [ordered] 순서대로 sort_order를 0..n-1로 매긴다(문장 하나). 값이 이미 같은 행은 건드리지 않는다. */
     fun applyOrder(groupId: Long, ordered: List<Long>) {

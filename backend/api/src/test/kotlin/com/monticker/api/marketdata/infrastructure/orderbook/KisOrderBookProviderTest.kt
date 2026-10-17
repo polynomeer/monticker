@@ -1,6 +1,6 @@
 package com.monticker.api.marketdata.infrastructure.orderbook
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.api.support.TestJson
 import io.mockk.every
 import io.mockk.mockk
 import org.assertj.core.api.Assertions.assertThat
@@ -13,7 +13,7 @@ class KisOrderBookProviderTest {
 
     private val redisTemplate = mockk<StringRedisTemplate>()
     private val valueOps = mockk<ValueOperations<String, String>>()
-    private val mapper = ObjectMapper()
+    private val mapper = TestJson.boot
     private val provider = KisOrderBookProvider(redisTemplate, mapper)
 
     private fun stubRedis(symbol: String, json: String?) {

@@ -21,8 +21,8 @@ import org.mockito.BDDMockito.given
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest
-import org.springframework.boot.test.mock.mockito.MockBean
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.context.annotation.Import
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.http.MediaType
@@ -43,12 +43,12 @@ import java.time.Instant
 class TradingHaltAdminSecurityTest {
 
     @Autowired lateinit var mvc: MockMvc
-    @MockBean lateinit var tradingHaltService: TradingHaltService
-    @MockBean lateinit var jwtTokenProvider: JwtTokenProvider
-    @MockBean(answer = Answers.RETURNS_DEEP_STUBS) lateinit var redis: StringRedisTemplate
-    @MockBean lateinit var oauth2SuccessHandler: OAuth2SuccessHandler
-    @MockBean lateinit var customOAuth2UserService: CustomOAuth2UserService
-    @MockBean lateinit var cookieAuthorizationRequestRepository: HttpCookieOAuth2AuthorizationRequestRepository
+    @MockitoBean lateinit var tradingHaltService: TradingHaltService
+    @MockitoBean lateinit var jwtTokenProvider: JwtTokenProvider
+    @MockitoBean(answers = Answers.RETURNS_DEEP_STUBS) lateinit var redis: StringRedisTemplate
+    @MockitoBean lateinit var oauth2SuccessHandler: OAuth2SuccessHandler
+    @MockitoBean lateinit var customOAuth2UserService: CustomOAuth2UserService
+    @MockitoBean lateinit var cookieAuthorizationRequestRepository: HttpCookieOAuth2AuthorizationRequestRepository
 
     // Mockito any()는 null을 돌려줘 Kotlin non-null 파라미터에서 NPE가 난다 — 기본값으로 채운다.
     private fun anyScope(): HaltScope = any(HaltScope::class.java) ?: HaltScope.GLOBAL

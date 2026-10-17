@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.*
 @RequestMapping("/api/paper/conditional-orders")
 class PaperConditionalOrderController(private val service: PaperConditionalOrderService) {
 
-    private fun userId(): Long = SecurityContextHolder.getContext().authentication.principal as Long
+    private fun userId(): Long = SecurityContextHolder.getContext().authentication!!.principal as Long
 
     @GetMapping
     fun list(@RequestParam(required = false) stockId: Long?): ResponseEntity<List<PaperConditionalOrderResponse>> =

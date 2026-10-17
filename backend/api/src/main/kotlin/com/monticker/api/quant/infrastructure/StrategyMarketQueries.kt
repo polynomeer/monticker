@@ -40,7 +40,7 @@ class StrategyMarketSearchRepository(private val jdbc: JdbcTemplate) {
 
     /** 공개 전략의 ruleset_id — 이름 검색 후보(구독 많은 순, 최대 [limit]개) */
     fun visibleRulesetIds(limit: Int = MAX_NAME_SCAN): List<String> =
-        jdbc.queryForList("$VISIBLE_CTE SELECT ruleset_id FROM visible $ORDER LIMIT ?", String::class.java, limit)
+        jdbc.queryForList("$VISIBLE_CTE SELECT ruleset_id FROM visible $ORDER LIMIT ?", String::class.java, limit).filterNotNull()
 
     private fun where(term: String, nameMatchedRulesetIds: Collection<String>): Pair<String, List<Any>> {
         val pattern = likePattern(term)

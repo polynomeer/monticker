@@ -137,6 +137,11 @@ Kotlin 컴파일러 플러그인(`plugin.spring`·`plugin.jpa`)은 `kotlin("jvm"
   - 고정하며 확인한 지금 형식: worker는 `Instant`를 초.나노초 **숫자**로, api(Boot 매퍼)와 Go는 ISO **문자열**로 쓴다 — 소비자는 둘 다 읽는다. Go 틱엔 `marketStatus`가 없다(api는 null → 조건부 주문 미발동, ADR-055). Redis 시세는 Map으로 읽어 가격 소수 자릿수가 줄어든다(71200.50 → 71200.5).
   - Redis 캐시(`@class` 타입 정보)는 테스트로 고정하지 않는다 — B4-5 배포 때 캐시 키 접두사를 바꿔 끊는다(TTL ≤ 1시간).
 - **B4-4** Elasticsearch 서버 9로(로컬 이미지 + 운영). 클라이언트 8.18로 서버 9를 먼저 확인.
+  - ✅ 로컬(B4-5b PR): 이미지 9.4.5(+nori). 확인한 것:
+    - 클라이언트 9(Boot 4)는 서버 8.18에 **붙지 못한다** — `compatible-with=9` 헤더를 `media_type_header_exception`으로 거부. 색인·검색·health가 전부 실패하고 검색은 DB 폴백으로 조용히 넘어간다.
+    - 클라이언트 8.18.8(main, Boot 3.5)은 서버 9.4.5에 붙는다 — info·health·indices.exists·getMapping·bulk·search 모두 정상(REST 호환).
+    - 8.18 데이터 디렉터리에서 9는 바로 뜨지 않는다 → **8.19를 거친다**. 로컬 실데이터(6개 인덱스, 31k 문서)로 8.18 → 8.19.4 → 9.4.5를 해 봤다: `_migration/deprecations` 0건, 문서 수·nori 그대로.
+  - **운영 순서(B4-5b 배포 전에 끝낸다)**: ① 운영 ES를 8.19로 → ② `GET _migration/deprecations` 확인 → ③ 9.x로(운영 api는 아직 Boot 3.5 — 위에서 호환 확인) → ④ B4-5b(api Boot 4) 배포. **일정은 운영 담당이 정한다.**
 - **B4-5** Boot 4.1 업그레이드 본체: starter 이름, Flyway·Batch-JDBC 명시, Batch 6 시퀀스 마이그레이션·패키지·API, Kafka `@BackOff`·spring-retry 제거, Modulith 2.1, springdoc 3.1, logstash 9, `@MockitoBean`. Jackson은 Boot 매퍼를 주입받는 곳만 `JsonMapper`로(B4-3 테스트가 초록이어야 한다), 직접 만든 매퍼는 그대로 둔다. Jackson 전환 방식은 **ADR**로 남긴다.
   - **두 PR로 나눈다**: B4-5a worker(먼저) → B4-5b api. 두 앱은 빌드가 따로고 형식이 B4-3으로 고정돼 있어 섞인 상태(worker Boot 4, api Boot 3.5)가 롤링 배포와 같은 조건이다. Jackson 전환 방식은 [ADR-104](decisions/104-jackson3-with-jackson2-defaults-and-outbox-status.md).
   - **B4-5a(worker)에서 찾은 것** — 빌드·단위 테스트로는 안 드러나고 통합 테스트·로컬 기동에서 나왔다. api에서도 같은 것을 볼 것:
@@ -147,6 +152,18 @@ Kotlin 컴파일러 플러그인(`plugin.spring`·`plugin.jpa`)은 `kotlin("jvm"
     - `spring-boot-starter-opentelemetry`는 trace·지표·로그를 OTLP로 내보낸다(기본 켜짐). **Boot 3.5에는 OTLP exporter가 없어 trace가 Jaeger로 간 적이 없다**(docker-compose 주석과 다르다). 업그레이드로 동작을 바꾸지 않게 셋 다 껐다 → 후속: trace 내보내기를 켤지, sampling(지금 1.0 — 틱마다 Redis span)과 함께 정한다.
     - Spring 7(JSpecify): `queryForList(…, String::class.java)` 원소가 `String?`, `Health.withDetail`이 null을 거부(런타임엔 원래 거부했다 — 서킷 브레이커가 없을 때 KisApiHealthIndicator가 예외를 낼 수 있었다).
     - 덤: worker의 `mail.smtp.auth·starttls`가 `spring.kafka` 아래에 잘못 들여쓰여 JavaMail에 닿지 않았다(별도 커밋으로 고침).
+- **B4-5b(api)에서 찾은 것** — B4-5a의 항목(Kafka 템플릿 주입, 1.x 아웃박스 행, 자동 구성 모듈, 속성 이름, OTLP)에 더해:
+  - **ES 클라이언트 9는 서버 8.x와 붙지 않는다** → B4-4가 배포 선행 조건(위).
+  - Modulith JPA 엔티티의 `completionAttempts`가 primitive int라 NULL 행 하나가 재전송 조회를 통째로 깨뜨린다 → V102(`DEFAULT 0`).
+  - Batch 6: `@EnableBatchProcessing`만으로는 메모리 저장소(실행 이력이 BATCH_* 테이블에 안 남는다) → `@EnableJdbcJobRepository`. 시퀀스는 RENAME 대신 V103으로 `BATCH_JOB_INSTANCE_SEQ`를 1,000,000 앞에서 새로 만든다(롤링 배포 중 Batch 5 pod 보호). 통합 테스트(`BatchJdbcJobRepositoryIntegrationTest`).
+  - `spring.data.mongodb.uri` → `spring.mongodb.uri`(옛 키는 조용히 `localhost:27017/test`로 붙는다).
+  - Spring Data Redis 4 캐시 writer가 기본 비동기 쓰기 → `immediateWrites()`. 캐시 직렬화는 Jackson 2 유지 + 키 `v2:` 접두사(ADR-104).
+  - Jackson 3: `decimalValue()`가 null 노드에서 예외(Yahoo 파서는 Jackson 2 유지), 3.1의 `JsonNode.map(Function)`이 Kotlin `map`을 가림.
+  - Spring Kafka 4: 같은 간격의 재시도는 토픽 하나(`-retry`)로 합친다(SINGLE_TOPIC 기본값). 우리 컨슈머는 지수 백오프라 `-retry-0/1` 그대로 — 고정 백오프로 바꾸지 말 것(`KafkaTopicConfigTest`).
+  - Boot 4 테스트: `@MockBean` → `@MockitoBean`, `@WebMvcTest`의 보안 자동 구성은 `spring-boot-starter-security-test`, MockMvc·DataJpaTest는 기술별 test starter.
+  - 덤(별도 커밋 `fix(api)`): `WatchRuleConsumer`의 `@RetryableTopic` 재시도·DLT 전달이 ByteArraySerializer 템플릿 때문에 **늘 실패**했고, 잘못된 메시지 하나가 `market.event-detected` 파티션을 멈췄다(Boot 3.5에서도 같았다). 템플릿 두 개를 명시해 고쳤다.
+  - 덤: `spring.flyway.repair-on-migrate`는 Boot에 없는 키다(3.5에서도) — 아무 일도 하지 않는다. 지우는 건 따로.
+  - 확인: 단위 1,396 · 통합 203 통과. 로컬 전체 스택(api·worker Boot 4.1 + ES 9.4.5 + Kafka): health UP, 가입·인증·로그인·모의 주문 → `trading.order-filled` 아웃박스·Kafka 메시지가 B4-3 고정 형식과 같음, ES 색인·검색(폴백 0), 잘못된 메시지 → retry-0 → retry-1 → DLT.
 - **B4-6** 직접 만든 Jackson 2 매퍼를 `tools.jackson`으로 한 PR씩(날짜·정렬 설정을 명시해 B4-3이 초록인 채로).
   - ✅ worker(#235·#236): Kafka `WireJson`, 외부 API 클라이언트·Redis/DB JSON(`PlainJson`) 모두 Jackson 3, `configureForJackson2()`로 형식 유지. worker 코드에 Jackson 2 없음(`NoJackson2InMainTest`).
     - 트리 접근 차이: `asLong()` 등은 숫자 아닌 문자열에서 예외(→ `asLong(0)`), JSON `null`의 텍스트는 `""`(Jackson 2는 `"null"` — **의도적으로 받아들인 유일한 동작 변경**), 3.1의 `JsonNode.map(Function)`이 Kotlin `map`을 가림(→ `values().map`). `ExternalApiParsingGoldenTest`가 전환 전 동작을 실제 응답 모양으로 고정했다.
@@ -267,7 +284,7 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 | B4-1 statemachine 제거 | 완료 | #213 | ADR-103. 50조합 동작 일치 |
 | B4-2 Modulith v2 컬럼 | 완료 | #223 | V101 nullable 추가. "backfill 불필요"는 틀렸다 — 1.x 행 상태 표시는 B4-5a(ADR-104) |
 | B4-3 직렬화 고정 테스트 | 완료 | #225 | worker·api·Go 양쪽에 같은 JSON 고정, gateway-ci 신설 |
-| B4-4 ES 9 서버 | 시작 전 | — | 운영 일정 필요 |
-| B4-5a worker Boot 4.1 | PR | — | ADR-104. 통합 테스트·로컬 기동(api 3.5와 혼합)으로 확인 |
-| B4-5b api Boot 4.1 | 시작 전 | — | B4-5a에서 찾은 것을 api에도 적용 |
+| B4-4 ES 9 서버 | 로컬 완료 | — | 로컬 9.4.5(B4-5b PR). 운영은 8.19 → 9, **B4-5b 배포 전에** — 일정 필요 |
+| B4-5a worker Boot 4.1 | 완료 | #229 | ADR-104. 통합 테스트·로컬 기동(api 3.5와 혼합)으로 확인 |
+| B4-5b api Boot 4.1 | PR | #233 | ES 9 선행. V102·V103, Batch JDBC 저장소, 캐시 동기 쓰기 |
 | B4-6 | 진행 중 | #235 #236 | worker 완료. api는 #233 뒤 |

@@ -1,6 +1,6 @@
 package com.monticker.api.auth.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.json.JsonMapper
 import com.monticker.api.auth.api.CategoryChannels
 import com.monticker.api.auth.api.NotificationChannelsResponse
 import com.monticker.api.auth.api.NotificationPreferenceRequest
@@ -28,7 +28,7 @@ import java.time.LocalTime
 class NotificationPreferenceService(
     private val jdbc: JdbcTemplate,
     private val redis: StringRedisTemplate,
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: JsonMapper,
     private val consents: ConsentService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)

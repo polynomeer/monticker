@@ -1,8 +1,8 @@
 package com.monticker.api.batch
 
-import org.springframework.batch.item.ExecutionContext
-import org.springframework.batch.item.ItemStreamReader
-import org.springframework.batch.item.ItemStreamSupport
+import org.springframework.batch.infrastructure.item.ExecutionContext
+import org.springframework.batch.infrastructure.item.ItemStreamReader
+import org.springframework.batch.infrastructure.item.ItemStreamSupport
 
 /**
  * `id > 마지막으로 읽은 id`로 다음 페이지를 가져오는 리더.

@@ -1,7 +1,7 @@
 package com.monticker.api.quant.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.readValue
+import tools.jackson.databind.json.JsonMapper
+import tools.jackson.module.kotlin.readValue
 import com.monticker.api.quant.domain.QuantBacktestResult
 import com.monticker.api.quant.domain.QuantEquityPoint
 import com.monticker.api.quant.domain.QuantForwardTest
@@ -50,7 +50,7 @@ data class StrategyPerformance(
 class StrategyPerformanceQuery(
     private val backtestResultRepository: QuantBacktestResultRepository,
     private val forwardTestRepository: QuantForwardTestRepository,
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: JsonMapper,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 

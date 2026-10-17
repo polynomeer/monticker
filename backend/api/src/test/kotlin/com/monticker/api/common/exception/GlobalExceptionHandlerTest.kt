@@ -155,7 +155,7 @@ class GlobalExceptionHandlerTest {
     @Test
     fun `없는 경로는 서버 오류가 아니라 404다`() {
         val resp = handler.handleNoResource(
-            org.springframework.web.servlet.resource.NoResourceFoundException(org.springframework.http.HttpMethod.GET, "/api/nope"),
+            org.springframework.web.servlet.resource.NoResourceFoundException(org.springframework.http.HttpMethod.GET, "/api/nope", "/api/nope"),
         )
         assertThat(resp.statusCode).isEqualTo(HttpStatus.NOT_FOUND)
     }
