@@ -19,6 +19,9 @@
 - [ ] **개인정보 국외 이전(Anthropic API 전송) 고지 의무 여부** — [legal-review-brief.md §2-5](legal-review-brief.md#2-5-개인정보-국외-이전-고지)
 - [ ] **AI 주문 제안(Order Proposal)이 투자자문업 규제 대상인가** (2026-09-09 추가, ADR-036) — [legal-review-brief.md §2-7](legal-review-brief.md#2-7-ai가-생성하는-매수매도-방향-제안이-투자자문업또는-유사투자자문업-규제-대상인가)
 - [ ] **종목 커뮤니티 댓글이 유사투자자문업 규제 대상인가** (2026-09-09 추가, ADR-037) — [legal-review-brief.md §2-8](legal-review-brief.md#2-8-이용자-간-종목-커뮤니티-댓글이-유사투자자문업-규제-대상인가)
+- [ ] **이용자가 정한 규칙대로 서버가 실계좌 주문을 내는 것이 투자일임업인가** (2026-10-18 추가, ADR-105 방향의 선행 조건) — [legal-review-brief.md §2-9](legal-review-brief.md#2-9-이용자가-미리-정한-규칙대로-서버가-실계좌-주문을-내는-것이-투자일임업에-해당하는가)
+- [ ] **계좌 전체 거래 내역을 가져와 저장·분석하는 것이 마이데이터 등록 대상인가** (2026-10-18 추가) — [legal-review-brief.md §2-10](legal-review-brief.md#2-10-이용자의-증권-계좌-거래-내역을-가져와-저장분석하는-것이-본인신용정보관리업마이데이터-등록-대상인가)
+- [ ] **매매 습관 피드백이 투자자문인가, 손실 감소를 내세운 광고의 한계** (2026-10-18 추가) — [legal-review-brief.md §2-11](legal-review-brief.md#2-11-이용자-본인의-매매-습관에-대한-피드백이-투자자문에-해당하는가-그리고-이를-광고할-때의-한계는)
 - [ ] **통신판매업 신고 필요 여부** — [legal-review-brief.md §2-6](legal-review-brief.md#2-6-통신판매업-신고-필요-여부)
 - [ ] **사업자 등록** (개인사업자 vs 법인 선택 — 지분 구조·투자 유치 계획에 따라 세무사·법무사 상담 필요) — [legal-review-brief.md §3](legal-review-brief.md#3-사업자-등록--일반-절차-정보-참고용-최종-선택은-세무사법무사-상담-권장)
 - [ ] **Creator 수익 정산의 실제 세무 처리** (원천징수 등, [ADR-016](decisions/016-subscription-creator-revenue-sharing.md)) — 세무사 상담 필요
