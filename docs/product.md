@@ -6,7 +6,58 @@
 
 **MVP is complete. monticker is now in active commercialization** — see [ADR-023](decisions/023-commercialization-pivot.md). The "Exclude from MVP" list that used to live in this document is retired; those items are now roadmap items with real target phases (below), not out-of-scope. Every new feature should be built to production/commercial bar (security, compliance, concurrency-safety, observability), not MVP bar.
 
-## Product Identity
+## Product Identity — 2026-10 재정의 초안 (검증 전 가설)
+
+> 상태: **초안**. 근거·대안·검증 기준은 [ADR-105](decisions/105-target-user-and-core-loop-redefinition.md)에 있다. 사용자 인터뷰로 검증하기 전까지 아래 "기존 정체성"과 함께 둔다. 검증되면 이 절이 기존 정체성을 대체한다.
+
+### 왜 다시 정하는가
+
+- 원래 핵심이었던 "가격이 왜 움직였나"는 토스증권 **AI 시그널**(2025-11 출시)이 증권 앱 안에서 무료로 제공한다. 정면 경쟁으로는 이길 수 없다.
+- 기능 축 8개·개발 단계 19개로 퍼져서, 축마다 그 분야 전문 서비스보다 약하다.
+
+### 핵심 사용자
+
+> **장중에 시장을 볼 수 없는 직장인 겸업 투자자 — 그중 즉흥적으로 반응했다가 손실을 본 경험이 있는 사람.**
+
+실패(충동매매)가 아니라 상황(장중에 못 봄)으로 정의한다. 충동 손실은 회의·출퇴근 중 휴대폰으로 즉흥 반응할 때 생긴다. 같은 사람에게 "참아라" 대신 "밤에 정해 두면 낮에 안 봐도 된다"고 말한다. 퀀트 취미 투자자는 2차 사용자, 입문자는 유입 경로로만 본다.
+
+### 정체성 문장
+
+> 주가가 왜 움직였는지는 증권사 앱이 알려준다. monticker는 그때 내가 하기로 한 일을, 내가 시장을 못 보는 동안에도 그대로 하게 만든다.
+
+### 핵심 루프
+
+```
+밤 — 계획      내일 이런 일이 생기면 이렇게 한다 (Watch Rule, 조건부 주문, 리스크 한도)
+낮 — 자동 대응  사용자는 안 본다. 규칙이 반응하고, 꼭 필요한 것만 알린다 (방해 금지 시간)
+저녁 — 복기    계획대로 됐나. 계획 밖에서 한 매매는 어떻게 됐나 (원장, 감정 태그, 준수율, 주간 리포트)
+```
+
+절제는 제한이 아니라 자동화로 만든다. 리스크 한도·쿨링오프·킬 스위치는 주인공이 아니라 안전장치다.
+
+### 왜 monticker가 할 수 있나
+
+증권사는 거래가 늘어야 돈을 번다. monticker는 BYOK라 중개 수수료 없이 구독으로 번다. "덜, 계획대로 매매하게 하는 기능"이 사업 모델과 충돌하지 않는다. 종목을 추천할 수 없다는 제약도 "사용자 본인의 규칙을 지키게 돕는 도구"라는 방향과 맞는다.
+
+### 기존 기능의 자리
+
+| 자리 | 기능 |
+|---|---|
+| 핵심 루프 | Watch Rule, 조건부 주문, 리스크 한도, 알림·방해 금지 시간, 원장·영수증, 감정 태그, 준수율, 주간 리포트, 증권사 연동 |
+| 루프의 재료 | 이벤트 감지·타임라인, 차트, 뉴스·공시, 스크리너 |
+| 2차 사용자용 | Quant Lab 룰셋 빌더·백테스트·포워드 테스트 |
+| 내림 (신규 투자 중단, 유지보수만) | 포트폴리오 최적화, 세금 최적화, 켈리 포지션 사이징, 차트 패턴 인식, 종목 커뮤니티, 전략 판매, 가상 투자 미션·친구 대결 |
+
+### 바뀌는 지점
+
+1. 홈 화면: 시장 스크리너 → "내일 내 규칙이 할 일, 오늘 내 규칙이 한 일".
+2. 첫 경험: 모의투자로 계획·복기를 먼저, 자동 대응이 필요해질 때 증권사 연동.
+3. monticker 밖에서 낸 매매도 가져와 "계획 밖 매매"로 복기한다 (계좌 하루 전체 체결 조회는 새로 구현 필요).
+4. 실계좌 Watch Rule 자동 실행은 아직 모의계좌 한정(ADR-051) 그대로 둔다. 법무 검토 후 별도 ADR로 결정.
+
+---
+
+## Product Identity — 기존 정체성 (ADR-105 검증 전까지 유지)
 
 monticker is an **event-centric stock observation platform with a built-in quant strategy lab and investment wallet**.
 
