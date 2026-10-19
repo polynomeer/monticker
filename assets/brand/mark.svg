@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- monticker 마크: 몸 + 눈 둘 + 차트선 입(끝점 = 현재가). 손익에 반응하는 표정은 만들지 않는다 -->
+  <path d="M18 50 a32 32 0 0 1 64 0 V86 L71 76 L60 86 L50 76 L40 86 L29 76 L18 86 Z" fill="#7c4dd6"/>
+  <circle cx="40" cy="44" r="5" fill="#ffffff"/>
+  <circle cx="60" cy="44" r="5" fill="#ffffff"/>
+  <polyline points="36,62 43,58 49,61 56,55 63,56" fill="none" stroke="#ffffff" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="64.5" cy="55.5" r="3.4" fill="#ff79c6"/>
+</svg>
