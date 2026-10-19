@@ -195,4 +195,22 @@ class PortfolioIntegrationTest : PostgresIntegrationTest() {
         assertThat(h.accounts.single().accountName).isEqualTo("모의계좌")
         assertThat(holdings.holdings(me, HoldingsScope.REAL).holdings).isEmpty()
     }
+
+    // ADR-108 — 보유 종목 피드·알림의 "보유" 기준: 모든 실계좌에서 지금 수량이 남은 stocks 종목만
+    @Test
+    fun `heldStockIds는 다 판 종목·시세 없는 상품·남의 계좌를 빼고 지금 가진 종목만 낸다`() {
+        val kis = service.create(me, AccountSource.MANUAL, "한투", Institution.KIS, AccountKind.GENERAL, null).id
+        val isa = service.create(me, AccountSource.MANUAL, "ISA", Institution.KIWOOM, AccountKind.ISA, null).id
+        buy(kis, samsung, "10", "70000")
+        service.addManual(me, kis, TransactionInput(TransactionType.SELL, LocalDate.parse("2026-10-10"), stockId = samsung,
+            quantity = BigDecimal("10"), price = BigDecimal("80000")))
+        buy(isa, avgo, "1", "280")
+        buy(isa, null, "100", "1000", code = "KR5223941K16")       // 시세 없는 펀드 — stocks에 없다
+        val theirs = service.create(other, AccountSource.MANUAL, "남", Institution.OTHER, AccountKind.GENERAL, null).id
+        service.addManual(other, theirs, TransactionInput(TransactionType.BUY, LocalDate.parse("2026-10-01"), stockId = samsung,
+            quantity = BigDecimal("1"), price = BigDecimal("70000")))
+
+        assertThat(holdings.heldStockIds(me)).containsExactly(avgo)
+        assertThat(holdings.heldStockIds(other)).containsExactly(samsung)
+    }
 }

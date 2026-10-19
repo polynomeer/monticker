@@ -70,6 +70,16 @@ class PortfolioHoldingsQueryService(
         HoldingsScope.PAPER -> paper(userId)
     }
 
+    /**
+     * 모든 실계좌(모의계좌 제외)에서 지금 보유 중인 종목(stocks에 있는 것만). 보유 종목 피드(ADR-108)가 쓴다 —
+     * worker의 알림 대상(`StockAudience`)과 같은 기준이다.
+     */
+    fun heldStockIds(userId: Long): Set<Long> =
+        transactions.findAllForUser(userId).groupBy { it.accountId }.values
+            .flatMap { HoldingsCalculator.calculate(it).positions }
+            .filter { it.isOpen }
+            .mapNotNullTo(LinkedHashSet()) { it.key.stockId }
+
     private fun real(userId: Long): HoldingsView {
         val accountNames = accounts.findAll(userId).associate { it.id to it.name }
         val byAccount = transactions.findAllForUser(userId).groupBy { it.accountId }
