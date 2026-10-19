@@ -836,6 +836,17 @@ CREATE TABLE portfolio_optimizations (
 
 보유는 이 원장으로 계산한다(이동평균, 매수 수수료 포함 — `HoldingsCalculator`). 증권사 잔고 스냅샷 대사 테이블은 2단계에서 더한다.
 
+### portfolio_import_batches (V105)
+
+CSV 가져오기 한 번이 한 묶음이다. 원본 파일은 저장하지 않고 SHA-256만 남긴다. 묶음을 지우면 그 묶음으로 들어온 거래도 지워진다(`portfolio_transactions.import_batch_id ON DELETE CASCADE` — 되돌리기).
+
+| Column | 설명 |
+|---|---|
+| account_id | FK portfolio_accounts ON DELETE CASCADE |
+| format | `MONTICKER_V1`·`CUSTOM`(증권사별 형식은 실제 내보내기 파일을 받은 뒤) |
+| file_sha256 | 원본 대신 해시 |
+| row_count / imported_count / duplicate_count / skipped_count | 파일 행 수, 새로 들어간 거래, 지문이 같아 건너뛴 거래, 오류라 건너뛴 행(이용자가 고른 경우만) |
+
 ## TimescaleDB Tables
 
 ### ~~price_ticks~~ — 제거됨 (V42, [ADR-041](decisions/041-timescale-hypertable-promotion.md))
