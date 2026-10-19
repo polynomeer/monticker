@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <!-- 링크 미리보기(og:image) 1200×630 -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2a1f4d"/><stop offset="1" stop-color="#121018"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <g transform="translate(110 135) scale(3.6)">
+    <path d="M18 50 a32 32 0 0 1 64 0 V86 L71 76 L60 86 L50 76 L40 86 L29 76 L18 86 Z" fill="#a78bfa"/>
+    <circle cx="40" cy="44" r="5" fill="#121018"/>
+    <circle cx="60" cy="44" r="5" fill="#121018"/>
+    <polyline points="36,62 43,58 49,61 56,55 63,56" fill="none" stroke="#121018" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="64.5" cy="55.5" r="3.4" fill="#ff79c6"/>
+  </g>
+  <text x="520" y="300" font-family="Pretendard, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif" font-size="96" font-weight="800" fill="#f8f8f2" letter-spacing="-2">monticker</text>
+  <text x="524" y="372" font-family="Pretendard, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif" font-size="34" font-weight="500" fill="#c3c8e2">주가가 움직이면, 왜 움직였는지 먼저</text>
+</svg>

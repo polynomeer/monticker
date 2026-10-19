@@ -68,6 +68,7 @@ monticker의 모든 문서를 **독자별 · 주제별**로 정리한 색인입�
 | [screener.md](screener.md) | 스크리너 화면 설계 |
 | [settlement.md](settlement.md) | 정산 시스템 설계 — 페이퍼/전략마켓/구독/증권사 4종, Mock→Real 전환 지점 |
 | [event-storming.html](event-storming.html) | 이벤트 스토밍 결과 (브라우저로 열기) |
+| [../assets/brand/](../assets/brand/README.md) | 브랜드 마크(차트 입 몬스터) 원본 SVG·사용 규칙 — 앱 아이콘·파비콘·og 이미지는 `scripts/brand/render-icons.mjs`로 굽는다 |
 | [images/](images/) | README·매뉴얼용 화면 스크린샷 — 2026-09-23 캡처로 터미널 디자인 이전 화면이라 다시 찍어야 함([목록](manual/README.md#스크린샷-다시-찍을-목록)). 재생성은 `apps/web/scripts/capture-screenshots.mjs` ([../CONTRIBUTING.md](../CONTRIBUTING.md#문서-스크린샷-다시-찍기)) |
 
 ### 설계·결정
