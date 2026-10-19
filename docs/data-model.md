@@ -805,6 +805,37 @@ CREATE TABLE portfolio_optimizations (
 
 쓰기는 Flyway 마이그레이션으로만 한다. api(`common.calendar.MarketCalendar`)·worker(`KrxHolidayCalendarLoader`)가 1시간마다 다시 읽는다.
 
+## Portfolio Aggregation Tables (V104 — done, [ADR-106](decisions/106-account-aggregation-staged-sources.md))
+
+여러 출처의 계좌·거래를 담는 통합 포트폴리오 원장([account-aggregation-plan.md](account-aggregation-plan.md)). 모의계좌(`paper_trades`·`portfolio_positions`)는 옮기지 않고 읽기 어댑터로 붙인다. 주문용 연동(`brokerage_accounts`)과도 분리한다 — 실계좌 리스크 검사는 이 테이블을 쓰지 않는다.
+
+### portfolio_accounts
+
+| Column | Type | 설명 |
+|---|---|---|
+| id | BIGSERIAL PK | |
+| user_id | BIGINT FK users ON DELETE CASCADE | |
+| source | VARCHAR(20) | `MANUAL`·`CSV`(1단계), `BROKER_API`·`MYDATA`(2·3단계, 자문 뒤) |
+| institution | VARCHAR(30) | KIS, TOSS, KIWOOM, … , OTHER |
+| name | VARCHAR(50) | |
+| account_kind | VARCHAR(20) | GENERAL·ISA·PENSION·IRP·OTHER |
+| account_ref_masked | VARCHAR(20) | 끝 4자리만(`****1234`). 원번호는 저장하지 않는다 |
+
+### portfolio_transactions
+
+| Column | Type | 설명 |
+|---|---|---|
+| account_id | BIGINT FK portfolio_accounts ON DELETE CASCADE | 계좌를 지우면 거래도 지운다 |
+| type | VARCHAR(20) | BUY·SELL·DIVIDEND·DEPOSIT·WITHDRAWAL·FEE·TAX |
+| trade_date | DATE | |
+| stock_id / instrument_code / instrument_name | | stocks에 있으면 stock_id, 없으면(펀드·채권·매칭 전) 코드·이름 |
+| quantity / price | NUMERIC(24,6) | 해외 소수점 주식 |
+| amount / fee / tax | NUMERIC(24,4) | 거래 통화 기준. amount는 수수료·세금 제외 |
+| currency | VARCHAR(3) | 종목이 있으면 종목 통화와 같아야 한다 |
+| fingerprint | VARCHAR(64) | `UNIQUE(account_id, fingerprint)` — 같은 파일을 다시 올려도 중복되지 않게. 손 입력은 매번 새 값 |
+
+보유는 이 원장으로 계산한다(이동평균, 매수 수수료 포함 — `HoldingsCalculator`). 증권사 잔고 스냅샷 대사 테이블은 2단계에서 더한다.
+
 ## TimescaleDB Tables
 
 ### ~~price_ticks~~ — 제거됨 (V42, [ADR-041](decisions/041-timescale-hypertable-promotion.md))
