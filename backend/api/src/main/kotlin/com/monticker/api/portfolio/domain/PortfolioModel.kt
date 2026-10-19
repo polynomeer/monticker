@@ -54,3 +54,8 @@ data class PortfolioTransaction(
     val instrumentKey: InstrumentKey?
         get() = if (stockId != null || instrumentCode != null) InstrumentKey(stockId, instrumentCode) else null
 }
+
+/** CSV 가져오기 한 번의 기록(원본 파일은 남기지 않는다) */
+data class ImportBatch(
+    val id: Long, val format: String, val rowCount: Int, val imported: Int, val duplicates: Int, val skipped: Int, val createdAt: Instant,
+)

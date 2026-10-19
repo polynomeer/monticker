@@ -1,10 +1,13 @@
 package com.monticker.api.portfolio
 
+import com.monticker.api.common.consent.ConsentService
 import com.monticker.api.common.exception.BusinessRuleException
 import com.monticker.api.paper.application.HoldingResponse
 import com.monticker.api.paper.application.PaperPortfolioQueryService
 import com.monticker.api.portfolio.application.HoldingsScope
-import com.monticker.api.portfolio.application.ManualTransactionInput
+import com.monticker.api.portfolio.application.TransactionInput
+import com.monticker.api.portfolio.application.TransactionNormalizer
+import com.monticker.api.portfolio.domain.AccountSource
 import com.monticker.api.portfolio.application.PortfolioAccountService
 import com.monticker.api.portfolio.application.PortfolioHoldingsQueryService
 import com.monticker.api.portfolio.domain.AccountKind
@@ -35,11 +38,15 @@ class PortfolioIntegrationTest : PostgresIntegrationTest() {
     private val paper = mockk<PaperPortfolioQueryService>()
     private val accounts by lazy { PortfolioAccountRepository(jdbcTemplate) }
     private val txs by lazy { PortfolioTransactionRepository(jdbcTemplate) }
-    private val service by lazy {
-        PortfolioAccountService(accounts, txs, jdbcTemplate).apply {
-            clock = Clock.fixed(Instant.parse("2026-10-19T03:00:00Z"), ZoneId.of("Asia/Seoul"))
-        }
+    /** 동의는 ConsentService 단위 테스트가 본다 — 여기서는 이미 동의한 이용자로 둔다 */
+    private val consents = mockk<ConsentService> {
+        every { requireMissingAndRecord(any(), any(), any(), any()) } returns emptySet()
+        every { missingRequired(any(), any()) } returns emptySet()
     }
+    private val normalizer by lazy {
+        TransactionNormalizer(jdbcTemplate).apply { clock = Clock.fixed(Instant.parse("2026-10-19T03:00:00Z"), ZoneId.of("Asia/Seoul")) }
+    }
+    private val service by lazy { PortfolioAccountService(accounts, txs, normalizer, consents) }
     private val holdings by lazy { PortfolioHoldingsQueryService(accounts, txs, paper, jdbcTemplate) }
 
     private var me = 0L
@@ -69,18 +76,18 @@ class PortfolioIntegrationTest : PostgresIntegrationTest() {
     }
 
     private fun buy(account: Long, stockId: Long?, qty: String, px: String, date: String = "2026-10-01", fee: String = "0", code: String? = null) =
-        service.addManual(me, account, ManualTransactionInput(
+        service.addManual(me, account, TransactionInput(
             type = TransactionType.BUY, tradeDate = LocalDate.parse(date), stockId = stockId, instrumentCode = code,
             instrumentName = code?.let { "채권형 펀드" }, quantity = BigDecimal(qty), price = BigDecimal(px), fee = BigDecimal(fee),
         ))
 
     @Test
     fun `두 계좌의 같은 종목을 합쳐 평균 원가·평가금액·비중을 낸다`() {
-        val kis = service.createManual(me, "한투 일반", Institution.KIS, AccountKind.GENERAL, "1234").id
-        val isa = service.createManual(me, "키움 ISA", Institution.KIWOOM, AccountKind.ISA, null).id
+        val kis = service.create(me, AccountSource.MANUAL, "한투 일반", Institution.KIS, AccountKind.GENERAL, "1234").id
+        val isa = service.create(me, AccountSource.MANUAL, "키움 ISA", Institution.KIWOOM, AccountKind.ISA, null).id
         buy(kis, samsung, "10", "70000", fee = "100")
         buy(isa, samsung, "10", "74000")
-        service.addManual(me, isa, ManualTransactionInput(TransactionType.SELL, LocalDate.parse("2026-10-10"), stockId = samsung,
+        service.addManual(me, isa, TransactionInput(TransactionType.SELL, LocalDate.parse("2026-10-10"), stockId = samsung,
             quantity = BigDecimal("4"), price = BigDecimal("78000")))
 
         val view = holdings.holdings(me, HoldingsScope.REAL)
@@ -101,7 +108,7 @@ class PortfolioIntegrationTest : PostgresIntegrationTest() {
 
     @Test
     fun `통화별로 합계를 따로 내고 시세 없는 상품은 평가금액에서 빼고 센다`() {
-        val acc = service.createManual(me, "통합", Institution.OTHER, AccountKind.GENERAL, null).id
+        val acc = service.create(me, AccountSource.MANUAL, "통합", Institution.OTHER, AccountKind.GENERAL, null).id
         buy(acc, samsung, "1", "70000")
         buy(acc, avgo, "0.5", "280")
         buy(acc, null, "1000", "1.02", code = "KR5223941K16")
@@ -122,7 +129,7 @@ class PortfolioIntegrationTest : PostgresIntegrationTest() {
 
     @Test
     fun `남의 계좌는 보이지도 지워지지도 않는다`() {
-        val acc = service.createManual(me, "내 계좌", Institution.TOSS, AccountKind.GENERAL, null).id
+        val acc = service.create(me, AccountSource.MANUAL, "내 계좌", Institution.TOSS, AccountKind.GENERAL, null).id
         val txId = buy(acc, samsung, "1", "70000")
 
         assertThat(service.list(other)).isEmpty()
@@ -130,14 +137,14 @@ class PortfolioIntegrationTest : PostgresIntegrationTest() {
         assertThatThrownBy { service.transactions(other, acc, 0, 10) }.isInstanceOf(NoSuchElementException::class.java)
         assertThatThrownBy { service.deleteTransaction(other, acc, txId) }.isInstanceOf(NoSuchElementException::class.java)
         assertThatThrownBy { service.delete(other, acc) }.isInstanceOf(NoSuchElementException::class.java)
-        assertThatThrownBy { service.addManual(other, acc, ManualTransactionInput(TransactionType.DEPOSIT, LocalDate.parse("2026-10-01"), amount = BigDecimal.TEN)) }
+        assertThatThrownBy { service.addManual(other, acc, TransactionInput(TransactionType.DEPOSIT, LocalDate.parse("2026-10-01"), amount = BigDecimal.TEN)) }
             .isInstanceOf(NoSuchElementException::class.java)
         assertThat(holdings.holdings(me, HoldingsScope.REAL).holdings).hasSize(1)
     }
 
     @Test
     fun `계좌를 지우면 거래도 남지 않는다`() {
-        val acc = service.createManual(me, "지울 계좌", Institution.NH, AccountKind.GENERAL, null).id
+        val acc = service.create(me, AccountSource.MANUAL, "지울 계좌", Institution.NH, AccountKind.GENERAL, null).id
         buy(acc, samsung, "1", "70000")
         service.delete(me, acc)
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM portfolio_transactions WHERE account_id = ?", Int::class.java, acc)).isZero()
@@ -146,32 +153,32 @@ class PortfolioIntegrationTest : PostgresIntegrationTest() {
 
     @Test
     fun `잘못된 입력은 400(IllegalArgumentException)으로 막는다`() {
-        val acc = service.createManual(me, "검증", Institution.KIS, AccountKind.GENERAL, null).id
-        fun add(input: ManualTransactionInput) = service.addManual(me, acc, input)
+        val acc = service.create(me, AccountSource.MANUAL, "검증", Institution.KIS, AccountKind.GENERAL, null).id
+        fun add(input: TransactionInput) = service.addManual(me, acc, input)
         val d = LocalDate.parse("2026-10-01")
-        assertThatThrownBy { add(ManualTransactionInput(TransactionType.BUY, LocalDate.parse("2026-10-20"), samsung, quantity = BigDecimal.ONE, price = BigDecimal.ONE)) }
+        assertThatThrownBy { add(TransactionInput(TransactionType.BUY, LocalDate.parse("2026-10-20"), samsung, quantity = BigDecimal.ONE, price = BigDecimal.ONE)) }
             .isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("미래")
-        assertThatThrownBy { add(ManualTransactionInput(TransactionType.BUY, d, avgo, quantity = BigDecimal.ONE, price = BigDecimal.ONE, currency = "KRW")) }
+        assertThatThrownBy { add(TransactionInput(TransactionType.BUY, d, avgo, quantity = BigDecimal.ONE, price = BigDecimal.ONE, currency = "KRW")) }
             .isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("USD")
-        assertThatThrownBy { add(ManualTransactionInput(TransactionType.BUY, d, quantity = BigDecimal.ONE, price = BigDecimal.ONE)) }
+        assertThatThrownBy { add(TransactionInput(TransactionType.BUY, d, quantity = BigDecimal.ONE, price = BigDecimal.ONE)) }
             .isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("종목")
-        assertThatThrownBy { add(ManualTransactionInput(TransactionType.SELL, d, samsung, quantity = BigDecimal.ZERO, price = BigDecimal.ONE)) }
+        assertThatThrownBy { add(TransactionInput(TransactionType.SELL, d, samsung, quantity = BigDecimal.ZERO, price = BigDecimal.ONE)) }
             .isInstanceOf(IllegalArgumentException::class.java)
-        assertThatThrownBy { add(ManualTransactionInput(TransactionType.DIVIDEND, d, amount = BigDecimal.TEN)) }
+        assertThatThrownBy { add(TransactionInput(TransactionType.DIVIDEND, d, amount = BigDecimal.TEN)) }
             .isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("배당")
-        assertThatThrownBy { add(ManualTransactionInput(TransactionType.BUY, d, 999_999_999, quantity = BigDecimal.ONE, price = BigDecimal.ONE)) }
+        assertThatThrownBy { add(TransactionInput(TransactionType.BUY, d, 999_999_999, quantity = BigDecimal.ONE, price = BigDecimal.ONE)) }
             .isInstanceOf(IllegalArgumentException::class.java).hasMessageContaining("종목을 찾을 수 없습니다")
-        assertThatThrownBy { service.createManual(me, "x", Institution.KIS, AccountKind.GENERAL, "12345") }
+        assertThatThrownBy { service.create(me, AccountSource.MANUAL, "x", Institution.KIS, AccountKind.GENERAL, "12345") }
             .isInstanceOf(IllegalArgumentException::class.java)
         // 같은 날 같은 거래를 두 번 넣는 것은 허용한다(실제로 있다)
-        repeat(2) { add(ManualTransactionInput(TransactionType.BUY, d, samsung, quantity = BigDecimal.ONE, price = BigDecimal("70000"))) }
+        repeat(2) { add(TransactionInput(TransactionType.BUY, d, samsung, quantity = BigDecimal.ONE, price = BigDecimal("70000"))) }
         assertThat(holdings.holdings(me, HoldingsScope.REAL).holdings.single().quantity).isEqualByComparingTo("2")
     }
 
     @Test
     fun `계좌는 20개까지다`() {
-        repeat(20) { service.createManual(me, "계좌$it", Institution.OTHER, AccountKind.GENERAL, null) }
-        assertThatThrownBy { service.createManual(me, "21번째", Institution.OTHER, AccountKind.GENERAL, null) }
+        repeat(20) { service.create(me, AccountSource.MANUAL, "계좌$it", Institution.OTHER, AccountKind.GENERAL, null) }
+        assertThatThrownBy { service.create(me, AccountSource.MANUAL, "21번째", Institution.OTHER, AccountKind.GENERAL, null) }
             .isInstanceOf(BusinessRuleException::class.java)
     }
 

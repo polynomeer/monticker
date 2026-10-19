@@ -130,6 +130,19 @@ class GlobalExceptionHandler {
     fun handleNoResource(e: org.springframework.web.servlet.resource.NoResourceFoundException) =
         error(HttpStatus.NOT_FOUND, "요청한 경로를 찾을 수 없습니다")
 
+    // 파일 업로드(통합 포트폴리오 CSV, ADR-106) — 아래 Exception 처리기에 걸려 500이 되지 않게 먼저 받는다
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException::class)
+    fun handleUploadTooLarge(e: org.springframework.web.multipart.MaxUploadSizeExceededException) =
+        error(HttpStatus.PAYLOAD_TOO_LARGE, "파일이 너무 큽니다(최대 5MB)")
+
+    @ExceptionHandler(org.springframework.web.multipart.support.MissingServletRequestPartException::class)
+    fun handleMissingPart(e: org.springframework.web.multipart.support.MissingServletRequestPartException) =
+        error(HttpStatus.BAD_REQUEST, "필수 파일이 없습니다: ${e.requestPartName}")
+
+    @ExceptionHandler(org.springframework.web.multipart.MultipartException::class)
+    fun handleMultipart(e: org.springframework.web.multipart.MultipartException) =
+        error(HttpStatus.BAD_REQUEST, "파일 업로드 요청을 읽을 수 없습니다")
+
     // ── 5xx — 서버 오류 ──────────────────────────────────────────────────
 
     @ExceptionHandler(Exception::class)
