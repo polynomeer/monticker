@@ -836,6 +836,9 @@ CREATE TABLE portfolio_optimizations (
 
 보유는 이 원장으로 계산한다(이동평균, 매수 수수료 포함 — `HoldingsCalculator`). 증권사 잔고 스냅샷 대사 테이블은 2단계에서 더한다.
 
+종목 소식(감지 이벤트·뉴스·공시)의 받는 사람에 보유자도 들어간다([ADR-108](decisions/108-holdings-as-notification-audience.md)). worker `StockAudience`가 이 원장을
+종목으로 찾는다 — V106 `idx_portfolio_tx_stock_trade (stock_id, account_id, trade_date, id) WHERE stock_id IS NOT NULL AND type IN ('BUY','SELL')`.
+
 ### portfolio_import_batches (V105)
 
 CSV 가져오기 한 번이 한 묶음이다. 원본 파일은 저장하지 않고 SHA-256만 남긴다. 묶음을 지우면 그 묶음으로 들어온 거래도 지워진다(`portfolio_transactions.import_batch_id ON DELETE CASCADE` — 되돌리기).
