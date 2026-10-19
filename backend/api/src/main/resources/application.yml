@@ -1,6 +1,12 @@
 spring:
   application:
     name: monticker-api
+  # 파일 업로드는 통합 포트폴리오 CSV 가져오기뿐이다(ADR-106) — 서비스 한도(5MB, PortfolioImportService.MAX_FILE_BYTES)에 맞춘다.
+  # 기본값(1MB)이면 1년치 거래내역 파일이 서비스 검사 전에 잘린다
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/monticker}
     username: ${DB_USER:monticker}
