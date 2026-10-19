@@ -39,6 +39,8 @@ data class CalculatedAccount(
  * - 가진 것보다 많이 팔면 예외를 던지지 않는다. 가진 만큼만 계산하고 [Position.oversold]로 표시한다 — 파일로 가져온
  *   기록은 앞 구간이 빠지기 쉽고, 한 행 때문에 계좌 전체를 못 보여주면 안 된다.
  * - 거래는 날짜, 같은 날이면 입력 순(id)으로 처리한다.
+ *
+ * 보유 수량 규칙을 바꾸면 worker `StockAudience`(종목 소식 받는 사람의 SQL, ADR-108)도 같이 바꾼다.
  */
 object HoldingsCalculator {
 
