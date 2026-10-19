@@ -186,4 +186,30 @@ class StockEventRepositoryIntegrationTest {
             insertEvent(stockA, EventType.VOLUME_SURGE, bucket.plusSeconds(20)) // same UTC minute bucket
         }.isInstanceOf(DataIntegrityViolationException::class.java)
     }
+
+    // ADR-108 보유 종목 피드 — (시각, id) 커서로 페이지를 넘겨도 같은 시각 이벤트가 빠지거나 겹치지 않는다
+    @Test
+    fun `findRecentByStockIds pages by (time, id) without losing events that share a timestamp`() {
+        val a = createStock("FED001")
+        val b = createStock("FED002")
+        val other = createStock("FED003")
+        val t = Instant.parse("2026-10-19T01:00:00Z")
+        insertEvent(a, EventType.PRICE_SPIKE, t)                     // 셋이 같은 시각
+        insertEvent(b, EventType.PRICE_SPIKE, t)
+        insertEvent(a, EventType.VOLUME_SURGE, t)
+        insertEvent(b, EventType.PRICE_DROP, t.minus(1, ChronoUnit.HOURS))
+        insertEvent(other, EventType.PRICE_SPIKE, t)                 // 요청하지 않은 종목
+
+        val ids = listOf(a, b)
+        val first = stockEventRepository.findRecentByStockIds(ids, t.plusSeconds(1), Long.MAX_VALUE, PageRequest.of(0, 2))
+        val last = first.last()
+        val second = stockEventRepository.findRecentByStockIds(ids, last.eventTime, last.id, PageRequest.of(0, 10))
+
+        val all = first + second
+        assertThat(all).hasSize(4)
+        assertThat(all.map { it.id }).doesNotHaveDuplicates()
+        assertThat(all.map { it.stockId }).doesNotContain(other)
+        assertThat(all.map { it.eventTime }).isSortedAccordingTo(Comparator.reverseOrder())
+        assertThat(second.last().eventType).isEqualTo(EventType.PRICE_DROP)
+    }
 }

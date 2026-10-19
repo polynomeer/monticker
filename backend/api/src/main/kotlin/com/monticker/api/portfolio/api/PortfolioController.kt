@@ -1,5 +1,6 @@
 package com.monticker.api.portfolio.api
 
+import com.monticker.api.portfolio.application.HoldingEventFeed
 import com.monticker.api.portfolio.application.HoldingsScope
 import com.monticker.api.portfolio.application.HoldingsView
 import com.monticker.api.portfolio.application.ImportOptions
@@ -10,6 +11,7 @@ import com.monticker.api.portfolio.application.TransactionInput
 import com.monticker.api.portfolio.domain.ImportBatch
 import com.monticker.api.portfolio.domain.csv.CsvFormat
 import com.monticker.api.portfolio.application.PortfolioAccountService
+import com.monticker.api.portfolio.application.PortfolioEventFeedService
 import com.monticker.api.portfolio.application.PortfolioHoldingsQueryService
 import com.monticker.api.portfolio.domain.AccountKind
 import com.monticker.api.portfolio.domain.AccountSource
@@ -46,12 +48,24 @@ import java.time.LocalDate
 class PortfolioController(
     private val accountService: PortfolioAccountService,
     private val holdingsService: PortfolioHoldingsQueryService,
+    private val eventFeedService: PortfolioEventFeedService,
     private val importService: PortfolioImportService,
 ) {
     /** GET /api/portfolio/holdings?scope=REAL|PAPER — REAL은 모의계좌를 뺀 모든 계좌의 합 */
     @GetMapping("/holdings")
     fun holdings(@AuthenticationPrincipal userId: Long, @RequestParam(defaultValue = "REAL") scope: HoldingsScope): HoldingsView =
         holdingsService.holdings(userId, scope)
+
+    /**
+     * GET /api/portfolio/events?cursor=&limit=20 — 모든 실계좌의 보유 종목 이벤트, 최신순(ADR-108).
+     * 다음 페이지는 응답의 nextCursor를 cursor로 넘긴다.
+     */
+    @GetMapping("/events")
+    fun events(
+        @AuthenticationPrincipal userId: Long,
+        @RequestParam(required = false) cursor: String?,
+        @RequestParam(defaultValue = "20") limit: Int,
+    ): HoldingEventFeed = eventFeedService.feed(userId, cursor, limit.coerceIn(1, 50))
 
     @GetMapping("/accounts")
     fun accounts(@AuthenticationPrincipal userId: Long): List<PortfolioAccountResponse> =
