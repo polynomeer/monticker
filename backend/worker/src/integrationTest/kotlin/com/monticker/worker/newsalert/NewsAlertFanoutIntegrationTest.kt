@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 /**
  * ADR-100 — 관심종목 뉴스·공시 팬아웃을 실제 Postgres(api 마이그레이션 전부)에서 본다:
- * 받는 사람은 그 종목을 **자기** 관심종목에 넣은 사용자뿐이고, 재전송·동시 리스너에도 사용자당 한 행·한 알림이며,
+ * 받는 사람은 그 종목을 **자기** 관심종목에 넣었거나 보유 중인(ADR-108) 사용자뿐이고, 재전송·동시 리스너에도 사용자당 한 행·한 알림이며,
  * 시간당 상한과 신선도가 행·알림 수를 묶는다.
  */
 class NewsAlertFanoutIntegrationTest : PostgresIntegrationTest() {
@@ -111,6 +111,30 @@ class NewsAlertFanoutIntegrationTest : PostgresIntegrationTest() {
         assertThat(notifies().map { it.toMessage().category }).containsOnly("NEWS")
         assertThat(publisher.events.filterIsInstance<SearchIndexEvent>().map { it.payload!!["userId"] })
             .containsExactlyInAnyOrder(watcher, emailOnly)
+    }
+
+    // ADR-108 — 관심종목에 없어도 보유 중이면 받는다. 관심종목이기도 하면 한 번
+    @Test
+    fun `holders of the stock get the article too, once even when they also watch it`() {
+        val stock = newStock()
+        fun hold(userId: Long) {
+            val accountId = jdbcTemplate.queryForObject(
+                "INSERT INTO portfolio_accounts (user_id, source, institution, name) VALUES (?, 'CSV', 'OTHER', 'a') RETURNING id",
+                Long::class.java, userId,
+            )!!
+            jdbcTemplate.update(
+                """INSERT INTO portfolio_transactions (account_id, type, trade_date, stock_id, quantity, price, amount, fingerprint)
+                   VALUES (?, 'BUY', DATE '2026-01-02', ?, 1, 100, 100, ?)""",
+                accountId, stock, "fp-${seq.incrementAndGet()}",
+            )
+        }
+        val holder = newUser().also { hold(it) }
+        val both = newUser().also { hold(it); watch(it, stock) }
+
+        assertThat(fanout.fanOut(article(stock), now)).isEqualTo(2)
+        assertThat(rows(holder)).hasSize(1)
+        assertThat(rows(both)).hasSize(1)
+        assertThat(notifies().map { it.userId }).containsExactlyInAnyOrder(holder, both)
     }
 
     @Test

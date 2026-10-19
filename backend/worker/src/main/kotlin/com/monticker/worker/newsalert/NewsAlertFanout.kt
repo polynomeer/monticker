@@ -1,5 +1,6 @@
 package com.monticker.worker.newsalert
 
+import com.monticker.worker.notification.StockAudience
 import tools.jackson.databind.json.JsonMapper
 import com.monticker.worker.search.SearchIndexEvent
 import io.micrometer.core.instrument.MeterRegistry
@@ -15,7 +16,7 @@ import java.sql.Timestamp
 import java.time.Instant
 
 /**
- * ADR-100 — 새 뉴스·공시 하나를 그 종목을 관심종목에 넣은 사용자 각자의 알림 이력에 적재하고 알린다(ADR-090과 같은 사용자 소유 행).
+ * ADR-100 — 새 뉴스·공시 하나를 그 종목을 관심종목에 넣었거나 보유 중인(ADR-108) 사용자 각자의 알림 이력에 적재하고 알린다(ADR-090과 같은 사용자 소유 행).
  *
  * ```
  * NewsCollector / DisclosureCollector (수집 트랜잭션)
@@ -24,7 +25,7 @@ import java.time.Instant
  * NewsAlertFanout.on ◄────────────────────────────────────────┘
  *   신선도·중요도 → 아니면 끝
  *   pg_advisory_xact_lock(뉴스 팬아웃)                       // 시간당 상한을 세고 쓰는 동안 다른 팬아웃과 겹치지 않게
- *   받는 사람 = 그 종목을 관심종목에 넣은 사용자(탈퇴 제외, 뉴스·공시 알림을 끈 사람 제외) + 최근 1시간 뉴스 이력 수
+ *   받는 사람 = 그 종목을 관심종목에 넣었거나 보유 중인 사용자([StockAudience]; 탈퇴 제외, 뉴스·공시 알림을 끈 사람 제외) + 최근 1시간 뉴스 이력 수
  *   사용자마다: 상한 판정 → INSERT alert_histories … ON CONFLICT (user_id, dedup_key) DO NOTHING RETURNING id
  *     새 행만 → SearchIndexEvent(alert_histories, ruleType=NEWS)                     (외부화 → api 색인)
  *              → NewsAlertNotifyEvent (상한 안일 때만)                               (내부 → NewsAlertDelivery → 발송 정책)
@@ -35,7 +36,7 @@ import java.time.Instant
  *   사용자만 받는다.
  * - **채널·방해 금지 시간은 여기서 정하지 않는다.** 발송 시점에 `NotificationPolicy`가 NEWS 종류로 정한다(ADR-082/093). 여기서는
  *   "이 종류를 받겠다"(news_alert_push 또는 news_alert_email)만 본다 — 뉴스는 양이 많아 끈 사람의 알림함까지 채우지 않는다.
- * - 소유: 받는 사람은 **그 사용자 자신의 관심종목**에서만 나온다. 다른 사람의 관심종목·보유 종목은 보지 않는다.
+ * - 소유: 받는 사람은 **그 사용자 자신의 관심종목·보유**에서만 나온다. 다른 사람의 관심종목·보유 종목은 보지 않는다.
  * - 운영 스위치: `notify.news-alert.enabled=false`(NEWS_ALERT_ENABLED)면 팬아웃 자체를 하지 않는다 — 이력 행도 알림도 없다.
  *   꺼 둔 동안 들어온 기사는 다시 켜도 소급하지 않는다(발행 기록은 완료 처리된다).
  */
@@ -92,13 +93,11 @@ class NewsAlertFanout(
             """
             SELECT a.user_id, COALESCE(c.recorded, 0) AS recorded, COALESCE(c.notified, 0) AS notified
             FROM (
-                SELECT DISTINCT wg.user_id
-                FROM watchlist_items wi
-                JOIN watchlist_groups wg ON wg.id = wi.group_id
-                JOIN users u ON u.id = wg.user_id AND u.deleted_at IS NULL
-                LEFT JOIN notification_preferences np ON np.user_id = wg.user_id
-                WHERE wi.stock_id = ?
-                  AND COALESCE(np.news_alert_push OR np.news_alert_email, true)
+                SELECT DISTINCT i.user_id
+                FROM (${StockAudience.INTERESTED_USERS_SQL}) i
+                JOIN users u ON u.id = i.user_id AND u.deleted_at IS NULL
+                LEFT JOIN notification_preferences np ON np.user_id = i.user_id
+                WHERE COALESCE(np.news_alert_push OR np.news_alert_email, true)
             ) a
             LEFT JOIN LATERAL (
                 SELECT COUNT(*) AS recorded,
@@ -109,7 +108,7 @@ class NewsAlertFanout(
             ORDER BY a.user_id
             """.trimIndent(),
             { rs, _ -> Recipient(rs.getLong("user_id"), rs.getInt("recorded"), rs.getInt("notified")) },
-            event.stockId, Timestamp.from(now.minus(NewsAlertRules.CAP_WINDOW)),
+            event.stockId, event.stockId, Timestamp.from(now.minus(NewsAlertRules.CAP_WINDOW)),
         )
         if (recipients.isEmpty()) return 0
 
