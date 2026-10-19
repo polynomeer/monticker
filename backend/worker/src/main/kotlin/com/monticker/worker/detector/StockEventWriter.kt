@@ -1,5 +1,6 @@
 package com.monticker.worker.detector
 
+import com.monticker.worker.notification.StockAudience
 import com.monticker.worker.common.PlainJson
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -107,18 +108,16 @@ class StockEventWriter(
         const val SEARCH_INDEX = "stock_events"
 
         /**
-         * 이 종목을 관심종목에 넣은 사용자의 활성 기기 토큰. 바인딩: stockId.
+         * 이 종목을 관심종목에 넣었거나 보유 중인 사용자([StockAudience], ADR-108)의 활성 기기 토큰. 바인딩: stockId, stockId.
          * 예전 쿼리는 존재하지 않는 컬럼 `wi.watchlist_group_id`로 조인해 매번 SQL 오류였고(실제 컬럼은 `group_id`, V3),
          * 오류가 runCatching + debug 로그에 묻혀 관심종목 급등·급락·거래량 급증 푸시가 한 번도 나가지 않았다.
          * 같은 종목이 여러 그룹에 있어도 토큰은 한 번 — 탈퇴한 사용자는 제외.
          */
         const val WATCHER_DEVICE_TOKENS_SQL = """
             SELECT DISTINCT dt.user_id, dt.token
-            FROM watchlist_items wi
-            JOIN watchlist_groups wg ON wg.id = wi.group_id
-            JOIN device_tokens dt ON dt.user_id = wg.user_id AND dt.is_active = true
-            JOIN users u ON u.id = wg.user_id AND u.deleted_at IS NULL
-            WHERE wi.stock_id = ?
+            FROM (${StockAudience.INTERESTED_USERS_SQL}) a
+            JOIN device_tokens dt ON dt.user_id = a.user_id AND dt.is_active = true
+            JOIN users u ON u.id = a.user_id AND u.deleted_at IS NULL
         """
 
         /** api `StockEventDocument` 매핑과 같은 형태 — 날짜는 epoch_millis, sentimentScore는 감지 이벤트에 없다. */
@@ -148,11 +147,11 @@ class StockEventWriter(
     }
 
     private fun sendEventPushAsync(event: DetectedEvent) {
-        // 이 stock_id를 관심종목으로 가진 user들의 device token 조회
+        // 이 stock_id를 관심종목에 넣었거나 보유 중인 user들의 device token 조회
         val rows = jdbcTemplate.query(
                 WATCHER_DEVICE_TOKENS_SQL,
                 { rs, _ -> rs.getLong("user_id") to rs.getString("token") },
-                event.stockId,
+                event.stockId, event.stockId,
             )
             if (rows.isEmpty()) return
 
