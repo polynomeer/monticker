@@ -135,4 +135,43 @@ class HoldingsCalculatorTest {
         val p = calc(tx(TransactionType.BUY, "2026-01-02", qty = "10.000000", price = "1")).positions.single()
         assertThat(p.quantity.toPlainString()).isEqualTo("10")
     }
+
+    // ── ADR-111 매수일 환율 기준 원화 원가 ──
+    private val rates = mapOf(LocalDate.parse("2025-03-03") to BigDecimal("1300"), LocalDate.parse("2025-04-01") to BigDecimal("1400"))
+    private fun krwRate(currency: String, date: LocalDate): BigDecimal? = if (currency == "KRW") BigDecimal.ONE else rates[date]
+
+    @Test
+    fun `해외 종목 원화 원가는 매수일 환율로 쌓고, 매도는 같은 비율로 덜어 평균 매수 환율이 그대로다`() {
+        val p = HoldingsCalculator.calculate(listOf(
+            tx(TransactionType.BUY, "2025-03-03", stockId = 7, qty = "1", price = "100", currency = "USD"),
+            tx(TransactionType.BUY, "2025-04-01", stockId = 7, qty = "1", price = "100", currency = "USD"),
+            tx(TransactionType.SELL, "2025-04-01", stockId = 7, qty = "1", price = "120", currency = "USD"),
+        ), ::krwRate).positions.single()
+        assertThat(p.costBasis).isEqualByComparingTo("100")
+        // 130,000 + 140,000 = 270,000 → 절반 매도 → 135,000(평균 1,350원)
+        assertThat(p.costBasisKrw).isEqualByComparingTo("135000")
+    }
+
+    @Test
+    fun `매수일 환율이 없으면 원화 원가는 null — 다 팔고 다시 사면 새로 시작한다`() {
+        val missing = HoldingsCalculator.calculate(listOf(
+            tx(TransactionType.BUY, "2025-01-10", stockId = 7, qty = "1", price = "100", currency = "USD"),
+            tx(TransactionType.BUY, "2025-03-03", stockId = 7, qty = "1", price = "100", currency = "USD"),
+        ), ::krwRate).positions.single()
+        assertThat(missing.costBasisKrw).isNull()
+
+        val reset = HoldingsCalculator.calculate(listOf(
+            tx(TransactionType.BUY, "2025-01-10", stockId = 7, qty = "1", price = "100", currency = "USD"),
+            tx(TransactionType.SELL, "2025-03-03", stockId = 7, qty = "1", price = "100", currency = "USD"),
+            tx(TransactionType.BUY, "2025-04-01", stockId = 7, qty = "2", price = "50", currency = "USD"),
+        ), ::krwRate).positions.single()
+        assertThat(reset.costBasisKrw).isEqualByComparingTo("140000")
+    }
+
+    @Test
+    fun `원화 종목은 원화 원가가 원가와 같고, 환율을 안 넘기면 채우지 않는다`() {
+        val buy = tx(TransactionType.BUY, "2026-01-02", qty = "10", price = "70000", fee = "100")
+        assertThat(HoldingsCalculator.calculate(listOf(buy), ::krwRate).positions.single().costBasisKrw).isEqualByComparingTo("700100")
+        assertThat(calc(buy).positions.single().costBasisKrw).isNull()
+    }
 }
