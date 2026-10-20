@@ -8,6 +8,7 @@ import type {
   ImportPreview,
   ImportResult,
   PortfolioAccount,
+  PortfolioAnalysis,
   PortfolioConsent,
   PortfolioHoldings,
   PortfolioTransaction,
@@ -33,6 +34,11 @@ const json = (body: unknown): RequestInit => ({ headers: { "Content-Type": "appl
 
 export async function getHoldings(scope: HoldingsScope): Promise<PortfolioHoldings> {
   return (await ok(await authFetch(`/api/portfolio/holdings?scope=${scope}`))).json();
+}
+
+/** 원화 요약·배분·배당·돈 가중 수익률(ADR-111) */
+export async function getAnalysis(): Promise<PortfolioAnalysis> {
+  return (await ok(await authFetch("/api/portfolio/analysis"))).json();
 }
 
 export async function getHoldingEvents(cursor: string | null, limit = 20): Promise<HoldingEventFeed> {
