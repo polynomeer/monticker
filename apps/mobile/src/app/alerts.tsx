@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, RefreshControl } from "react-native";
 import { useRouter } from "expo-router";
-import { getApiBase } from "@/services/api";
+import { authFetch } from "@/services/auth";
+import { useAuthState } from "@/services/useAuth";
+import { SignInRequired } from "@/components/SignInRequired";
 
 interface AlertRule {
   id: number;
@@ -28,7 +30,7 @@ export default function AlertsScreen() {
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      const res = await fetch(`${getApiBase()}/api/alerts/rules`, {
+      const res = await authFetch(`/api/alerts/rules`, {
         headers: { "Content-Type": "application/json" },
       });
       if (res.ok) setRules(await res.json());
@@ -38,9 +40,12 @@ export default function AlertsScreen() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  const auth = useAuthState();
+  // 로그인 상태가 정해진 뒤에 읽는다 — 로그인하고 돌아오면 다시 읽는다
+  useEffect(() => { if (auth === "signedIn") load(); }, [auth, load]);
 
-  if (loading) return <View style={s.center}><ActivityIndicator size="large" color={ACCENT} /></View>;
+  if (auth === "signedOut") return <SignInRequired message="알림 규칙을 보려면 로그인해 주세요" />;
+  if (auth === "unknown" || loading) return <View style={s.center}><ActivityIndicator size="large" color={ACCENT} /></View>;
 
   return (
     <View style={s.container}>

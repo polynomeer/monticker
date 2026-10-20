@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, RefreshControl } from "react-native";
 import { useRouter } from "expo-router";
-import { getApiBase } from "@/services/api";
+import { authFetch } from "@/services/auth";
+import { useAuthState } from "@/services/useAuth";
+import { SignInRequired } from "@/components/SignInRequired";
 
 interface WatchlistItem {
   id: number;
@@ -22,7 +24,7 @@ export default function WatchlistScreen() {
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      const res = await fetch(`${getApiBase()}/api/watchlists`);
+      const res = await authFetch(`/api/watchlists`);
       if (res.ok) setGroups(await res.json());
     } finally {
       setLoading(false);
@@ -30,11 +32,14 @@ export default function WatchlistScreen() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  const auth = useAuthState();
+  // 로그인 상태가 정해진 뒤에 읽는다 — 로그인하고 돌아오면 다시 읽는다
+  useEffect(() => { if (auth === "signedIn") load(); }, [auth, load]);
 
   const allItems = groups.flatMap(g => g.items.map(i => ({ ...i, groupName: g.name })));
 
-  if (loading) return <View style={s.center}><ActivityIndicator size="large" color={ACCENT} /></View>;
+  if (auth === "signedOut") return <SignInRequired message="관심종목을 보려면 로그인해 주세요" />;
+  if (auth === "unknown" || loading) return <View style={s.center}><ActivityIndicator size="large" color={ACCENT} /></View>;
 
   return (
     <View style={s.container}>
