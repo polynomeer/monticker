@@ -363,8 +363,10 @@ class SubscriptionService(
         return paymentRepo.countByUserIdAndStatusAndCreatedAtAfter(userId, PaymentStatus.FAILED, since)
     }
 
+    private fun renewedExpiresAt(): Instant = Instant.now().plus(30, ChronoUnit.DAYS)
+
     private fun extend(subscription: UserSubscription, plan: SubscriptionPlan) {
-        subscription.upgrade(plan, expiresAt = Instant.now().plus(30, ChronoUnit.DAYS))
+        subscription.upgrade(plan, expiresAt = renewedExpiresAt())
         subscriptionRepo.save(subscription)
     }
 
@@ -376,6 +378,9 @@ class SubscriptionService(
      * `SUBSCRIPTION_PAYMENT` 원장 행이 생기지 않았다 — 돈은 움직이고 회계는 비는 상태다.
      * `bench/consistency/verify.py` 의 "성공 결제 수 == 원장 행 수" 불변식이 바로 이걸 잡으려고
      * 있는 것이고, 갱신 배치가 한 번도 돌지 않았기 때문에 드러나지 않았을 뿐이다.
+     *
+     * 적체 정리 경로(구독을 넘기지 않음)는 구독 행 락을 쥐고 다시 읽는다. 그 사이 해지·탈퇴된 구독의 **갱신** 청구라면
+     * 재활성화하지 않는다 — `upgrade()`가 ACTIVE로 되돌리면 다음 갱신 배치가 해지한 사용자에게 또 청구한다(ADR-059·ADR-109 Note).
      */
     private fun settlePayment(
         record: PaymentRecord,
@@ -389,8 +394,23 @@ class SubscriptionService(
         ledgerService.recordSubscriptionPayment(
             record.userId, record.plan.code.name, record.amount, record.id,
         )
-        val target = subscription ?: subscriptionRepo.findByUserId(record.userId).orElse(null)
-        target?.let { extend(it, record.plan) }
+        if (subscription != null) {
+            extend(subscription, record.plan)
+            return
+        }
+        // 적체 정리 경로 — 갱신·해지·탈퇴와 같은 행 락을 쥐고 지금 상태를 본다(ADR-053·ADR-109 Note).
+        val target = subscriptionRepo.findByUserIdForUpdate(record.userId).orElse(null) ?: return
+        if (target.status != SubscriptionStatus.ACTIVE && isRenewalOrderId(record.pgOrderId)) {
+            // 해지·탈퇴 전에 나간 갱신 청구가 뒤늦게 DONE으로 확인됐다. upgrade()로 연장하면 ACTIVE로 되살아나 다음 갱신 배치가
+            // 또 청구한다. 돈은 이미 움직였으니 기록·원장은 위에서 확정했고, 낸 기간만 붙인다 — 해지 상태는 그대로다.
+            // 환불은 자동화하지 않는다(ADR-059 §Consequences) — 사람이 볼 수 있게 경고를 남긴다.
+            target.extendPaidPeriod(maxOf(target.expiresAt ?: Instant.EPOCH, renewedExpiresAt()))
+            subscriptionRepo.save(target)
+            log.warn("해지·탈퇴된 구독의 갱신 결제가 뒤늦게 확정됨 — 재활성화하지 않고 기간만 연장, 환불 검토 필요: " +
+                "userId={} status={} orderId={} amount={}", record.userId, target.status, record.pgOrderId, record.amount)
+            return
+        }
+        extend(target, record.plan)
     }
 
     /**
@@ -443,7 +463,12 @@ class SubscriptionService(
          * 만료시각은 갱신이 성공해야 바뀌므로 주기 식별자로 쓰기에 알맞다.
          */
         fun renewalOrderId(subscription: UserSubscription): String =
-            "renewal_${subscription.id}_${subscription.expiresAt?.epochSecond ?: 0L}"
+            "${RENEWAL_ORDER_PREFIX}${subscription.id}_${subscription.expiresAt?.epochSecond ?: 0L}"
+
+        /** 갱신 배치가 낸 청구인가 — 사용자가 직접 낸 일회성 결제(`sub_…`)는 구독을 활성화하는 것이 의도다. */
+        fun isRenewalOrderId(orderId: String?): Boolean = orderId?.startsWith(RENEWAL_ORDER_PREFIX) == true
+
+        private const val RENEWAL_ORDER_PREFIX = "renewal_"
     }
 
     private fun getOrCreateSubscription(userId: Long, plan: SubscriptionPlan): UserSubscription =
@@ -483,7 +508,7 @@ data class SubscribeResult(
 
 /** PENDING 결제 하나를 PG 에 물어본 결과 (ADR-059). */
 enum class PaymentResolution {
-    /** PG 가 DONE 이라고 답했다 — 청구됐다. 기록·원장·구독을 확정했다. */
+    /** PG 가 DONE 이라고 답했다 — 청구됐다. 기록·원장·구독을 확정했다. 해지·탈퇴된 구독의 갱신 청구면 기간만 붙이고 되살리지 않는다. */
     PAID,
     /** PG 가 확정적으로 실패(CANCELED/ABORTED/EXPIRED)라고 답했다. */
     FAILED,
