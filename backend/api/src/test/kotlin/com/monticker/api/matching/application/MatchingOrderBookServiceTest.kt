@@ -145,6 +145,23 @@ class MatchingOrderBookServiceTest {
     }
 
     @Test
+    fun `evictUser removes only that user's resting orders across stocks and sides`() {
+        fun limit(id: Long, userId: Long, stockId: Long, side: OrderSide, price: String) = Order(
+            id = id, userId = userId, stockId = stockId, side = side, orderType = OrderType.LIMIT,
+            quantity = 1, limitPrice = Price.of(BigDecimal(price)),
+        )
+        service.submit(limit(1L, 7L, 100L, OrderSide.BUY, "900"))
+        service.submit(limit(2L, 8L, 100L, OrderSide.BUY, "900"))
+        service.submit(limit(3L, 7L, 200L, OrderSide.SELL, "1100"))
+
+        assertThat(service.evictUser(7L)).isEqualTo(2)
+
+        assertThat(service.getOrCreate(100L).bids[BigDecimal("900")]!!.map { it.id }).containsExactly(2L)
+        assertThat(service.getOrCreate(200L).asks).isEmpty()   // 빈 가격 단계도 지운다
+        assertThat(service.evictUser(7L)).isZero()
+    }
+
+    @Test
     fun `cancel returns false for an order that does not exist in the book`() {
         val cancelled = service.cancel(100L, 999L, OrderSide.BUY)
 
