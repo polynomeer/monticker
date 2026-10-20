@@ -25,6 +25,7 @@ export default function RootLayout() {
         <Stack.Screen name="index"           options={{ title: "monticker" }} />
         <Stack.Screen name="watchlist"       options={{ title: "관심종목" }} />
         <Stack.Screen name="alerts"          options={{ title: "알림" }} />
+        <Stack.Screen name="accounts"        options={{ title: "내 계좌" }} />
         <Stack.Screen name="stocks/[symbol]" options={{ title: "" }} />
         <Stack.Screen name="login"           options={{ title: "로그인", presentation: "modal" }} />
       </Stack>
