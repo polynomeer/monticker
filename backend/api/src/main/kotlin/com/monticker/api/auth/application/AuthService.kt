@@ -180,12 +180,14 @@ class AuthService(
     fun deleteAccount(userId: Long, password: String) {
         val user = userRepository.findById(userId).orElseThrow()
         require(passwordEncoder.matches(password, user.passwordHash)) { "비밀번호가 올바르지 않습니다." }
-        user.deletedAt = Instant.now()
-        user.updatedAt = Instant.now()
-        jdbc.update("DELETE FROM refresh_tokens WHERE user_id = ?", userId)
-        // 사용자 행이 남는 소프트 삭제라 CASCADE로 지워지지 않는 데이터(통합 포트폴리오 등)를 각 모듈이 같은 트랜잭션에서 지운다
+        // 사용자 행이 남는 소프트 삭제라 CASCADE로 지워지지 않는 데이터를 각 모듈이 같은 트랜잭션에서 지운다(ADR-109).
+        // 먼저 낸다 — 거부하는 리스너(결과가 열린 실주문이 있는 증권사 계좌)가 던지면 아래 익명화까지 함께 롤백된다.
         events.publishEvent(UserAccountDeletedEvent(userId))
-        log.info("[AuthService] 계정 삭제(soft): userId={}", userId)
+        jdbc.update("DELETE FROM refresh_tokens WHERE user_id = ?", userId)
+        jdbc.update("DELETE FROM notification_preferences WHERE user_id = ?", userId)
+        jdbc.update("DELETE FROM user_preferences WHERE user_id = ?", userId)
+        user.anonymize()
+        log.info("[AuthService] 계정 삭제(soft, 익명화): userId={}", userId)
     }
 
     fun socialLoginOrSignup(email: String, nickname: String, provider: String, providerId: String): TokenPair {

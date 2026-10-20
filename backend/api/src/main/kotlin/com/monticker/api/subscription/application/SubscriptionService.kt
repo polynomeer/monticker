@@ -187,6 +187,22 @@ class SubscriptionService(
         log.info("구독 해지: userId={} plan={}", userId, subscription.plan.code)
     }
 
+    /**
+     * ADR-109 — 탈퇴. 자동결제 카드(빌링키)를 지우고 활성 구독을 해지한다. 남겨 두면 갱신 배치가 탈퇴한 사용자에게 계속 청구한다
+     * (갱신 배치는 사용자 탈퇴 여부를 보지 않는다). 남은 기간은 환불하지 않는다. 결제 기록(payment_records)과 구독 이력은
+     * 전자상거래법 보존 기간(5년) 동안 남긴다 — 사용자 행이 익명화되어 사람과 직접 이어지지 않는다.
+     */
+    @Transactional
+    fun closeForAccountDeletion(userId: Long) {
+        billingKeyRepo.deleteByUserId(userId)
+        val subscription = subscriptionRepo.findByUserId(userId).orElse(null) ?: return
+        if (subscription.status == SubscriptionStatus.ACTIVE) {
+            subscription.cancel()
+            subscriptionRepo.save(subscription)
+        }
+        log.info("탈퇴로 구독 정리: userId={} plan={} status={}", userId, subscription.plan.code, subscription.status)
+    }
+
     @Transactional(readOnly = true)
     fun getPayments(userId: Long, pageable: Pageable): Page<PaymentRecord> =
         paymentRepo.findAllByUserIdOrderByCreatedAtDesc(userId, pageable)

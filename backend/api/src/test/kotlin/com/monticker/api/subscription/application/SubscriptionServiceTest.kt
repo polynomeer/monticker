@@ -599,6 +599,36 @@ class SubscriptionServiceTest {
         }
     }
 
+    // ── ADR-109 탈퇴 ──────────────────────────────────────────────────────────
+
+    @Test
+    fun `탈퇴하면 빌링키를 지우고 활성 구독을 해지한다 - 갱신 배치가 더 청구하지 않는다`() {
+        val sub = makeSubscription(makePlan(PlanCode.PRO, BigDecimal("9900")), status = SubscriptionStatus.ACTIVE)
+        every { billingKeyRepo.deleteByUserId(1L) } just Runs
+        every { subscriptionRepo.findByUserId(1L) } returns Optional.of(sub)
+        every { subscriptionRepo.save(any()) } returns sub
+
+        service.closeForAccountDeletion(1L)
+
+        verify(exactly = 1) { billingKeyRepo.deleteByUserId(1L) }
+        assertThat(sub.status).isEqualTo(SubscriptionStatus.CANCELLED)
+        verify(exactly = 0) { paymentRepo.delete(any()) }
+    }
+
+    @Test
+    fun `탈퇴할 때 구독이 없거나 이미 해지됐어도 실패하지 않고 빌링키는 지운다`() {
+        every { billingKeyRepo.deleteByUserId(1L) } just Runs
+        every { subscriptionRepo.findByUserId(1L) } returns Optional.empty()
+        service.closeForAccountDeletion(1L)
+
+        val cancelled = makeSubscription(makePlan(PlanCode.PRO, BigDecimal("9900")), status = SubscriptionStatus.CANCELLED)
+        every { subscriptionRepo.findByUserId(1L) } returns Optional.of(cancelled)
+        service.closeForAccountDeletion(1L)
+
+        verify(exactly = 2) { billingKeyRepo.deleteByUserId(1L) }
+        verify(exactly = 0) { subscriptionRepo.save(any()) }
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     // ── billingSchedule (ADR-083) ────────────────────────────────────────────

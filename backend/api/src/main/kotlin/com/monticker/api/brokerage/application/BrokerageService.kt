@@ -181,6 +181,45 @@ class BrokerageService(
     }
 
     /**
+     * ADR-109 — 탈퇴. 이 사용자의 **모든** 계좌(갈아타기로 비활성화됐지만 키가 남은 계좌 포함)에 [disconnect]와 같은 규칙을 적용한다:
+     * 결과가 열린 주문이나 발동 중인 조건부 주문이 하나라도 있으면 거부한다(탈퇴 트랜잭션 전체가 롤백된다). 없으면 대기 중인
+     * 조건부 주문을 취소하고 키를 지운다. 계좌·주문·정산 행은 실거래 기록이라 남긴다(보존 기간은 ADR-109).
+     * 같은 사용자 advisory lock과 계좌 행 락을 잡는 이유는 [disconnect]와 같다. 키가 지워진 계좌 수를 돌려준다.
+     */
+    @Transactional
+    fun closeForAccountDeletion(userId: Long): Int {
+        jdbc.query("SELECT pg_advisory_xact_lock(?, (? % 2147483647)::int)", { _ -> }, ADVISORY_NS_ORDER, userId)
+        val accounts = accountRepo.findAllByUserId(userId)
+        if (accounts.isEmpty()) return 0
+
+        jdbc.query("SELECT id FROM brokerage_accounts WHERE user_id = ? ORDER BY id FOR UPDATE", { _ -> }, userId)
+        val openOrders = accounts.sumOf { openOrderCount(it.id) }
+        if (openOrders > 0) {
+            throw BusinessRuleException("체결 여부를 증권사에서 아직 확인 중인 주문이 ${openOrders}건 있어 탈퇴할 수 없습니다. 미체결 주문을 취소하거나 확인이 끝난 뒤 다시 시도해주세요.")
+        }
+        val triggered = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM conditional_orders WHERE user_id = ? AND status = 'TRIGGERED'",
+            Long::class.java, userId,
+        ) ?: 0L
+        if (triggered > 0) {
+            throw BusinessRuleException("지금 발동되어 주문을 내고 있는 조건부 주문이 있어 탈퇴할 수 없습니다. 잠시 후 다시 시도해주세요.")
+        }
+
+        val cancelled = jdbc.update(
+            "UPDATE conditional_orders SET status = 'CANCELLED', updated_at = now() WHERE user_id = ? AND status = 'ACTIVE'",
+            userId,
+        )
+        val closing = accounts.filter { it.isActive || it.holdsCredentials }
+        closing.forEach {
+            it.disconnect()
+            accountRepo.save(it)
+        }
+        // 키·토큰 값은 절대 로그에 남기지 않는다
+        log.info("탈퇴로 증권사 연동 정리: userId={} accounts={} cancelledConditionalOrders={}", userId, closing.map { it.id }, cancelled)
+        return closing.size
+    }
+
+    /**
      * ADR-067 — 증권사에서 아직 결과가 열린 주문 수. 대조·상태 동기화가 이 계좌의 키를 써야 하는 주문이다.
      * 접수·일부 체결은 최근 24시간만 센다 — 국내 주문은 당일 유효라 그보다 오래된 것은 동기화 잡도 보지 않고 더 체결될 수 없다.
      */
