@@ -25,6 +25,8 @@ export type AuthState = "unknown" | "signedOut" | "signedIn";
 let accessToken: string | null = null;
 let state: AuthState = "unknown";
 let refreshing: Promise<boolean> | null = null;
+/** 로그아웃마다 올린다 — 로그아웃 전에 시작한 갱신이 끝난 뒤 토큰을 다시 저장하지 않게 */
+let generation = 0;
 const listeners = new Set<(s: AuthState) => void>();
 
 function setState(next: AuthState) {
@@ -41,7 +43,8 @@ export function subscribeAuth(listener: (s: AuthState) => void): () => void {
   return () => { listeners.delete(listener); };
 }
 
-async function save(tokens: NativeTokenResponse) {
+async function save(tokens: NativeTokenResponse, gen = generation) {
+  if (gen !== generation) return;          // 그 사이 로그아웃했다 — 받은 토큰은 버린다(서버에서는 이미 폐기됐거나 곧 만료)
   await SecureStore.setItemAsync(REFRESH_KEY, tokens.refreshToken, STORE_OPTIONS);
   accessToken = tokens.accessToken;
   setState("signedIn");
@@ -75,21 +78,23 @@ export async function login(email: string, password: string): Promise<void> {
 /** 저장된 refresh token으로 새 토큰 쌍을 받는다 — 동시에 불려도 요청은 하나 */
 function refresh(): Promise<boolean> {
   if (!refreshing) {
+    const gen = generation;
     refreshing = (async () => {
-      const stored = await SecureStore.getItemAsync(REFRESH_KEY, STORE_OPTIONS);
-      if (!stored) { await clear(); return false; }
       try {
+        // 기기가 잠겨 있으면(WHEN_UNLOCKED) 읽기가 실패한다 — 로그아웃시키지 않고 다음에 다시
+        const stored = await SecureStore.getItemAsync(REFRESH_KEY, STORE_OPTIONS);
+        if (!stored) { await clear(); return false; }
         const res = await fetch(`${getApiBase()}/api/auth/native/refresh`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ refreshToken: stored }),
         });
-        if (res.status === 401 || res.status === 400) { await clear(); return false; }
+        if (res.status === 401 || res.status === 400) { if (gen === generation) await clear(); return false; }
         if (!res.ok) return false;          // 일시 오류(5xx·429) — 토큰은 그대로 두고 다음에 다시
-        await save(await res.json());
-        return true;
+        await save(await res.json(), gen);
+        return gen === generation;
       } catch {
-        return false;                        // 네트워크 오류 — 로그아웃시키지 않는다
+        return false;                        // 네트워크 오류·저장소 오류 — 로그아웃시키지 않는다
       }
     })().finally(() => { refreshing = null; });
   }
@@ -118,6 +123,9 @@ export async function authFetch(path: string, init: RequestInit = {}): Promise<R
 
 /** 이 기기의 세션만 끝낸다. 서버 폐기가 실패해도 기기에서는 지운다 */
 export async function logout(beforeClear?: () => Promise<void>): Promise<void> {
+  // 진행 중인 갱신이 있으면 끝난 뒤에 — 그래야 지금 저장된(가장 새) 토큰을 폐기한다
+  await refreshing?.catch(() => undefined);
+  generation += 1;
   const stored = await SecureStore.getItemAsync(REFRESH_KEY, STORE_OPTIONS).catch(() => null);
   await beforeClear?.().catch(() => undefined);
   if (stored) {
