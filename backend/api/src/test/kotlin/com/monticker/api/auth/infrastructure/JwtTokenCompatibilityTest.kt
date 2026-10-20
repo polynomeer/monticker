@@ -30,6 +30,21 @@ class JwtTokenCompatibilityTest {
         assertThat(provider.getUserId(REFRESH_0_12_7)).isEqualTo(7L)
     }
 
+    // typ 클레임(ADR-109 보안 검토 M1) 이전에 발급된 토큰도 refresh 경로에서 구분된다 — role이 있으면 access token이다
+    @Test
+    fun `typ 클레임 이전 토큰도 refresh 경로에서 access와 refresh를 가른다`() {
+        assertThat(provider.getRefreshUserId(REFRESH_0_12_7)).isEqualTo(7L)
+        org.assertj.core.api.Assertions.assertThatThrownBy { provider.getRefreshUserId(ACCESS_0_12_7) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+    }
+
+    @Test
+    fun `새로 발급한 토큰은 typ으로 구분하고, access token은 refresh 경로에 못 들어간다`() {
+        assertThat(provider.getRefreshUserId(provider.generateRefreshToken(3L))).isEqualTo(3L)
+        org.assertj.core.api.Assertions.assertThatThrownBy { provider.getRefreshUserId(provider.generateAccessToken(3L, "a@b.c", "USER")) }
+            .isInstanceOf(IllegalArgumentException::class.java)
+    }
+
     @Test
     fun `서명을 바꾼 토큰은 여전히 거부한다`() {
         val tampered = ACCESS_0_12_7.dropLast(2) + if (ACCESS_0_12_7.endsWith("AA")) "BB" else "AA"
