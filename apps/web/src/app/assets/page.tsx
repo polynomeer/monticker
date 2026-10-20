@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { PortfolioAccount } from "@monticker/types";
-import { Btn, BtnLink, Icon, Notice, Panel, PanelRow, Seg, TerminalPage, dirClass, fmtSigned, type TopStat } from "@/components/terminal";
+import { Btn, Icon, Notice, Panel, PanelRow, Seg, TerminalPage, dirClass, fmtSigned, type TopStat } from "@/components/terminal";
 import { LoginRequired, Skeleton } from "@/components/portfolio/PaperStates";
 import { useIsLoggedIn } from "@/components/home/data";
 import { useConsentStatus } from "@/hooks/useConsents";
 import { useAccounts, useAgreePortfolioConsent, useHoldings } from "@/hooks/usePortfolio";
 import { AccountDetail } from "@/components/assets/AccountDetail";
+import { BrokerageLinkCard } from "@/components/assets/BrokerageLinkCard";
+import { PaperPortfolioView, usePaperStats } from "@/components/portfolio/PaperPortfolioView";
 import { AddAccountDialog } from "@/components/assets/AddAccountDialog";
 import { AssetHoldingsTable } from "@/components/assets/AssetHoldingsTable";
 import { CurrencyTotals } from "@/components/assets/CurrencyTotals";
@@ -20,20 +23,35 @@ type View = "TOTAL" | "ACCOUNTS" | "PAPER";
 const VIEWS = [
   { value: "TOTAL", label: "통합" },
   { value: "ACCOUNTS", label: "계좌별" },
-  { value: "PAPER", label: "모의" },
+  { value: "PAPER", label: "모의투자" },
 ] as const;
+
+const isView = (v: string | null): v is View => v === "TOTAL" || v === "ACCOUNTS" || v === "PAPER";
 
 const TITLE = "내 자산";
 const CRUMB = "여러 증권 계좌 통합";
 
 /**
  * 내 자산(ADR-106 1단계, docs/account-aggregation-plan.md §8) — 손 입력·CSV로 넣은 여러 증권 계좌를 한곳에.
- * 통합: 계좌 사이에 합친 보유와 보유 종목 소식(ADR-108). 계좌별: 계좌 추가·가져오기·거래. 모의: 모의계좌 보유(읽기 전용).
+ * 통합: 계좌 사이에 합친 보유와 보유 종목 소식(ADR-108). 계좌별: 계좌 추가·가져오기·거래. 모의: 모의 포트폴리오 전체(ADR-110 —
+ * 예전 /portfolio). 탭은 주소(?view=)에 남아 링크로 열고 새로 고침해도 유지된다 — 탭 이동은 방문 기록을 쌓지 않는다(replace).
  * 표시·복기용이다 — 실계좌 주문·리스크 검사는 이 값을 쓰지 않는다(ADR-055).
  */
 export default function AssetsPage() {
+  // useSearchParams는 정적 렌더에서 Suspense 경계가 필요하다(login 화면과 같은 방식)
+  return (
+    <Suspense fallback={<TerminalPage title={TITLE} crumb={CRUMB}><Skeleton className="h-72" /></TerminalPage>}>
+      <AssetsScreen />
+    </Suspense>
+  );
+}
+
+function AssetsScreen() {
   const isLoggedIn = useIsLoggedIn();
-  const [view, setView] = useState<View>("TOTAL");
+  const router = useRouter();
+  const param = useSearchParams().get("view");
+  const view: View = isView(param) ? param : "TOTAL";
+  const setView = (v: View) => router.replace(v === "TOTAL" ? "/assets" : `/assets?view=${v}`, { scroll: false });
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
   const [renewAgreed, setRenewAgreed] = useState(false);
@@ -41,7 +59,7 @@ export default function AssetsPage() {
   const consentStatus = useConsentStatus(isLoggedIn);
   const accounts = useAccounts(isLoggedIn);
   const real = useHoldings("REAL", isLoggedIn && view === "TOTAL");
-  const paper = useHoldings("PAPER", isLoggedIn && view === "PAPER");
+  const paperStats = usePaperStats();
   const agree = useAgreePortfolioConsent();
 
   const list = accounts.data ?? [];
@@ -75,7 +93,7 @@ export default function AssetsPage() {
   };
 
   return (
-    <TerminalPage title={TITLE} crumb={CRUMB} stats={view === "TOTAL" && hasAccounts ? stats : []}>
+    <TerminalPage title={TITLE} crumb={CRUMB} stats={view === "PAPER" ? paperStats : view === "TOTAL" && hasAccounts ? stats : []}>
       <div className="flex flex-wrap items-center gap-2">
         <Seg options={VIEWS} value={view} onChange={setView} />
         <Btn size="sm" icon="plus" className="ml-auto" onClick={() => setAdding(true)}>계좌 추가</Btn>
@@ -92,11 +110,7 @@ export default function AssetsPage() {
       )}
 
       {view === "PAPER" ? (
-        <Panel tabs={["모의계좌 보유"]} actions={[]} closable={false} bodyClassName="px-1.5 pb-1.5 pt-1"
-          right={<BtnLink href="/portfolio" kind="ghost" size="sm">모의 포트폴리오로</BtnLink>}>
-          {paper.isPending ? <Skeleton className="h-40" /> : <AssetHoldingsTable holdings={paper.data?.holdings ?? []} showAccounts={false} />}
-          <p className="m-0 px-2 py-1.5 text-2xs text-tm-muted">모의 자금이라 통합 합계와 보유 종목 소식에는 넣지 않습니다.</p>
-        </Panel>
+        <PaperPortfolioView />
       ) : accounts.isPending ? (
         <Skeleton className="h-72" />
       ) : accounts.isError ? (
@@ -135,6 +149,7 @@ export default function AssetsPage() {
                 </button>
               ))}
             </nav>
+            <BrokerageLinkCard />
             <DeleteAllData onDone={() => { setSelectedId(null); setView("TOTAL"); }} />
           </div>
           <div className="flex-[999_1_640px] min-w-0">
