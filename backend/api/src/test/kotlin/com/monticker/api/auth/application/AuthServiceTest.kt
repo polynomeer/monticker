@@ -42,7 +42,8 @@ class AuthServiceTest {
     private val guard = RedisGuard(SimpleMeterRegistry())
     private val revocationService = mockk<RefreshTokenRevocationService>(relaxed = true)
     private val consentService = mockk<ConsentService>(relaxed = true)
-    private val service = AuthService(userRepository, provider, encoder, jdbc, redis, emailService, guard, revocationService, consentService)
+    private val events = mockk<org.springframework.context.ApplicationEventPublisher>(relaxed = true)
+    private val service = AuthService(userRepository, provider, encoder, jdbc, redis, emailService, guard, revocationService, consentService, events)
     private val requiredConsents = listOf("TERMS", "PRIVACY", "AGE_OVER_19")
 
     @Test
@@ -300,5 +301,19 @@ class AuthServiceTest {
 
         assertThatThrownBy { service.signup("n@test.com", "password1!", "미동의", emptyList()) }
             .isInstanceOf(IllegalArgumentException::class.java)
+    }
+
+    // 탈퇴는 소프트 삭제라 CASCADE가 돌지 않는다 — 사용자 데이터를 지우는 모듈(통합 포트폴리오)이 이 이벤트로 지운다
+    @Test
+    fun `탈퇴하면 같은 트랜잭션에서 탈퇴 이벤트를 낸다 - 비밀번호가 틀리면 내지 않는다`() {
+        val user = User(id = 7L, email = "bye@test.com", passwordHash = encoder.encode("password1!"), nickname = "탈퇴")
+        every { userRepository.findById(7L) } returns Optional.of(user)
+
+        assertThatThrownBy { service.deleteAccount(7L, "wrong-pass1!") }.isInstanceOf(IllegalArgumentException::class.java)
+        verify(exactly = 0) { events.publishEvent(any<Any>()) }
+
+        service.deleteAccount(7L, "password1!")
+        assertThat(user.deletedAt).isNotNull()
+        verify(exactly = 1) { events.publishEvent(com.monticker.api.common.account.UserAccountDeletedEvent(7L)) }
     }
 }

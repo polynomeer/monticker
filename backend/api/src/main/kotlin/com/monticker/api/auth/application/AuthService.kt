@@ -1,5 +1,7 @@
 package com.monticker.api.auth.application
 
+import com.monticker.api.common.account.UserAccountDeletedEvent
+import org.springframework.context.ApplicationEventPublisher
 import com.monticker.api.common.consent.ConsentGroup
 import com.monticker.api.common.consent.ConsentService
 import com.monticker.api.common.consent.ConsentSource
@@ -43,6 +45,7 @@ class AuthService(
     private val guard: RedisGuard,
     private val revocationService: RefreshTokenRevocationService,
     private val consentService: ConsentService,
+    private val events: ApplicationEventPublisher,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -180,6 +183,8 @@ class AuthService(
         user.deletedAt = Instant.now()
         user.updatedAt = Instant.now()
         jdbc.update("DELETE FROM refresh_tokens WHERE user_id = ?", userId)
+        // 사용자 행이 남는 소프트 삭제라 CASCADE로 지워지지 않는 데이터(통합 포트폴리오 등)를 각 모듈이 같은 트랜잭션에서 지운다
+        events.publishEvent(UserAccountDeletedEvent(userId))
         log.info("[AuthService] 계정 삭제(soft): userId={}", userId)
     }
 
