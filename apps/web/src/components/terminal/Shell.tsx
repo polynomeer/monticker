@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useConsentStatus } from "@/hooks/useConsents";
@@ -78,12 +78,22 @@ function Rail() {
 }
 
 // ── 상단 바 ────────────────────────────────────────────────────────────
+/**
+ * monticker 마크 — 몬스터 몸 + 눈 둘 + 차트선 입(끝 핑크 점 = 현재가). 원본: assets/brand/mark.svg
+ * 눈·입은 마스크로 뚫어 어떤 배경 위에서도 배경색이 비친다. 몸 색은 currentColor.
+ */
 export function LogoMark({ size = 26 }: { size?: number }) {
+  const maskId = `mt-logo-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   return (
-    <svg width={size} height={size} viewBox="0 0 26 26" fill="none" aria-hidden className="text-dracula-purple">
-      <rect x="1" y="1" width="24" height="24" rx="7" stroke="currentColor" strokeWidth="2" />
-      <path d="M6 17 L10 12 L13 14 L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="19" cy="7" r="2.2" fill="currentColor" />
+    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden className="text-dracula-purple">
+      <mask id={maskId}>
+        <rect width="100" height="100" fill="#fff" />
+        <circle cx="40" cy="44" r="5.5" fill="#000" />
+        <circle cx="60" cy="44" r="5.5" fill="#000" />
+        <polyline points="36,62 43,58 49,61 56,55 63,56" fill="none" stroke="#000" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+      </mask>
+      <path d="M18 50 a32 32 0 0 1 64 0 V86 L71 76 L60 86 L50 76 L40 86 L29 76 L18 86 Z" fill="currentColor" mask={`url(#${maskId})`} />
+      <circle cx="64.5" cy="55.5" r="4" className="fill-dracula-pink" />
     </svg>
   );
 }
