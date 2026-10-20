@@ -49,6 +49,15 @@ class PortfolioAccountService(
         return accounts.find(userId, id)!!
     }
 
+    /**
+     * "계좌 정보 수집·이용"에 (다시) 동의한다 — 동의 문서가 바뀐 뒤 이미 계좌가 있는 이용자가 가져오기를 이어 가려면 필요하다.
+     * 처음 동의는 계좌를 만들 때 함께 받는다([create]). 현재 버전에 이미 동의했으면 비어 있어도 통과한다.
+     */
+    @Transactional
+    fun agreeConsent(userId: Long, givenConsents: Collection<String>) {
+        consents.requireMissingAndRecord(userId, ConsentGroup.PORTFOLIO_DATA, givenConsents, ConsentSource.PORTFOLIO)
+    }
+
     @Transactional
     fun update(userId: Long, accountId: Long, name: String, kind: AccountKind): PortfolioAccount {
         if (!accounts.update(userId, accountId, validName(name), kind)) throw NoSuchElementException("계좌를 찾을 수 없습니다")
