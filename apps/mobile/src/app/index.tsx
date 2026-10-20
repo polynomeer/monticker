@@ -104,6 +104,10 @@ export default function HomeScreen() {
           <Text style={s.navIcon}>⭐</Text>
           <Text style={s.navLabel}>관심종목</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={s.navItem} onPress={() => router.push("/accounts")}>
+          <Text style={s.navIcon}>💼</Text>
+          <Text style={s.navLabel}>내 계좌</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={s.navItem} onPress={() => router.push("/alerts")}>
           <Text style={s.navIcon}>🔔</Text>
           <Text style={s.navLabel}>알림</Text>

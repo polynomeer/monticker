@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.16",
+    "@monticker/types": "workspace:*",
     "expo": "~57.0.28",
     "expo-constants": "~57.0.21",
     "expo-device": "~57.0.2",
