@@ -146,3 +146,41 @@ Accepted
   사용자의 구독이 활성으로 보이고 연속 실패로 강등될 때까지 결제 실패가 쌓였다. 이제 적체 정리도 같은 구독 행 락을 쥐고, 해지된 구독의
   갱신 청구는 결제·원장만 확정하고 구독은 해지 상태로 둔다. 탈퇴한 사용자에게 청구된 그 한 번은 자동 환불하지 않고 경고 로그로
   남긴다 — 사람이 보고 환불한다. ADR-059 Notes 참고.
+- 2026-10 — "결정했지만 미구현: 후속" 표의 모의투자·퀀트 데이터를 구현했다. 표의 결정(삭제, strategy_market은 판매 중지)은 그대로다.
+  Consequences의 "리스너 실행 순서는 정하지 않았다"는 이것으로 바뀐다.
+  - **순서는 `@Order`로 정한다.** 값은 `common.account.UserDeletionOrder` 한곳에 둔다. 모듈 셋을 한 리스너로 모으지 않았다 — 테이블을 가진
+    모듈이 지운다는 원칙(Reasons)을 지키고, 모듈 의존성(package-info)도 늘리지 않는다. `@Order`가 없는 리스너는 맨 뒤에 돈다.
+
+    | 순서 | 리스너 | 하는 일 |
+    |---|---|---|
+    | 100 `PAPER_FREEZE` | paper | 발동 전 조건부 주문을 CANCELLED로(행 락) |
+    | 200 `MATCHING_FREEZE` | matching | 미체결 주문 → 포지션 → 계좌 행 `FOR UPDATE` |
+    | 300 `WALLET` | wallet | order_emotion_tags, ledger_events, ledger_snapshots, investment_behavior_scores, weekly_report_sends 삭제 |
+    | 400 `PAPER` | paper | paper_settlements → paper_trades → paper_conditional_orders → portfolio_positions → paper_accounts 삭제 |
+    | 500 `MATCHING` | matching | fills → order_sagas → orders 삭제 |
+
+  - **늦게 온 체결은 행 락으로 막는다. 호가창을 비우는 것으로 막지 않는다.** 힙 호가창은 표시용 사본이고 체결하지 않는다(ADR-048).
+    체결은 DB 행을 기준으로 한다(LimitOrderFiller `FOR UPDATE SKIP LOCKED`, ADR-074). FREEZE가 미체결 주문 행을 잡으면 다음과 같이 된다.
+    지금 체결 중인 주문은 그 커밋을 기다린다. 그래서 그 체결의 paper_trades·원장이 뒤 단계 DELETE에 잡힌다. 이후 스위퍼는 잠긴 행을 건너뛰고,
+    커밋 뒤에는 그 행이 없다. 계좌·포지션 행 락은 같은 사용자의 새 BUY·SELL 제출을 커밋까지 세운다. 락 순서(조건부 주문 → 주문 → 포지션 → 계좌)는
+    체결 경로와 같아서 교착하지 않는다. 호가창 사본은 커밋 뒤에 이 pod에서 뺀다(`evictUser`). 롤백되면 주문이 남으므로 사본도 그대로 둔다.
+    다른 pod의 사본은 남는다. 체결에 쓰이지 않고 재시작하면 사라진다.
+  - **퀀트.** Mongo의 내 룰셋 id와 내 마켓 행의 ruleset_id를 합친다. 이 id로 quant_signals(forward_test_id FK 때문에 먼저) →
+    quant_forward_tests(equity CASCADE) → quant_backtest_results를 지운다. Mongo `rule_sets` 문서는 Postgres 트랜잭션에 묶이지 않는다.
+    그래서 **커밋 뒤에** 지운다. 먼저 지웠다가 탈퇴가 롤백되면 탈퇴하지 않은 사용자의 룰셋이 사라지기 때문이다. 커밋 뒤 삭제가 실패하면 문서가 남는다.
+    주인이 탈퇴해 아무도 볼 수 없다. 에러 로그만 남긴다.
+  - **구독자로서.** strategy_subscriptions 행을 지우고 그 전략의 subscribe_count를 1씩 줄인다. 구독 해지와 같다.
+  - **크리에이터로서(판매 중지).** `strategy_market.delisted_at`(V107)을 채운다. 행은 지우지 않는다. creator_earnings가 참조한다.
+    판매 중지된 전략은 목록·검색·총수(`MARKET_VISIBLE_FROM`)와 구독에서 빠진다. **기존 구독자의 구독은 즉시 끝낸다**
+    (구독 행 삭제, subscribe_count 0). 룰셋이 지워져 더 이상 신호를 낼 수 없기 때문이다. 유료 구독은 닫혀 있어(ADR-080) 환불할 것이 없다.
+    구독자에게 따로 알리지는 않는다. 구독 목록에서 사라질 뿐이다. 구독은 행을 `FOR SHARE`로 읽는다. 판매 중지 UPDATE와 직렬화해,
+    판매 중지 직후 들어온 구독이 남지 않게 한다.
+  - tax_harvesting_logs·portfolio_optimizations(analytics), order_proposals(ai)는 모듈마다 리스너를 두고 지운다.
+  - 검증: 리스너마다 단위 테스트를 둔다. `UserAccountDeletionIntegrationTest`(Testcontainers)는 Spring 이벤트 멀티캐스터로 실제 발행한다.
+    한 번의 탈퇴로 FK를 어기지 않고 다 지워지는지, 다른 사용자 데이터는 남는지, 판매 중지·구독 수·정산 보존이 맞는지, FREEZE가 잡은 주문을
+    스위퍼가 건너뛰는지 본다.
+  - 남은 것:
+    - FREEZE를 기다리던 다른 트랜잭션의 주문 제출이 탈퇴 커밋 뒤에 이어질 수 있다. 예를 들어 같은 사용자의 워치룰 자동주문이 계좌 행 락을 기다리던 경우다.
+      이때 `ensureAccountExists`가 탈퇴한 사용자 앞으로 모의 계좌를 다시 만든다. 가상 자금이고 로그인할 수 없는 계정이다. 제출 경로에
+      탈퇴 사용자 가드를 넣어 닫는다(후속).
+    - 판매 중지된 전략을 가리키는 다른 사용자의 워치룰·알림 규칙(전략 신호 조건)은 남는다. 신호가 더 오지 않아 발동하지 않는다.
