@@ -83,6 +83,13 @@ class PortfolioController(
             ),
         )
 
+    /** "계좌 정보 수집·이용"에 다시 동의한다(문서가 바뀐 뒤). body: {"consents": ["PORTFOLIO_DATA_COLLECTION"]} */
+    @PostMapping("/consent")
+    fun agreeConsent(@AuthenticationPrincipal userId: Long, @RequestBody req: PortfolioConsentRequest): ResponseEntity<Void> {
+        accountService.agreeConsent(userId, req.consents)
+        return ResponseEntity.noContent().build()
+    }
+
     /** 통합 포트폴리오 데이터를 모두 지우고 동의를 철회한다(되돌릴 수 없다). 모의계좌·증권사 주문 연동은 그대로다 */
     @DeleteMapping("/data")
     fun deleteAll(@AuthenticationPrincipal userId: Long): Map<String, Int> = mapOf("deletedAccounts" to accountService.deleteAll(userId))
@@ -165,6 +172,8 @@ data class CreateAccountRequest(
     /** 처음이면 ["PORTFOLIO_DATA_COLLECTION"] */
     val consents: List<String> = emptyList(),
 )
+
+data class PortfolioConsentRequest(val consents: List<String> = emptyList())
 
 data class UpdateAccountRequest(val name: String, val accountKind: AccountKind)
 

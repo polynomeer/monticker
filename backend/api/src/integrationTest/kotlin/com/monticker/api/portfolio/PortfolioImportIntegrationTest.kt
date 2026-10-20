@@ -1,5 +1,8 @@
 package com.monticker.api.portfolio
 
+import com.monticker.api.common.consent.ConsentSource
+import com.monticker.api.common.consent.ConsentGroup
+import io.mockk.verify
 import com.monticker.api.common.consent.ConsentService
 import com.monticker.api.common.consent.ConsentType
 import com.monticker.api.paper.application.PaperPortfolioQueryService
@@ -189,5 +192,11 @@ class PortfolioImportIntegrationTest : PostgresIntegrationTest() {
         assertThat(accountService.deleteAll(me)).isEqualTo(1)
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM portfolio_import_batches WHERE account_id = ?", Int::class.java, acc)).isZero()
         assertThat(txs.count(acc)).isZero()
+    }
+
+    @Test
+    fun `다시 동의하기는 계좌 정보 동의 묶음으로 기록한다`() {
+        accountService.agreeConsent(me, listOf("PORTFOLIO_DATA_COLLECTION"))
+        verify { consents.requireMissingAndRecord(me, ConsentGroup.PORTFOLIO_DATA, listOf("PORTFOLIO_DATA_COLLECTION"), ConsentSource.PORTFOLIO) }
     }
 }
