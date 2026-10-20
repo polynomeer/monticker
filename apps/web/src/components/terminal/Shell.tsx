@@ -25,6 +25,7 @@ const RAIL: (RailItem | null)[] = [
   { label: "트레이딩", icon: "candles", href: "/stocks/search", match: ["/stocks", "/compare"] },
   { label: "스크리너", icon: "filter", href: "/screener", match: ["/screener"] },
   { label: "관심종목", icon: "star", href: "/watchlist", match: ["/watchlist"] },
+  { label: "내 자산", icon: "card", href: "/assets", match: ["/assets"] },
   { label: "포트폴리오", icon: "pie", href: "/portfolio", match: ["/portfolio", "/matching", "/watch-rules"] },
   { label: "지갑", icon: "wallet", href: "/wallet", match: ["/wallet", "/settlement"] },
   { label: "퀀트랩", icon: "flask", href: "/quant-lab", match: ["/quant-lab", "/backtest", "/analytics"] },
