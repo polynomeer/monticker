@@ -7,3 +7,4 @@ export * from "./brokerage";
 export * from "./community";
 export * from "./ai";
 export * from "./watchrule";
+export * from "./portfolio";
