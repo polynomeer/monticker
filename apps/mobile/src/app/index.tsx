@@ -6,6 +6,9 @@ import {
 import { useRouter } from "expo-router";
 import { useEffect, useState, useCallback } from "react";
 import { getApiBase } from "@/services/api";
+import { logout } from "@/services/auth";
+import { unregisterPushToken } from "@/services/notifications";
+import { useAuthState } from "@/services/useAuth";
 
 interface ScreenerItem {
   stockId: number;
@@ -27,6 +30,7 @@ const TABS = [
 
 export default function HomeScreen() {
   const router = useRouter();
+  const auth = useAuthState();
   const [sort, setSort]         = useState("amount");
   const [items, setItems]       = useState<ScreenerItem[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -104,6 +108,18 @@ export default function HomeScreen() {
           <Text style={s.navIcon}>🔔</Text>
           <Text style={s.navLabel}>알림</Text>
         </TouchableOpacity>
+        {auth === "signedIn" ? (
+          // 이 기기의 푸시 토큰을 먼저 해제하고(세션이 살아 있을 때) 세션을 끝낸다
+          <TouchableOpacity style={s.navItem} onPress={() => logout(unregisterPushToken)} accessibilityRole="button">
+            <Text style={s.navIcon}>🚪</Text>
+            <Text style={s.navLabel}>로그아웃</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={s.navItem} onPress={() => router.push("/login")} accessibilityRole="button">
+            <Text style={s.navIcon}>👤</Text>
+            <Text style={s.navLabel}>로그인</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
