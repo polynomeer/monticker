@@ -11,6 +11,8 @@ import com.monticker.api.portfolio.application.TransactionInput
 import com.monticker.api.portfolio.domain.ImportBatch
 import com.monticker.api.portfolio.domain.csv.CsvFormat
 import com.monticker.api.portfolio.application.PortfolioAccountService
+import com.monticker.api.portfolio.application.PortfolioAnalysis
+import com.monticker.api.portfolio.application.PortfolioAnalysisService
 import com.monticker.api.portfolio.application.PortfolioEventFeedService
 import com.monticker.api.portfolio.application.PortfolioHoldingsQueryService
 import com.monticker.api.portfolio.domain.AccountKind
@@ -49,6 +51,7 @@ class PortfolioController(
     private val accountService: PortfolioAccountService,
     private val holdingsService: PortfolioHoldingsQueryService,
     private val eventFeedService: PortfolioEventFeedService,
+    private val analysisService: PortfolioAnalysisService,
     private val importService: PortfolioImportService,
 ) {
     /** GET /api/portfolio/holdings?scope=REAL|PAPER — REAL은 모의계좌를 뺀 모든 계좌의 합 */
@@ -66,6 +69,10 @@ class PortfolioController(
         @RequestParam(required = false) cursor: String?,
         @RequestParam(defaultValue = "20") limit: Int,
     ): HoldingEventFeed = eventFeedService.feed(userId, cursor, limit.coerceIn(1, 50))
+
+    /** GET /api/portfolio/analysis — 원화 요약(주가·환차손익), 배분, 배당, 돈 가중 수익률(ADR-111) */
+    @GetMapping("/analysis")
+    fun analysis(@AuthenticationPrincipal userId: Long): PortfolioAnalysis = analysisService.analysis(userId)
 
     @GetMapping("/accounts")
     fun accounts(@AuthenticationPrincipal userId: Long): List<PortfolioAccountResponse> =

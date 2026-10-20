@@ -16,6 +16,11 @@ data class Position(
     val dividendsNet: BigDecimal,
     /** 가진 것보다 많이 판 기록이 있다 — 앞 구간 거래가 빠졌을 가능성(CSV 누락 등). 확인이 필요하다 */
     val oversold: Boolean,
+    /**
+     * 매입 원가를 **매수한 날의 환율**로 원화로 바꾼 값(같은 이동평균). 환율을 넘긴 계산에서만 채우고, 매수일 환율이 하나라도
+     * 없으면 null — 환차손익을 나눌 수 없다. 원화 종목은 [costBasis]와 같다.
+     */
+    val costBasisKrw: BigDecimal? = null,
 ) {
     val isOpen get() = quantity.signum() > 0
 
@@ -47,12 +52,21 @@ object HoldingsCalculator {
     private class Acc(val key: InstrumentKey, var name: String?, val currency: String) {
         var quantity: BigDecimal = BigDecimal.ZERO
         var cost: BigDecimal = BigDecimal.ZERO
+        /** 원화 원가 — 매수일 환율을 모르는 매수가 하나라도 있으면 null로 남는다 */
+        var costKrw: BigDecimal? = BigDecimal.ZERO
         var realized: BigDecimal = BigDecimal.ZERO
         var dividends: BigDecimal = BigDecimal.ZERO
         var oversold = false
     }
 
-    fun calculate(transactions: List<PortfolioTransaction>): CalculatedAccount {
+    /**
+     * @param krwRate (통화, 거래일) → 원화 환율. 주면 포지션마다 매수일 환율 기준 원화 원가([Position.costBasisKrw])도 낸다.
+     *   원화는 1을 돌려줘야 한다. 그 날 환율이 없으면 null.
+     */
+    fun calculate(
+        transactions: List<PortfolioTransaction>,
+        krwRate: ((currency: String, date: java.time.LocalDate) -> BigDecimal?)? = null,
+    ): CalculatedAccount {
         val positions = LinkedHashMap<Pair<InstrumentKey, String>, Acc>()
         val cash = LinkedHashMap<String, BigDecimal>()
         fun cashAdd(currency: String, delta: BigDecimal) { cash[currency] = (cash[currency] ?: BigDecimal.ZERO) + delta }
@@ -67,6 +81,10 @@ object HoldingsCalculator {
                     val a = acc ?: error("매수에는 종목이 필요하다(DB 제약 ck_portfolio_tx_trade)")
                     a.quantity += tx.quantity!!
                     a.cost += tx.amount + tx.fee
+                    if (krwRate != null) {
+                        val rate = krwRate(tx.currency, tx.tradeDate)
+                        a.costKrw = if (rate == null) null else a.costKrw?.plus((tx.amount + tx.fee) * rate)
+                    }
                     cashAdd(tx.currency, -(tx.amount + tx.fee + tx.tax))
                 }
                 TransactionType.SELL -> {
@@ -76,13 +94,15 @@ object HoldingsCalculator {
                     if (requested > a.quantity) a.oversold = true
                     if (sold.signum() > 0) {
                         val costOut = a.cost.multiply(sold).divide(a.quantity, 10, RoundingMode.HALF_UP)
+                        // 원화 원가도 같은 비율로 덜어 낸다 — 이동평균이라 남은 주식의 평균 매수 환율은 그대로다
+                        a.costKrw = a.costKrw?.let { it - it.multiply(sold).divide(a.quantity, 10, RoundingMode.HALF_UP) }
                         // 가진 만큼의 비율로만 매도 금액·비용을 나눈다(초과분은 원가를 모르는 매도다)
                         val ratio = sold.divide(requested, 10, RoundingMode.HALF_UP)
                         val proceeds = (tx.amount - tx.fee - tx.tax).multiply(ratio)
                         a.realized += proceeds - costOut
                         a.cost -= costOut
                         a.quantity -= sold
-                        if (a.quantity.signum() == 0) a.cost = BigDecimal.ZERO
+                        if (a.quantity.signum() == 0) { a.cost = BigDecimal.ZERO; a.costKrw = BigDecimal.ZERO }   // 다 팔면 새로 시작 — 옛 매수의 환율 누락도 끝난다
                     }
                     cashAdd(tx.currency, tx.amount - tx.fee - tx.tax)
                 }
@@ -105,6 +125,7 @@ object HoldingsCalculator {
                     realizedPnl = it.realized.setScale(4, RoundingMode.HALF_UP),
                     dividendsNet = it.dividends.setScale(4, RoundingMode.HALF_UP),
                     oversold = it.oversold,
+                    costBasisKrw = if (krwRate == null) null else it.costKrw?.setScale(4, RoundingMode.HALF_UP),
                 )
             },
             cashByCurrency = cash.mapValues { it.value.setScale(4, RoundingMode.HALF_UP) },
