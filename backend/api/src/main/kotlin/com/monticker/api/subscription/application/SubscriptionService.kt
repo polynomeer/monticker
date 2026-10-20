@@ -11,6 +11,8 @@ import com.monticker.api.subscription.infrastructure.pg.PgClient
 import com.monticker.api.subscription.infrastructure.pg.PaymentFailureKind
 import com.monticker.api.subscription.infrastructure.pg.PaymentRequest
 import com.monticker.api.wallet.application.LedgerService
+import jakarta.persistence.EntityManager
+import jakarta.persistence.PersistenceContext
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
@@ -31,6 +33,10 @@ class SubscriptionService(
     private val paymentMetrics: PaymentMetrics,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+
+    // 갱신 배치가 넘긴 엔티티를 락을 쥔 뒤 다시 읽는 데만 쓴다. 단위 테스트에서는 없다(null) — 그때는 다시 읽지 않는다.
+    @PersistenceContext
+    private var entityManager: EntityManager? = null
 
     @Transactional(readOnly = true)
     fun getActivePlans(): List<SubscriptionPlan> =
@@ -175,10 +181,12 @@ class SubscriptionService(
      * 키워드 휴리스틱에 "없습니다"는 없고 "없음"만 있다(BusinessRuleException 주석이 경고하는
      * 바로 그 함정). 해지 버튼을 두 번 누른 사용자가 500을 받는다. L-08 부하 시나리오에서
      * 반복마다 500이 하나씩 찍히는 것으로 드러났다.
+     *
+     * 갱신과 같은 행 락을 쥔다 — 갱신이 청구 중이면 끝날 때까지 기다리고, 해지가 먼저 커밋되면 갱신은 청구하지 않는다(ADR-053 Note).
      */
     @Transactional
     fun cancel(userId: Long) {
-        val subscription = subscriptionRepo.findByUserId(userId).orElseThrow {
+        val subscription = subscriptionRepo.findByUserIdForUpdate(userId).orElseThrow {
             BusinessRuleException("구독 정보가 없습니다.")
         }
         require(subscription.status == SubscriptionStatus.ACTIVE) { "활성 구독이 없습니다." }
@@ -191,11 +199,15 @@ class SubscriptionService(
      * ADR-109 — 탈퇴. 자동결제 카드(빌링키)를 지우고 활성 구독을 해지한다. 남겨 두면 갱신 배치가 탈퇴한 사용자에게 계속 청구한다
      * (갱신 배치는 사용자 탈퇴 여부를 보지 않는다). 남은 기간은 환불하지 않는다. 결제 기록(payment_records)과 구독 이력은
      * 전자상거래법 보존 기간(5년) 동안 남긴다 — 사용자 행이 익명화되어 사람과 직접 이어지지 않는다.
+     *
+     * 빌링키를 지우기 **전에** 갱신과 같은 구독 행 락을 쥔다. 갱신이 빌링키를 읽은 직후 탈퇴가 커밋돼 한 번 더 청구되던 틈이 닫힌다 —
+     * 갱신이 먼저 락을 쥐었으면 그 청구가 끝난 뒤 탈퇴가 진행되고, 탈퇴가 먼저면 갱신은 해지된 구독을 보고 건너뛴다(ADR-109 Note).
      */
     @Transactional
     fun closeForAccountDeletion(userId: Long) {
+        val subscription = subscriptionRepo.findByUserIdForUpdate(userId).orElse(null)
         billingKeyRepo.deleteByUserId(userId)
-        val subscription = subscriptionRepo.findByUserId(userId).orElse(null) ?: return
+        if (subscription == null) return
         if (subscription.status == SubscriptionStatus.ACTIVE) {
             subscription.cancel()
             subscriptionRepo.save(subscription)
@@ -226,9 +238,22 @@ class SubscriptionService(
      *     되물어 실제로 청구됐는지 확인한 뒤에만 판정한다.
      *  4. PG 장애(UNAVAILABLE)는 결제 거절이 아니다 — 다운그레이드 카운트에 넣지 않는다.
      *     PG가 30분 죽었다고 돈 내는 고객을 FREE로 내리면 안 된다.
+     *
+     * 배치가 넘긴 [batchRead]는 청크를 읽은 시점의 값이다. 그 사이 해지·탈퇴가 커밋됐을 수 있으므로 행 락을 쥐고 다시 읽은 값으로만
+     * 판단한다 — 해지·탈퇴도 같은 락을 쥐므로 "빌링키를 읽은 직후 탈퇴가 커밋돼 한 번 더 청구"되는 틈이 없다(ADR-053·ADR-109 Note).
+     * 다시 읽은 만료일이 배치가 읽은 것과 다르면 다른 실행이 이미 이 주기를 갱신했다는 뜻이라 건너뛴다 — 새 만료일로 orderId를
+     * 만들면 다음 주기를 미리 긁게 된다.
      */
     @Transactional
-    fun renewSubscription(subscription: UserSubscription): RenewResult {
+    fun renewSubscription(batchRead: UserSubscription): RenewResult {
+        val subscription = subscriptionRepo.findByIdForUpdate(batchRead.id).orElse(null)
+            ?.also { entityManager?.refresh(it) }
+            ?: return RenewResult.Skipped
+        if (subscription.status != SubscriptionStatus.ACTIVE || subscription.expiresAt != batchRead.expiresAt) {
+            log.info("갱신 건너뜀 — 배치가 읽은 뒤 구독이 바뀌었다: userId={} status={} expiresAt={} (배치: {})",
+                subscription.userId, subscription.status, subscription.expiresAt, batchRead.expiresAt)
+            return RenewResult.Skipped
+        }
         val plan = subscription.plan
         if (plan.price.toLong() == 0L) return RenewResult.Skipped
 
