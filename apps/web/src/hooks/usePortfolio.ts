@@ -11,6 +11,7 @@ import {
   deleteAllPortfolioData,
   deleteTransaction,
   getAccounts,
+  getAnalysis,
   getHoldingEvents,
   getHoldings,
   getImports,
@@ -25,6 +26,7 @@ const root = ["assets"] as const;
 const keys = {
   holdings: (scope: HoldingsScope) => [...root, "holdings", scope] as const,
   events: [...root, "events"] as const,
+  analysis: [...root, "analysis"] as const,
   accounts: [...root, "accounts"] as const,
   transactions: (accountId: number) => [...root, "transactions", accountId] as const,
   imports: (accountId: number) => [...root, "imports", accountId] as const,
@@ -38,6 +40,11 @@ function useInvalidateAll() {
 export function useHoldings(scope: HoldingsScope, enabled: boolean) {
   // 시세(1분봉 최신 종가)가 바뀐다 — 모의 포트폴리오보다 느슨하게
   return useQuery({ queryKey: keys.holdings(scope), queryFn: () => getHoldings(scope), enabled, refetchInterval: enabled ? 30_000 : false });
+}
+
+/** 분석은 보유와 같은 시세를 쓰므로 같은 주기로 */
+export function useAnalysis(enabled: boolean) {
+  return useQuery({ queryKey: keys.analysis, queryFn: getAnalysis, enabled, refetchInterval: enabled ? 30_000 : false });
 }
 
 export function useHoldingEvents(enabled: boolean) {

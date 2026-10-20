@@ -7,7 +7,8 @@ import { Btn, Icon, Notice, Panel, PanelRow, Seg, TerminalPage, dirClass, fmtSig
 import { LoginRequired, Skeleton } from "@/components/portfolio/PaperStates";
 import { useIsLoggedIn } from "@/components/home/data";
 import { useConsentStatus } from "@/hooks/useConsents";
-import { useAccounts, useAgreePortfolioConsent, useHoldings } from "@/hooks/usePortfolio";
+import { useAccounts, useAgreePortfolioConsent, useAnalysis, useHoldings } from "@/hooks/usePortfolio";
+import { AllocationPanel, DividendsPanel, KrwSummaryTiles, ReturnsPanel } from "@/components/assets/AnalysisPanels";
 import { AccountDetail } from "@/components/assets/AccountDetail";
 import { BrokerageLinkCard } from "@/components/assets/BrokerageLinkCard";
 import { PaperPortfolioView, usePaperStats } from "@/components/portfolio/PaperPortfolioView";
@@ -59,6 +60,7 @@ function AssetsScreen() {
   const consentStatus = useConsentStatus(isLoggedIn);
   const accounts = useAccounts(isLoggedIn);
   const real = useHoldings("REAL", isLoggedIn && view === "TOTAL");
+  const analysis = useAnalysis(isLoggedIn && view === "TOTAL");
   const paperStats = usePaperStats();
   const agree = useAgreePortfolioConsent();
 
@@ -78,9 +80,15 @@ function AssetsScreen() {
   }
 
   const krw = real.data?.totals.find((t) => t.currency === "KRW");
+  // 분석이 오면 해외 종목까지 원화로 바꾼 합계를, 아직이면 원화 종목만의 합계를 보인다. 모의 환율이면 라벨에 붙인다(ADR-071)
+  const conv = analysis.data?.krw;
+  const fxTag = conv?.fxMocked ? " (모의 환율)" : "";
+  const pnl = conv ? conv.unrealizedPnlKrw ?? conv.pricePnlKrw : krw?.unrealizedPnl;
   const stats: TopStat[] = [
-    { label: "원화 평가금액", value: krw ? fmtMoney(krw.marketValue, "KRW") : "—" },
-    { label: "원화 평가손익", value: krw ? fmtSigned(krw.unrealizedPnl) : "—", tone: krw ? dirClass(krw.unrealizedPnl) : undefined },
+    conv
+      ? { label: `총 평가금액${fxTag}`, value: fmtMoney(conv.marketValueKrw, "KRW"), hint: "해외 종목은 지금 원/달러로 바꿨습니다" }
+      : { label: "원화 평가금액", value: krw ? fmtMoney(krw.marketValue, "KRW") : "—" },
+    { label: conv ? `평가손익${fxTag}` : "원화 평가손익", value: pnl == null ? "—" : fmtSigned(pnl), tone: pnl == null ? undefined : dirClass(pnl) },
     { label: "외화 통화", value: `${real.data?.totals.filter((t) => t.currency !== "KRW").length ?? 0}개`, hint: "환율 환산은 아직 하지 않습니다 — 통화별로 따로 봅니다" },
     { label: "계좌", value: `${list.length}개` },
     { label: "보유 종목", value: `${real.data?.holdings.length ?? 0}개` },
@@ -120,6 +128,10 @@ function AssetsScreen() {
       ) : view === "TOTAL" ? (
         <>
           {real.data && <CurrencyTotals totals={real.data.totals} />}
+          {/* 원화 합계는 통화가 둘 이상일 때만 의미가 있다 */}
+          {analysis.data && (real.data?.totals.length ?? 0) > 1 && (
+            <KrwSummaryTiles krw={analysis.data.krw} fxRate={analysis.data.fx.find((f) => f.currency === "USD")} />
+          )}
           <PanelRow>
             <Panel tabs={["보유 종목"]} actions={[]} closable={false} className="flex-[999_1_700px]" bodyClassName="px-1.5 pb-1.5 pt-1">
               {real.isPending ? <Skeleton className="h-60" /> : <AssetHoldingsTable holdings={real.data?.holdings ?? []} />}
@@ -131,6 +143,19 @@ function AssetsScreen() {
               <HoldingEventsFeed enabled={view === "TOTAL"} />
             </Panel>
           </PanelRow>
+          {analysis.data && (
+            <PanelRow>
+              <Panel tabs={["자산 배분"]} actions={[]} closable={false} className="flex-[1_1_320px]">
+                <AllocationPanel analysis={analysis.data} />
+              </Panel>
+              <Panel tabs={["배당"]} actions={[]} closable={false} className="flex-[1_1_360px]">
+                <DividendsPanel dividends={analysis.data.dividends} />
+              </Panel>
+              <Panel tabs={["수익률"]} actions={[]} closable={false} className="flex-[1_1_280px]">
+                <ReturnsPanel returns={analysis.data.returns} />
+              </Panel>
+            </PanelRow>
+          )}
         </>
       ) : (
         <PanelRow>

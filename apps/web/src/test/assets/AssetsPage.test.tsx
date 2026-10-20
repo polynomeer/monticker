@@ -22,6 +22,7 @@ vi.mock("@/hooks/usePortfolio", () => ({
   useAccounts: () => ({ data: accounts, isPending: false, isError: false }),
   useHoldings: () => ({ data: { scope: "REAL", holdings: [], totals: [] }, isPending: false }),
   useAgreePortfolioConsent: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useAnalysis: () => ({ data: undefined }),
 }));
 vi.mock("@/components/portfolio/PaperPortfolioView", () => ({
   PaperPortfolioView: () => <div>모의 포트폴리오 본문</div>,
