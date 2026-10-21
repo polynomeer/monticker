@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 const MARKET_COLORS: { key: ChartThemeKey; name: string; sub: string }[] = [
   { key: "default", name: "글로벌", sub: "상승 초록 · 하락 빨강" },
   { key: "korean", name: "한국식", sub: "상승 빨강 · 하락 파랑" },
-  { key: "classic", name: "색약 친화", sub: "상승 파랑 · 하락 주황" },
+  { key: "classic", name: "색약 친화", sub: "상승 파랑 · 하락 자홍" },
   { key: "mono", name: "모노", sub: "상승 밝은 회색 · 하락 어두운 회색" },
 ];
 
