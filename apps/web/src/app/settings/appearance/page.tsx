@@ -1,11 +1,13 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { H2, Panel, PanelRow, PreviewTag, TerminalPage, Toggle } from "@/components/terminal";
+import { H2, Panel, PanelRow, TerminalPage, Toggle } from "@/components/terminal";
 import { SettingsNav } from "@/components/settings/SettingsNav";
 import { useThemeStore, CHART_THEMES, type ChartThemeKey } from "@/stores/themeStore";
 import { useA11yStore, useReducedMotion, TEXT_SIZES, type TextSize } from "@/stores/a11yStore";
 import { cn } from "@/lib/utils";
+import { THEMES } from "@/lib/themes";
+import { ThemePicker } from "@/components/settings/ThemePicker";
 
 /** 시세 색상 — 기존 차트 테마(themeStore)에 시안의 이름을 붙인다 */
 const MARKET_COLORS: { key: ChartThemeKey; name: string; sub: string }[] = [
@@ -17,27 +19,6 @@ const MARKET_COLORS: { key: ChartThemeKey; name: string; sub: string }[] = [
 
 function choiceBorder(on: boolean) {
   return on ? "border-2 border-dracula-purple" : "border border-tm-line2 hover:border-tm-muted";
-}
-
-function ThemeCard({
-  name, bg, panel, rail, on, onClick, disabled,
-}: { name: ReactNode; bg: string; panel: string; rail: string; on: boolean; onClick?: () => void; disabled?: boolean }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={on}
-      disabled={disabled}
-      onClick={onClick}
-      className={cn("flex flex-col gap-2.5 rounded-xl bg-tm-inner p-3 text-left text-dracula-fg disabled:cursor-not-allowed disabled:opacity-60", choiceBorder(on))}
-    >
-      <span className="flex h-[84px] gap-1.5 rounded-lg p-2" style={{ background: bg }} aria-hidden>
-        <span className="w-3.5 rounded-sm" style={{ background: rail }} />
-        <span className="flex-1 rounded-sm" style={{ background: panel }} />
-        <span className="flex-2 rounded-sm" style={{ background: panel }} />
-      </span>
-      <span className="flex items-center gap-2 font-semibold">{name}</span>
-    </button>
-  );
 }
 
 function SettingRow({ title, sub, children }: { title: ReactNode; sub: ReactNode; children: ReactNode }) {
@@ -53,7 +34,7 @@ function SettingRow({ title, sub, children }: { title: ReactNode; sub: ReactNode
 }
 
 export default function AppearanceSettingsPage() {
-  const { chartTheme, setChartTheme } = useThemeStore();
+  const { chartTheme, setChartTheme, appTheme, setAppTheme } = useThemeStore();
   const {
     textSize, setTextSize, highContrast, setHighContrast,
     reduceMotion, setReduceMotion, monoNumbers, setMonoNumbers, priceFlash, setPriceFlash,
@@ -67,7 +48,7 @@ export default function AppearanceSettingsPage() {
       title="화면 설정"
       crumb="설정"
       stats={[
-        { label: "테마", value: highContrast ? "고대비 다크" : "다크 (Dracula)" },
+        { label: "테마", value: `${THEMES[appTheme]?.name ?? THEMES.dracula.name}${highContrast ? " · 고대비" : ""}` },
         { label: "시세 색상", value: marketName },
         { label: "글자 크기", value: TEXT_SIZES[textSize]?.label ?? "—" },
       ]}
@@ -75,14 +56,8 @@ export default function AppearanceSettingsPage() {
       <PanelRow>
         <SettingsNav />
         <Panel tabs={["화면 설정"]} actions={[]} closable={false} className="flex-[999_1_600px]" bodyClassName="p-5">
-          <H2>테마</H2>
-          <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))" }}>
-            <ThemeCard name="다크 (Dracula)" bg="#1b1c24" panel="#282a36" rail="#343746" on={!highContrast} onClick={() => setHighContrast(false)} />
-            {/* 앱은 다크 전용(ThemeProvider forcedTheme="dark") — 시스템 테마 추종은 아직 없다 */}
-            <ThemeCard name={<>시스템 설정 따르기 <PreviewTag /></>} bg="#2a2b33" panel="#3a3c48" rail="#4a4c58" on={false} disabled />
-            {/* 고대비 = a11yStore.highContrast → html[data-contrast="high"] — globals.css가 tm-* 표면을 검정 쪽으로, 뮤트 글자·테두리를 밝게 덮는다. 미리보기 색도 그 값 */}
-            <ThemeCard name="고대비 다크" bg="#000000" panel="#14141a" rail="#2e2f3d" on={highContrast} onClick={() => setHighContrast(true)} />
-          </div>
+          <H2 sub="표면·글자·강조색이 바뀝니다. 시세 색상이 '글로벌'이면 상승·하락 색도 테마 기본을 따릅니다">테마</H2>
+          <ThemePicker value={appTheme} onChange={setAppTheme} />
 
           <H2 sub="차트·호가·등락률 전체에 적용">시세 색상</H2>
           <div className="flex flex-wrap gap-2">
@@ -152,6 +127,11 @@ export default function AppearanceSettingsPage() {
               }
             >
               <Toggle checked={motionReduced} label="움직임 줄이기" onChange={setReduceMotion} />
+            </SettingRow>
+            {/* 고대비 = a11yStore.highContrast → html[data-contrast="high"]. 테마와 따로 켠다: 어떤 테마 위에서든 뮤트 글자·테두리를
+                밝게(라이트 테마는 진하게) 덮고 포커스 링을 굵게 한다. '하이 콘트라스트' 테마는 팔레트 자체가 고대비라 함께 켜도 거의 같다 */}
+            <SettingRow title="고대비" sub="흐린 글자와 옅은 테두리를 또렷하게, 키보드 포커스를 굵게 표시합니다. 하이 콘트라스트 테마와 함께 쓸 수 있습니다">
+              <Toggle checked={highContrast} label="고대비" onChange={setHighContrast} />
             </SettingRow>
             <SettingRow title="숫자 고정폭 글꼴" sub="가격·수량을 고정폭 글꼴로 정렬합니다. 끄면 본문 글꼴에 숫자 폭만 맞춥니다">
               <Toggle checked={monoNumbers} label="숫자 고정폭 글꼴" onChange={setMonoNumbers} />
