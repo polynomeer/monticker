@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { Panel, Sparkline, dirClass, fmtPct } from "@/components/terminal";
-import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
+import { useMarketColors } from "@/stores/themeStore";
 import { useDailyCloses, useIsLoggedIn, useQuotes, useWatchlistGroups } from "./data";
 
 /** 관심종목 상위 5개 — 시세는 /api/screener/quotes, 스파크라인은 최근 30일 일봉 종가. */
 export default function HomeWatchlist() {
   const isLoggedIn = useIsLoggedIn();
-  const theme = useThemeStore((s) => CHART_THEMES[s.chartTheme]);
+  const theme = useMarketColors();
   const { data: groups = [], isLoading } = useWatchlistGroups(isLoggedIn);
   const items = Array.from(new Map(groups.flatMap((g) => g.items).map((i) => [i.stockId, i])).values()).slice(0, 5);
   const ids = items.map((i) => i.stockId);

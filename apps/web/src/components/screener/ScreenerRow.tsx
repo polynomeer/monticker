@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { EventBadge, Icon, Sparkline } from "@/components/terminal";
-import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
+import { useMarketColors } from "@/stores/themeStore";
 import { eventLabel } from "@/components/home/data";
 import BuySellBar from "./BuySellBar";
 import ChangeRateBadge from "./ChangeRateBadge";
@@ -20,7 +20,7 @@ const Dash = () => <span className="text-tm-muted">—</span>;
  * 헤더와 같은 columns 배열(폭 클래스 공유)로 그려서 정렬이 어긋나지 않는다.
  */
 export default function ScreenerRow({ item, columns, intraday }: Props) {
-  const theme = useThemeStore((s) => CHART_THEMES[s.chartTheme]);
+  const theme = useMarketColors();
   const isKR = ["KOSPI", "KOSDAQ"].includes(item.market);
   const { isLoggedIn, isWatched, toggle } = useWatchlistIds();
   const watched = isWatched(item.stockId);

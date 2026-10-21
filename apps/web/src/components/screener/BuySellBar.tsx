@@ -1,11 +1,11 @@
 "use client";
 
-import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
+import { useMarketColors } from "@/stores/themeStore";
 
 interface Props { buy: number; sell: number; }
 
 export default function BuySellBar({ buy, sell }: Props) {
-  const theme = useThemeStore((s) => CHART_THEMES[s.chartTheme]);
+  const theme = useMarketColors();
   return (
     <div className="flex w-full min-w-[80px] items-center gap-1.5">
       <div className="relative flex h-1.5 flex-1 overflow-hidden rounded-full bg-tm-inner">
