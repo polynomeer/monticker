@@ -108,6 +108,7 @@ monticker의 모든 문서를 **독자별 · 주제별**로 정리한 색인입�
 | [security-review.md](security-review.md) | 시큐어 코딩/보안 설계 점검 — Critical 3건과 우선순위별 개선안 |
 | [design-review-2026-10.md](design-review-2026-10.md) | ADR 001~054 교차 사고실험 — ADR끼리 만나는 지점의 결함(Mock 시세→실주문, 결과 불명 주문 등), 남은 P0~P2 |
 | [validation-hardening-plan.md](validation-hardening-plan.md) | 입력값·논리 분기 검증 점검 (완료, PR #80) |
+| [web-design-v2-plan.md](web-design-v2-plan.md) | 웹 디자인 2판(ADR-112) 코드 적용 계획 — 주황 실전 전용, 안전 UX(리뷰 P0), 테마 6종(드라큘라 기본), 상단 고정 검색·라벨 레일·상태 알약. W1~W5 순서와 진행 상황 |
 | [design-rollout-plan.md](design-rollout-plan.md) | 터미널 디자인 시안(ADR-066) 적용 후 "준비 중" 요소의 기능 구현 계획 — P0(동의 기록·연동 해지·출금 정책) ~ P2, 화면별 |
 | [dependency-upgrade-plan.md](dependency-upgrade-plan.md) | 닫아 둔 메이저 의존성 업그레이드(Boot 4·Kotlin 2·Testcontainers 2·jjwt·Next 16·Tailwind 4·TS 7·Expo 58)의 트랙·순서·검증 |
 | [scale-out-plan.md](scale-out-plan.md) | 병목 인벤토리, 목표 아키텍처, Phase 0~4 전환 로드맵 |
