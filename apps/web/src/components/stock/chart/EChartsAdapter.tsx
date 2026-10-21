@@ -7,7 +7,8 @@
  */
 
 import { useEffect, useRef, useCallback, useState } from "react";
-import type { ChartAdapterProps, CandleData, IndicatorKey, Drawing, DrawingPoint, SignalMarker, SentimentMarker, TradeMarker, ChartInterval } from "./types";
+import { THEMES, type ThemePalette } from "@/lib/themes";
+import type { ChartTheme, ChartAdapterProps, CandleData, IndicatorKey, Drawing, DrawingPoint, SignalMarker, SentimentMarker, TradeMarker, ChartInterval } from "./types";
 import { aggregateTradeMarkers, describeTradeGroup, tradeMarkPoints, tradeTimesKst } from "./tradeMarkers";
 import { candleIndexAt, fmtCandleLabel, fractionalIndexAt, inferInterval, isIntraday, timeAtIndex } from "./chartTime";
 import { decimate, estimateLabelWidth, formatMeasure, heikinAshi, isDrawingMeaningful, magnetSnap, measure, placeLabel, shiftPoints, zoomWindow, type IndexedPoint } from "./drawingGeometry";
@@ -46,15 +47,20 @@ function calcBollingerBands(data: CandleData[], period = 20) {
 }
 
 // ── 이벤트 타입 색상 ─────────────────────────────────────────
-// 터미널 시안의 이벤트 색·글자(components/stock/parts.tsx EVENT_META와 같은 값)
-const EVENT_COLORS: Record<string, string> = {
-  PRICE_SPIKE:          "#50fa7b",
-  PRICE_DROP:           "#ff79c6",
-  VOLUME_SURGE:         "#bd93f9",
-  NEWS_PUBLISHED:       "#c3c8e2",
-  DISCLOSURE_PUBLISHED: "#8be9fd",
-  default:              "#c3c8e2",
-};
+// 터미널 시안의 이벤트 색·글자(components/stock/parts.tsx EVENT_META와 같은 역할) — 앱 테마 팔레트를 따른다
+function eventColor(type: string, p: ThemePalette): string {
+  switch (type) {
+    case "PRICE_SPIKE":          return p.green;
+    case "PRICE_DROP":           return p.pink;
+    case "VOLUME_SURGE":         return p.accent;
+    case "DISCLOSURE_PUBLISHED": return p.cyan;
+    default:                     return p.soft; // NEWS_PUBLISHED 포함
+  }
+}
+/** 차트 테마의 팔레트 — 넘기지 않은 호출(테스트·옛 호출부)은 드라큘라 */
+function paletteOf(theme: ChartTheme): ThemePalette {
+  return theme.palette ?? THEMES.dracula.palette;
+}
 const EVENT_LETTERS: Record<string, string> = {
   PRICE_SPIKE: "P", PRICE_DROP: "P", VOLUME_SURGE: "V", NEWS_PUBLISHED: "N", DISCLOSURE_PUBLISHED: "D", SECTOR_MOVE: "S",
 };
@@ -69,12 +75,10 @@ function fmtVol(v: number): string {
   if (v >= 1_000)     return `${(v / 1_000).toFixed(0)}K`;
   return String(v);
 }
-// 드로잉 색 — 터미널 팔레트(Dracula)와 같은 값. 주황은 실전 전용(ADR-112)이라 쓰지 않는다
-const DRAW_COLORS = {
-  trend: "#ff79c6",
-  pen:   "#f1fa8c",
-  zoom:  "#bd93f9",
-} as const;
+// 드로잉 색 — 앱 테마 팔레트. 주황은 실전 전용(ADR-112)이라 쓰지 않는다
+function drawColors(p: ThemePalette) {
+  return { trend: p.pink, pen: p.yellow, zoom: p.accent } as const;
+}
 
 /** 메인 시리즈 이름 — 툴팁이 이 시리즈의 dataIndex로 봉을 찾는다 */
 const MAIN_SERIES = "OHLC";
@@ -159,6 +163,7 @@ export default function EChartsAdapter({
       const chg    = prev ? ((last.close - prev.close) / prev.close) * 100 : 0;
       const isUp   = last.close >= last.open;
       const accent = theme.accent ?? theme.text;
+      const pal    = paletteOf(theme);
       const zk     = zoomRef.current;
       const keptZoom = zk && zk.firstTime === candles[0].time ? zk : null;
 
@@ -171,13 +176,13 @@ export default function EChartsAdapter({
         .map(e => {
           const idx = candleIndexOf(e.time);
           if (idx < 0) return null;
-          const color = EVENT_COLORS[e.eventType] ?? EVENT_COLORS.default;
+          const color = eventColor(e.eventType, pal);
           return {
             name:  e.title,
             coord: [idx, candles[idx].high],
             value: EVENT_LETTERS[e.eventType] ?? "E",
             // 시안의 원형 마커 — 페이지 배경 원 + 이벤트 색 테두리 + 글자
-            itemStyle: { color: "#1b1c24", borderColor: color, borderWidth: 2 },
+            itemStyle: { color: pal.page, borderColor: color, borderWidth: 2 },
             label: { color },
             symbolSize: e.importanceScore > 70 ? 22 : 18,
             // markPoint 데이터 항목에 자유 필드를 얹어두면 클릭 이벤트의 params.data로
@@ -199,7 +204,7 @@ export default function EChartsAdapter({
           symbol: "pin",
           symbolRotate: buy ? 180 : 0,
           itemStyle: { color: buy ? theme.upColor : theme.downColor },
-          label: { color: "#1b1c24", fontSize: 9 },
+          label: { color: pal.page, fontSize: 9 },
           symbolSize: 20,
           eventId: undefined,
         } as never);
@@ -208,12 +213,12 @@ export default function EChartsAdapter({
       for (const s of sentimentMarkers) {
         const idx = candleIndexOf(s.time);
         if (idx < 0) continue;
-        const color = s.score > 0.05 ? "#50fa7b" : s.score < -0.05 ? "#ff5555" : "#6272a4";
+        const color = s.score > 0.05 ? pal.green : s.score < -0.05 ? pal.red : pal.comment;
         markData.push({
           name: `감성 ${s.score >= 0 ? "+" : ""}${s.score.toFixed(2)} · ${s.title}`,
           coord: [idx, candles[idx].high],
           value: s.score >= 0 ? "+" : "−",
-          itemStyle: { color: "#1b1c24", borderColor: color, borderWidth: 2 },
+          itemStyle: { color: pal.page, borderColor: color, borderWidth: 2 },
           label: { color },
           symbolSize: 12 + Math.round(Math.min(1, Math.abs(s.score)) * 8),
           eventId: undefined,
@@ -283,7 +288,7 @@ export default function EChartsAdapter({
           trigger: "axis",
           transitionDuration: reduceMotion ? 0 : 0.4,
           axisPointer: { type: "cross", crossStyle: { color: theme.text }, animation: !reduceMotion },
-          backgroundColor: theme.bg === "#ffffff" ? "#f8f8f2" : "#282a36",
+          backgroundColor: pal.panel,
           borderColor: theme.grid,
           padding: [8, 12],
           textStyle: { color: theme.text, fontSize: 12 },
@@ -460,21 +465,21 @@ export default function EChartsAdapter({
           ...(ma5 ? [{
             name: "MA5", type: "line", xAxisIndex: 0, yAxisIndex: 0,
             data: ma5, smooth: true, symbol: "none",
-            lineStyle: { color: "#f1fa8c", width: 1.5, opacity: 0.9 },
+            lineStyle: { color: pal.yellow, width: 1.5, opacity: 0.9 },
             tooltip: { show: false },
           }] : []),
 
           ...(ma20 ? [{
             name: "MA20", type: "line", xAxisIndex: 0, yAxisIndex: 0,
             data: ma20, smooth: true, symbol: "none",
-            lineStyle: { color: "#8be9fd", width: 1.5, opacity: 0.9 },
+            lineStyle: { color: pal.cyan, width: 1.5, opacity: 0.9 },
             tooltip: { show: false },
           }] : []),
 
           ...(ma60 ? [{
             name: "MA60", type: "line", xAxisIndex: 0, yAxisIndex: 0,
             data: ma60, smooth: true, symbol: "none",
-            lineStyle: { color: "#ff79c6", width: 1.5, opacity: 0.9 },
+            lineStyle: { color: pal.pink, width: 1.5, opacity: 0.9 },
             tooltip: { show: false },
           }] : []),
 
@@ -482,19 +487,19 @@ export default function EChartsAdapter({
             {
               name: "BOLL", type: "line", xAxisIndex: 0, yAxisIndex: 0,
               data: boll.upper, smooth: true, symbol: "none",
-              lineStyle: { color: "#bd93f9", width: 1, opacity: 0.6, type: "dashed" as const },
+              lineStyle: { color: pal.accent, width: 1, opacity: 0.6, type: "dashed" as const },
               tooltip: { show: false },
             },
             {
               name: "BOLL", type: "line", xAxisIndex: 0, yAxisIndex: 0,
               data: boll.mid, smooth: true, symbol: "none",
-              lineStyle: { color: "#bd93f9", width: 1, opacity: 0.8 },
+              lineStyle: { color: pal.accent, width: 1, opacity: 0.8 },
               tooltip: { show: false }, legendHoverLink: false,
             },
             {
               name: "BOLL", type: "line", xAxisIndex: 0, yAxisIndex: 0,
               data: boll.lower, smooth: true, symbol: "none",
-              lineStyle: { color: "#bd93f9", width: 1, opacity: 0.6, type: "dashed" as const },
+              lineStyle: { color: pal.accent, width: 1, opacity: 0.6, type: "dashed" as const },
               tooltip: { show: false }, legendHoverLink: false,
             },
           ] : []),
@@ -509,7 +514,7 @@ export default function EChartsAdapter({
               return candles.map(c => map.get(c.time) ?? null);
             })(),
             smooth: false, symbol: "none",
-            lineStyle: { color: "#ff79c6", width: 1.5, type: "dashed" as const },
+            lineStyle: { color: pal.pink, width: 1.5, type: "dashed" as const },
             tooltip: { show: false },
           }] : []),
           // 거래량 바
@@ -565,6 +570,7 @@ export default function EChartsAdapter({
       cur.onDrawingsChange?.(cur.drawings.map(x => (x.id === id ? { ...x, points } : x)));
     };
 
+    const dc = drawColors(paletteOf(theme));
     const elements: Record<string, unknown>[] = [];
     for (const d of st.drawings) {
       if (!isDrawingMeaningful(d, st.interval)) continue;
@@ -596,9 +602,9 @@ export default function EChartsAdapter({
       } else if (d.tool === "TREND_LINE") {
         const [x1, y1] = toPx(d.points[0]);
         const [x2, y2] = toPx(d.points[1]);
-        elements.push({ ...common, type: "line", shape: { x1, y1, x2, y2 }, style: { stroke: DRAW_COLORS.trend, lineWidth: 2 } });
+        elements.push({ ...common, type: "line", shape: { x1, y1, x2, y2 }, style: { stroke: dc.trend, lineWidth: 2 } });
       } else if (d.tool === "PEN") {
-        elements.push({ ...common, type: "polyline", shape: { points: d.points.map(toPx) }, style: { stroke: DRAW_COLORS.pen, lineWidth: 2, fill: null } });
+        elements.push({ ...common, type: "polyline", shape: { points: d.points.map(toPx) }, style: { stroke: dc.pen, lineWidth: 2, fill: null } });
       } else if (d.tool === "TEXT") {
         const [x, y] = toPx(d.points[0]);
         elements.push({
@@ -616,14 +622,14 @@ export default function EChartsAdapter({
     if (pending && hover && tool === "TREND_LINE") {
       const [x1, y1] = ptPx(pending);
       const [x2, y2] = ptPx(hover);
-      elements.push({ type: "line", silent: true, z: 51, shape: { x1, y1, x2, y2 }, style: { stroke: DRAW_COLORS.trend, lineWidth: 1.5, lineDash: [4, 3] } });
+      elements.push({ type: "line", silent: true, z: 51, shape: { x1, y1, x2, y2 }, style: { stroke: dc.trend, lineWidth: 1.5, lineDash: [4, 3] } });
     }
     if (pending && hover && tool === "ZOOM") {
       const xa = ptPx(pending)[0], xb = ptPx(hover)[0];
       elements.push({
         type: "rect", silent: true, z: 51,
         shape: { x: Math.min(xa, xb), y: GRID_TOP, width: Math.abs(xb - xa), height: Math.max(0, gridBottom - GRID_TOP) },
-        style: { fill: `${DRAW_COLORS.zoom}22`, stroke: DRAW_COLORS.zoom, lineWidth: 1 },
+        style: { fill: `${dc.zoom}22`, stroke: dc.zoom, lineWidth: 1 },
       });
     }
     const m = tool === "MEASURE" ? (measureRef.current ?? (pending && hover ? { a: pending, b: hover } : null)) : null;
@@ -646,7 +652,7 @@ export default function EChartsAdapter({
     }
     const pen = penRef.current;
     if (pen && pen.points.length > 1) {
-      elements.push({ type: "polyline", silent: true, z: 51, shape: { points: pen.points.map(toPx) }, style: { stroke: DRAW_COLORS.pen, lineWidth: 2, fill: null } });
+      elements.push({ type: "polyline", silent: true, z: 51, shape: { points: pen.points.map(toPx) }, style: { stroke: dc.pen, lineWidth: 2, fill: null } });
     }
 
     // graphic 컴포넌트를 통째로 갈아 끼운다(replaceMerge) — merge면 지운 드로잉이 화면에 남는다.

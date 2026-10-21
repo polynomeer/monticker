@@ -136,7 +136,7 @@ export function tradeTimesKst(g: TradeMarkerGroup, n = 3): string {
 export function tradeMarkPoints(
   groups: TradeMarkerGroup[],
   candles: Pick<CandleData, "low" | "high">[],
-  theme: Pick<ChartTheme, "upColor" | "downColor">,
+  theme: Pick<ChartTheme, "upColor" | "downColor" | "palette">,
 ) {
   return groups.map((g) => {
     const buy = g.side === "BUY";
@@ -150,7 +150,7 @@ export function tradeMarkPoints(
       symbolOffset: [0, buy ? 16 : -16] as [number, number],
       symbolSize: g.count > 1 ? 26 : 22,
       itemStyle: { color: buy ? theme.upColor : theme.downColor },
-      label: { color: "#1b1c24", fontSize: 9 },
+      label: { color: theme.palette?.page ?? "#1b1c24", fontSize: 9 }, // 마커 글자 = 페이지 배경색
       eventId: undefined,
     };
   });

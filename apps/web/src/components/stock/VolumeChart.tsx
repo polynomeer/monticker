@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useTheme } from "next-themes";
-import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
+import { useMarketColors, useThemePalette } from "@/stores/themeStore";
 import type { CandleData } from "./chart/types";
 
 let echartsPromise: Promise<typeof import("echarts")> | null = null;
@@ -25,9 +24,8 @@ interface Props {
 export default function VolumeChart({ candles, height = 140 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef     = useRef<import("echarts").ECharts | null>(null);
-  const { resolvedTheme } = useTheme();
-  const { chartTheme } = useThemeStore();
-  const ct = CHART_THEMES[chartTheme] ?? CHART_THEMES.default;
+  const ct = useMarketColors();
+  const pal = useThemePalette();
 
   useEffect(() => {
     if (!containerRef.current || candles.length === 0) return;
@@ -37,10 +35,10 @@ export default function VolumeChart({ candles, height = 140 }: Props) {
       if (disposed || !containerRef.current) return;
       if (chartRef.current) chartRef.current.dispose();
 
-      const isDark  = true; // 터미널 디자인은 다크 전용
-      const bg      = isDark ? "#282a36" : "#ffffff";
-      const grid    = isDark ? "#34364a" : "#e5e7eb";
-      const text    = isDark ? "#a4abcf" : "#6b7280";
+      // 앱 테마 팔레트 — 패널 배경·구분선·보조 글자(드라큘라는 이전과 같은 값)
+      const bg      = pal.panel;
+      const grid    = pal.line;
+      const text    = pal.muted;
       const upColor = `${ct.upColor}cc`;
       const dnColor = `${ct.downColor}cc`;
 
@@ -58,7 +56,7 @@ export default function VolumeChart({ candles, height = 140 }: Props) {
         animation: false,
         tooltip: {
           trigger: "axis",
-          backgroundColor: isDark ? "#21222c" : "#fff",
+          backgroundColor: pal.inner,
           borderColor: grid,
           textStyle: { color: text },
           formatter: (params: unknown[]) => {
@@ -129,7 +127,7 @@ export default function VolumeChart({ candles, height = 140 }: Props) {
         chartRef.current = null;
       }
     };
-  }, [candles, height, resolvedTheme, chartTheme]);
+  }, [candles, height, ct.upColor, ct.downColor, pal]);
 
   if (candles.length === 0) return null;
 

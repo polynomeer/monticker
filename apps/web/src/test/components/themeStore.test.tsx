@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { act, render } from "@testing-library/react";
+import { act, render, renderHook } from "@testing-library/react";
 import { AppThemeSync, MarketColorSync } from "@/components/ThemeProvider";
 import { themeInitScript } from "@/components/ThemeScript";
-import { CHART_THEMES, THEME_STORAGE_KEY, resolveMarketColors, useThemeStore } from "@/stores/themeStore";
+import { CHART_THEMES, THEME_STORAGE_KEY, resolveMarketColors, useThemePalette, useThemeStore } from "@/stores/themeStore";
+import { THEMES } from "@/lib/themes";
 
 const root = document.documentElement;
 
@@ -30,6 +31,15 @@ describe("themeStore — 앱 테마", () => {
     await useThemeStore.persist.rehydrate();
     expect(useThemeStore.getState().appTheme).toBe("dracula");
     expect(useThemeStore.getState().chartTheme).toBe("korean");
+  });
+});
+
+describe("useThemePalette — 캔버스 차트 색", () => {
+  it("드라큘라 기본, 테마를 바꾸면 그 팔레트로 다시 렌더된다", () => {
+    const { result } = renderHook(() => useThemePalette());
+    expect(result.current.panel).toBe("#282a36");
+    act(() => useThemeStore.getState().setAppTheme("light"));
+    expect(result.current).toBe(THEMES.light.palette);
   });
 });
 

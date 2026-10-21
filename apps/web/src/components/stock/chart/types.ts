@@ -1,3 +1,4 @@
+import type { ThemePalette } from "@/lib/themes";
 // ── 공통 캔들 / 이벤트 타입 ──────────────────────────────────
 export interface CandleData {
   time: number;   // Unix epoch seconds
@@ -60,6 +61,8 @@ export interface ChartTheme {
   downColor: string;
   /** 라인·영역 차트 선 색(강조색). 없으면 text */
   accent?: string;
+  /** 앱 테마 팔레트(hex) — 이벤트·지표·드로잉 색과 마커 바탕. 없으면 드라큘라 */
+  palette?: ThemePalette;
 }
 
 /** 메인 시리즈 표시 방식 */
