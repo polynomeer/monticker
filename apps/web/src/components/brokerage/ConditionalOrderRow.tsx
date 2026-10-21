@@ -1,16 +1,17 @@
 "use client";
 
-// 조건부 주문(ADR-032) 한 건의 상태 표기와 해지 버튼 — 표(DataTable)의 셀로 쓴다.
+// 조건부 주문(ADR-032) 한 건의 상태 표기와 감시 취소 버튼 — 표(DataTable)의 셀로 쓴다.
+import { useState } from "react";
 import type { ConditionalOrderResponse, ConditionalOrderStatus, ConditionalTriggerType } from "@monticker/types";
 import { useCancelConditionalOrder } from "@/hooks/useBrokerage";
 import { useToast } from "@/hooks/useToast";
-import { Pill, type Tone } from "@/components/terminal";
+import { ConfirmDialog, KV, Pill, fmtNum, type Tone } from "@/components/terminal";
 
 export const COND_STATUS: Record<ConditionalOrderStatus, { label: string; tone: Tone }> = {
   ACTIVE:    { label: "감시 중",      tone: "cyan" },
   TRIGGERED: { label: "발동 처리 중", tone: "orange" },
   EXECUTED:  { label: "발동 완료",    tone: "green" },
-  CANCELLED: { label: "해지됨",       tone: "muted" },
+  CANCELLED: { label: "취소됨",       tone: "muted" },
   EXPIRED:   { label: "만료됨",       tone: "muted" },
   FAILED:    { label: "발동 실패",    tone: "red" },
 };
@@ -62,25 +63,54 @@ export function ConditionalStatusCell({ o }: { o: ConditionalOrderResponse }) {
   );
 }
 
-/** ACTIVE일 때만 — 해지(취소). */
+/**
+ * ACTIVE일 때만 — 감시 취소. 취소하면 이 주문의 보호(손절 등)가 사라지므로 한 번 확인받는다.
+ * "해지"는 계좌 연동 해지와 헷갈려서 "감시 취소"라고 부른다(디자인 리뷰 P0).
+ */
 export function ConditionalCancelButton({ o }: { o: ConditionalOrderResponse }) {
   const { toast } = useToast();
   const cancelOrder = useCancelConditionalOrder();
+  const [confirming, setConfirming] = useState(false);
   if (o.status !== "ACTIVE") return null;
 
   const handleCancel = async () => {
     try {
       await cancelOrder.mutateAsync(o.id);
-      toast({ type: "success", title: "해지 완료", message: "조건부 주문이 해지되었습니다." });
+      toast({ type: "success", title: "감시 취소 완료", message: "조건부 주문 감시를 취소했습니다." });
     } catch (e) {
-      toast({ type: "error", title: "해지 실패", message: (e as Error).message });
+      toast({ type: "error", title: "감시 취소 실패", message: (e as Error).message });
+    } finally {
+      setConfirming(false);
     }
   };
 
+  const below = isBelowTrigger(o.triggerType);
   return (
-    <button type="button" onClick={handleCancel} disabled={cancelOrder.isPending}
-      className="inline-flex h-7 items-center rounded-lg border border-[#6b3a44] px-2.5 text-xs font-semibold text-[#ff8a8a] hover:bg-[#3d252b] disabled:opacity-40">
-      {cancelOrder.isPending ? "해지 중..." : "해지"}
-    </button>
+    <>
+      <button type="button" onClick={() => setConfirming(true)} disabled={cancelOrder.isPending}
+        className="inline-flex h-7 items-center whitespace-nowrap rounded-lg border border-[#6b3a44] px-2.5 text-xs font-semibold text-[#ff8a8a] hover:bg-[#3d252b] disabled:opacity-40">
+        {cancelOrder.isPending ? "취소 중..." : "감시 취소"}
+      </button>
+      {confirming && (
+        <ConfirmDialog
+          title="조건부 주문 감시를 취소할까요?"
+          cancelLabel="그대로 두기"
+          confirmLabel={cancelOrder.isPending ? "취소 중..." : "감시 취소"}
+          confirmKind="danger"
+          pending={cancelOrder.isPending}
+          onCancel={() => setConfirming(false)}
+          onConfirm={handleCancel}
+        >
+          <div className="flex flex-col gap-2 text-left">
+            <KV k="종목" v={o.symbol} />
+            <KV k="조건" v={`${TRIGGER_LABEL[o.triggerType]} · ${fmtNum(o.triggerPrice)}원 ${below ? "이하" : "이상"}`} mono={false} />
+            <KV k="주문" v={`${o.side === "BUY" ? "매수" : "매도"} ${fmtNum(o.quantity)}주 · ${o.orderType === "LIMIT" ? `지정가 ${fmtNum(o.limitPrice)}원` : "시장가"}`} mono={false} />
+          </div>
+          <p className="m-0 text-xs leading-relaxed text-tm-muted">
+            취소하면 이 가격 조건을 더 이상 감시하지 않습니다{o.ocoGroupId ? " · OCO로 묶인 다른 조건은 따로 취소하기 전까지 계속 감시합니다" : ""}.
+          </p>
+        </ConfirmDialog>
+      )}
+    </>
   );
 }
