@@ -81,7 +81,17 @@ W1~W3는 셸과 겹치지 않아 먼저 한다.
 | 단계 | PR | 상태 |
 |---|---|---|
 | W1 색 역할 | [#261](https://github.com/polynomeer/monticker/pull/261) | 리뷰 중 |
-| W2 안전 UX | — | 진행 중 |
-| W3 테마 | — | 대기 |
+| W2 안전 UX | [#262](https://github.com/polynomeer/monticker/pull/262) | 리뷰 중 |
+| W3 테마 | [#263](https://github.com/polynomeer/monticker/pull/263) (#261 위에 쌓음) | 리뷰 중 |
 | W4 셸 | — | ADR-110 머지 대기 |
 | W5 마무리 | — | 대기 |
+
+### W3 남은 하드코딩 (라이트 계열 공개 전에 처리)
+
+| 대상 | 지금 | 처리 |
+|---|---|---|
+| 임의값 hex 클래스(`bg-[#3a2f52]` 등) | 58개 파일 164건, `text-white`·gray 7건 | 의미 토큰(`tm-*`·`caution` 등)으로 바꾼다. 특히 `terminal/ui.tsx`의 태그·알림 박스 배경 |
+| Frontier 차트(`FrontierChart`·`frontierOption`) | 드라큘라 고정 | `useThemePalette()`로 |
+| 차트 범례(`ChartPanel`)·이벤트 메타(`stock/parts.tsx` `EVENT_META`)·`alerts/data.ts` | 드라큘라 고정 | 토큰으로 |
+| `EventChartIllustration`·`AuthShell`·`Toast`·`CookieBanner` | 드라큘라 고정 | 토큰으로 |
+| 실전 주문 리스크 미리보기 | 종목 집중도만 화면 판정(W2) | 증권사 잔고 기준 미리보기 API + ADR-092 보완 ADR (백엔드) |
