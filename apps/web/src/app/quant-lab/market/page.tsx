@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { MarketStrategy } from "@monticker/types";
 import { authFetch } from "@/services/api";
 import { Btn, BtnLink, Notice, Panel, PanelCol, PanelRow, SelectBox, TerminalPage } from "@/components/terminal";
-import { SegOpts } from "@/components/quant/parts";
+import { PAST_PERFORMANCE_NOTICE, SegOpts } from "@/components/quant/parts";
 import { MarketStrategyCard, forwardWeeks } from "@/components/strategy-market/MarketStrategyCard";
 import { SubscribedSignalsPanel, useSubscribedSignalFeed } from "@/components/strategy-market/SubscribedSignalsPanel";
 import { hasNextPage, sharedTotalLabel, useMarketTotal } from "@/components/strategy-market/marketTotal";
@@ -87,6 +87,10 @@ export default function StrategyMarketPage() {
             </div>
           </div>
 
+          {/* 이용약관 제9조 — 전략 카드에는 성과 고지가 함께 표시된다. 목록 위에 한 번, 카드마다 짧게 한 줄. */}
+          <Notice tone="info">
+            {PAST_PERFORMANCE_NOTICE}. 카드의 MDD·CAGR은 백테스트, 포워드 기간은 실시간 신호 기록이며 검증 전 전략은 표본이 짧습니다. 투자 판단과 책임은 이용자 본인에게 있습니다.
+          </Notice>
           {isError && <Notice tone="danger">전략 목록을 불러오지 못했습니다.</Notice>}
 
           {isLoading ? (
