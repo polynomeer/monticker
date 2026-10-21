@@ -41,7 +41,7 @@ enum class ConsentGroup(val required: Set<ConsentType>, val optional: Set<Consen
 object ConsentDocuments {
     private val VERSIONS = mapOf(
         ConsentType.TERMS to "terms-draft-2026-10",
-        ConsentType.PRIVACY to "privacy-draft-2026-10",
+        ConsentType.PRIVACY to "privacy-draft-2026-10-21",
         ConsentType.AGE_OVER_19 to "v1",
         ConsentType.MARKETING to "v1",
         ConsentType.BROKERAGE_DELEGATION to "v1",
