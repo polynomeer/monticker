@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { getAccessToken } from "@/services/auth";
 import {
   isUnresolvedOrderStatus, useBrokerageAccount, useBrokerageBalance, useBrokerageOrders, useBrokerageSettlements,
@@ -8,6 +9,8 @@ import {
 } from "@/hooks/useBrokerage";
 import { useStockChart } from "@/hooks/useStockChart";
 import { useFillHeight } from "@/hooks/useFillHeight";
+import { useRiskExposure } from "@/components/risk/useRiskExposure";
+import { realOrderRiskRows } from "@/lib/realOrderRisk";
 import { ApiError } from "@/services/brokerage";
 import StockChart from "@/components/stock/chart/StockChart";
 import OrderProposalCard from "@/components/ai/OrderProposalCard";
@@ -101,6 +104,8 @@ export default function BrokerageOrderPage() {
   const { data: account, isLoading: accountLoading } = useBrokerageAccount();
   const { data: balance, isLoading: balanceLoading, isError: balanceError } = useBrokerageBalance(!!account);
   const { data: trading } = useTradingStatus(!!account);
+  // 리스크 한도(사용자 단위 유효 한도 — 모의·실전 공통). 노출도 값들은 모의계좌 기준이라 여기서는 limits만 쓴다.
+  const { data: exposure } = useRiskExposure(isLoggedIn && !!account);
   const submitOrder = useSubmitBrokerageOrder();
   const ordersQuery = useBrokerageOrders(histPage, !!account && histTab === "orders");
   const fillsQuery = useBrokerageSettlements(histPage, !!account && histTab === "fills");
@@ -154,6 +159,11 @@ export default function BrokerageOrderPage() {
   const krx = !!stock && isKrxSymbol(stock.symbol);
   const tickOk = orderType !== "LIMIT" || !krx || isOnKrxTick(Number(limitPrice));
   const halted = !!trading?.halted;
+  // 주문 전 리스크 — 화면이 판정할 수 있는 규칙만 막는다(이유는 realOrderRiskRows 주석). 한도를 아직 못 읽었으면 막지 않는다 — 서버 게이트(422)가 최종 판정이다.
+  const riskRows = stock
+    ? realOrderRiskRows({ side, quantity, price: priceForEstimate, symbol: stock.symbol, balance: balanceReady ? balance : undefined, limits: exposure?.limits })
+    : [];
+  const riskFail = riskRows.find(r => r.state === "fail") ?? null;
   const isValid =
     !!stock &&
     qtyOk &&
@@ -161,6 +171,7 @@ export default function BrokerageOrderPage() {
     tickOk &&
     balanceReady &&
     quantity <= maxQty &&
+    !riskFail &&
     !halted;
 
   // 검증 체크리스트 — 필수 항목은 위 isValid와 같은 조건을 그대로 보여 준다. 호가 단위·가격제한폭은 서버가 같은 규칙으로 다시 본다(ADR-081).
@@ -191,6 +202,12 @@ export default function BrokerageOrderPage() {
       required: false,
       server: true,
     },
+    ...riskRows.map((r): Check => ({
+      label: r.label,
+      state: r.state === "server" ? "na" : r.state,
+      required: r.state !== "server",
+      server: r.state === "server",
+    })),
   ];
 
   // 주문 가격선 — 매 렌더 새 배열을 넘기면 차트가 통째로 다시 그려지므로 값이 바뀔 때만 만든다.
@@ -354,13 +371,21 @@ export default function BrokerageOrderPage() {
                 <span className="text-2xs text-[#ff8a8a]">{side === "BUY" ? "가용 현금을 초과했습니다." : "보유 수량을 초과했습니다."}</span>
               )}
 
-              <ul className="m-0 flex list-none flex-col gap-1.5 rounded-lg bg-tm-inner px-3 py-2.5" aria-label="주문 검증">
-                {checks.map(c => <CheckLine key={c.label} c={c} />)}
-              </ul>
+              <section aria-labelledby="order-checks-title" className="flex flex-col gap-2 rounded-lg bg-tm-inner px-3 py-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 id="order-checks-title" className="m-0 text-2xs font-normal text-tm-muted">주문 전 검사 · 모의·실전 공통</h3>
+                  <Link href="/risk" className="text-2xs">리스크 한도</Link>
+                </div>
+                <ul className="m-0 flex list-none flex-col gap-1.5 p-0" aria-label="주문 검증">
+                  {checks.map(c => <CheckLine key={c.label} c={c} />)}
+                </ul>
+                <span className="text-2xs text-tm-muted">집중도 외 한도는 주문할 때 증권사 잔고로 서버가 판정합니다.</span>
+              </section>
 
               <KV k="예상 주문 금액" v={priceForEstimate > 0 ? `${fmtNum(estimatedAmount)}원` : "—"} />
               <KV k="예상 수수료" v="증권사 기준" mono={false} />
 
+              {riskFail?.reason && <p role="alert" className="m-0 text-xs text-[#ff8a8a]">{riskFail.reason}</p>}
               <Btn kind={side === "BUY" ? "buy" : "sell"} size="lg" full onClick={openConfirm} disabled={!isValid || submitOrder.isPending}>
                 주문 확인
               </Btn>
