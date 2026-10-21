@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
+import { usePaperPortfolio } from "@/hooks/usePaperTrade";
 import { Btn, BuySell, Field, Icon, KV, Seg, SelectBox, fmtNum } from "@/components/terminal";
 import { cn } from "@/lib/utils";
 import { estimateMarketFill, type FillDto, type OrderBookData, type OrderDto } from "./data";
@@ -79,6 +80,16 @@ export function OrderForm({ stockId, setStockId, stocks, presetSide, book }: {
   const estimatedPrice = orderType === "LIMIT" ? parsedLimitPrice : est?.avg ?? book?.currentPrice ?? null;
   const amount = estimatedPrice != null && Number.isFinite(estimatedPrice) ? estimatedPrice * quantity : null;
 
+  // 체결 엔진은 모의계좌 현금에서 예약한다(매수: 지정가 × 수량, 시장가는 호가로 추정한 금액). 넘으면 입력 즉시 알리고 제출을 막는다 —
+  // "리스크 사전 확인"을 누르기 전까지 모르는 일이 없게. 잔고를 아직 못 읽었으면 판단하지 않는다(서버가 최종 판정).
+  const qtyErrorId = useId();
+  const { data: portfolio } = usePaperPortfolio();
+  const cash = portfolio?.cash ?? null;
+  const unitPrice = estimatedPrice != null && Number.isFinite(estimatedPrice) && estimatedPrice > 0 ? estimatedPrice : null;
+  const maxBuyQty = cash != null && unitPrice != null ? Math.floor(cash / unitPrice) : null;
+  const overCash = isBuy && cash != null && amount != null && unitPrice != null && amount > cash;
+  const cashError = overCash ? `가용 현금 ${fmtNum(cash)}원을 넘습니다 · 최대 ${fmtNum(maxBuyQty)}주` : null;
+
   const orderPayload = () => ({
     stockId, side, orderType, quantity,
     limitPrice: orderType === "LIMIT" ? parsedLimitPrice : null,
@@ -126,9 +137,11 @@ export function OrderForm({ stockId, setStockId, stocks, presetSide, book }: {
       )}
       <Field
         label="수량" aria-label="수량" unit="주" type="number" min={1} max={MAX_ORDER_QUANTITY} value={quantity}
+        aria-invalid={overCash || undefined} aria-describedby={cashError ? qtyErrorId : undefined}
         onChange={(e) => setQuantity(Math.min(MAX_ORDER_QUANTITY, Math.max(1, Math.floor(Number(e.target.value) || 1))))}
         className="flex-none"
       />
+      {cashError && <p id={qtyErrorId} role="alert" className="m-0 text-xs text-[#ff8a8a]">{cashError}</p>}
       <KV k={isBuy ? "예약될 금액" : "예상 체결 금액"} v={amount != null ? `${fmtNum(amount)}원` : "—"} />
       <KV
         k="예상 슬리피지 (시장가 시)"
@@ -158,7 +171,7 @@ export function OrderForm({ stockId, setStockId, stocks, presetSide, book }: {
           {riskCheckMutation.isPending ? "확인 중..." : "리스크 사전 확인"}
         </Btn>
       </div>
-      <Btn kind={isBuy ? "buy" : "sell"} size="lg" full onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending || !isValid}>
+      <Btn kind={isBuy ? "buy" : "sell"} size="lg" full onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending || !isValid || overCash}>
         {submitMutation.isPending ? "처리 중..." : `${isBuy ? "매수" : "매도"} 주문 제출`}
       </Btn>
       {submitMutation.isError && <p role="alert" className="m-0 text-xs text-[#ff8a8a]">{(submitMutation.error as Error).message}</p>}
