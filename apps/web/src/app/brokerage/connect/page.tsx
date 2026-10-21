@@ -75,7 +75,7 @@ function Stepper({ current }: { current: number }) {
             <span
               className={cn(
                 "num grid h-7 w-7 flex-none place-items-center rounded-full text-xs font-bold",
-                done ? "bg-dracula-green text-tm-page" : on ? "bg-dracula-purple text-tm-page" : "border-[1.5px] border-tm-line2 text-tm-muted",
+                done ? "bg-dracula-green text-tm-page" : on ? "bg-dracula-purple text-tm-on-accent" : "border-[1.5px] border-tm-line2 text-tm-muted",
               )}
             >
               {done ? <Icon name="check" size={14} strokeWidth={3} /> : i + 1}

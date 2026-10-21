@@ -221,7 +221,7 @@ export default function ReplayPage() {
                 aria-label={`${d.getMonth() + 1}월 ${d.getDate()}일 복기 · 수익률 ${dailyReturnText(ret)}`}
                 title={DAILY_RETURN_DEFINITION}
                 onClick={() => setDate(key)}
-                className={cn("flex w-[58px] flex-col items-center gap-0.5 rounded-lg py-2", on ? "bg-dracula-purple text-tm-page" : "bg-tm-inner text-dracula-fg hover:bg-tm-raised")}
+                className={cn("flex w-[58px] flex-col items-center gap-0.5 rounded-lg py-2", on ? "bg-dracula-purple text-tm-on-accent" : "bg-tm-inner text-dracula-fg hover:bg-tm-raised")}
               >
                 <span className="text-2xs opacity-80">{WEEKDAY[d.getDay()]}</span>
                 <span className="num text-13 font-semibold">{`${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`}</span>
