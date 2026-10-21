@@ -57,7 +57,7 @@ export function latencyStat(health: BrokerageApiHealth | null | undefined, now =
   return {
     label: "API 지연",
     value: fmtLatency(health.lastLatencyMs),
-    tone: recentError ? "text-dracula-orange" : health.lastLatencyMs >= SLOW_LATENCY_MS ? "text-dracula-orange" : undefined,
+    tone: recentError ? "text-caution" : health.lastLatencyMs >= SLOW_LATENCY_MS ? "text-caution" : undefined,
     hint,
   };
 }

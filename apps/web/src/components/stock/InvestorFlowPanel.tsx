@@ -57,7 +57,7 @@ export default function InvestorFlowPanel({ stockId, bare = false }: Props) {
       {!bare ? <h3 className="m-0 text-15 font-bold">개인·외국인·기관 순매수</h3> : <span className="text-2xs text-tm-muted">개인·외국인·기관 순매수 · 최근 10거래일</span>}
       {data?.isAnyMocked && (
         <span title="KIS API 미설정 또는 응답 없음 — 모의 데이터로 대체됨">
-          <Pill tone="orange">모의 데이터</Pill>
+          <Pill tone="caution">모의 데이터</Pill>
         </span>
       )}
     </div>

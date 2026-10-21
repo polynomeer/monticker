@@ -301,7 +301,7 @@ export default function OrderForm({ stock, currentPrice, brokerageConnected }: P
           <div className="flex flex-col gap-[7px] rounded-lg bg-tm-inner px-3 py-2.5">
             <div className="flex items-center justify-between">
               <span className="text-2xs text-tm-muted">주문 전 리스크 체크</span>
-              <span aria-live="polite" className={cn("text-2xs font-semibold", risk.data && !risk.pending && (risk.data.approved ? "text-dracula-green" : "text-dracula-orange"))}>
+              <span aria-live="polite" className={cn("text-2xs font-semibold", risk.data && !risk.pending && (risk.data.approved ? "text-dracula-green" : "text-caution"))}>
                 {risk.idle ? "" : risk.pending ? "점검 중..." : risk.data ? (risk.data.approved ? "통과" : "한도 초과") : ""}
               </span>
             </div>
@@ -315,10 +315,10 @@ export default function OrderForm({ stock, currentPrice, brokerageConnected }: P
             {risk.data?.checks.map((c) => (
               <div key={c.rule} className={cn("flex justify-between gap-2 text-xs", risk.pending && "opacity-50")} title={c.detail}>
                 <span className="flex items-center gap-1.5 text-tm-soft">
-                  <Icon name={c.passed ? "check" : "alert"} size={14} strokeWidth={c.passed ? 2.4 : 2} className={c.passed ? "text-dracula-green" : "text-dracula-orange"} />
+                  <Icon name={c.passed ? "check" : "alert"} size={14} strokeWidth={c.passed ? 2.4 : 2} className={c.passed ? "text-dracula-green" : "text-caution"} />
                   {RULE_LABEL[c.rule] ?? c.rule}
                 </span>
-                <span className={cn("num", !c.passed && "text-dracula-orange")}>{ruleValue(c)}</span>
+                <span className={cn("num", !c.passed && "text-caution")}>{ruleValue(c)}</span>
               </div>
             ))}
           </div>

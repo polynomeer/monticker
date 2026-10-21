@@ -169,7 +169,7 @@ export default function ConditionalOrderPage() {
       if (d == null) return <span className="text-tm-muted">—</span>;
       return (
         <div className="flex min-w-[150px] items-center gap-2">
-          <div className="flex-1"><Bar pct={100 - d * 10} color={d < 2 ? "bg-dracula-orange" : "bg-dracula-purple"} h={6} /></div>
+          <div className="flex-1"><Bar pct={100 - d * 10} color={d < 2 ? "bg-caution" : "bg-dracula-purple"} h={6} /></div>
           <span className="num text-xs">{d.toFixed(1)}%</span>
         </div>
       );
@@ -230,7 +230,7 @@ export default function ConditionalOrderPage() {
       crumb="실전투자 · 가격 조건 충족 시 자동 제출"
       stats={[
         { label: "감시 중", value: stats ? `${fmtNum(stats.byStatus.ACTIVE)}건` : "—" },
-        { label: "트리거 임박", value: `${imminent}건${singlePage ? "" : "+"}`, tone: imminent > 0 ? "text-dracula-orange" : undefined, hint: "현재가가 트리거 가격의 2% 안쪽인 감시 중 주문(이 페이지 기준)" },
+        { label: "트리거 임박", value: `${imminent}건${singlePage ? "" : "+"}`, tone: imminent > 0 ? "text-caution" : undefined, hint: "현재가가 트리거 가격의 2% 안쪽인 감시 중 주문(이 페이지 기준)" },
         { label: "이번 달 발동", value: stats ? `${fmtNum(stats.firedThisMonth)}건` : "—", hint: "이번 달 1일 00:00(KST)부터 발동한 조건부 주문" },
         { label: "감시 주기", value: "실시간 시세" },
       ]}
@@ -278,7 +278,7 @@ export default function ConditionalOrderPage() {
                     inputClassName={isBelowType ? "text-down" : "text-up"}
                   />
                   {!singleDirectionValid && (
-                    <span className="text-xs text-dracula-orange">
+                    <span className="text-xs text-caution">
                       {isBelowType
                         ? `현재가(${fmtNum(currentPrice)}원)보다 낮아야 합니다 — 이대로면 등록 즉시 발동됩니다.`
                         : `현재가(${fmtNum(currentPrice)}원)보다 높아야 합니다 — 이대로면 등록 즉시 발동됩니다.`}
@@ -310,7 +310,7 @@ export default function ConditionalOrderPage() {
                     inputClassName="text-down"
                   />
                   {currentPrice > 0 && Number(stopLossPrice) > 0 && Number(stopLossPrice) >= currentPrice && (
-                    <span className="text-xs text-dracula-orange">현재가({fmtNum(currentPrice)}원)보다 낮아야 합니다 — 이대로면 등록 즉시 발동됩니다.</span>
+                    <span className="text-xs text-caution">현재가({fmtNum(currentPrice)}원)보다 낮아야 합니다 — 이대로면 등록 즉시 발동됩니다.</span>
                   )}
                   <Field
                     className="flex-none"
@@ -325,7 +325,7 @@ export default function ConditionalOrderPage() {
                     inputClassName="text-up"
                   />
                   {currentPrice > 0 && Number(takeProfitPrice) > 0 && Number(takeProfitPrice) <= currentPrice && (
-                    <span className="text-xs text-dracula-orange">현재가({fmtNum(currentPrice)}원)보다 높아야 합니다 — 이대로면 등록 즉시 발동됩니다.</span>
+                    <span className="text-xs text-caution">현재가({fmtNum(currentPrice)}원)보다 높아야 합니다 — 이대로면 등록 즉시 발동됩니다.</span>
                   )}
                 </>
               )}

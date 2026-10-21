@@ -1,5 +1,5 @@
 import type { Config } from "tailwindcss";
-import { dracula, tm } from "./src/lib/designTokens";
+import { dracula, role, tm } from "./src/lib/designTokens";
 
 const config: Config = {
   content: [
@@ -19,6 +19,8 @@ const config: Config = {
         },
         // 터미널 디자인 시안(ADR-066) 표면 토큰 — 페이지 < 패널 < 인셋/강조 순서로 밝아진다
         tm: { ...tm },
+        // 의미 색(ADR-112) — text-live·bg-caution/15·border-disclosure/40. 주황(live)은 실전 전용이다.
+        ...role,
         // 상승/하락 색 — 사용자 차트 테마(themeStore)를 따라 CSS 변수로 바뀐다.
         // <alpha-value>는 쓰지 않는다: Tailwind v4 호환 계층은 이를 1로 바꾸고 투명도 수식어(bg-up/5)를 버린다.
         // 자리표시자가 없으면 v4가 color-mix로 투명도를 입힌다.

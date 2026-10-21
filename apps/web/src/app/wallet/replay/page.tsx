@@ -61,7 +61,7 @@ interface EmotionStat { emotion: string; count: number; avgReturnPct: number | n
 
 const TYPE_LABEL: Record<string, string> = { BUY: "매수", SELL: "매도", DEPOSIT: "입금", WITHDRAWAL: "출금", FEE: "수수료" };
 const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
-const EMO_COLORS = ["#50fa7b", "#bd93f9", "#ff79c6", "#ffb86c", "#8be9fd", "#f1fa8c"];
+const EMO_COLORS = ["#50fa7b", "#bd93f9", "#ff79c6", "#c3c8e2", "#8be9fd", "#f1fa8c"];
 
 /** 로컬 날짜 YYYY-MM-DD (toISOString은 UTC라 KST 오전에 하루 전 날짜가 된다) */
 function ymd(d: Date) {
@@ -331,7 +331,7 @@ export default function ReplayPage() {
                       <span className={buy ? "text-up" : sell ? "text-down" : "text-tm-soft"}>{TYPE_LABEL[ev.type] ?? ev.type}</span>
                       {q != null && <span className="num text-tm-soft">{fmtNum(q)}주{ev.price != null && ` ${fmtNum(ev.price)}`}</span>}
                       {ev.tradeId != null && <OriginBadge origin={ev.origin} originRef={ev.originRef} />}
-                      {ev.planned === false && <span title={PLANNED_DEFINITION}><Pill tone="orange">계획 외</Pill></span>}
+                      {ev.planned === false && <span title={PLANNED_DEFINITION}><Pill tone="caution">계획 외</Pill></span>}
                       {ev.emotion && (
                         <span title={ev.memo ?? undefined}><Chip className="h-[22px]">{emotionLabel(ev.emotion)}</Chip></span>
                       )}
