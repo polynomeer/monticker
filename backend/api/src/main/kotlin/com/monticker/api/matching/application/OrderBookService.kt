@@ -34,7 +34,7 @@ class MatchingOrderBookService {
         }
     }
 
-    /** ADR-109 — 탈퇴한 사용자의 대기 주문을 이 pod의 호가창에서 모두 뺀다. 뺀 건수를 돌려준다. */
+    /** ADR-114 — 탈퇴한 사용자의 대기 주문을 이 pod의 호가창에서 모두 뺀다. 뺀 건수를 돌려준다. */
     fun evictUser(userId: Long): Int {
         var evicted = 0
         books.values.forEach { book ->

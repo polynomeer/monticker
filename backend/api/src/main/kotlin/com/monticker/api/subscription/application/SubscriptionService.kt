@@ -196,12 +196,12 @@ class SubscriptionService(
     }
 
     /**
-     * ADR-109 — 탈퇴. 자동결제 카드(빌링키)를 지우고 활성 구독을 해지한다. 남겨 두면 갱신 배치가 탈퇴한 사용자에게 계속 청구한다
+     * ADR-114 — 탈퇴. 자동결제 카드(빌링키)를 지우고 활성 구독을 해지한다. 남겨 두면 갱신 배치가 탈퇴한 사용자에게 계속 청구한다
      * (갱신 배치는 사용자 탈퇴 여부를 보지 않는다). 남은 기간은 환불하지 않는다. 결제 기록(payment_records)과 구독 이력은
      * 전자상거래법 보존 기간(5년) 동안 남긴다 — 사용자 행이 익명화되어 사람과 직접 이어지지 않는다.
      *
      * 빌링키를 지우기 **전에** 갱신과 같은 구독 행 락을 쥔다. 갱신이 빌링키를 읽은 직후 탈퇴가 커밋돼 한 번 더 청구되던 틈이 닫힌다 —
-     * 갱신이 먼저 락을 쥐었으면 그 청구가 끝난 뒤 탈퇴가 진행되고, 탈퇴가 먼저면 갱신은 해지된 구독을 보고 건너뛴다(ADR-109 Note).
+     * 갱신이 먼저 락을 쥐었으면 그 청구가 끝난 뒤 탈퇴가 진행되고, 탈퇴가 먼저면 갱신은 해지된 구독을 보고 건너뛴다(ADR-114 Note).
      */
     @Transactional
     fun closeForAccountDeletion(userId: Long) {
@@ -240,7 +240,7 @@ class SubscriptionService(
      *     PG가 30분 죽었다고 돈 내는 고객을 FREE로 내리면 안 된다.
      *
      * 배치가 넘긴 [batchRead]는 청크를 읽은 시점의 값이다. 그 사이 해지·탈퇴가 커밋됐을 수 있으므로 행 락을 쥐고 다시 읽은 값으로만
-     * 판단한다 — 해지·탈퇴도 같은 락을 쥐므로 "빌링키를 읽은 직후 탈퇴가 커밋돼 한 번 더 청구"되는 틈이 없다(ADR-053·ADR-109 Note).
+     * 판단한다 — 해지·탈퇴도 같은 락을 쥐므로 "빌링키를 읽은 직후 탈퇴가 커밋돼 한 번 더 청구"되는 틈이 없다(ADR-053·ADR-114 Note).
      * 다시 읽은 만료일이 배치가 읽은 것과 다르면 다른 실행이 이미 이 주기를 갱신했다는 뜻이라 건너뛴다 — 새 만료일로 orderId를
      * 만들면 다음 주기를 미리 긁게 된다.
      */
@@ -380,7 +380,7 @@ class SubscriptionService(
      * 있는 것이고, 갱신 배치가 한 번도 돌지 않았기 때문에 드러나지 않았을 뿐이다.
      *
      * 적체 정리 경로(구독을 넘기지 않음)는 구독 행 락을 쥐고 다시 읽는다. 그 사이 해지·탈퇴된 구독의 **갱신** 청구라면
-     * 재활성화하지 않는다 — `upgrade()`가 ACTIVE로 되돌리면 다음 갱신 배치가 해지한 사용자에게 또 청구한다(ADR-059·ADR-109 Note).
+     * 재활성화하지 않는다 — `upgrade()`가 ACTIVE로 되돌리면 다음 갱신 배치가 해지한 사용자에게 또 청구한다(ADR-059·ADR-114 Note).
      */
     private fun settlePayment(
         record: PaymentRecord,
@@ -398,7 +398,7 @@ class SubscriptionService(
             extend(subscription, record.plan)
             return
         }
-        // 적체 정리 경로 — 갱신·해지·탈퇴와 같은 행 락을 쥐고 지금 상태를 본다(ADR-053·ADR-109 Note).
+        // 적체 정리 경로 — 갱신·해지·탈퇴와 같은 행 락을 쥐고 지금 상태를 본다(ADR-053·ADR-114 Note).
         val target = subscriptionRepo.findByUserIdForUpdate(record.userId).orElse(null) ?: return
         if (target.status != SubscriptionStatus.ACTIVE && isRenewalOrderId(record.pgOrderId)) {
             // 해지·탈퇴 전에 나간 갱신 청구가 뒤늦게 DONE으로 확인됐다. upgrade()로 연장하면 ACTIVE로 되살아나 다음 갱신 배치가

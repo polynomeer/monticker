@@ -29,7 +29,7 @@ import java.math.BigDecimal
 import java.util.UUID
 
 /**
- * ADR-109 Note — 탈퇴 이벤트 하나로 모의투자(wallet → paper → matching)·Quant·분석·AI 제안 데이터가 실제 Postgres의 FK를
+ * ADR-114 Note — 탈퇴 이벤트 하나로 모의투자(wallet → paper → matching)·Quant·분석·AI 제안 데이터가 실제 Postgres의 FK를
  * 어기지 않고 지워지는지, 마켓 전략은 판매 중지만 되는지 본다. 리스너 순서는 Spring 이벤트 멀티캐스터가 `@Order`로 정한다 —
  * 그래서 컨텍스트를 띄워 실제로 발행한다(빈은 리스너와 JdbcTemplate만, Mongo 저장소는 목).
  */

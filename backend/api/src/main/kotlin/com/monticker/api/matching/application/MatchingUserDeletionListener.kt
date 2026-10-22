@@ -11,7 +11,7 @@ import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
 
 /**
- * ADR-109 — 탈퇴하면 모의 주문·체결·사가를 지운다(가상 자금, 보존 의무 없음). 탈퇴 트랜잭션 안에서 동기로 돈다.
+ * ADR-114 — 탈퇴하면 모의 주문·체결·사가를 지운다(가상 자금, 보존 의무 없음). 탈퇴 트랜잭션 안에서 동기로 돈다.
  *
  * 두 단계다([UserDeletionOrder]).
  * 1. [freeze] — 다른 모듈이 지우기 전에 미체결 주문·포지션·계좌 행을 `FOR UPDATE`로 잡는다. 체결의 근거는 힙 호가창이 아니라

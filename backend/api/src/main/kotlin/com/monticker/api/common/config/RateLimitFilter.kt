@@ -41,9 +41,12 @@ class RateLimitFilter(
         // 엔드포인트별 IP 기반 제한. 인증 엔드포인트는 브루트포스 방어를 위해 더 엄격히 적용한다.
         data class Limit(val key: String, val max: Int, val window: Duration)
         val limit = when {
-            path == "/api/auth/login"      -> Limit("auth.login:$ip",   10, Duration.ofMinutes(1))
+            // 네이티브 앱 경로(ADR-109)는 웹과 같은 버킷을 쓴다 — 경로를 바꿔 한도를 두 배로 쓰지 못하게
+            path == "/api/auth/login" || path == "/api/auth/native/login"
+                                           -> Limit("auth.login:$ip",   10, Duration.ofMinutes(1))
             path == "/api/auth/signup"     -> Limit("auth.signup:$ip",   5, Duration.ofMinutes(10))
-            path == "/api/auth/refresh"    -> Limit("auth.refresh:$ip", 20, Duration.ofMinutes(1))
+            path == "/api/auth/refresh" || path == "/api/auth/native/refresh"
+                                           -> Limit("auth.refresh:$ip", 20, Duration.ofMinutes(1))
             path.startsWith("/api/auth/")  -> Limit("auth:$ip",         30, Duration.ofMinutes(1))
             path.startsWith("/api/")       -> Limit("api:$ip",         300, Duration.ofMinutes(1))
             else                           -> { chain.doFilter(req, res); return }

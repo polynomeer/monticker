@@ -200,12 +200,7 @@ class AuthServiceTest {
     fun `refresh accepts a token matching the stored hash and rotates it for a new pair`() {
         val user = User(id = 5L, email = "r@test.com", passwordHash = "x", nickname = "리프레시")
         val refreshToken = provider.generateRefreshToken(5L)
-        every {
-            jdbc.queryForObject(
-                match<String> { it.contains("refresh_tokens") && it.contains("token_hash") },
-                Int::class.java, any<String>(), 5L,
-            )
-        } returns 1
+        every { jdbc.update(match<String> { it.startsWith("DELETE FROM refresh_tokens WHERE token_hash") }, any<String>(), 5L) } returns 1
         every { userRepository.findById(5L) } returns Optional.of(user)
 
         val result = service.refresh(refreshToken)
@@ -213,14 +208,14 @@ class AuthServiceTest {
         assertThat(result.accessToken).isNotBlank()
         assertThat(result.refreshToken).isNotBlank()
         // 삭제는 원문 토큰이 아니라 해시로 매칭되어야 한다 — DB가 유출돼도 저장값에서 원문을 복원할 수 없어야 한다.
-        verify { jdbc.update(match<String> { it.startsWith("DELETE FROM refresh_tokens WHERE token_hash") }, any<String>()) }
-        verify(exactly = 0) { jdbc.update(any<String>(), eq(refreshToken)) }
+        verify { jdbc.update(match<String> { it.startsWith("DELETE FROM refresh_tokens WHERE token_hash") }, any<String>(), 5L) }
+        verify(exactly = 0) { jdbc.update(any<String>(), eq(refreshToken), any()) }
     }
 
     @Test
     fun `refresh rejects a token whose hash has no matching row`() {
         val refreshToken = provider.generateRefreshToken(9L)
-        every { jdbc.queryForObject(any<String>(), Int::class.java, any<String>(), 9L) } returns 0
+        every { jdbc.update(match<String> { it.startsWith("DELETE FROM refresh_tokens WHERE token_hash") }, any<String>(), 9L) } returns 0
 
         assertThatThrownBy { service.refresh(refreshToken) }
             .isInstanceOf(IllegalArgumentException::class.java)
@@ -232,7 +227,7 @@ class AuthServiceTest {
         // token being replayed (possible theft) or a token from a logged-out session. Either
         // way, revoke the whole family instead of just rejecting this one request.
         val refreshToken = provider.generateRefreshToken(9L)
-        every { jdbc.queryForObject(any<String>(), Int::class.java, any<String>(), 9L) } returns 0
+        every { jdbc.update(match<String> { it.startsWith("DELETE FROM refresh_tokens WHERE token_hash") }, any<String>(), 9L) } returns 0
 
         assertThatThrownBy { service.refresh(refreshToken) }
             .isInstanceOf(IllegalArgumentException::class.java)
@@ -244,7 +239,27 @@ class AuthServiceTest {
     fun `refresh rejects a garbage token without querying the database`() {
         assertThatThrownBy { service.refresh("not-a-jwt") }
             .isInstanceOf(IllegalArgumentException::class.java)
-        verify(exactly = 0) { jdbc.queryForObject(any<String>(), Int::class.java, any<String>(), any<Long>()) }
+        verify(exactly = 0) { jdbc.update(match<String> { it.contains("refresh_tokens") }, *anyVararg()) }
+    }
+
+    // 보안 검토 M1 — access token을 refresh 경로에 넣어도 재사용 탐지(모든 세션 폐기)까지 가지 않는다
+    @Test
+    fun `refresh rejects an access token without touching the database or revoking sessions`() {
+        val accessToken = provider.generateAccessToken(9L, "v@test.com", "USER")
+
+        assertThatThrownBy { service.refresh(accessToken) }.isInstanceOf(IllegalArgumentException::class.java)
+
+        verify(exactly = 0) { jdbc.update(match<String> { it.contains("refresh_tokens") }, *anyVararg()) }
+        verify(exactly = 0) { revocationService.revokeAll(any()) }
+    }
+
+    @Test
+    fun `refresh of a hard-deleted user is a 401-style rejection, not a 404`() {
+        val refreshToken = provider.generateRefreshToken(11L)
+        every { jdbc.update(match<String> { it.startsWith("DELETE FROM refresh_tokens WHERE token_hash") }, any<String>(), 11L) } returns 1
+        every { userRepository.findById(11L) } returns Optional.empty()
+
+        assertThatThrownBy { service.refresh(refreshToken) }.isInstanceOf(IllegalArgumentException::class.java)
     }
 
     @Test
@@ -302,7 +317,7 @@ class AuthServiceTest {
         verify(exactly = 1) { events.publishEvent(com.monticker.api.common.account.UserAccountDeletedEvent(7L)) }
     }
 
-    // ADR-109 — 행은 결제·실거래·동의 기록이 참조해 남기고, 사람을 알아볼 수 있는 값은 지운다
+    // ADR-114 — 행은 결제·실거래·동의 기록이 참조해 남기고, 사람을 알아볼 수 있는 값은 지운다
     @Test
     fun `탈퇴하면 사용자 행을 익명화하고 auth가 가진 설정을 지운다`() {
         val user = User(

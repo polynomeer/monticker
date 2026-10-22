@@ -1,9 +1,11 @@
 package com.monticker.api.common.exception
 
 import com.monticker.api.common.aop.RiskLimitException
+import com.monticker.api.common.idempotency.IndeterminateOutcome
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.http.HttpStatus
+import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.core.MethodParameter
 import org.springframework.security.authentication.BadCredentialsException
@@ -66,8 +68,23 @@ class GlobalExceptionHandlerTest {
         // 전역 예외 분류 개선(docs/validation-hardening-plan.md) — 키워드 매칭에 기대지 않는
         // 명시적 타입. "저장된 리밸런싱 목표가 없습니다." 같은 메시지는 IllegalStateException
         // 키워드("불가"/"없음" 등)와 우연히도 안 겹쳐 500으로 샜었다.
-        val resp = handler.handleBusinessRule(BusinessRuleException("저장된 리밸런싱 목표가 없습니다."))
+        val request = MockHttpServletRequest()
+        val resp = handler.handleBusinessRule(BusinessRuleException("저장된 리밸런싱 목표가 없습니다."), request)
         assertThat(resp.statusCode).isEqualTo(HttpStatus.CONFLICT)
+        assertThat(request.getAttribute(IndeterminateOutcome.REQUEST_ATTRIBUTE)).isNull()   // 확정 실패 — 멱등성 키를 풀어도 된다
+    }
+
+    @Test
+    fun `결과 불명 예외는 409이면서 멱등성 필터가 키를 고정하도록 요청에 표시한다 (ADR-110)`() {
+        val e = object : BusinessRuleException("주문 결과를 확인하고 있습니다(주문 #7)."), IndeterminateOutcome {
+            override val orderId: Long = 7
+        }
+        val request = MockHttpServletRequest()
+
+        val resp = handler.handleBusinessRule(e, request)
+
+        assertThat(resp.statusCode).isEqualTo(HttpStatus.CONFLICT)
+        assertThat(request.getAttribute(IndeterminateOutcome.REQUEST_ATTRIBUTE)).isSameAs(e)
     }
 
     @Test

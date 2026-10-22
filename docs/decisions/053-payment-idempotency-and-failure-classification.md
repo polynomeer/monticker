@@ -216,7 +216,7 @@ confirm하면 토스가 2회차를 4xx로 거절하지만, 그때 우리는 "결
 
 ## Notes
 
-- 2026-10 — 배치가 읽은 뒤 바뀐 구독을 청구하던 틈을 닫았다([ADR-109](109-account-deletion-data-retention.md) Notes). 갱신 배치는 청크를 먼저
+- 2026-10 — 배치가 읽은 뒤 바뀐 구독을 청구하던 틈을 닫았다([ADR-114](114-account-deletion-data-retention.md) Notes). 갱신 배치는 청크를 먼저
   읽고 하나씩 청구하므로, 그 사이 해지·탈퇴가 커밋돼도 배치가 든 엔티티는 ACTIVE였고 빌링키도 락 없이 읽었다 — 한 번 더 청구될 수 있었다.
   이제 `renewSubscription`은 구독 행을 `PESSIMISTIC_WRITE`로 다시 읽어(그리고 refresh해) 판단하고, `cancel`·`closeForAccountDeletion`도
   같은 락을 쥔다. 다시 읽은 구독이 ACTIVE가 아니거나 **만료일이 배치가 읽은 값과 다르면** `Skipped`다. 만료일 조건은 이 ADR의 멱등성을

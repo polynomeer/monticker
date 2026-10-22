@@ -8,7 +8,7 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
 
 /**
- * ADR-109 — 탈퇴하면 모의 계좌와 그 기록을 지운다(가상 자금, 보존 의무 없음). 탈퇴 트랜잭션 안에서 동기로 돈다.
+ * ADR-114 — 탈퇴하면 모의 계좌와 그 기록을 지운다(가상 자금, 보존 의무 없음). 탈퇴 트랜잭션 안에서 동기로 돈다.
  *
  * 두 단계다([UserDeletionOrder]).
  * 1. [freeze] — 아직 발동하지 않은 조건부 주문을 취소한다. UPDATE가 행을 잠그므로 지금 발동 중인 주문(SKIP LOCKED로 잡힌 행)은

@@ -102,4 +102,19 @@ class RateLimitFilterTest {
 
         assertThat(keys.single().single()).isEqualTo("rate:auth.login:198.51.100.20")
     }
+
+    @Test
+    fun `네이티브 앱 로그인·갱신은 웹과 같은 버킷을 쓴다 — 경로를 바꿔 한도를 늘리지 못한다 (ADR-109)`() {
+        val keys = mutableListOf<List<String>>()
+        every { redis.execute(any<RedisScript<Long>>(), capture(keys), any<String>()) } returns 1L
+
+        listOf("/api/auth/login", "/api/auth/native/login", "/api/auth/refresh", "/api/auth/native/refresh").forEach {
+            filter().doFilter(request(it).apply { remoteAddr = "203.0.113.9" }, MockHttpServletResponse(), MockFilterChain())
+        }
+
+        assertThat(keys.map { it.single() }).containsExactly(
+            "rate:auth.login:203.0.113.9", "rate:auth.login:203.0.113.9",
+            "rate:auth.refresh:203.0.113.9", "rate:auth.refresh:203.0.113.9",
+        )
+    }
 }

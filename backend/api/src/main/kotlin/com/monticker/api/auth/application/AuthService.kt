@@ -115,17 +115,19 @@ class AuthService(
     }
 
     fun refresh(refreshToken: String): TokenPair {
+        // access token은 여기서 거부한다 — 재사용 탐지까지 가면 그 사용자의 모든 세션이 끊긴다(getRefreshUserId)
         val userId = try {
-            jwtTokenProvider.getUserId(refreshToken)
+            jwtTokenProvider.getRefreshUserId(refreshToken)
         } catch (e: Exception) {
             throw IllegalArgumentException("유효하지 않은 refresh token입니다.")
         }
         val tokenHash = hashToken(refreshToken)
-        val count = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM refresh_tokens WHERE token_hash = ? AND user_id = ? AND expires_at > now()",
-            Int::class.java, tokenHash, userId,
-        ) ?: 0
-        if (count == 0) {
+        // 확인과 폐기를 DELETE 한 번으로 — 같은 토큰으로 동시에 두 번 갱신해도 하나만 성공하고, 나머지는 재사용으로 본다
+        val deleted = jdbc.update(
+            "DELETE FROM refresh_tokens WHERE token_hash = ? AND user_id = ? AND expires_at > now()",
+            tokenHash, userId,
+        )
+        if (deleted == 0) {
             // 서명은 유효한데 DB엔 없다 — 정상 흐름이라면 있을 수 없다(로그아웃했거나, 이미
             // 회전으로 폐기된 토큰을 다시 쓴 것). 탈취된 토큰의 재사용 가능성으로 보고 이
             // 사용자의 모든 refresh token을 폐기해 전체 세션을 강제 종료한다(H3). 정상적인
@@ -135,19 +137,13 @@ class AuthService(
             revocationService.revokeAll(userId)
             throw IllegalArgumentException("만료되었거나 유효하지 않은 refresh token입니다.")
         }
-        jdbc.update("DELETE FROM refresh_tokens WHERE token_hash = ?", tokenHash)
-        val user = userRepository.findById(userId).orElseThrow()
+        val user = userRepository.findById(userId).orElseThrow { IllegalArgumentException("탈퇴한 계정입니다.") }
         require(!user.isDeleted) { "탈퇴한 계정입니다." }
         return issueTokens(user)
     }
 
-    /**
-     * 이 refresh token 하나만 폐기한다(로그아웃한 기기만) — 비밀번호 재설정처럼 모든 기기를
-     * 강제 로그아웃하지 않는다. 토큰이 이미 만료·사용됐거나 형식이 잘못돼도 조용히 무시한다
-     * (로그아웃은 이미 목표 상태에 도달했으므로 실패로 취급할 이유가 없다).
-     */
     fun logout(refreshToken: String) {
-        val userId = runCatching { jwtTokenProvider.getUserId(refreshToken) }.getOrNull() ?: return
+        val userId = runCatching { jwtTokenProvider.getRefreshUserId(refreshToken) }.getOrNull() ?: return
         jdbc.update(
             "DELETE FROM refresh_tokens WHERE token_hash = ? AND user_id = ?",
             hashToken(refreshToken), userId,
@@ -184,7 +180,7 @@ class AuthService(
     fun deleteAccount(userId: Long, password: String) {
         val user = userRepository.findById(userId).orElseThrow()
         require(passwordEncoder.matches(password, user.passwordHash)) { "비밀번호가 올바르지 않습니다." }
-        // 사용자 행이 남는 소프트 삭제라 CASCADE로 지워지지 않는 데이터를 각 모듈이 같은 트랜잭션에서 지운다(ADR-109).
+        // 사용자 행이 남는 소프트 삭제라 CASCADE로 지워지지 않는 데이터를 각 모듈이 같은 트랜잭션에서 지운다(ADR-114).
         // 먼저 낸다 — 거부하는 리스너(결과가 열린 실주문이 있는 증권사 계좌)가 던지면 아래 익명화까지 함께 롤백된다.
         events.publishEvent(UserAccountDeletedEvent(userId))
         jdbc.update("DELETE FROM refresh_tokens WHERE user_id = ?", userId)
