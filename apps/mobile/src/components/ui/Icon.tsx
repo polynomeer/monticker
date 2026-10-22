@@ -3,17 +3,20 @@ import Svg, { Circle, Line, Path, Polygon, Rect } from "react-native-svg";
 /** 시안의 선 아이콘(24 그리드, 둥근 끝). 색은 부모가 정한다 */
 export type IconName =
   | "home" | "star" | "wallet" | "search" | "user" | "chevronRight" | "chevronLeft" | "sort" | "plus" | "minus"
-  | "flask" | "file" | "alert" | "clock" | "mic" | "bell" | "moon" | "mail" | "shield" | "bank" | "check" | "close";
+  | "flask" | "file" | "alert" | "clock" | "mic" | "bell" | "moon" | "mail" | "shield" | "bank" | "check" | "close"
+  | "share";
 
 interface Props {
   name: IconName;
   size?: number;
   color: string;
   strokeWidth?: number;
+  /** 채운 모양(관심종목에 든 별 등) */
+  filled?: boolean;
 }
 
-export function Icon({ name, size = 24, color, strokeWidth = 2 }: Props) {
-  const p = { stroke: color, strokeWidth, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, fill: "none" };
+export function Icon({ name, size = 24, color, strokeWidth = 2, filled }: Props) {
+  const p = { stroke: color, strokeWidth, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, fill: filled ? color : "none" };
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
       {SHAPES[name](p)}
@@ -46,4 +49,5 @@ const SHAPES: Record<IconName, (p: StrokeProps) => React.ReactNode> = {
   bank: (p) => <><Path d="M3 21h18" {...p} /><Path d="M5 21V10l7-5 7 5v11" {...p} /><Path d="M9 21v-6h6v6" {...p} /></>,
   check: (p) => <Path d="M20 6 9 17l-5-5" {...p} />,
   close: (p) => <><Path d="M18 6 6 18" {...p} /><Path d="m6 6 12 12" {...p} /></>,
+  share: (p) => <><Path d="M12 3v12" {...p} fill="none" /><Path d="m7 8 5-5 5 5" {...p} fill="none" /><Path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" {...p} fill="none" /></>,
 };

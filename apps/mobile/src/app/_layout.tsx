@@ -45,7 +45,8 @@ function ThemedStack() {
         <Stack.Screen name="settings/updown" options={{ headerShown: false }} />
         <Stack.Screen name="alerts"          options={{ headerShown: false }} />
         <Stack.Screen name="accounts"        options={{ title: "다른 증권 계좌" }} />
-        <Stack.Screen name="stocks/[symbol]" options={{ title: "" }} />
+        <Stack.Screen name="stocks/[symbol]" options={{ headerShown: false }} />
+        <Stack.Screen name="order"           options={{ headerShown: false, presentation: "formSheet", sheetGrabberVisible: true, sheetCornerRadius: 38 }} />
         <Stack.Screen name="login"           options={{ title: "로그인", presentation: "modal" }} />
       </Stack>
     </>
