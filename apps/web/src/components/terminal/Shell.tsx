@@ -221,13 +221,13 @@ function TopBar({ left, stats, account }: { left: ReactNode; stats: TopStat[]; a
           data-account={account.kind}
           className={cn(
             "flex h-9 items-center gap-2 rounded-lg border px-3 text-13 text-dracula-fg hover:bg-tm-raised",
-            live ? "border-dracula-orange/60" : "border-tm-line2",
+            live ? "border-live/60" : "border-tm-line2",
           )}
         >
-          <span aria-hidden className={cn("h-[7px] w-[7px] rounded-full", live ? "bg-dracula-orange" : "bg-dracula-yellow")} />
+          <span aria-hidden className={cn("h-[7px] w-[7px] rounded-full", live ? "bg-live" : "bg-dracula-yellow")} />
           {live ? "실전" : "모의투자"} 계좌
           {chip.amount !== undefined && (
-            <span className={cn("num", live ? "text-dracula-orange" : "text-tm-muted")} title={chip.amountLabel}>
+            <span className={cn("num", live ? "text-live" : "text-tm-muted")} title={chip.amountLabel}>
               <span className="sr-only">{chip.amountLabel} </span>
               {chip.amount}
             </span>

@@ -5,7 +5,7 @@ import type { FrontierChartTheme } from "@/components/stock/chart/types";
 
 const theme: FrontierChartTheme = {
   bg: "#000000", text: "#ffffff", grid: "#333333", sample: "#c3c8e2", frontier: "#bd93f9",
-  maxSharpe: "#50fa7b", optimal: "#bd93f9", equalWeight: "#ffb86c", held: "#8be9fd",
+  maxSharpe: "#50fa7b", optimal: "#bd93f9", equalWeight: "#ff79c6", held: "#8be9fd",
 };
 
 type Series = { name: string; type: string; data: [number, number, number | null][] };

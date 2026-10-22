@@ -74,7 +74,7 @@ const sections: LegalSection[] = [
       <p>
         구독형 유료 서비스 및 전략 마켓 결제는 회사가 지정한 전자결제대행사(PG사)를 통해
         처리됩니다. 결제·환불·정기결제 해지 절차는{" "}
-        <span className="text-dracula-orange">[구독 관리 화면 경로 — 확정 후 기재]</span>에서 확인할
+        <span className="text-caution">[구독 관리 화면 경로 — 확정 후 기재]</span>에서 확인할
         수 있습니다.
       </p>
     ),
@@ -82,7 +82,7 @@ const sections: LegalSection[] = [
   {
     heading: "제8조 (환불 정책)",
     body: (
-      <p className="text-dracula-orange">
+      <p className="text-caution">
         [전자상거래법 등 관련 법령에 따른 청약철회·환불 기준은 법률 검토 후 확정합니다]
       </p>
     ),
@@ -121,7 +121,7 @@ const sections: LegalSection[] = [
   {
     heading: "제12조 (준거법 및 관할)",
     body: (
-      <p className="text-dracula-orange">
+      <p className="text-caution">
         이 약관은 대한민국 법령을 준거법으로 하며, 분쟁 발생 시 관할 법원은 [사업자 등록 및 법률
         검토 후 확정]으로 합니다.
       </p>

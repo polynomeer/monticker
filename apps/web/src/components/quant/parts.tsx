@@ -31,7 +31,7 @@ export function fmtMatch(rate: number | null | undefined, compared: number | nul
 
 export function matchTone(rate: number | null | undefined): string {
   if (rate == null) return "text-tm-muted";
-  return rate >= 0.85 ? "text-dracula-green" : rate >= 0.6 ? "text-dracula-orange" : "text-down";
+  return rate >= 0.85 ? "text-dracula-green" : rate >= 0.6 ? "text-caution" : "text-down";
 }
 
 /** 백엔드 MDD는 양수 %(고점 대비 낙폭)다 — 손실로 읽히게 음수로 표기한다. */

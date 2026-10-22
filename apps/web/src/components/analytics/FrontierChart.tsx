@@ -21,7 +21,7 @@ const THEME: FrontierChartTheme = {
   frontier: dracula.purple,
   maxSharpe: dracula.green,
   optimal: dracula.purple,
-  equalWeight: dracula.orange,
+  equalWeight: dracula.pink,
   held: dracula.cyan,
 };
 

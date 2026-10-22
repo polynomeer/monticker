@@ -30,7 +30,7 @@ export function StatusCardFrame({ children, className, live }: { children: React
 const TONE = {
   ok: { bg: "bg-[#22392c]", fg: "text-dracula-green", icon: "check" as IconName },
   error: { bg: "bg-[#47262d]", fg: "text-[#ff8a8a]", icon: "x" as IconName },
-  warn: { bg: "bg-[#43342a]", fg: "text-dracula-orange", icon: "alert" as IconName },
+  warn: { bg: "bg-[#3d3f2a]", fg: "text-caution", icon: "alert" as IconName },
   pending: { bg: "bg-tm-raised", fg: "text-dracula-purple", icon: "clock" as IconName },
 };
 

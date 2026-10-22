@@ -51,7 +51,7 @@ export default function StockScoreCard({ stockId, bare = false }: Props) {
         <span className={bare ? "text-2xs text-tm-muted" : "text-15 font-bold"}>종목 스코어</span>
         {data?.isValuationPopulationMocked && (
           <span title="KIS API 미설정 또는 응답 없음 — 비교 종목 상당수가 모의 데이터라 스코어 신뢰도가 낮음">
-            <Pill tone="orange">모의 데이터</Pill>
+            <Pill tone="caution">모의 데이터</Pill>
           </span>
         )}
       </div>

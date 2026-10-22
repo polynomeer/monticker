@@ -36,7 +36,7 @@ const sections: LegalSection[] = [
         회원 탈퇴 시 개인정보는 지체 없이 파기하거나 알아볼 수 없게 바꿉니다. 다만 결제·실거래 기록 등
         관계 법령이나 분쟁 대비를 위해 보존이 필요한 기록은 정해진 기간 동안 보관합니다. 자세한 내용은
         아래 &ldquo;4. 탈퇴 시 개인정보 처리&rdquo;를 확인하세요.{" "}
-        <span className="text-dracula-orange">[정확한 보유기간은 법률 검토 후 확정]</span>
+        <span className="text-caution">[정확한 보유기간은 법률 검토 후 확정]</span>
       </p>
     ),
   },
@@ -75,7 +75,7 @@ const sections: LegalSection[] = [
         </ul>
         <p>
           보관 기록은 위 목적 외에는 이용하지 않습니다.{" "}
-          <span className="text-dracula-orange">
+          <span className="text-caution">
             [보존 대상, 보존 기간(5년), 기간이 지난 뒤의 파기 절차는 법률 검토 후 확정]
           </span>
         </p>
@@ -138,7 +138,7 @@ const sections: LegalSection[] = [
   {
     heading: "9. 개인정보 보호책임자",
     body: (
-      <p className="text-dracula-orange">
+      <p className="text-caution">
         [운영자명], [연락처 이메일] — 사업자 등록 및 정식 운영 개시 전 확정 예정
       </p>
     ),

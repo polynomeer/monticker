@@ -77,11 +77,11 @@ const PATTERN_LABEL: Record<string, string> = {
   HEAD_AND_SHOULDERS: "헤드앤숄더", DOUBLE_BOTTOM: "이중 바닥", DOUBLE_TOP: "이중 천장",
   ASCENDING_TRIANGLE: "상승 삼각수렴", DESCENDING_TRIANGLE: "하락 삼각수렴",
 };
-const REGIME_META: Record<string, { label: string; tone: "green" | "red" | "muted" | "orange" }> = {
+const REGIME_META: Record<string, { label: string; tone: "green" | "red" | "muted" | "caution" }> = {
   BULL: { label: "상승장", tone: "green" },
   BEAR: { label: "하락장", tone: "red" },
   SIDEWAYS: { label: "횡보장", tone: "muted" },
-  HIGH_VOL: { label: "고변동성", tone: "orange" },
+  HIGH_VOL: { label: "고변동성", tone: "caution" },
 };
 
 function won(n: number) { return Math.round(n).toLocaleString("ko-KR"); }
@@ -387,7 +387,7 @@ export default function AnalyticsPage() {
         { label: "분석 기간", value: usedPeriod ? `${usedPeriod.firstDate} ~ ${usedPeriod.lastDate} · ${usedPeriod.observations}일` : periodLabel(period), tone: "text-tm-soft" },
         held
           ? { label: "현재 보유 샤프", value: heldSharpe == null ? "—" : heldSharpe.toFixed(2), tone: heldSharpe == null ? "text-tm-muted" : "text-dracula-cyan" }
-          : { label: "동일가중 샤프", value: eqSharpe == null ? "—" : eqSharpe.toFixed(2), tone: eqSharpe == null ? "text-tm-muted" : "text-dracula-orange" },
+          : { label: "동일가중 샤프", value: eqSharpe == null ? "—" : eqSharpe.toFixed(2), tone: eqSharpe == null ? "text-tm-muted" : "text-dracula-pink" },
         { label: "샤프 최대 (과거 기준)", value: best == null ? "—" : best.sharpe.toFixed(2), tone: best == null ? "text-tm-muted" : "text-dracula-green" },
       ]}
     >

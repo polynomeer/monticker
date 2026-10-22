@@ -17,6 +17,19 @@ export const dracula = {
   yellow: "#f1fa8c",
 } as const;
 
+/**
+ * 의미 색(ADR-112) — 화면 코드는 팔레트 이름 대신 이것을 쓴다(`text-live`, `bg-caution/15`).
+ * 주황은 실전(실제 돈) 전용이다: 실전 배지·실전 경고·실주문 확인 말고는 쓰지 않는다.
+ */
+export const role = {
+  /** 실전 계좌·실주문 */
+  live: dracula.orange,
+  /** 경고·주의·"모의 데이터" 표식 */
+  caution: dracula.yellow,
+  /** 공시 이벤트 */
+  disclosure: dracula.cyan,
+} as const;
+
 /** 터미널 디자인 시안(ADR-066) 표면 토큰 — 페이지 < 패널 < 인셋/강조 순서로 밝아진다 */
 export const tm = {
   page: "#1b1c24",

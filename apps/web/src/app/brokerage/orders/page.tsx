@@ -44,7 +44,7 @@ function CheckLine({ c }: { c: Check }) {
   const icon = {
     ok: <Icon name="check" size={14} strokeWidth={2.4} className="text-dracula-green" />,
     fail: <Icon name="x" size={14} strokeWidth={2.4} className="text-[#ff8a8a]" />,
-    warn: <Icon name="alert" size={14} className="text-dracula-orange" />,
+    warn: <Icon name="alert" size={14} className="text-caution" />,
     wait: <Icon name="clock" size={14} className="text-tm-muted" />,
     na: <span className="w-3.5 text-center text-tm-muted">–</span>,
   }[c.state];
@@ -253,7 +253,7 @@ export default function BrokerageOrderPage() {
     { label: "현재가", value: currentPrice > 0 ? `${fmtNum(currentPrice)}원` : "—" },
     { label: "등락", value: fmtChangeRate(changeRate) ?? "—", tone: changeRate != null ? dirClass(changeRate) : undefined },
     { label: "호가 단위", value: tick ? `${fmtNum(tick)}원` : "—" },
-    { label: "가용 현금", value: balanceError ? "조회 불가" : won(balance?.cash), tone: balanceError ? "text-dracula-orange" : undefined },
+    { label: "가용 현금", value: balanceError ? "조회 불가" : won(balance?.cash), tone: balanceError ? "text-caution" : undefined },
     { ...apiStat(account), label: "API" },
   ];
 
@@ -347,7 +347,7 @@ export default function BrokerageOrderPage() {
                   ))}
                 </div>
               )}
-              <span className={cn("text-2xs", balanceError ? "text-dracula-orange" : "text-tm-muted")}>
+              <span className={cn("text-2xs", balanceError ? "text-caution" : "text-tm-muted")}>
                 {balanceLoading
                   ? "잔고 조회 중..."
                   : balanceError
@@ -397,10 +397,10 @@ export default function BrokerageOrderPage() {
               tabIndex={-1}
               role="region"
               aria-label="실제 주문 확인"
-              className="flex flex-col gap-3.5 rounded-xl border-[1.5px] border-dracula-orange bg-tm-inner p-5 outline-hidden"
+              className="flex flex-col gap-3.5 rounded-xl border-[1.5px] border-live bg-tm-inner p-5 outline-hidden"
             >
               <div className="flex items-center gap-2.5">
-                <Icon name="alert" size={20} className="text-dracula-orange" />
+                <Icon name="alert" size={20} className="text-live" />
                 <span className="text-base font-bold">실제 주문을 보낼까요?</span>
               </div>
               <div className="flex flex-col gap-2">
@@ -437,7 +437,7 @@ export default function BrokerageOrderPage() {
           )}
           {orderError && (
             <Notice tone="warn">
-              <b className="text-dracula-orange">주문 제출에 실패했습니다</b>
+              <b className="text-caution">주문 제출에 실패했습니다</b>
               <br />{orderError}
             </Notice>
           )}

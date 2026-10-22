@@ -131,8 +131,8 @@ export const RULE_META: Record<string, { letter: string; color: string; tag: str
   RSI_ABOVE:            { letter: "R", color: "#8be9fd", tag: "지표", category: "price" },
   RSI_BELOW:            { letter: "R", color: "#8be9fd", tag: "지표", category: "price" },
   VOLUME_SURGE:         { letter: "V", color: "#bd93f9", tag: "거래량", category: "event" },
-  NEWS_PUBLISHED:       { letter: "N", color: "#8be9fd", tag: "뉴스", category: "news" },
-  DISCLOSURE_PUBLISHED: { letter: "D", color: "#ffb86c", tag: "공시", category: "news" },
+  NEWS_PUBLISHED:       { letter: "N", color: "#c3c8e2", tag: "뉴스", category: "news" },
+  DISCLOSURE_PUBLISHED: { letter: "D", color: "#8be9fd", tag: "공시", category: "news" },
   HOLDING_DROP:         { letter: "H", color: "#ff8a8a", tag: "보유 종목", category: "account" },
   // ADR-090 — 내 전략·구독 전략의 포워드 테스트 신호(규칙 없이 서버가 적재)
   QUANT_SIGNAL:         { letter: "Q", color: "#50fa7b", tag: "시그널", category: "signal" },
