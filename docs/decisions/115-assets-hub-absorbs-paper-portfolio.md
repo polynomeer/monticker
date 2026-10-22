@@ -1,7 +1,9 @@
-# ADR-110: "내 자산"이 모의 포트폴리오를 탭으로 품고, 실전투자(주문)는 따로 둔다
+# ADR-115: "내 자산"이 모의 포트폴리오를 탭으로 품고, 실전투자(주문)는 따로 둔다
 
 ## Status
 Accepted
+
+**Note (2026-10-22):** 처음엔 ADR-115으로 썼다. 같은 시기 main에 다른 ADR-115(실거래 주문 멱등성)이 먼저 들어가 115로 옮겼다.
 
 [account-aggregation-plan.md](../account-aggregation-plan.md) §8의 "기존 `portfolio/`(모의)와 `brokerage/`(실계좌)를 하나의 내 자산으로 묶는다"를
 어디까지 할지 정한다. [ADR-066](066-terminal-ui-shell.md)의 아이콘 레일 구성을 바꾼다(레일 원칙 — 한 번의 클릭, 가장 긴 경로 일치 — 은 그대로).
