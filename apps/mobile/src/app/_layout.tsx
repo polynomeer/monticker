@@ -1,9 +1,11 @@
 import { Stack } from "expo-router";
 import { useEffect } from "react";
 import { StatusBar } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { registerPushToken } from "@/services/notifications";
 import { restoreSession } from "@/services/auth";
 import { useAuthState } from "@/services/useAuth";
+import { ThemeProvider, useTheme } from "@/theme/ThemeProvider";
 
 export default function RootLayout() {
   const auth = useAuthState();
@@ -12,14 +14,26 @@ export default function RootLayout() {
   useEffect(() => { if (auth === "signedIn") registerPushToken(); }, [auth]);
 
   return (
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <ThemedStack />
+      </ThemeProvider>
+    </SafeAreaProvider>
+  );
+}
+
+function ThemedStack() {
+  const { c, scheme } = useTheme();
+  return (
     <>
-      <StatusBar barStyle="light-content" backgroundColor="#0d1117" />
+      <StatusBar barStyle={scheme === "dark" ? "light-content" : "dark-content"} backgroundColor={c.bg} />
       <Stack
         screenOptions={{
-          headerStyle: { backgroundColor: "#0d1117" },
-          headerTintColor: "#e8eaf6",
+          headerStyle: { backgroundColor: c.bg },
+          headerTintColor: c.text,
           headerTitleStyle: { fontWeight: "700" },
-          contentStyle: { backgroundColor: "#0d1117" },
+          headerShadowVisible: false,
+          contentStyle: { backgroundColor: c.bg },
         }}
       >
         <Stack.Screen name="index"           options={{ title: "monticker" }} />
