@@ -7,7 +7,8 @@
     "icon": "./assets/icon.png",
     "platforms": [
       "ios",
-      "android"
+      "android",
+      "web"
     ],
     "android": {
       "package": "com.augboot.monticker",
@@ -34,6 +35,9 @@
           "icon": "./assets/notification-icon.png"
         }
       ]
-    ]
+    ],
+    "web": {
+      "output": "single"
+    }
   }
 }
