@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, RefreshControl } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { getApiBase } from "@/services/api";
+import { rememberStock } from "@/services/recent";
 
 interface StockPrice { stockId: number; symbol: string; price: number; volume: number; changeRate?: number; hasData: boolean }
 interface StockEvent { id: number; eventType: string; title: string; importanceScore: number; eventTime: string }
@@ -37,7 +38,7 @@ export default function StockDetailScreen() {
       .then(r => r.json())
       .then((stocks: { id: number; symbol: string; name: string }[]) => {
         const match = stocks.find(s => s.symbol === symbol);
-        if (match) { setStockId(match.id); setName(match.name); }
+        if (match) { setStockId(match.id); setName(match.name); rememberStock({ symbol: match.symbol, name: match.name }); }
       });
   }, [symbol]);
 

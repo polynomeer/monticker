@@ -1,4 +1,4 @@
-import * as SecureStore from "expo-secure-store";
+import * as SecureStore from "./secureStore";
 import { getApiBase } from "./api";
 
 /**
