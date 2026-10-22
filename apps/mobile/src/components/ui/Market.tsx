@@ -52,7 +52,7 @@ export function Sparkline({ values, width = 60, height = 28, color, strokeWidth 
   const pts = sparklinePoints(values, width, height, strokeWidth + 2);
   const m = marker ? pts[Math.min(marker.index, pts.length - 1)] : null;
   return (
-    <Svg width={width} height={height} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+    <Svg width={width} height={height}>
       <Polyline points={pts.map(([x, y]) => `${x},${y}`).join(" ")} fill="none" stroke={stroke} strokeWidth={strokeWidth} strokeLinejoin="round" strokeLinecap="round" />
       {m && marker && <Circle cx={m[0]} cy={m[1]} r={5} fill={marker.color} />}
     </Svg>
