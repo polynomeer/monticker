@@ -4,6 +4,7 @@
     "slug": "monticker",
     "version": "0.1.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "platforms": [
       "ios",
       "android"
@@ -11,12 +12,19 @@
     "android": {
       "package": "com.augboot.monticker",
       "adaptiveIcon": {
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "monochromeImage": "./assets/adaptive-icon-monochrome.png",
+        "backgroundColor": "#6a3fd4"
       }
     },
     "ios": {
       "bundleIdentifier": "com.augboot.monticker",
-      "supportsTablet": false
+      "supportsTablet": false,
+      "icon": {
+        "light": "./assets/icon.png",
+        "dark": "./assets/icon-dark.png",
+        "tinted": "./assets/icon-tinted.png"
+      }
     },
     "plugins": [
       "expo-router",
