@@ -173,7 +173,7 @@ class StrategyMarketController(
         val userId = jwtTokenProvider.getUserId(auth.removePrefix("Bearer ").trim())
 
         // 전략 정보 조회 (creator, price). queryForMap은 0건이면 EmptyResultDataAccessException(→ 500)이라 404로 바꾼다.
-        // ADR-109 Note — 판매 중지된 전략은 구독할 수 없다. FOR SHARE는 크리에이터 탈퇴(판매 중지 UPDATE)와 직렬화한다 —
+        // ADR-114 Note — 판매 중지된 전략은 구독할 수 없다. FOR SHARE는 크리에이터 탈퇴(판매 중지 UPDATE)와 직렬화한다 —
         // 없으면 판매 중지가 구독을 지운 뒤 이 INSERT가 들어와 판매 중지된 전략에 구독이 남는다.
         val strategy = try {
             jdbc.queryForMap(

@@ -1018,7 +1018,7 @@ class BrokerageServiceTest {
         verify(exactly = 0) { accountRepo.save(any()) }
     }
 
-    // ── ADR-109 탈퇴 ────────────────────────────────────────────────────────────
+    // ── ADR-114 탈퇴 ────────────────────────────────────────────────────────────
 
     private fun stubAccountDeletion(accounts: List<BrokerageAccount>, openOrders: Map<Long, Long> = emptyMap(), triggered: Long = 0) {
         every { accountRepo.findAllByUserId(1L) } returns accounts

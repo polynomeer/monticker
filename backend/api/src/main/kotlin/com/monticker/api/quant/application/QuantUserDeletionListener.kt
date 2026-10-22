@@ -10,7 +10,7 @@ import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
 
 /**
- * ADR-109 — 탈퇴하면 Quant Lab 데이터를 지우고, 마켓에 올린 전략은 판매 중지한다. 탈퇴 트랜잭션 안에서 동기로 돈다.
+ * ADR-114 — 탈퇴하면 Quant Lab 데이터를 지우고, 마켓에 올린 전략은 판매 중지한다. 탈퇴 트랜잭션 안에서 동기로 돈다.
  *
  * - **구독자로서.** 구독 행을 지우고 그 전략의 subscribe_count를 1씩 줄인다(구독 해지와 같다).
  * - **크리에이터로서.** strategy_market 행은 지우지 않는다 — creator_earnings(5년 보존)가 참조한다. delisted_at을 채워 마켓

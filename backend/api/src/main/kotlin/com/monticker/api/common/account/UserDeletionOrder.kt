@@ -1,7 +1,7 @@
 package com.monticker.api.common.account
 
 /**
- * ADR-109 Note — [UserAccountDeletedEvent] 리스너의 실행 순서(`@Order` 값). 작은 값이 먼저 돈다. 값이 없는 리스너는
+ * ADR-114 Note — [UserAccountDeletedEvent] 리스너의 실행 순서(`@Order` 값). 작은 값이 먼저 돈다. 값이 없는 리스너는
  * 맨 뒤(LOWEST_PRECEDENCE)에 돈다 — 다른 모듈 테이블과 FK로 엮이지 않은 데이터는 순서를 정하지 않는다.
  *
  * 모의투자 데이터는 세 모듈의 테이블이 FK로 엮여 있다(order_emotion_tags → paper_trades → fills → orders,

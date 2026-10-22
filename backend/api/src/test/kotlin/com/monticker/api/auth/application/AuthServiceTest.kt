@@ -317,7 +317,7 @@ class AuthServiceTest {
         verify(exactly = 1) { events.publishEvent(com.monticker.api.common.account.UserAccountDeletedEvent(7L)) }
     }
 
-    // ADR-109 — 행은 결제·실거래·동의 기록이 참조해 남기고, 사람을 알아볼 수 있는 값은 지운다
+    // ADR-114 — 행은 결제·실거래·동의 기록이 참조해 남기고, 사람을 알아볼 수 있는 값은 지운다
     @Test
     fun `탈퇴하면 사용자 행을 익명화하고 auth가 가진 설정을 지운다`() {
         val user = User(

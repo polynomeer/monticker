@@ -8,7 +8,7 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
 
 /**
- * ADR-109 — 탈퇴하면 모의투자 원장·감정 태그·행동 점수·주간 리포트 발송 기록을 지운다(가상 자금, 보존 의무 없음).
+ * ADR-114 — 탈퇴하면 모의투자 원장·감정 태그·행동 점수·주간 리포트 발송 기록을 지운다(가상 자금, 보존 의무 없음).
  * order_emotion_tags가 paper_trades를 참조하므로 paper보다 먼저 돈다([UserDeletionOrder.WALLET]).
  * ledger_events.paper_trade_id는 FK가 없다(ADR-043). 탈퇴 트랜잭션 안에서 동기로 돈다.
  */
