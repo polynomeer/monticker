@@ -7,6 +7,7 @@ import { restoreSession } from "@/services/auth";
 import { useAuthState } from "@/services/useAuth";
 import { ThemeProvider, useTheme } from "@/theme/ThemeProvider";
 import { restoreTradingMode } from "@/services/mode";
+import { LockGate } from "@/components/shell/LockGate";
 
 export default function RootLayout() {
   const auth = useAuthState();
@@ -19,7 +20,9 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <ThemedStack />
+        <LockGate active={auth === "signedIn"}>
+          <ThemedStack />
+        </LockGate>
       </ThemeProvider>
     </SafeAreaProvider>
   );
@@ -47,7 +50,8 @@ function ThemedStack() {
         <Stack.Screen name="accounts"        options={{ title: "다른 증권 계좌" }} />
         <Stack.Screen name="stocks/[symbol]" options={{ headerShown: false }} />
         <Stack.Screen name="order"           options={{ headerShown: false, presentation: "formSheet", sheetGrabberVisible: true, sheetCornerRadius: 38 }} />
-        <Stack.Screen name="login"           options={{ title: "로그인", presentation: "modal" }} />
+        <Stack.Screen name="login"           options={{ headerShown: false, presentation: "modal" }} />
+        <Stack.Screen name="onboarding"      options={{ headerShown: false, gestureEnabled: false }} />
       </Stack>
     </>
   );
