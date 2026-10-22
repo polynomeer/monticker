@@ -15,7 +15,7 @@ interface UserSubscriptionRepository : JpaRepository<UserSubscription, Long> {
     fun findByUserId(userId: Long): Optional<UserSubscription>
 
     /**
-     * 갱신·해지·탈퇴를 구독 행 하나로 직렬화한다 (ADR-053·ADR-109 Note). 갱신이 빌링키를 읽고 청구하는 동안 해지·탈퇴가 끼어들어
+     * 갱신·해지·탈퇴를 구독 행 하나로 직렬화한다 (ADR-053·ADR-114 Note). 갱신이 빌링키를 읽고 청구하는 동안 해지·탈퇴가 끼어들어
      * 커밋되면 한 번 더 청구된다 — 세 경로가 모두 이 락을 먼저 쥔다.
      *
      * 이미 영속성 컨텍스트에 있는 엔티티는 락만 걸리고 상태는 갱신되지 않는다(JPA 규약). 갱신 배치는 청크 트랜잭션에서 읽은 엔티티를

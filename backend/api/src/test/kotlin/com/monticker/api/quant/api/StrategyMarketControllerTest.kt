@@ -173,7 +173,7 @@ class StrategyMarketControllerTest {
         verify(exactly = 0) { jdbc.update(any<String>(), *anyVararg()) }
     }
 
-    // ADR-109 Note — 크리에이터가 탈퇴해 판매 중지된 전략은 구독할 수 없다. 판매 중지와 직렬화하려고 행을 FOR SHARE로 읽는다.
+    // ADR-114 Note — 크리에이터가 탈퇴해 판매 중지된 전략은 구독할 수 없다. 판매 중지와 직렬화하려고 행을 FOR SHARE로 읽는다.
     @Test
     fun `subscribe reads only listed strategies and locks the row against delisting`() {
         every { jwtTokenProvider.getUserId("token") } returns 9L

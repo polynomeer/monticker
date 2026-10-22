@@ -180,7 +180,7 @@ class AuthService(
     fun deleteAccount(userId: Long, password: String) {
         val user = userRepository.findById(userId).orElseThrow()
         require(passwordEncoder.matches(password, user.passwordHash)) { "비밀번호가 올바르지 않습니다." }
-        // 사용자 행이 남는 소프트 삭제라 CASCADE로 지워지지 않는 데이터를 각 모듈이 같은 트랜잭션에서 지운다(ADR-109).
+        // 사용자 행이 남는 소프트 삭제라 CASCADE로 지워지지 않는 데이터를 각 모듈이 같은 트랜잭션에서 지운다(ADR-114).
         // 먼저 낸다 — 거부하는 리스너(결과가 열린 실주문이 있는 증권사 계좌)가 던지면 아래 익명화까지 함께 롤백된다.
         events.publishEvent(UserAccountDeletedEvent(userId))
         jdbc.update("DELETE FROM refresh_tokens WHERE user_id = ?", userId)
