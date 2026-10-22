@@ -293,11 +293,13 @@ class IdempotencyFilter(
             "timestamp" to Instant.now().toString(),
         )))
 
+    // getWriter()가 아니라 getOutputStream()으로 쓴다 — 결과 불명 경로는 핸들러가 이미 ContentCachingResponseWrapper로 응답을 쓴 뒤라,
+    // Spring 7(Boot 4)에서는 그때 원래 응답의 getOutputStream()이 불린 상태다. 그 뒤 getWriter()는 서블릿 규약상 IllegalStateException이다.
     private fun writeJson(response: HttpServletResponse, status: Int, body: String) {
         response.status = status
         response.characterEncoding = "UTF-8"
         response.contentType = MediaType.APPLICATION_JSON_VALUE
-        response.writer.write(body)
+        response.outputStream.write(body.toByteArray(Charsets.UTF_8))
     }
 
     private fun rejectUnavailable(response: HttpServletResponse, userId: Long, key: String) {
