@@ -113,8 +113,8 @@ importers:
         specifier: ^2.1.10
         version: 2.1.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@stomp/stompjs':
-        specifier: '>=7.4.0'
-        version: 7.4.0
+        specifier: '>=7.5.0'
+        version: 7.5.0
       '@tanstack/react-query':
         specifier: ^5.104.3
         version: 5.104.3(react@19.3.0)
@@ -1641,8 +1641,8 @@ packages:
   '@sinclair/typebox@0.27.12':
     resolution: {integrity: sha512-hhyNJ+nbR6ZR7pToHvllEFun9TL0sbL+tk/ON75lo+Xas054uez98qRbsuNt7MBCyZKK4+8Yli/OAGZhmfBZ/g==}
 
-  '@stomp/stompjs@7.4.0':
-    resolution: {integrity: sha512-JSyT230gT3g8v9MPLb/OukN46M+omkUR79ixg6L31em41RaHud6DqBTiooeP7rpcKyzKkpgZ72HDUjFqGKYJvg==}
+  '@stomp/stompjs@7.5.0':
+    resolution: {integrity: sha512-xh3sdzEYH8M+krQGBOgj+U0BLBHd7ccTj8YM3mVxaULMTW/wx2QBWf448pilRiWZKjglhDmNILxM3W+j/Ch9uw==}
 
   '@swc/helpers@0.5.23':
     resolution: {integrity: sha512-5lSsMOTXURePglDfvuAQUqkGek9Hg2kksOYay2m0+XR++b2NWYL/4sWyuvVBIs8oKnJaxkdi9whaL/sqN13afw==}
@@ -6955,7 +6955,7 @@ snapshots:
 
   '@sinclair/typebox@0.27.12': {}
 
-  '@stomp/stompjs@7.4.0': {}
+  '@stomp/stompjs@7.5.0': {}
 
   '@swc/helpers@0.5.23':
     dependencies:
