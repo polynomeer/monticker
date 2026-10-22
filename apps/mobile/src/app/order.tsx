@@ -32,9 +32,10 @@ interface PaperOrderResult { status: "FILLED" | "PENDING" | string; tradeId: num
  * 모의: 리스크 미리보기(ADR-092) + 감정 태그 + 지정가/시장가. 실전은 LiveOrderSheet.
  */
 export default function OrderScreen() {
-  const { mode } = useTradingMode();
+  // 시트를 연 순간의 모드로 고정한다 — 주문 중 로그아웃·연동 해제로 모드가 바뀌어도 다른 시트로 바뀌지 않게(결과를 잃지 않게)
+  const opened = useRef(useTradingMode().mode).current;
   const { symbol, side } = useLocalSearchParams<{ symbol: string; side?: Side }>();
-  if (mode === "live") return <LiveOrderSheet symbol={symbol} initialSide={side === "SELL" ? "SELL" : "BUY"} />;
+  if (opened === "live") return <LiveOrderSheet symbol={symbol} initialSide={side === "SELL" ? "SELL" : "BUY"} />;
   return <PaperOrderSheet symbol={symbol} initialSide={side === "SELL" ? "SELL" : "BUY"} />;
 }
 

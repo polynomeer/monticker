@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, Share, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { PaperPortfolio, StockEvent, StockPriceResponse, StockSearchItem, WatchlistGroup } from "@monticker/types";
+import type { BrokerageBalanceResponse, PaperPortfolio, StockEvent, StockPriceResponse, StockSearchItem, WatchlistGroup } from "@monticker/types";
 import { useTheme } from "@/theme/ThemeProvider";
 import { changeColor } from "@/theme/palette";
 import { font, tabular } from "@/theme/type";
@@ -45,7 +45,8 @@ export default function StockDetailScreen() {
   const candles = useApi<Candle[]>(id ? `/api/stocks/${id}/candles?${candleQuery(period, new Date())}` : null);
   const weekAgo = useMemo(() => new Date(Date.now() - 7 * 86_400_000).toISOString(), []);
   const events = useApi<StockEvent[]>(id ? `/api/stocks/${id}/events?from=${encodeURIComponent(weekAgo)}&limit=5` : null, { refreshMs: 60_000 });
-  const portfolio = useApi<PaperPortfolio>(signedIn ? "/api/paper/portfolio" : null, { auth: true });
+  const portfolio = useApi<PaperPortfolio>(signedIn && mode === "paper" ? "/api/paper/portfolio" : null, { auth: true });
+  const brokerBalance = useApi<BrokerageBalanceResponse>(signedIn && mode === "live" ? "/api/brokerage/account/balance" : null, { auth: true });
   const groups = useApi<WatchlistGroup[]>(signedIn ? "/api/watchlists" : null, { auth: true });
 
   if (search.loading) return <Loading />;
@@ -57,11 +58,17 @@ export default function StockDetailScreen() {
   const diff = last != null && p?.prevClose ? last - p.prevClose : null;
   const closes = (candles.data ?? []).map((k) => Number(k.close));
   const times = (candles.data ?? []).map((k) => k.time);
-  const holding = portfolio.data?.holdings.find((h) => h.stockId === id && h.quantity > 0) ?? null;
+  const live = mode === "live";
+  // 보유 요약은 지금 모드의 계좌만 — 실전이면 증권사 잔고(ADR-025: 모의 숫자를 실전 화면에 쓰지 않는다)
+  const liveHolding = brokerBalance.data?.holdings.find((h) => h.symbol === stock.symbol && Number(h.quantity) > 0);
+  const holding = live
+    ? liveHolding
+      ? { quantity: Number(liveHolding.quantity), avgPrice: Number(liveHolding.avgPrice), pnlRate: Number(liveHolding.avgPrice) > 0 ? ((Number(liveHolding.currentPrice) - Number(liveHolding.avgPrice)) / Number(liveHolding.avgPrice)) * 100 : 0 }
+      : null
+    : portfolio.data?.holdings.find((h) => h.stockId === id && h.quantity > 0) ?? null;
   const watchItem = (groups.data ?? []).flatMap((g) => g.items).find((i) => i.stockId === id) ?? null;
   const evs = events.data ?? [];
   const now = new Date();
-  const live = mode === "live";
 
   const toggleWatch = async () => {
     if (!signedIn) { router.push("/login"); return; }
@@ -158,10 +165,10 @@ export default function StockDetailScreen() {
 
       <View style={[s.bottom, { paddingBottom: Math.max(insets.bottom, 16) + 14 }]} pointerEvents="box-none">
         <LinearGradientFade color={c.bg} height={170} />
-        {!live && holding && (
-          <Glass style={s.holding}>
+        {holding && (
+          <Glass style={s.holding} borderColor={live ? c.liveBorder : undefined}>
             <Text style={[font.footnote, s.holdingText, { color: c.soft }]}>
-              보유 {formatWon(holding.quantity)}주 · 평균 {formatWon(holding.avgPrice)} ·{" "}
+              {live && <Text style={[s.semibold, { color: c.live }]}>실전 · </Text>}보유 {formatWon(holding.quantity)}주 · 평균 {formatWon(holding.avgPrice)} ·{" "}
               <Text style={[s.semibold, { color: changeColor(holding.pnlRate, market, c.muted) }]}>{formatPct(holding.pnlRate)}</Text>
             </Text>
           </Glass>

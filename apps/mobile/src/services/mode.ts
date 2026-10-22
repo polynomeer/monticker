@@ -36,6 +36,11 @@ export async function loadBrokerAccount(): Promise<BrokerageAccountResponse | nu
     broker = null;
   }
   if (broker && (!broker.isActive || !broker.tokenValid)) broker = null;
+  // 실전 중에 연동이 끊겼으면(토큰 만료·해제) 모의로 돌린다
+  if (!broker && mode === "live") {
+    mode = "paper";
+    AsyncStorage.setItem(KEY, "paper").catch(() => undefined);
+  }
   emit();
   return broker;
 }
