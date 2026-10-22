@@ -64,6 +64,8 @@ monticker의 모든 문서를 **독자별 · 주제별**로 정리한 색인입�
 | [human-action-items.md](human-action-items.md) | 코드로 못 끝내는 일만 모은 목록 — 법무, 계정 발급, 사업자 등록 |
 | [engineering-backlog.md](engineering-backlog.md) | 코드로 할 수 있는 남은 일 — 완료 항목은 근거 커밋과 함께 체크 |
 | [legal-review-brief.md](legal-review-brief.md) | 변호사에게 전달할 브리핑 팩 — 사실관계 + 질문 목록 (법률 자문 아님) |
+| [research/stock-app-menu-comparison.md](research/stock-app-menu-comparison.md) | 국내외 주식 앱 하단 탭·메뉴 구성 비교 — 주문은 탭이 아닌 종목 화면, 모의투자는 계좌 모드, 확인/미확인 구분표 (iOS 메뉴 시안 B안 근거) |
+| [research/overseas-app-menu-recheck.md](research/overseas-app-menu-recheck.md) | 해외 주식 앱 메뉴 재검증(2026-10) — 출처 등급별 정리, iOS 26 탭·하단 액세서리 1차 출처, '조건부 상태 바' 추천 근거 |
 | [ui-benchmarks.md](ui-benchmarks.md) | 증권 앱 UI 벤치마크 (데스크톱 확장판은 `.docx`) |
 | [screener.md](screener.md) | 스크리너 화면 설계 |
 | [settlement.md](settlement.md) | 정산 시스템 설계 — 페이퍼/전략마켓/구독/증권사 4종, Mock→Real 전환 지점 |
