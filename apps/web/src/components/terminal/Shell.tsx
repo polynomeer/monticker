@@ -124,7 +124,7 @@ export function SymbolPill({ name, code, market }: { name: string; code?: string
   return (
     <Link href="/stocks/search" className="flex h-9 items-center gap-2.5 rounded-lg bg-tm-panel px-2.5 text-dracula-fg hover:bg-tm-raised">
       <Icon name="search" size={16} className="text-tm-muted" />
-      <span className="grid h-5 w-5 place-items-center rounded-md bg-dracula-purple text-2xs font-bold text-tm-page">{name.slice(0, 1)}</span>
+      <span className="grid h-5 w-5 place-items-center rounded-md bg-dracula-purple text-2xs font-bold text-tm-on-accent">{name.slice(0, 1)}</span>
       <h1 className="m-0 text-sm font-bold">{name}</h1>
       {code && <span className="num text-2xs text-tm-muted">{code}</span>}
       {market && <span className="rounded-sm bg-tm-raised px-1.5 py-px text-2xs text-tm-soft">{market}</span>}
@@ -158,7 +158,7 @@ function UserMenu() {
 
   if (!isLoggedIn) {
     return (
-      <Link href="/login" className="inline-flex h-9 items-center rounded-lg bg-dracula-purple px-3.5 text-13 font-bold text-tm-page">
+      <Link href="/login" className="inline-flex h-9 items-center rounded-lg bg-dracula-purple px-3.5 text-13 font-bold text-tm-on-accent">
         로그인
       </Link>
     );

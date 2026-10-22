@@ -1,6 +1,6 @@
 "use client";
 
-import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
+import { useMarketColors } from "@/stores/themeStore";
 
 interface Props { rate: number; amount: number; }
 
@@ -12,7 +12,7 @@ function fmt(n: number) {
 
 /** 등락률(위) + 전일 대비 금액(아래). 색은 사용자 차트 테마의 상승/하락색. */
 export default function ChangeRateBadge({ rate, amount }: Props) {
-  const theme = useThemeStore((s) => CHART_THEMES[s.chartTheme]);
+  const theme = useMarketColors();
   const up    = rate >= 0;
   const color = up ? theme.upColor : theme.downColor;
   const sign  = up ? "+" : "";

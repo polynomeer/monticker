@@ -1,5 +1,6 @@
 // 시안의 작은 SVG 차트들(스파크라인·도넛·라인). 큰 캔들 차트는 기존 ECharts 어댑터
 // (components/stock/chart)를 그대로 쓴다 — 여기서 새 차트 엔진을 만들지 않는다.
+// 축·글자·구분선 색은 Tailwind fill-/stroke- 클래스(테마 CSS 변수)라 앱 테마를 따른다. 계열 색은 호출부가 준다.
 import type { ReactNode } from "react";
 
 export function Sparkline({ values, color = "currentColor", width = 88, height = 26, fill = true, stretch = false, className }: {
@@ -66,8 +67,8 @@ export function Donut({ parts, size = 150, thickness = 22, center, label = "비�
       })}
       {center && (
         <>
-          <text x={size / 2} y={size / 2 - 2} textAnchor="middle" fill="#f8f8f2" fontSize={18} fontWeight={600} className="num">{center[0]}</text>
-          <text x={size / 2} y={size / 2 + 18} textAnchor="middle" fill="#a4abcf" fontSize={11}>{center[1]}</text>
+          <text x={size / 2} y={size / 2 - 2} textAnchor="middle" fontSize={18} fontWeight={600} className="num fill-dracula-fg">{center[0]}</text>
+          <text x={size / 2} y={size / 2 + 18} textAnchor="middle" fontSize={11} className="fill-tm-muted">{center[1]}</text>
         </>
       )}
     </svg>
@@ -107,14 +108,14 @@ export function LineChart({ series, width = 860, height = 240, xLabels = [], yDi
     <svg viewBox={`0 0 ${width + 60} ${height}`} className="block h-auto w-full" role="img" aria-label={label}>
       {grid.map((g, k) => (
         <g key={k}>
-          <line x1={0} x2={width} y1={y(g)} y2={y(g)} stroke="#34364a" strokeDasharray="2 4" />
-          <text x={width + 8} y={y(g) + 4} fill="#a4abcf" fontSize={11} className="num">
+          <line x1={0} x2={width} y1={y(g)} y2={y(g)} strokeDasharray="2 4" className="stroke-tm-line" />
+          <text x={width + 8} y={y(g) + 4} fontSize={11} className="num fill-tm-muted">
             {g.toLocaleString("ko-KR", { maximumFractionDigits: yDigits, minimumFractionDigits: yDigits })}
             {ySuffix}
           </text>
         </g>
       ))}
-      {baseline != null && <line x1={0} x2={width} y1={y(baseline)} y2={y(baseline)} stroke="#a4abcf" strokeOpacity={0.5} />}
+      {baseline != null && <line x1={0} x2={width} y1={y(baseline)} y2={y(baseline)} strokeOpacity={0.5} className="stroke-tm-muted" />}
       {series.map((s, si) => {
         const n = s.values.length;
         const pts = s.values.map((v, i) => `${((i / Math.max(n - 1, 1)) * width).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
@@ -126,7 +127,7 @@ export function LineChart({ series, width = 860, height = 240, xLabels = [], yDi
         );
       })}
       {xLabels.map(([fx, t]) => (
-        <text key={t + fx} x={Math.min(fx * width, width - 48)} y={height - 6} fill="#a4abcf" fontSize={11} className="num">
+        <text key={t + fx} x={Math.min(fx * width, width - 48)} y={height - 6} fontSize={11} className="num fill-tm-muted">
           {t}
         </text>
       ))}

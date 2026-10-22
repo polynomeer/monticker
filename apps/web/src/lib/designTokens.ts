@@ -1,5 +1,6 @@
-// 색 토큰의 단일 출처 — tailwind.config.ts가 이 값으로 `dracula-*`·`tm-*` 클래스를 만들고,
-// 캔버스 차트(ECharts 어댑터)처럼 CSS 클래스를 못 쓰는 곳은 여기서 직접 읽는다.
+// 드라큘라(기본 테마) 색의 단일 출처 — src/lib/themes.ts가 이 값으로 기본 테마 팔레트를 만들고, globals.css :root의
+// CSS 변수가 같은 값이다(themes.test.ts가 검사). Tailwind 클래스(`dracula-*`·`tm-*`)는 그 변수를 읽어 테마를 따른다.
+// 캔버스 차트처럼 CSS를 못 쓰는 곳은 테마를 따르려면 useThemePalette()를 쓴다 — 여기 값은 드라큘라 고정이다.
 // 상승/하락 색은 사용자 차트 테마(themeStore)라 여기 두지 않는다.
 
 export const dracula = {

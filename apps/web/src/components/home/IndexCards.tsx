@@ -1,7 +1,7 @@
 "use client";
 
 import { Pill, Sparkline, Tile, dirClass, fmtPct, fmtSigned } from "@/components/terminal";
-import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
+import { useMarketColors } from "@/stores/themeStore";
 import { fmtIndexValue, kstTime, useMarketIndices } from "./data";
 
 // 시안의 지수 카드(KOSPI·KOSDAQ·USD/KRW). 값은 GET /api/market/indices(ADR-071).
@@ -22,7 +22,7 @@ export function MockTag() {
 
 export default function IndexCards() {
   const { data = [], isLoading } = useMarketIndices();
-  const theme = useThemeStore((s) => CHART_THEMES[s.chartTheme]);
+  const theme = useMarketColors();
   const byCode = new Map(data.map((d) => [d.code, d]));
 
   return (

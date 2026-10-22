@@ -11,7 +11,7 @@ import { Icon, type IconName } from "./Icon";
 export type BtnKind = "primary" | "buy" | "sell" | "ghost" | "soft" | "danger" | "live";
 
 const BTN_KIND: Record<BtnKind, string> = {
-  primary: "bg-dracula-purple text-tm-page font-bold hover:brightness-110",
+  primary: "bg-dracula-purple text-tm-on-accent font-bold hover:brightness-110",
   buy: "bg-up text-tm-page font-bold hover:brightness-110",
   sell: "bg-down text-tm-page font-bold hover:brightness-110",
   ghost: "border border-tm-line2 text-dracula-fg font-semibold hover:bg-tm-raised",
@@ -192,7 +192,7 @@ export function Checkbox({ checked, onChange, label, sub, disabled }: { checked:
       onClick={() => onChange?.(!checked)}
       className="flex items-start gap-2.5 text-left text-13 text-dracula-fg disabled:opacity-50"
     >
-      <span className={cn("grid h-[18px] w-[18px] flex-none place-items-center rounded-[5px]", checked ? "bg-dracula-purple text-tm-page" : "border-[1.5px] border-tm-line2 text-transparent")}>
+      <span className={cn("grid h-[18px] w-[18px] flex-none place-items-center rounded-[5px]", checked ? "bg-dracula-purple text-tm-on-accent" : "border-[1.5px] border-tm-line2 text-transparent")}>
         <Icon name="check" size={13} strokeWidth={3} />
       </span>
       <span className="flex flex-col gap-0.5">
