@@ -9,7 +9,7 @@ import { ConfirmDialog, KV, Pill, fmtNum, type Tone } from "@/components/termina
 
 export const COND_STATUS: Record<ConditionalOrderStatus, { label: string; tone: Tone }> = {
   ACTIVE:    { label: "감시 중",      tone: "cyan" },
-  TRIGGERED: { label: "발동 처리 중", tone: "orange" },
+  TRIGGERED: { label: "발동 처리 중", tone: "caution" },
   EXECUTED:  { label: "발동 완료",    tone: "green" },
   CANCELLED: { label: "취소됨",       tone: "muted" },
   EXPIRED:   { label: "만료됨",       tone: "muted" },
@@ -27,7 +27,7 @@ export const TRIGGER_TONE: Record<ConditionalTriggerType, Tone> = {
   STOP_LOSS: "red",
   TAKE_PROFIT: "green",
   PRICE_ABOVE: "purple",
-  PRICE_BELOW: "orange",
+  PRICE_BELOW: "pink",
 };
 
 /** STOP_LOSS/PRICE_BELOW는 현재가 <= trigger, TAKE_PROFIT/PRICE_ABOVE는 현재가 >= trigger 에서 발동. */

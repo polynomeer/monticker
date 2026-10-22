@@ -1,4 +1,4 @@
-import * as SecureStore from "expo-secure-store";
+import * as SecureStore from "./secureStore";
 import { getApiBase } from "./api";
 
 /**
@@ -12,6 +12,8 @@ import { getApiBase } from "./api";
  */
 
 const REFRESH_KEY = "monticker.refreshToken";
+/** 설정 화면 프로필에 보일 로그인 이메일 — 프로필 API가 없어 기기 보안 저장소에 둔다 */
+const EMAIL_KEY = "monticker.email";
 const STORE_OPTIONS: SecureStore.SecureStoreOptions = { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY };
 
 interface NativeTokenResponse {
@@ -53,6 +55,7 @@ async function save(tokens: NativeTokenResponse, gen = generation) {
 async function clear() {
   accessToken = null;
   await SecureStore.deleteItemAsync(REFRESH_KEY, STORE_OPTIONS).catch(() => undefined);
+  await SecureStore.deleteItemAsync(EMAIL_KEY, STORE_OPTIONS).catch(() => undefined);
   setState("signedOut");
 }
 
@@ -73,6 +76,7 @@ export async function login(email: string, password: string): Promise<void> {
   if (res.status === 429) throw new LoginError("로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.");
   if (!res.ok) throw new LoginError("이메일 또는 비밀번호가 올바르지 않습니다.");
   await save(await res.json());
+  await SecureStore.setItemAsync(EMAIL_KEY, email.trim(), STORE_OPTIONS).catch(() => undefined);
 }
 
 /** 저장된 refresh token으로 새 토큰 쌍을 받는다 — 동시에 불려도 요청은 하나 */
@@ -136,4 +140,9 @@ export async function logout(beforeClear?: () => Promise<void>): Promise<void> {
     }).catch(() => undefined);
   }
   await clear();
+}
+
+/** 로그인할 때 쓴 이메일(이 기기). 모르면 null */
+export async function getSignedInEmail(): Promise<string | null> {
+  return SecureStore.getItemAsync(EMAIL_KEY, STORE_OPTIONS).catch(() => null);
 }

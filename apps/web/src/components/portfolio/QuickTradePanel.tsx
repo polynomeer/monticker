@@ -156,7 +156,7 @@ export function QuickTradePanel({ portfolio, meta, sectorValue }: {
       <BuySell value={side} onChange={setSide} />
       <Field label="수량" unit="주" type="number" inputMode="numeric" min={1} max={MAX_QTY} value={qty} onChange={(e) => setQty(e.target.value)} className="flex-none" />
       <KV k="예상 금액" v={stock && qtyValid ? `${fmtNum(amount)}원` : "—"} />
-      <KV k={`주문 후 ${sector ?? "섹터"} 비중 (참고)`} v={afterPct != null ? `${afterPct.toFixed(1)}%` : "—"} />
+      <KV k={`주문 후 ${sector ?? "섹터"} 비중 (참고)`} v={afterPct != null ? `${afterPct.toFixed(1)}%` : "—"} valueClassName={afterPct != null && afterPct >= 40 ? "text-caution" : undefined} />
       {stock && <span className="num text-2xs text-tm-muted">{side === "BUY" ? `가용 현금 ${fmtNum(cash)}원 · 최대 ${fmtNum(max)}주` : `보유 ${fmtNum(held)}주`}</span>}
       {risk.pending && !risk.data && <span aria-live="polite" className="text-2xs text-tm-muted">리스크 한도 점검 중...</span>}
       {risk.error && <span className="text-2xs text-tm-muted">{risk.error.message} 주문할 때 서버가 다시 판정합니다.</span>}

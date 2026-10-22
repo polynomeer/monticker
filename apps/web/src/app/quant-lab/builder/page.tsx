@@ -61,7 +61,7 @@ const BLOCKS: { label: string; icon: IconName; make?: () => Omit<Condition, "id"
   { label: "시가총액",   icon: "pie",     reason: "시가총액 이력이 없어 조건으로 쓸 수 없습니다 — 유니버스의 시총 필터를 쓰세요" },
 ];
 
-const COND_COLORS = ["text-dracula-purple", "text-dracula-cyan", "text-dracula-pink", "text-dracula-orange", "text-dracula-green"];
+const COND_COLORS = ["text-dracula-purple", "text-dracula-cyan", "text-dracula-pink", "text-dracula-yellow", "text-dracula-green"];
 
 function uid() { return Math.random().toString(36).slice(2, 8); }
 
@@ -393,7 +393,7 @@ export default function BuilderPage() {
 
   const blocks = BLOCKS.filter(b => b.label.toLowerCase().includes(blockQuery.trim().toLowerCase()));
   const st = existing ? rulesetStatus(existing.status) : null;
-  const reliabilityTone = latest?.reliabilityScore === "A" || latest?.reliabilityScore === "B" ? "text-dracula-green" : latest?.reliabilityScore ? "text-dracula-orange" : "text-tm-muted";
+  const reliabilityTone = latest?.reliabilityScore === "A" || latest?.reliabilityScore === "B" ? "text-dracula-green" : latest?.reliabilityScore ? "text-caution" : "text-tm-muted";
   const lastSaved = existing ? new Date(existing.updatedAt) : null;
   const curve = useMemo(() => latest?.equityCurve.map(p => p.equity) ?? [], [latest]);
 

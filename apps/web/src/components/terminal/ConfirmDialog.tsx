@@ -21,7 +21,7 @@ export function ConfirmDialog({
   onCancel: () => void;
   /** 확정 처리 중 — 두 버튼을 막고 Esc로 닫히지 않게 한다 */
   pending?: boolean;
-  confirmKind?: "primary" | "danger" | "buy" | "sell" | "warn";
+  confirmKind?: "primary" | "danger" | "buy" | "sell" | "live";
 }) {
   const titleId = useId();
   const boxRef = useRef<HTMLElement>(null);
@@ -67,10 +67,10 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         onKeyDown={onKeyDown}
-        className="flex w-full max-w-[420px] flex-col gap-3.5 rounded-xl border-[1.5px] border-dracula-orange bg-tm-panel p-5 shadow-glow-line"
+        className="flex w-full max-w-[420px] flex-col gap-3.5 rounded-xl border-[1.5px] border-live bg-tm-panel p-5 shadow-glow-line"
       >
         <div className="flex items-center gap-2.5">
-          <Icon name="alert" size={20} className="flex-none text-dracula-orange" />
+          <Icon name="alert" size={20} className="flex-none text-live" />
           <h2 id={titleId} className="m-0 text-base font-bold">{title}</h2>
         </div>
         {children}

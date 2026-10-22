@@ -73,8 +73,8 @@ const SAVING_TOOLS: ReadonlySet<DrawingTool> = new Set(["TREND_LINE", "HORIZONTA
 type ChartLayer = EventLayer | "quant" | "sentiment";
 
 const LAYERS: { key: ChartLayer; label: string; color: string }[] = [
-  { key: "disclosure", label: "공시", color: "#ffb86c" },
-  { key: "news", label: "뉴스", color: "#8be9fd" },
+  { key: "disclosure", label: "공시", color: "#8be9fd" },
+  { key: "news", label: "뉴스", color: "#c3c8e2" },
   { key: "volume", label: "거래량", color: "#bd93f9" },
   { key: "price", label: "급등락", color: "#50fa7b" },
   { key: "quant", label: "퀀트 시그널", color: "#50fa7b" },

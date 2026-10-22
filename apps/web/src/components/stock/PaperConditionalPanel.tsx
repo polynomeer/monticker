@@ -16,7 +16,7 @@ import { useToast } from "@/hooks/useToast";
 export const PAPER_TRIGGER_LABEL: Record<PaperTriggerType, string> = {
   TAKE_PROFIT: "익절", STOP_LOSS: "손절", PRICE_ABOVE: "가격 이상", PRICE_BELOW: "가격 이하",
 };
-export const PAPER_COND_STATUS: Record<PaperConditionalOrder["status"], { label: string; tone: "green" | "muted" | "orange" | "red" | "cyan" | "yellow" }> = {
+export const PAPER_COND_STATUS: Record<PaperConditionalOrder["status"], { label: string; tone: "green" | "muted" | "caution" | "red" | "cyan" | "yellow" }> = {
   WAITING_PARENT: { label: "체결 대기", tone: "yellow" },
   ACTIVE: { label: "감시 중", tone: "cyan" },
   EXECUTED: { label: "체결", tone: "green" },

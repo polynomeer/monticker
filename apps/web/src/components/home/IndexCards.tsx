@@ -15,7 +15,7 @@ const SLOTS = [
 export function MockTag() {
   return (
     <span title="실시세 공급자가 연결되지 않아 개발용 모의 값입니다(ADR-071)">
-      <Pill tone="orange" className="h-[18px] px-1.5 text-[0.625rem]">모의</Pill>
+      <Pill tone="caution" className="h-[18px] px-1.5 text-[0.625rem]">모의</Pill>
     </span>
   );
 }

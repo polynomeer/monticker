@@ -26,7 +26,7 @@ export function maskAccount(accountNumber: string | null | undefined) {
 /** 시안의 실계좌 경고 — 실거래 경로 화면 맨 위에 항상 둔다. */
 export function LiveNotice() {
   return (
-    <Notice tone="warn" icon="alert">
+    <Notice tone="live" icon="alert">
       이 화면의 주문은 <b>실제 증권사 계좌에서 실제 돈으로</b> 체결됩니다. monticker는 자금을 보관하지 않으며, 체결 결과는 증권사 처리 결과를 따릅니다.
     </Notice>
   );
@@ -169,8 +169,8 @@ export function useSymbolQuotes(symbols: string[], withPrice: boolean) {
 
 // ── 주문 상태 ──────────────────────────────────────────────────────────
 export const ORDER_STATUS: Record<BrokerageOrderStatus, { label: string; tone: Tone }> = {
-  PENDING_SUBMIT:   { label: "제출 중",      tone: "orange" },
-  UNKNOWN:          { label: "결과 확인 중", tone: "orange" },
+  PENDING_SUBMIT:   { label: "제출 중",      tone: "caution" },
+  UNKNOWN:          { label: "결과 확인 중", tone: "caution" },
   SUBMITTED:        { label: "접수됨",       tone: "yellow" },
   FILLED:           { label: "체결",         tone: "green" },
   PARTIALLY_FILLED: { label: "부분 체결",    tone: "cyan" },
@@ -197,8 +197,8 @@ export function brokerageStats(account: BrokerageAccountResponse | null | undefi
   return [
     { label: "연동 증권사", value: account ? brokerageProviderLabel(account.provider) : "—" },
     { label: "계좌", value: maskAccount(account?.accountNumber) },
-    { label: "가용 현금", value: balanceError ? "조회 불가" : won(balance?.cash), tone: balanceError ? "text-dracula-orange" : undefined },
-    { label: "총 평가금액", value: balanceError ? "조회 불가" : won(balance?.totalEvaluated), tone: balanceError ? "text-dracula-orange" : undefined },
+    { label: "가용 현금", value: balanceError ? "조회 불가" : won(balance?.cash), tone: balanceError ? "text-caution" : undefined },
+    { label: "총 평가금액", value: balanceError ? "조회 불가" : won(balance?.totalEvaluated), tone: balanceError ? "text-caution" : undefined },
     apiStat(account),
     latencyStat(account?.apiHealth),
   ];
@@ -208,7 +208,7 @@ export function apiStat(account: BrokerageAccountResponse | null | undefined): T
   if (!account) return { label: "API 상태", value: "—" };
   return account.tokenValid
     ? { label: "API 상태", value: "정상", tone: "text-dracula-green" }
-    : { label: "API 상태", value: "재인증 필요", tone: "text-dracula-orange" };
+    : { label: "API 상태", value: "재인증 필요", tone: "text-caution" };
 }
 
 export function PagerButtons({ page, totalPages, onChange }: { page: number; totalPages: number; onChange: (p: number) => void }) {

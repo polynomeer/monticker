@@ -8,7 +8,7 @@ import { useToastStore, Toast, ToastType } from "@/hooks/useToast";
 const STYLES: Record<ToastType, { box: string; icon: IconName; tone: string }> = {
   success: { box: "border-[#2f4d39]", icon: "check", tone: "text-dracula-green" },
   error: { box: "border-[#64363f]", icon: "x", tone: "text-[#ff8a8a]" },
-  warning: { box: "border-[#5a4430]", icon: "alert", tone: "text-dracula-orange" },
+  warning: { box: "border-[#55583a]", icon: "alert", tone: "text-caution" },
   info: { box: "border-[#33415e]", icon: "info", tone: "text-dracula-cyan" },
 };
 

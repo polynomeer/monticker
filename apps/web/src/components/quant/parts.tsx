@@ -31,7 +31,7 @@ export function fmtMatch(rate: number | null | undefined, compared: number | nul
 
 export function matchTone(rate: number | null | undefined): string {
   if (rate == null) return "text-tm-muted";
-  return rate >= 0.85 ? "text-dracula-green" : rate >= 0.6 ? "text-dracula-orange" : "text-down";
+  return rate >= 0.85 ? "text-dracula-green" : rate >= 0.6 ? "text-caution" : "text-down";
 }
 
 /** 포워드 테스트가 돈 기간(주). 멈췄으면 멈춘 날까지. */
