@@ -68,6 +68,8 @@ interface Draft {
   quantity: number;
   limitPrice?: number;
   estimate: number;
+  /** ADR-110 — 확인 창 하나 = 주문 한 건 = 키 하나. 전송 버튼이 두 번 눌려도 주문은 한 번만 나간다. */
+  idempotencyKey: string;
 }
 
 const p2 = (n: number) => String(n).padStart(2, "0");
@@ -213,6 +215,7 @@ export default function BrokerageOrderPage() {
       stock, side, orderType, quantity,
       limitPrice: orderType === "LIMIT" ? Number(limitPrice) : undefined,
       estimate: estimatedAmount,
+      idempotencyKey: crypto.randomUUID(),
     });
   };
 
@@ -229,6 +232,7 @@ export default function BrokerageOrderPage() {
         orderType: draft.orderType,
         quantity: draft.quantity,
         limitPrice: draft.orderType === "LIMIT" ? draft.limitPrice : undefined,
+        idempotencyKey: draft.idempotencyKey,
       });
       setResult(order);
     } catch (e) {
