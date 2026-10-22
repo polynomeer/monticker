@@ -1,133 +1,73 @@
-import { useEffect, useState, useCallback } from "react";
-import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, RefreshControl } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { authFetch } from "@/services/auth";
+import type { AlertRule, ScreenerQuote } from "@monticker/types";
+import { useTheme } from "@/theme/ThemeProvider";
+import { font } from "@/theme/type";
 import { useAuthState } from "@/services/useAuth";
+import { useApi } from "@/services/useApi";
+import { Badge, EmptyState, GroupedList, Loading, Screen } from "@/components/ui";
+import { BackButton } from "@/components/ui/BackButton";
 import { SignInRequired } from "@/components/SignInRequired";
-
-interface AlertRule {
-  id: number;
-  stockId: number;
-  symbol: string;
-  name: string;
-  ruleType: string;
-  conditionJson: string;
-  isActive: boolean;
-}
+import { formatWon } from "@/lib/format";
 
 const RULE_LABEL: Record<string, string> = {
-  PRICE_ABOVE:   "목표가 이상",
-  PRICE_BELOW:   "목표가 이하",
-  VOLUME_SURGE:  "거래량 급등",
+  PRICE_ABOVE: "목표가 이상",
+  PRICE_BELOW: "목표가 이하",
+  VOLUME_SURGE: "거래량 급등",
 };
 
+/** 가격 알림 규칙 목록. 규칙 응답에는 종목 id만 있어 이름·심볼은 시세 조회로 붙인다 */
 export default function AlertsScreen() {
-  const [rules, setRules]       = useState<AlertRule[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { c } = useTheme();
   const router = useRouter();
-
-  const load = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true); else setLoading(true);
-    try {
-      const res = await authFetch(`/api/alerts/rules`, {
-        headers: { "Content-Type": "application/json" },
-      });
-      if (res.ok) setRules(await res.json());
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
   const auth = useAuthState();
-  // 로그인 상태가 정해진 뒤에 읽는다 — 로그인하고 돌아오면 다시 읽는다
-  useEffect(() => { if (auth === "signedIn") load(); }, [auth, load]);
+  const rules = useApi<AlertRule[]>(auth === "signedIn" ? "/api/alerts/rules" : null, { auth: true });
+  const ids = [...new Set((rules.data ?? []).map((r) => r.stockId).filter((id): id is number => id != null))].slice(0, 50);
+  const quotes = useApi<{ items: ScreenerQuote[] }>(ids.length ? `/api/screener/quotes?ids=${ids.join(",")}` : null);
+  const byId = new Map((quotes.data?.items ?? []).map((q) => [q.stockId, q]));
 
   if (auth === "signedOut") return <SignInRequired message="알림 규칙을 보려면 로그인해 주세요" />;
-  if (auth === "unknown" || loading) return <View style={s.center}><ActivityIndicator size="large" color={ACCENT} /></View>;
+  if (auth === "unknown" || rules.loading) return <Loading />;
 
+  const list = rules.data ?? [];
   return (
-    <View style={s.container}>
-      {rules.length === 0 ? (
-        <View style={s.center}>
-          <Text style={s.emptyIcon}>🔔</Text>
-          <Text style={s.emptyTitle}>설정된 알림이 없어요</Text>
-          <Text style={s.emptySub}>종목을 선택하고 목표가 알림을 설정해보세요</Text>
-          <TouchableOpacity style={s.cta} onPress={() => router.push("/")}>
-            <Text style={s.ctaText}>종목 찾기</Text>
-          </TouchableOpacity>
-        </View>
+    <Screen title="가격 알림" leading={<BackButton />} bottomSpace={40} onRefresh={rules.reload}>
+      {list.length === 0 ? (
+        <EmptyState fill={false} title="설정된 알림이 없어요" sub="종목 화면에서 목표가 알림을 설정할 수 있어요." action={{ label: "종목 찾기", onPress: () => router.push("/search") }} />
       ) : (
-        <FlatList
-          data={rules}
-          keyExtractor={r => r.id.toString()}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={ACCENT} />}
-          ItemSeparatorComponent={() => <View style={s.sep} />}
-          renderItem={({ item }) => {
-            const cond = (() => {
-              try { return JSON.parse(item.conditionJson); } catch { return {}; }
-            })();
+        <GroupedList>
+          {list.map((r) => {
+            const q = r.stockId != null ? byId.get(r.stockId) : undefined;
+            const cond = parse(r.conditionJson);
             return (
-              <TouchableOpacity style={s.row} onPress={() => router.push(`/stocks/${item.symbol}`)}>
-                <View style={s.rowLeft}>
-                  <View style={s.rowTop}>
-                    <Text style={s.symbol}>{item.symbol}</Text>
-                    <View style={[s.badge, item.isActive ? s.badgeOn : s.badgeOff]}>
-                      <Text style={s.badgeText}>{item.isActive ? "활성" : "비활성"}</Text>
-                    </View>
-                  </View>
-                  <Text style={s.ruleName}>{RULE_LABEL[item.ruleType] ?? item.ruleType}</Text>
-                  {cond.threshold != null && (
-                    <Text style={s.threshold}>₩{Number(cond.threshold).toLocaleString()}</Text>
-                  )}
+              <Pressable
+                key={r.id}
+                disabled={!q}
+                onPress={() => q && router.push(`/stocks/${q.symbol}`)}
+                accessibilityRole="button"
+                style={({ pressed }) => [s.row, pressed && { backgroundColor: c.raised }]}
+              >
+                <View style={s.fill}>
+                  <Text style={[font.headline, { color: c.text }]}>{q?.name ?? "종목"}</Text>
+                  <Text style={[font.footnote, { color: c.muted }]}>
+                    {RULE_LABEL[r.ruleType] ?? r.ruleType}{cond.threshold != null ? ` · ${formatWon(Number(cond.threshold))}원` : ""}
+                  </Text>
                 </View>
-              </TouchableOpacity>
+                <Badge label={r.isActive ? "켜짐" : "꺼짐"} tone={r.isActive ? "accent" : "muted"} />
+              </Pressable>
             );
-          }}
-        />
+          })}
+        </GroupedList>
       )}
-
-      {/* 하단 내비게이션 */}
-      <View style={s.nav}>
-        <TouchableOpacity style={s.navItem} onPress={() => router.push("/")}>
-          <Text style={s.navIcon}>📈</Text><Text style={s.navLabel}>홈</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.navItem} onPress={() => router.push("/watchlist")}>
-          <Text style={s.navIcon}>⭐</Text><Text style={s.navLabel}>관심종목</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.navItem}>
-          <Text style={[s.navIcon, s.navActive]}>🔔</Text><Text style={[s.navLabel, s.navActive]}>알림</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+    </Screen>
   );
 }
 
-const BG = "#0d1117", SURF = "#161929", BORDER = "#242840", TEXT = "#e8eaf6", MUTED = "#5c6288", ACCENT = "#5c7cfa";
+function parse(json: string): { threshold?: number | string } {
+  try { return JSON.parse(json); } catch { return {}; }
+}
 
 const s = StyleSheet.create({
-  container:  { flex: 1, backgroundColor: BG },
-  center:     { flex: 1, alignItems: "center", justifyContent: "center", padding: 32 },
-  emptyIcon:  { fontSize: 48, marginBottom: 16 },
-  emptyTitle: { color: TEXT, fontSize: 18, fontWeight: "700", marginBottom: 8 },
-  emptySub:   { color: MUTED, fontSize: 14, textAlign: "center", marginBottom: 24 },
-  cta:        { backgroundColor: ACCENT, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
-  ctaText:    { color: "#fff", fontWeight: "600", fontSize: 15 },
-  sep:        { height: 1, backgroundColor: BORDER, marginHorizontal: 16 },
-  row:        { paddingHorizontal: 16, paddingVertical: 14 },
-  rowLeft:    { flex: 1 },
-  rowTop:     { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
-  symbol:     { color: TEXT, fontWeight: "700", fontSize: 15 },
-  ruleName:   { color: MUTED, fontSize: 13 },
-  threshold:  { color: ACCENT, fontSize: 14, fontWeight: "600", marginTop: 2 },
-  badge:      { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 4 },
-  badgeOn:    { backgroundColor: "rgba(92,124,250,.2)" },
-  badgeOff:   { backgroundColor: "#242840" },
-  badgeText:  { color: TEXT, fontSize: 10, fontWeight: "700" },
-  nav:        { flexDirection: "row", backgroundColor: SURF, borderTopWidth: 1, borderTopColor: BORDER, paddingBottom: 20, paddingTop: 8 },
-  navItem:    { flex: 1, alignItems: "center", gap: 2 },
-  navIcon:    { fontSize: 20 },
-  navLabel:   { color: MUTED, fontSize: 10 },
-  navActive:  { color: ACCENT },
+  fill: { flex: 1 },
+  row: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, paddingHorizontal: 16 },
 });

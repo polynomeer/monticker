@@ -106,7 +106,8 @@ export function useDisconnectBrokerage() {
 export function useSubmitBrokerageOrder() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (req: SubmitBrokerageOrderRequest) => submitBrokerageOrder(req),
+    mutationFn: ({ idempotencyKey, ...req }: SubmitBrokerageOrderRequest & { idempotencyKey: string }) =>
+      submitBrokerageOrder(req, idempotencyKey),
     // ADR-057 — 423(킬 스위치)일 수 있다. 배너가 다음 포커스까지 기다리지 않도록 상태를 다시 읽는다.
     onError: () => qc.invalidateQueries({ queryKey: ["brokerage", "trading-status"] }),
     onSuccess: () => {
