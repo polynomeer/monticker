@@ -36,7 +36,7 @@ vi.mock("@/hooks/useBrokerage", () => ({ useBrokerageAccount: () => ({ data: bro
 
 import AssetsPage from "@/app/assets/page";
 
-describe("내 자산 — 탭은 주소에 남는다(ADR-110)", () => {
+describe("내 자산 — 탭은 주소에 남는다(ADR-115)", () => {
   beforeEach(() => { replace.mockReset(); search = ""; brokerage = null; });
 
   it("view=PAPER면 모의 포트폴리오 전체와 모의 계좌 지표를 보여 준다", () => {

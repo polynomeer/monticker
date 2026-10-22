@@ -33,7 +33,7 @@ export function usePaperStats(): TopStat[] {
 
 /**
  * 모의 포트폴리오 — 보유·거래 내역·빠른 매수·손익 기여도·위험 집중도·평균단가 오버레이·리스크.
- * "내 자산"의 모의 탭이 그린다(ADR-110). 로그인한 뒤에만 그린다(부르는 쪽이 확인한다).
+ * "내 자산"의 모의 탭이 그린다(ADR-115). 로그인한 뒤에만 그린다(부르는 쪽이 확인한다).
  */
 export function PaperPortfolioView() {
   const [sellModal, setSellModal] = useState<Holding | null>(null);

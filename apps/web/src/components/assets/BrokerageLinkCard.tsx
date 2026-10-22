@@ -5,7 +5,7 @@ import { maskAccount } from "@/components/brokerage/shared";
 import { useBrokerageAccount } from "@/hooks/useBrokerage";
 
 /**
- * 주문용 증권사 연동(BYOK)이 있으면 계좌 목록 아래에 알린다 — 실전투자 화면으로 가는 길만 둔다(ADR-110).
+ * 주문용 증권사 연동(BYOK)이 있으면 계좌 목록 아래에 알린다 — 실전투자 화면으로 가는 길만 둔다(ADR-115).
  * 그 잔고는 통합 보유에 넣지 않는다: 증권사 API로 보유를 모으는 것은 2단계이고 법률 자문 뒤다(ADR-106, legal-review-brief §2-12).
  */
 export function BrokerageLinkCard() {
