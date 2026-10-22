@@ -89,6 +89,19 @@ class ConsentService(private val repo: UserConsentRepository) {
         log.info("동의 철회: userId={} type={}", userId, type)
     }
 
+    /**
+     * 기능 단위 동의(가입 밖의 그룹)를 철회한다. 가입 필수 항목은 [withdraw]처럼 막는다(탈퇴로 처리).
+     * 그 기능의 데이터를 지우는 흐름에서만 부른다 — 예: 통합 포트폴리오 데이터 전체 삭제(ADR-106).
+     */
+    fun withdrawFeature(userId: Long, group: ConsentGroup, source: ConsentSource) {
+        require(group != ConsentGroup.SIGNUP) { "가입 동의는 철회할 수 없습니다. 탈퇴로 처리해야 합니다." }
+        val now = Instant.now()
+        repo.saveAll(group.required.map {
+            UserConsent(userId = userId, consentType = it, documentVersion = ConsentDocuments.versionOf(it), agreed = false, source = source, recordedAt = now)
+        })
+        log.info("기능 동의 철회: userId={} group={}", userId, group)
+    }
+
     private fun record(userId: Long, types: Set<ConsentType>, source: ConsentSource) {
         val now = Instant.now()
         repo.saveAll(types.map { UserConsent(userId = userId, consentType = it, documentVersion = ConsentDocuments.versionOf(it), agreed = true, source = source, recordedAt = now) })
@@ -113,5 +126,6 @@ class ConsentService(private val repo: UserConsentRepository) {
         ConsentType.BROKERAGE_DELEGATION -> "주문 권한 위임"
         ConsentType.BROKERAGE_NO_CUSTODY -> "자금 미보관 고지"
         ConsentType.BROKERAGE_LOSS_ATTRIBUTION -> "손실 귀속 고지"
+        ConsentType.PORTFOLIO_DATA_COLLECTION -> "계좌 정보 수집·이용"
     }
 }

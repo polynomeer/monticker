@@ -34,6 +34,26 @@ class MatchingOrderBookService {
         }
     }
 
+    /** ADR-114 — 탈퇴한 사용자의 대기 주문을 이 pod의 호가창에서 모두 뺀다. 뺀 건수를 돌려준다. */
+    fun evictUser(userId: Long): Int {
+        var evicted = 0
+        books.values.forEach { book ->
+            synchronized(book) {
+                for (side in listOf(book.bids, book.asks)) {
+                    val it = side.entries.iterator()
+                    while (it.hasNext()) {
+                        val (_, deque) = it.next()
+                        val before = deque.size
+                        deque.removeIf { order -> order.userId == userId }
+                        evicted += before - deque.size
+                        if (deque.isEmpty()) it.remove()
+                    }
+                }
+            }
+        }
+        return evicted
+    }
+
     private fun matchMarket(book: OrderBook, taker: Order, results: MutableList<MatchResult>) {
         val counterBook = if (taker.side == OrderSide.BUY) book.asks else book.bids
         matchAgainstBook(counterBook, taker, results, priceLimit = null)

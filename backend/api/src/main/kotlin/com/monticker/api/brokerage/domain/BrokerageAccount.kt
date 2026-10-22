@@ -66,6 +66,10 @@ class BrokerageAccount(
     @Column(name = "disconnected_at")
     var disconnectedAt: Instant? = null,
 ) {
+    /** ADR-114 — 지울 자격증명이 남아 있는가. 갈아타기로 비활성화됐지만 열린 주문 대조를 위해 키를 남긴 계좌도 여기 걸린다(ADR-067 Note). */
+    val holdsCredentials: Boolean
+        get() = accessToken != null || appKey != null || appSecret != null || providerAccountRef != null
+
     /** ADR-067 — 저장된 자격증명을 모두 지우고 비활성화한다. 재연동은 새 키 입력으로만 가능하다. */
     fun disconnect(at: Instant = Instant.now()) {
         accessToken = null

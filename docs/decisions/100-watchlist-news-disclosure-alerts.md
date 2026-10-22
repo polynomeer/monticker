@@ -7,6 +7,8 @@ Accepted
 (사용자 소유 알림 이력·dedup 키), [ADR-093](093-notification-quiet-hours-and-delivery-channels.md)(방해 금지 시간·공유 사례표),
 [ADR-094](094-separate-outbox-tables-per-app.md)(앱별 아웃박스)를 따른다. 기존 결정을 번복하지 않는다.
 
+받는 사람은 [ADR-108](108-holdings-as-notification-audience.md)에서 "관심종목 ∪ 모든 실계좌의 보유 종목"으로 넓어졌다(그 밖의 결정은 그대로).
+
 ## Context
 
 `/settings/notifications`의 "뉴스·공시"는 V78부터 `news_alert_push`·`news_alert_email` 열이 있었지만 보내는 코드가 없었다.

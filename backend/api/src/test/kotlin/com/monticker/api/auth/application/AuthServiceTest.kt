@@ -42,7 +42,8 @@ class AuthServiceTest {
     private val guard = RedisGuard(SimpleMeterRegistry())
     private val revocationService = mockk<RefreshTokenRevocationService>(relaxed = true)
     private val consentService = mockk<ConsentService>(relaxed = true)
-    private val service = AuthService(userRepository, provider, encoder, jdbc, redis, emailService, guard, revocationService, consentService)
+    private val events = mockk<org.springframework.context.ApplicationEventPublisher>(relaxed = true)
+    private val service = AuthService(userRepository, provider, encoder, jdbc, redis, emailService, guard, revocationService, consentService, events)
     private val requiredConsents = listOf("TERMS", "PRIVACY", "AGE_OVER_19")
 
     @Test
@@ -300,5 +301,52 @@ class AuthServiceTest {
 
         assertThatThrownBy { service.signup("n@test.com", "password1!", "미동의", emptyList()) }
             .isInstanceOf(IllegalArgumentException::class.java)
+    }
+
+    // 탈퇴는 소프트 삭제라 CASCADE가 돌지 않는다 — 사용자 데이터를 지우는 모듈(통합 포트폴리오)이 이 이벤트로 지운다
+    @Test
+    fun `탈퇴하면 같은 트랜잭션에서 탈퇴 이벤트를 낸다 - 비밀번호가 틀리면 내지 않는다`() {
+        val user = User(id = 7L, email = "bye@test.com", passwordHash = encoder.encode("password1!"), nickname = "탈퇴")
+        every { userRepository.findById(7L) } returns Optional.of(user)
+
+        assertThatThrownBy { service.deleteAccount(7L, "wrong-pass1!") }.isInstanceOf(IllegalArgumentException::class.java)
+        verify(exactly = 0) { events.publishEvent(any<Any>()) }
+
+        service.deleteAccount(7L, "password1!")
+        assertThat(user.deletedAt).isNotNull()
+        verify(exactly = 1) { events.publishEvent(com.monticker.api.common.account.UserAccountDeletedEvent(7L)) }
+    }
+
+    // ADR-114 — 행은 결제·실거래·동의 기록이 참조해 남기고, 사람을 알아볼 수 있는 값은 지운다
+    @Test
+    fun `탈퇴하면 사용자 행을 익명화하고 auth가 가진 설정을 지운다`() {
+        val user = User(
+            id = 7L, email = "bye@test.com", passwordHash = encoder.encode("password1!"), nickname = "탈퇴",
+            provider = "GOOGLE", providerId = "g-123", emailVerified = true,
+        )
+        every { userRepository.findById(7L) } returns Optional.of(user)
+
+        service.deleteAccount(7L, "password1!")
+
+        assertThat(user.email).isEqualTo("deleted-7@deleted.invalid")
+        assertThat(user.nickname).isEqualTo(User.DELETED_NICKNAME)
+        assertThat(user.passwordHash).isNull()
+        assertThat(user.providerId).isNull()
+        assertThat(user.emailVerified).isFalse()
+        verify { jdbc.update("DELETE FROM refresh_tokens WHERE user_id = ?", 7L) }
+        verify { jdbc.update("DELETE FROM notification_preferences WHERE user_id = ?", 7L) }
+        verify { jdbc.update("DELETE FROM user_preferences WHERE user_id = ?", 7L) }
+    }
+
+    @Test
+    fun `탈퇴 리스너가 거부하면 익명화하지 않는다 - 예외가 트랜잭션 전체를 롤백한다`() {
+        val user = User(id = 7L, email = "bye@test.com", passwordHash = encoder.encode("password1!"), nickname = "탈퇴")
+        every { userRepository.findById(7L) } returns Optional.of(user)
+        every { events.publishEvent(any<Any>()) } throws com.monticker.api.common.exception.BusinessRuleException("확인 중인 주문")
+
+        assertThatThrownBy { service.deleteAccount(7L, "password1!") }
+            .isInstanceOf(com.monticker.api.common.exception.BusinessRuleException::class.java)
+        assertThat(user.email).isEqualTo("bye@test.com")
+        assertThat(user.deletedAt).isNull()
     }
 }

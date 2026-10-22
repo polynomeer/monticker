@@ -37,7 +37,7 @@ class WatcherDeviceTokensIntegrationTest : PostgresIntegrationTest() {
         jdbcTemplate.update("INSERT INTO device_tokens (user_id, token, is_active) VALUES (?, ?, ?)", userId, token, active)
 
     private fun watchers(stockId: Long): List<Pair<Long, String>> =
-        jdbcTemplate.query(StockEventWriter.WATCHER_DEVICE_TOKENS_SQL, { rs, _ -> rs.getLong("user_id") to rs.getString("token") }, stockId)
+        jdbcTemplate.query(StockEventWriter.WATCHER_DEVICE_TOKENS_SQL, { rs, _ -> rs.getLong("user_id") to rs.getString("token") }, stockId, stockId)
 
     @Test
     fun `returns active tokens of users who watch the stock, once even across several groups`() {
@@ -62,5 +62,30 @@ class WatcherDeviceTokensIntegrationTest : PostgresIntegrationTest() {
         assertThat(watchers(s)).containsExactlyInAnyOrder(
             alice to "alice-1", alice to "alice-2", bob to "bob-1",
         )
+    }
+
+    private fun hold(userId: Long, stockId: Long) {
+        val accountId = jdbcTemplate.queryForObject(
+            "INSERT INTO portfolio_accounts (user_id, source, institution, name) VALUES (?, 'MANUAL', 'OTHER', 'a') RETURNING id",
+            Long::class.java, userId,
+        )!!
+        jdbcTemplate.update(
+            """INSERT INTO portfolio_transactions (account_id, type, trade_date, stock_id, quantity, price, amount, fingerprint)
+               VALUES (?, 'BUY', DATE '2026-01-02', ?, 1, 100, 100, ?)""",
+            accountId, stockId, "fp-${System.nanoTime()}",
+        )
+    }
+
+    // ADR-108 — 관심종목에 없어도 어느 계좌에든 보유 중이면 받는다. 둘 다여도 토큰은 한 번
+    @Test
+    fun `holders get the push too, once even when they also watch the stock`() {
+        val s = stock("HLD${System.nanoTime() % 100000}")
+        val holder = user("holder").also { hold(it, s) }
+        val both = user("both").also { hold(it, s); group(it).also { g -> watch(g, s) } }
+        val goneHolder = user("gone-holder", deleted = true).also { hold(it, s) }
+
+        token(holder, "holder-1"); token(both, "both-1"); token(goneHolder, "gone-holder-1")
+
+        assertThat(watchers(s)).containsExactlyInAnyOrder(holder to "holder-1", both to "both-1")
     }
 }
