@@ -31,7 +31,7 @@ const ROW_COLUMNS: Column<ImportRowResult>[] = [
     cell: (r) => (
       <span className="flex items-center gap-1.5">
         {r.name ?? r.symbol ?? "—"}
-        {r.status !== "ERROR" && r.symbol && r.stockId == null && <Pill tone="orange">시세 없음</Pill>}
+        {r.status !== "ERROR" && r.symbol && r.stockId == null && <Pill tone="caution">시세 없음</Pill>}
       </span>
     ),
   },
@@ -168,7 +168,7 @@ export function ImportPanel({ accountId }: { accountId: number }) {
             <span className="text-up">새 거래 <b className="num">{preview.newCount}</b></span>
             <span className="text-tm-muted">이미 있음 <b className="num">{preview.duplicateCount}</b></span>
             <span className={preview.errorCount ? "text-[#ff8a8a]" : "text-tm-muted"}>오류 <b className="num">{preview.errorCount}</b></span>
-            {preview.unmatchedCount > 0 && <span className="text-dracula-orange">시세 없음 <b className="num">{preview.unmatchedCount}</b></span>}
+            {preview.unmatchedCount > 0 && <span className="text-caution">시세 없음 <b className="num">{preview.unmatchedCount}</b></span>}
             <span className="text-2xs text-tm-muted">인코딩 {preview.charset}</span>
           </div>
           {preview.unmatchedCount > 0 && (

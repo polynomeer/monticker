@@ -16,7 +16,7 @@ export function KrwSummaryTiles({ krw, fxRate }: { krw: KrwSummary; fxRate?: { k
     <AutoGrid min={220}>
       <Tile>
         <span className="flex items-center gap-1.5 text-2xs text-tm-muted">
-          원화 환산 평가금액 {krw.fxMocked && <Pill tone="orange">모의 환율</Pill>}
+          원화 환산 평가금액 {krw.fxMocked && <Pill tone="caution">모의 환율</Pill>}
         </span>
         <span className="num text-lg font-semibold">{won(krw.marketValueKrw)}</span>
         <KV k="매입금액(매수일 환율)" v={won(krw.costBasisKrw)} />

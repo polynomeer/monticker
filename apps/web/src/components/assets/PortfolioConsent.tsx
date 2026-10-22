@@ -28,7 +28,7 @@ export function PortfolioConsentBlock({ checked, onChange, renewal = false }: { 
   return (
     <section aria-label="계좌 정보 수집·이용 동의" className="flex flex-col gap-2.5 rounded-lg border border-tm-line bg-tm-inner p-3">
       <p className="m-0 text-xs font-semibold text-tm-soft">
-        계좌 정보 수집·이용 동의 (필수){renewal && <span className="ml-1.5 font-normal text-dracula-orange">— 안내 문서가 바뀌어 다시 동의가 필요합니다</span>}
+        계좌 정보 수집·이용 동의 (필수){renewal && <span className="ml-1.5 font-normal text-caution">— 안내 문서가 바뀌어 다시 동의가 필요합니다</span>}
       </p>
       <dl className="m-0 flex flex-col gap-1.5 text-xs leading-relaxed">
         {PORTFOLIO_CONSENT_ITEMS.map((i) => (

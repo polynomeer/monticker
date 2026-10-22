@@ -17,7 +17,7 @@ export function AssetHoldingsTable({ holdings, showAccounts = true }: { holdings
           <StockCell name={h.name ?? h.symbol ?? h.instrumentCode ?? "—"} code={h.symbol ?? h.instrumentCode ?? undefined} href={h.stockId && h.symbol ? `/stocks/${h.symbol}` : undefined} />
           {h.needsReview && (
             <span title="가진 것보다 많이 판 기록이 있습니다. 앞 구간 거래가 빠졌을 수 있습니다.">
-              <Pill tone="orange">확인 필요</Pill>
+              <Pill tone="caution">확인 필요</Pill>
             </span>
           )}
         </div>

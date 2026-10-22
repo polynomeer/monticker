@@ -12,7 +12,7 @@ export function BrokerageLinkCard() {
   const { data } = useBrokerageAccount();
   if (!data) return null;
   return (
-    <div className="flex flex-col gap-1.5 rounded-[10px] border border-dracula-orange/40 bg-tm-panel p-3">
+    <div className="flex flex-col gap-1.5 rounded-[10px] border border-live/40 bg-tm-panel p-3">
       <span className="text-2xs text-tm-muted">주문용 증권사 연동</span>
       <span className="text-13 font-semibold">
         {data.provider} <span className="num font-normal text-tm-soft">{maskAccount(data.accountNumber)}</span>
