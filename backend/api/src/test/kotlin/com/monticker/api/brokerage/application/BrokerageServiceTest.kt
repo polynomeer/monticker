@@ -1018,6 +1018,85 @@ class BrokerageServiceTest {
         verify(exactly = 0) { accountRepo.save(any()) }
     }
 
+    // ── ADR-109 탈퇴 ────────────────────────────────────────────────────────────
+
+    private fun stubAccountDeletion(accounts: List<BrokerageAccount>, openOrders: Map<Long, Long> = emptyMap(), triggered: Long = 0) {
+        every { accountRepo.findAllByUserId(1L) } returns accounts
+        every { accountRepo.save(any()) } answers { firstArg() }
+        accounts.forEach { a ->
+            every { jdbc.queryForObject(match<String> { it.contains("FROM brokerage_orders") && it.contains("COUNT") }, Long::class.java, a.id) } returns (openOrders[a.id] ?: 0L)
+        }
+        every { jdbc.queryForObject(match<String> { it.contains("FROM conditional_orders") && it.contains("TRIGGERED") }, Long::class.java, 1L) } returns triggered
+        every { jdbc.update(match<String> { it.contains("UPDATE conditional_orders") }, 1L) } returns 3
+    }
+
+    /** 갈아타기로 비활성화됐지만 열린 주문 대조를 위해 키를 남긴 계좌(ADR-067 Note) */
+    private fun switchedAwayAccountWithKeys() = BrokerageAccount(
+        id = 8L, userId = 1L, provider = BrokerageProvider.TOSS, accountNumber = "999", isActive = false,
+        accessToken = "old-tok", appKey = "old-key", appSecret = "old-secret",
+    )
+
+    @Test
+    fun `account deletion wipes keys on every account including an inactive one that kept its keys, and cancels active conditional orders`() {
+        val active = linkedAccount()
+        val inactive = switchedAwayAccountWithKeys()
+        stubAccountDeletion(listOf(active, inactive))
+
+        val closed = service.closeForAccountDeletion(1L)
+
+        assertThat(closed).isEqualTo(2)
+        listOf(active, inactive).forEach {
+            assertThat(it.holdsCredentials).isFalse()
+            assertThat(it.isActive).isFalse()
+            assertThat(it.disconnectedAt).isNotNull()
+        }
+        verify { jdbc.update(match<String> { it.contains("SET status = 'CANCELLED'") && it.contains("user_id = ?") && it.contains("status = 'ACTIVE'") }, 1L) }
+        verify { jdbc.query(match<String> { it.contains("pg_advisory_xact_lock") }, any<org.springframework.jdbc.core.RowCallbackHandler>(), any(), 1L) }
+    }
+
+    @Test
+    fun `account deletion leaves an already disconnected account untouched`() {
+        val gone = BrokerageAccount(id = 9L, userId = 1L, accountNumber = "1", isActive = false, disconnectedAt = Instant.parse("2026-01-01T00:00:00Z"))
+        stubAccountDeletion(listOf(gone))
+
+        assertThat(service.closeForAccountDeletion(1L)).isZero()
+
+        assertThat(gone.disconnectedAt).isEqualTo(Instant.parse("2026-01-01T00:00:00Z"))
+        verify(exactly = 0) { accountRepo.save(any()) }
+    }
+
+    @Test
+    fun `account deletion is refused while any account still has an order whose outcome is open — even an inactive one`() {
+        val active = linkedAccount()
+        val inactive = switchedAwayAccountWithKeys()
+        stubAccountDeletion(listOf(active, inactive), openOrders = mapOf(inactive.id to 1L))
+
+        assertThrows<BusinessRuleException> { service.closeForAccountDeletion(1L) }
+
+        assertThat(active.appKey).isEqualTo("key")
+        assertThat(inactive.appKey).isEqualTo("old-key")
+        verify(exactly = 0) { accountRepo.save(any()) }
+        verify(exactly = 0) { jdbc.update(match<String> { it.contains("UPDATE conditional_orders") }, 1L) }
+    }
+
+    @Test
+    fun `account deletion is refused while a triggered conditional order is being submitted`() {
+        val active = linkedAccount()
+        stubAccountDeletion(listOf(active), triggered = 1)
+
+        assertThrows<BusinessRuleException> { service.closeForAccountDeletion(1L) }
+
+        assertThat(active.appSecret).isEqualTo("secret")
+        verify(exactly = 0) { accountRepo.save(any()) }
+    }
+
+    @Test
+    fun `account deletion with no brokerage account does nothing`() {
+        stubAccountDeletion(emptyList())
+
+        assertThat(service.closeForAccountDeletion(1L)).isZero()
+    }
+
     @Test
     fun `connect is refused before calling the broker when the notice consents are missing (ADR-068)`() {
         val brokerClient = mockk<BrokerageClient>()

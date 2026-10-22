@@ -42,6 +42,12 @@ class UserSubscription(
         this.updatedAt = Instant.now()
     }
 
+    /** 낸 기간만 붙인다. [upgrade]와 달리 상태·해지 시각·플랜은 그대로다 — 해지된 구독을 되살리지 않는다. */
+    fun extendPaidPeriod(expiresAt: Instant) {
+        this.expiresAt = expiresAt
+        this.updatedAt = Instant.now()
+    }
+
     fun cancel() {
         this.status = SubscriptionStatus.CANCELLED
         this.cancelledAt = Instant.now()

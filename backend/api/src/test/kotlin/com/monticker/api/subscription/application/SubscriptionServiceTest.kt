@@ -224,6 +224,7 @@ class SubscriptionServiceTest {
         every { billingKeyRepo.findByUserId(1L) } returns Optional.empty()
         stubRenewal(record)
 
+        stubLock(sub)
         val result = service.renewSubscription(sub)
 
         assertThat(result).isEqualTo(RenewResult.Failed)
@@ -246,6 +247,7 @@ class SubscriptionServiceTest {
         stubRenewal(record)
         every { subscriptionRepo.save(any()) } returns sub
 
+        stubLock(sub)
         val result = serviceWithSpy.renewSubscription(sub)
 
         assertThat(result).isEqualTo(RenewResult.Renewed)
@@ -270,6 +272,7 @@ class SubscriptionServiceTest {
         every { planRepo.findByCode(PlanCode.FREE) } returns Optional.of(freePlan)
         every { subscriptionRepo.save(any()) }        returns sub
 
+        stubLock(sub)
         val result = service.renewSubscription(sub)
 
         assertThat(result).isEqualTo(RenewResult.Downgraded)
@@ -320,6 +323,7 @@ class SubscriptionServiceTest {
         every { paymentRepo.findByPgOrderId(any()) } returns Optional.of(paid)
         every { subscriptionRepo.save(any()) }        returns sub
 
+        stubLock(sub)
         val result = svc.renewSubscription(sub)
 
         assertThat(result).isEqualTo(RenewResult.Renewed)
@@ -339,6 +343,7 @@ class SubscriptionServiceTest {
         every { billingKeyRepo.findByUserId(1L) } returns Optional.of(billingKey())
         stubRenewal(rec, consecutiveFailures = 2L)   // 한 번만 더 실패하면 강등되는 상태
 
+        stubLock(sub)
         val result = svc.renewSubscription(sub)
 
         assertThat(result).isEqualTo(RenewResult.Deferred)
@@ -362,6 +367,7 @@ class SubscriptionServiceTest {
         every { subscriptionRepo.save(any()) }      returns sub
         stubRenewal(rec)
 
+        stubLock(sub)
         val result = svc.renewSubscription(sub)
 
         assertThat(result).isEqualTo(RenewResult.Renewed)
@@ -384,6 +390,7 @@ class SubscriptionServiceTest {
         every { billingKeyRepo.findByUserId(1L) } returns Optional.of(billingKey())
         stubRenewal(rec, consecutiveFailures = 2L)
 
+        stubLock(sub)
         val result = svc.renewSubscription(sub)
 
         assertThat(result).isEqualTo(RenewResult.Deferred)
@@ -405,6 +412,7 @@ class SubscriptionServiceTest {
         every { subscriptionRepo.findByUserId(1L) }  returns Optional.of(sub)
         every { subscriptionRepo.save(any()) }       returns sub
 
+        stubLock(sub)
         val result = svc.renewSubscription(sub)
 
         assertThat(result).isEqualTo(RenewResult.Renewed)
@@ -429,6 +437,7 @@ class SubscriptionServiceTest {
         every { paymentRepo.save(any()) }            returns pending
         every { subscriptionRepo.save(any()) }       returns sub
 
+        stubLock(sub)
         val result = svc.renewSubscription(sub)
 
         assertThat(result).isEqualTo(RenewResult.Renewed)
@@ -451,6 +460,7 @@ class SubscriptionServiceTest {
         every { planRepo.findByCode(PlanCode.FREE) }  returns Optional.of(freePlan)
         every { subscriptionRepo.save(any()) }        returns sub
 
+        stubLock(sub)
         val result = svc.renewSubscription(sub)
 
         assertThat(result).isEqualTo(RenewResult.Downgraded)
@@ -477,6 +487,7 @@ class SubscriptionServiceTest {
         every { subscriptionRepo.save(any()) }      returns sub
         stubRenewal(rec)
 
+        stubLock(sub)
         assertThat(svc.renewSubscription(sub)).isEqualTo(RenewResult.Renewed)
 
         verify { ledgerService.recordSubscriptionPayment(1L, "PRO", BigDecimal("9900"), rec.id) }
@@ -491,13 +502,115 @@ class SubscriptionServiceTest {
             lookup = PaymentStatusResult(found = true, status = "DONE", paymentKey = "pay_x")))
 
         every { paymentRepo.save(any()) }            returns rec
-        every { subscriptionRepo.findByUserId(1L) }  returns Optional.of(sub)
         every { subscriptionRepo.save(any()) }       returns sub
+        stubLock(sub)
 
         assertThat(svc.resolvePendingPayment(rec)).isEqualTo(PaymentResolution.PAID)
 
         assertThat(rec.status).isEqualTo(PaymentStatus.SUCCESS)
         verify { ledgerService.recordSubscriptionPayment(1L, "PRO", BigDecimal("9900"), rec.id) }
+    }
+
+    @Test
+    fun `적체 정리는 구독 행 락을 쥐고 정리한다`() {
+        val plan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val sub  = makeSubscription(plan)
+        val rec  = makeRenewalRecord(plan)
+        val svc  = serviceWith(FakePgClient(lookup = PaymentStatusResult(found = true, status = "DONE", paymentKey = "pay_r")))
+
+        every { paymentRepo.save(any()) }      returns rec
+        every { subscriptionRepo.save(any()) } returns sub
+        stubLock(sub)
+
+        assertThat(svc.resolvePendingPayment(rec)).isEqualTo(PaymentResolution.PAID)
+
+        verify { subscriptionRepo.findByUserIdForUpdate(1L) }
+        verify(exactly = 0) { subscriptionRepo.findByUserId(any()) }
+        assertThat(sub.status).isEqualTo(SubscriptionStatus.ACTIVE)
+        assertThat(sub.expiresAt).isAfter(Instant.now().plus(29, java.time.temporal.ChronoUnit.DAYS))
+    }
+
+    @Test
+    fun `해지 전에 남은 불확정 갱신 청구가 뒤늦게 확인돼도 해지된 구독을 되살리지 않는다`() {
+        // 갱신이 PENDING을 남김 → 사용자가 해지 → 적체 정리 배치가 PG에서 DONE을 확인.
+        // 예전에는 upgrade()로 ACTIVE·cancelledAt=null로 되돌려 다음 갱신 배치가 또 청구했다.
+        val plan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val oldExpiry = Instant.now().plusSeconds(3600)
+        val sub  = makeSubscription(plan).also { it.expiresAt = oldExpiry; it.cancel() }
+        val cancelledAt = sub.cancelledAt
+        val rec  = makeRenewalRecord(plan)
+        val svc  = serviceWith(FakePgClient(lookup = PaymentStatusResult(found = true, status = "DONE", paymentKey = "pay_late")))
+
+        every { paymentRepo.save(any()) }      returns rec
+        every { subscriptionRepo.save(any()) } returns sub
+        stubLock(sub)
+
+        assertThat(svc.resolvePendingPayment(rec)).isEqualTo(PaymentResolution.PAID)
+
+        // 돈은 움직였다 — 기록과 원장은 확정한다
+        assertThat(rec.status).isEqualTo(PaymentStatus.SUCCESS)
+        assertThat(rec.pgTransactionId).isEqualTo("pay_late")
+        verify { ledgerService.recordSubscriptionPayment(1L, "PRO", BigDecimal("9900"), rec.id) }
+        // 해지는 그대로, 낸 기간만 붙는다
+        assertThat(sub.status).isEqualTo(SubscriptionStatus.CANCELLED)
+        assertThat(sub.cancelledAt).isEqualTo(cancelledAt)
+        assertThat(sub.expiresAt).isAfter(oldExpiry)
+        // 갱신 배치는 ACTIVE만 읽으므로 다음 주기 청구 대상이 아니다
+        assertThat(service.billingSchedule(sub).noChargeReason).isEqualTo(BillingSchedule.NoChargeReason.CANCELLED)
+    }
+
+    @Test
+    fun `탈퇴로 해지된 구독의 불확정 갱신 청구가 확인돼도 되살리지 않는다`() {
+        val plan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val sub  = makeSubscription(plan).also { it.expiresAt = Instant.now().plusSeconds(3600) }
+        every { subscriptionRepo.findByUserIdForUpdate(1L) } returns Optional.of(sub)
+        every { subscriptionRepo.save(any()) } returns sub
+        every { billingKeyRepo.deleteByUserId(1L) } just Runs
+        service.closeForAccountDeletion(1L)
+
+        val rec = makeRenewalRecord(plan)
+        val svc = serviceWith(FakePgClient(lookup = PaymentStatusResult(found = true, status = "DONE", paymentKey = "pay_del")))
+        every { paymentRepo.save(any()) } returns rec
+
+        assertThat(svc.resolvePendingPayment(rec)).isEqualTo(PaymentResolution.PAID)
+
+        assertThat(rec.status).isEqualTo(PaymentStatus.SUCCESS)
+        assertThat(sub.status).isEqualTo(SubscriptionStatus.CANCELLED)
+        assertThat(sub.cancelledAt).isNotNull()
+    }
+
+    @Test
+    fun `해지된 구독의 갱신 청구를 확정해도 남은 기간을 줄이지 않는다`() {
+        val plan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val farExpiry = Instant.now().plus(90, java.time.temporal.ChronoUnit.DAYS)
+        val sub  = makeSubscription(plan, SubscriptionStatus.CANCELLED).also { it.expiresAt = farExpiry }
+        val rec  = makeRenewalRecord(plan)
+        val svc  = serviceWith(FakePgClient(lookup = PaymentStatusResult(found = true, status = "DONE", paymentKey = "pay_far")))
+
+        every { paymentRepo.save(any()) }      returns rec
+        every { subscriptionRepo.save(any()) } returns sub
+        stubLock(sub)
+
+        svc.resolvePendingPayment(rec)
+
+        assertThat(sub.expiresAt).isEqualTo(farExpiry)
+        assertThat(sub.status).isEqualTo(SubscriptionStatus.CANCELLED)
+    }
+
+    @Test
+    fun `일회성 결제가 뒤늦게 확인되면 사용자가 낸 결제이므로 구독을 활성화한다`() {
+        // 갱신이 아니라 사용자가 직접 /prepare → SDK로 낸 결제다. confirm이 유실됐을 뿐 활성화가 의도다.
+        val plan = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val sub  = makeSubscription(plan, SubscriptionStatus.EXPIRED)
+        val rec  = makePaymentRecord(plan).also { it.status = PaymentStatus.PENDING }   // sub_… orderId
+        val svc  = serviceWith(FakePgClient(lookup = PaymentStatusResult(found = true, status = "DONE", paymentKey = "pay_one")))
+
+        every { paymentRepo.save(any()) }      returns rec
+        every { subscriptionRepo.save(any()) } returns sub
+        stubLock(sub)
+
+        assertThat(svc.resolvePendingPayment(rec)).isEqualTo(PaymentResolution.PAID)
+        assertThat(sub.status).isEqualTo(SubscriptionStatus.ACTIVE)
     }
 
     @Test
@@ -568,7 +681,7 @@ class SubscriptionServiceTest {
         val plan = makePlan(PlanCode.PRO, BigDecimal("9900"))
         val sub  = makeSubscription(plan, status = SubscriptionStatus.ACTIVE)
 
-        every { subscriptionRepo.findByUserId(1L) } returns Optional.of(sub)
+        every { subscriptionRepo.findByUserIdForUpdate(1L) } returns Optional.of(sub)
         every { subscriptionRepo.save(any()) }       returns sub
 
         service.cancel(userId = 1L)
@@ -582,7 +695,7 @@ class SubscriptionServiceTest {
         // 해지 버튼을 두 번 누른 사용자가 500을 받고 있었다. GlobalExceptionHandler의
         // 키워드 휴리스틱에 "없습니다"는 없고 "없음"만 있어서 IllegalStateException이
         // 그대로 500으로 샜다 — L-08 부하 시나리오에서 반복마다 하나씩 찍혀 드러났다.
-        every { subscriptionRepo.findByUserId(1L) } returns Optional.empty()
+        every { subscriptionRepo.findByUserIdForUpdate(1L) } returns Optional.empty()
 
         assertThrows<BusinessRuleException> { service.cancel(userId = 1L) }
     }
@@ -592,11 +705,151 @@ class SubscriptionServiceTest {
         val plan = makePlan(PlanCode.PRO, BigDecimal("9900"))
         val sub  = makeSubscription(plan, status = SubscriptionStatus.CANCELLED)
 
-        every { subscriptionRepo.findByUserId(1L) } returns Optional.of(sub)
+        every { subscriptionRepo.findByUserIdForUpdate(1L) } returns Optional.of(sub)
 
         assertThrows<IllegalArgumentException> {
             service.cancel(userId = 1L)
         }
+    }
+
+    // ── ADR-109 탈퇴 ──────────────────────────────────────────────────────────
+
+    @Test
+    fun `탈퇴하면 빌링키를 지우고 활성 구독을 해지한다 - 갱신 배치가 더 청구하지 않는다`() {
+        val sub = makeSubscription(makePlan(PlanCode.PRO, BigDecimal("9900")), status = SubscriptionStatus.ACTIVE)
+        every { billingKeyRepo.deleteByUserId(1L) } just Runs
+        every { subscriptionRepo.findByUserIdForUpdate(1L) } returns Optional.of(sub)
+        every { subscriptionRepo.save(any()) } returns sub
+
+        service.closeForAccountDeletion(1L)
+
+        verify(exactly = 1) { billingKeyRepo.deleteByUserId(1L) }
+        assertThat(sub.status).isEqualTo(SubscriptionStatus.CANCELLED)
+        verify(exactly = 0) { paymentRepo.delete(any()) }
+    }
+
+    @Test
+    fun `탈퇴할 때 구독이 없거나 이미 해지됐어도 실패하지 않고 빌링키는 지운다`() {
+        every { billingKeyRepo.deleteByUserId(1L) } just Runs
+        every { subscriptionRepo.findByUserIdForUpdate(1L) } returns Optional.empty()
+        service.closeForAccountDeletion(1L)
+
+        val cancelled = makeSubscription(makePlan(PlanCode.PRO, BigDecimal("9900")), status = SubscriptionStatus.CANCELLED)
+        every { subscriptionRepo.findByUserIdForUpdate(1L) } returns Optional.of(cancelled)
+        service.closeForAccountDeletion(1L)
+
+        verify(exactly = 2) { billingKeyRepo.deleteByUserId(1L) }
+        verify(exactly = 0) { subscriptionRepo.save(any()) }
+    }
+
+    @Test
+    fun `탈퇴는 빌링키를 지우기 전에 갱신과 같은 구독 행 락을 먼저 쥔다`() {
+        val sub = makeSubscription(makePlan(PlanCode.PRO, BigDecimal("9900")), status = SubscriptionStatus.ACTIVE)
+        every { billingKeyRepo.deleteByUserId(1L) } just Runs
+        every { subscriptionRepo.findByUserIdForUpdate(1L) } returns Optional.of(sub)
+        every { subscriptionRepo.save(any()) } returns sub
+
+        service.closeForAccountDeletion(1L)
+
+        verifyOrder {
+            subscriptionRepo.findByUserIdForUpdate(1L)
+            billingKeyRepo.deleteByUserId(1L)
+        }
+        verify(exactly = 0) { subscriptionRepo.findByUserId(any()) }
+    }
+
+    // ── 배치가 읽은 뒤 바뀐 구독 (ADR-053·ADR-109 Note) ─────────────────────────
+    //
+    // 갱신 배치는 청크(20건)를 먼저 읽고 하나씩 청구한다. 그 사이 해지·탈퇴가 커밋되면 배치가 들고 있는 엔티티는 여전히 ACTIVE이고,
+    // 예전에는 그대로 빌링키를 읽어 한 번 더 긁었다. 이제는 행 락을 쥐고 다시 읽은 값으로만 판단한다.
+
+    /** 배치가 청크를 읽던 시점의 구독 — ACTIVE이고 만료가 다가왔다. */
+    private fun batchRead(plan: SubscriptionPlan) =
+        makeSubscription(plan).also { it.expiresAt = Instant.parse("2026-10-21T00:00:00Z") }
+
+    @Test
+    fun `배치가 읽은 뒤 사용자가 해지했으면 청구하지 않는다`() {
+        val plan    = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val stale   = batchRead(plan)
+        val current = batchRead(plan).also { it.cancel() }        // 해지가 먼저 커밋됐다
+        val pg      = FakePgClient()
+        every { subscriptionRepo.findByIdForUpdate(1L) } returns Optional.of(current)
+
+        val result = serviceWith(pg).renewSubscription(stale)
+
+        assertThat(result).isEqualTo(RenewResult.Skipped)
+        assertThat(pg.chargeCalls).isZero()
+        verify(exactly = 0) { billingKeyRepo.findByUserId(any()) }
+        verify(exactly = 0) { paymentRepo.save(any()) }
+        verify(exactly = 0) { ledgerService.recordSubscriptionPayment(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `배치가 읽은 뒤 탈퇴가 커밋됐으면 청구하지 않는다`() {
+        // closeForAccountDeletion이 같은 락을 쥐고 구독을 해지·빌링키를 지운 뒤 커밋했다. 갱신은 그 커밋을 기다렸다가 해지된 구독을 본다.
+        val plan    = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val stale   = batchRead(plan)
+        val current = batchRead(plan)
+        val pg      = FakePgClient()
+        every { billingKeyRepo.deleteByUserId(1L) } just Runs
+        every { subscriptionRepo.findByUserIdForUpdate(1L) } returns Optional.of(current)
+        every { subscriptionRepo.save(any()) } returns current
+        service.closeForAccountDeletion(1L)
+        every { subscriptionRepo.findByIdForUpdate(1L) } returns Optional.of(current)
+
+        val result = serviceWith(pg).renewSubscription(stale)
+
+        assertThat(result).isEqualTo(RenewResult.Skipped)
+        assertThat(pg.chargeCalls).isZero()
+        assertThat(stale.status).isEqualTo(SubscriptionStatus.ACTIVE)   // 배치가 든 값은 여전히 ACTIVE였다
+        verify(exactly = 0) { billingKeyRepo.findByUserId(any()) }
+    }
+
+    @Test
+    fun `배치가 읽은 뒤 다른 실행이 이미 갱신했으면 다음 주기를 미리 긁지 않는다`() {
+        // 새 만료일로 orderId를 만들면 멱등 기록에 걸리지 않는 새 주기가 된다 — 같은 주기 두 번 청구와 똑같은 결과다.
+        val plan    = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val stale   = batchRead(plan)
+        val current = batchRead(plan).also { it.expiresAt = Instant.parse("2026-11-20T00:00:00Z") }
+        val pg      = FakePgClient()
+        every { subscriptionRepo.findByIdForUpdate(1L) } returns Optional.of(current)
+
+        val result = serviceWith(pg).renewSubscription(stale)
+
+        assertThat(result).isEqualTo(RenewResult.Skipped)
+        assertThat(pg.chargeCalls).isZero()
+        verify(exactly = 0) { paymentRepo.save(any()) }
+    }
+
+    @Test
+    fun `배치가 읽은 구독 행이 사라졌으면 청구하지 않는다`() {
+        val pg = FakePgClient()
+        every { subscriptionRepo.findByIdForUpdate(1L) } returns Optional.empty()
+
+        val result = serviceWith(pg).renewSubscription(batchRead(makePlan(PlanCode.PRO, BigDecimal("9900"))))
+
+        assertThat(result).isEqualTo(RenewResult.Skipped)
+        assertThat(pg.chargeCalls).isZero()
+    }
+
+    @Test
+    fun `배치가 읽은 뒤 바뀐 것이 없으면 다시 읽은 구독으로 청구하고 연장한다`() {
+        val plan    = makePlan(PlanCode.PRO, BigDecimal("9900"))
+        val stale   = batchRead(plan)
+        val current = batchRead(plan)
+        val rec     = makePaymentRecord(plan).also { it.status = PaymentStatus.PENDING }
+        val pg      = FakePgClient()
+        every { subscriptionRepo.findByIdForUpdate(1L) } returns Optional.of(current)
+        every { billingKeyRepo.findByUserId(1L) } returns Optional.of(billingKey())
+        every { subscriptionRepo.save(any()) } returns current
+        stubRenewal(rec)
+
+        val result = serviceWith(pg).renewSubscription(stale)
+
+        assertThat(result).isEqualTo(RenewResult.Renewed)
+        assertThat(pg.chargeCalls).isEqualTo(1)
+        verify { paymentRepo.findByPgOrderId("renewal_1_${stale.expiresAt!!.epochSecond}") }
+        assertThat(current.expiresAt).isAfter(Instant.now())       // 락을 쥔 엔티티를 연장한다
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -656,6 +909,16 @@ class SubscriptionServiceTest {
     private fun makePaymentRecord(plan: SubscriptionPlan) =
         PaymentRecord(id = 99L, userId = 1L, plan = plan, amount = plan.price,
                       pgOrderId = "sub_1_abc", status = PaymentStatus.SUCCESS)
+
+    /** 갱신은 배치가 넘긴 엔티티가 아니라 행 락을 쥐고 다시 읽은 구독으로 판단한다. 단위 테스트에서는 같은 인스턴스를 돌려준다. */
+    private fun stubLock(current: UserSubscription) {
+        every { subscriptionRepo.findByIdForUpdate(current.id) } returns Optional.of(current)
+        every { subscriptionRepo.findByUserIdForUpdate(current.userId) } returns Optional.of(current)
+    }
+
+    private fun makeRenewalRecord(plan: SubscriptionPlan) =
+        PaymentRecord(id = 77L, userId = 1L, plan = plan, amount = plan.price,
+                      pgOrderId = "renewal_1_1760000000", status = PaymentStatus.PENDING)
 
     private fun billingKey() =
         UserBillingKey(id = 1L, userId = 1L, customerKey = "cust_1", billingKeyValue = "billing_key_1")
