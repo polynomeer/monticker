@@ -18,7 +18,7 @@ export default function DeliveryChannelsPanel({ data, loading }: { data: Deliver
         <>
           <div className="flex items-center justify-between border-b border-tm-line pb-2.5 text-xs">
             <span className="text-tm-muted">방해 금지 시간</span>
-            <span className={`num ${data.quietHours.activeNow ? "text-dracula-orange" : "text-tm-soft"}`}>{quietHoursLabel(data.quietHours)}</span>
+            <span className={`num ${data.quietHours.activeNow ? "text-caution" : "text-tm-soft"}`}>{quietHoursLabel(data.quietHours)}</span>
           </div>
           <ul className="m-0 list-none p-0">
             {sortCategories(data.categories).map((c) => {

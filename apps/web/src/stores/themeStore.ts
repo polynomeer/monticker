@@ -19,12 +19,13 @@ export const CHART_THEMES: Record<ChartThemeKey, ChartThemeConfig> = {
     wickUp:    "#0ecb81",
     wickDown:  "#f6465d",
   },
+  // 색약 친화 — 하락은 자홍(ADR-112: 주황은 실전 전용). 패널(#282a36) 위 글자 대비 5.8:1
   classic: {
     label:     "Classic",
     upColor:   "#2563eb",
-    downColor: "#f97316",
+    downColor: "#e879f9",
     wickUp:    "#2563eb",
-    wickDown:  "#f97316",
+    wickDown:  "#e879f9",
   },
   mono: {
     label:     "Mono",

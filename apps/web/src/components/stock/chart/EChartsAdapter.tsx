@@ -51,8 +51,8 @@ const EVENT_COLORS: Record<string, string> = {
   PRICE_SPIKE:          "#50fa7b",
   PRICE_DROP:           "#ff79c6",
   VOLUME_SURGE:         "#bd93f9",
-  NEWS_PUBLISHED:       "#8be9fd",
-  DISCLOSURE_PUBLISHED: "#ffb86c",
+  NEWS_PUBLISHED:       "#c3c8e2",
+  DISCLOSURE_PUBLISHED: "#8be9fd",
   default:              "#c3c8e2",
 };
 const EVENT_LETTERS: Record<string, string> = {
@@ -69,9 +69,9 @@ function fmtVol(v: number): string {
   if (v >= 1_000)     return `${(v / 1_000).toFixed(0)}K`;
   return String(v);
 }
-// 드로잉 색 — 터미널 팔레트(Dracula)와 같은 값
+// 드로잉 색 — 터미널 팔레트(Dracula)와 같은 값. 주황은 실전 전용(ADR-112)이라 쓰지 않는다
 const DRAW_COLORS = {
-  trend: "#ffb86c",
+  trend: "#ff79c6",
   pen:   "#f1fa8c",
   zoom:  "#bd93f9",
 } as const;
@@ -474,7 +474,7 @@ export default function EChartsAdapter({
           ...(ma60 ? [{
             name: "MA60", type: "line", xAxisIndex: 0, yAxisIndex: 0,
             data: ma60, smooth: true, symbol: "none",
-            lineStyle: { color: "#ffb86c", width: 1.5, opacity: 0.9 },
+            lineStyle: { color: "#ff79c6", width: 1.5, opacity: 0.9 },
             tooltip: { show: false },
           }] : []),
 

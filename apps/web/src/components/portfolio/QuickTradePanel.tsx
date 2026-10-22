@@ -140,7 +140,7 @@ export function QuickTradePanel({ portfolio, meta, sectorValue }: {
       <BuySell value={side} onChange={setSide} />
       <Field label="수량" unit="주" type="number" inputMode="numeric" min={1} max={MAX_QTY} value={qty} onChange={(e) => setQty(e.target.value)} className="flex-none" />
       <KV k="예상 금액" v={stock && qtyValid ? `${fmtNum(amount)}원` : "—"} />
-      <KV k={`주문 후 ${sector ?? "섹터"} 비중`} v={afterPct != null ? `${afterPct.toFixed(1)}%` : "—"} valueClassName={afterPct != null && afterPct >= 40 ? "text-dracula-orange" : undefined} />
+      <KV k={`주문 후 ${sector ?? "섹터"} 비중`} v={afterPct != null ? `${afterPct.toFixed(1)}%` : "—"} valueClassName={afterPct != null && afterPct >= 40 ? "text-caution" : undefined} />
       {stock && <span className="num text-2xs text-tm-muted">{side === "BUY" ? `가용 현금 ${fmtNum(cash)}원 · 최대 ${fmtNum(max)}주` : `보유 ${fmtNum(held)}주`}</span>}
       {error && <p role="alert" className="m-0 text-xs text-[#ff8a8a]">{error}</p>}
       <Btn kind={side === "BUY" ? "buy" : "sell"} size="lg" full onClick={submit} disabled={pending || !stock || price <= 0}>

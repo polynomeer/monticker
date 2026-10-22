@@ -17,7 +17,7 @@ const STATUS_TONE: Record<WatchRuleExecutionStatus, Tone> = {
   EXECUTED: "green",
   PLACED: "cyan",
   FILLED: "green",
-  CANCELLED: "orange",
+  CANCELLED: "caution",
   REJECTED: "red",
   SKIPPED: "muted",
 };

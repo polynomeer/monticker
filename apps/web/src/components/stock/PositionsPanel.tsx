@@ -50,9 +50,9 @@ const ORDER_STATUS: Record<string, string> = {
   FILLED: "체결", CANCELLED: "취소", REJECTED: "거부",
 };
 const TRIGGER_LABEL: Record<string, string> = { STOP_LOSS: "손절", TAKE_PROFIT: "익절", PRICE_ABOVE: "가격 이상", PRICE_BELOW: "가격 이하" };
-const COND_STATUS: Record<string, { label: string; tone: "green" | "muted" | "orange" | "red" | "cyan" }> = {
+const COND_STATUS: Record<string, { label: string; tone: "green" | "muted" | "caution" | "red" | "cyan" }> = {
   ACTIVE: { label: "감시 중", tone: "cyan" },
-  TRIGGERED: { label: "발동", tone: "orange" },
+  TRIGGERED: { label: "발동", tone: "caution" },
   EXECUTED: { label: "체결", tone: "green" },
   CANCELLED: { label: "취소", tone: "muted" },
   EXPIRED: { label: "만료", tone: "muted" },
@@ -168,7 +168,7 @@ function OpenOrders({ connected, symbol, orders, onCancel, cancelPending }: { co
     );
   }
   const cols: Column<BrokerageOrderResponse>[] = [
-    { key: "acc", header: "계좌", cell: () => <Pill tone="orange">실전</Pill> },
+    { key: "acc", header: "계좌", cell: () => <Pill tone="live">실전</Pill> },
     { key: "side", header: "구분", cell: (o) => SIDE(o.side) },
     { key: "type", header: "유형", cell: (o) => (o.orderType === "LIMIT" ? "지정가" : "시장가") },
     { key: "qty", header: "수량", align: "right", cell: (o) => <span className="num">{fmtNum(o.filledQty)} / {fmtNum(o.quantity)}</span> },
@@ -275,7 +275,7 @@ function Settlements() {
     { key: "px", header: "체결가", align: "right", cell: (s) => <span className="num">{fmtNum(s.fillPrice)}</span> },
     { key: "net", header: "정산 금액", align: "right", cell: (s) => <span className={cn("num", s.side === "BUY" ? "text-down" : "text-up")}>{s.side === "BUY" ? "-" : "+"}{fmtNum(s.netAmount)}</span> },
     { key: "date", header: "정산 예정일", cell: (s) => <span className="num">{new Date(s.settleDate).toLocaleDateString("ko-KR")}</span> },
-    { key: "st", header: "상태", cell: () => <Pill tone="orange">대기 중</Pill> },
+    { key: "st", header: "상태", cell: () => <Pill tone="caution">대기 중</Pill> },
   ];
   if (isLoading) return <div className="m-1.5 h-24 animate-pulse rounded-lg bg-tm-inner" />;
   if (isError) return <p className="m-0 py-8 text-center text-13 text-tm-muted">정산 내역을 불러오지 못했습니다.</p>;

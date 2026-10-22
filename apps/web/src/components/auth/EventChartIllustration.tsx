@@ -19,8 +19,8 @@ const DATA: [number, number, number, number, number][] = [
 
 // 이벤트 핀: [캔들 인덱스, 글자, 색, y]
 const PINS: [number, string, string, number][] = [
-  [14, "D", "#ffb86c", 18],
-  [27, "N", "#8be9fd", 18],
+  [14, "D", "#8be9fd", 18],
+  [27, "N", "#c3c8e2", 18],
   [28, "V", "#bd93f9", 42],
   [29, "Q", "#50fa7b", 18],
 ];

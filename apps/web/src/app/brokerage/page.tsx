@@ -92,7 +92,7 @@ export default function BrokerageDashboardPage() {
     { key: "sym", header: "종목", cell: e => <span className="font-medium">{e.order.symbol}</span> },
     { key: "side", header: "구분", cell: e => (
       <span className="flex items-center gap-1.5">
-        {e.kind === "CONDITIONAL" && <Pill tone="orange">조건부 · {TRIGGER_LABEL[e.order.triggerType]}</Pill>}
+        {e.kind === "CONDITIONAL" && <Pill tone="purple">조건부 · {TRIGGER_LABEL[e.order.triggerType]}</Pill>}
         <span className={sideClass(e.order.side)}>{sideLabel(e.order.side)}</span>
       </span>
     ) },
@@ -133,7 +133,7 @@ export default function BrokerageDashboardPage() {
             <div className="flex flex-wrap items-center gap-2 text-xs">
               {account.tokenValid
                 ? <Pill tone="green">정상 연결</Pill>
-                : <Pill tone="orange">재인증 필요</Pill>}
+                : <Pill tone="caution">재인증 필요</Pill>}
               <Pill tone={account.isActive ? "cyan" : "muted"}>{account.isActive ? "활성" : "비활성"}</Pill>
               {!account.tokenValid && (
                 <Link href="/brokerage/connect" className="ml-auto inline-flex h-7 items-center rounded-lg border border-[#6b3a44] px-2.5 text-xs font-semibold text-[#ff8a8a] hover:bg-[#3d252b]">
@@ -147,7 +147,7 @@ export default function BrokerageDashboardPage() {
             ) : balanceError ? (
               // 증권사 장애(503) 중엔 "0원"이 아니라 "조회 불가"를 보여 준다 — 이전엔 서버가 0원을 돌려줘 잔고가 사라진 것처럼 보였다
               <Notice tone="warn">
-                <b className="text-dracula-orange">잔고를 확인할 수 없습니다</b>
+                <b className="text-caution">잔고를 확인할 수 없습니다</b>
                 <br />
                 {balanceErr instanceof Error ? balanceErr.message : "증권사 응답이 없습니다. 잠시 후 자동으로 다시 시도합니다."}
               </Notice>
@@ -252,11 +252,11 @@ function ApiHealthLine({ health }: { health: BrokerageAccountResponse["apiHealth
   return (
     <span className="flex flex-wrap gap-x-2 text-2xs text-tm-muted">
       <span>
-        증권사 API 마지막 응답 <span className={cn("num", health.lastLatencyMs >= SLOW_LATENCY_MS && "text-dracula-orange")}>{fmtLatency(health.lastLatencyMs)}</span>
+        증권사 API 마지막 응답 <span className={cn("num", health.lastLatencyMs >= SLOW_LATENCY_MS && "text-caution")}>{fmtLatency(health.lastLatencyMs)}</span>
         {" "}({BROKER_OPERATION_LABEL[health.lastOperation] ?? health.lastOperation}, {agoText(health.lastCallAt)})
       </span>
       {health.lastErrorCode && health.lastErrorAt && (
-        <span className="text-dracula-orange">
+        <span className="text-caution">
           마지막 오류: {BROKER_ERROR_LABEL[health.lastErrorCode] ?? health.lastErrorCode} ({agoText(health.lastErrorAt)})
         </span>
       )}

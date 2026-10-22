@@ -93,7 +93,7 @@ export function WatchRuleRow({ rule, stockLabel, onToggle, onDelete, onEdit, pen
           <span className="text-sm font-bold">{title}</span>
           <Pill tone="muted">{rule.eventType === "QUANT_SIGNAL" ? "퀀트랩 전략" : (rule.requiredEventTypes?.length ? "복합 조건" : "직접 만든 규칙")}</Pill>
           {rule.targetType === "GROUP" && <Pill tone="cyan">관심종목 그룹</Pill>}
-          {limitReached && rule.isActive && <Pill tone="orange">오늘 한도 도달</Pill>}
+          {limitReached && rule.isActive && <Pill tone="caution">오늘 한도 도달</Pill>}
           {rule.targetGroupMissing && <Pill tone="red">대상 그룹 삭제됨</Pill>}
           {!rule.isActive && <Pill tone="yellow">중지됨</Pill>}
         </div>

@@ -17,7 +17,7 @@ function passwordStrength(pw: string): { label: string; level: 0 | 1 | 2 | 3 | 4
   if (/[0-9]/.test(pw)) score++;
   if (/[^A-Za-z0-9]/.test(pw)) score++;
   if (score <= 1) return { label: "약함", level: 1, color: "bg-[#ff8a8a]", text: "text-[#ff8a8a]" };
-  if (score <= 2) return { label: "보통", level: 2, color: "bg-dracula-orange", text: "text-dracula-orange" };
+  if (score <= 2) return { label: "보통", level: 2, color: "bg-caution", text: "text-caution" };
   if (score <= 3) return { label: "강함", level: 3, color: "bg-dracula-green", text: "text-dracula-green" };
   return { label: "매우 강함", level: 4, color: "bg-dracula-green", text: "text-dracula-green" };
 }

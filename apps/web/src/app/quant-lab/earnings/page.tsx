@@ -14,7 +14,7 @@ function won(n: number) {
 }
 
 const PAYOUT_STATUS: Record<string, { label: string; tone: Tone }> = {
-  REQUESTED: { label: "검토 중",   tone: "orange" },
+  REQUESTED: { label: "검토 중",   tone: "caution" },
   APPROVED:  { label: "승인됨",    tone: "cyan" },
   REJECTED:  { label: "거절됨",    tone: "red" },
   PAID:      { label: "지급 완료", tone: "green" },
@@ -181,7 +181,7 @@ export default function EarningsPage() {
     // 구독 해지는 이력 없이 지워져(DELETE) 이탈률을 계산할 수 없다.
     { key: "churn", header: "이탈률", align: "right", cell: () => <span className="num text-tm-muted" title="구독 해지 이력을 아직 기록하지 않습니다">—</span> },
     { key: "st", header: "상태", cell: r => r.price > 0
-      ? <Pill tone="orange">유료 · 결제 미개방</Pill>
+      ? <Pill tone="caution">유료 · 결제 미개방</Pill>
       : <Pill tone="green">무료 공개</Pill> },
   ];
   const earningCols: Column<CreatorEarning>[] = [

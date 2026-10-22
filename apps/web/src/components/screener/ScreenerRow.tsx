@@ -81,7 +81,7 @@ export default function ScreenerRow({ item, columns, intraday }: Props) {
         return (
           <span className="flex items-center gap-1">
             {item.isFundamentalsMocked && (
-              <span title="KIS API 미설정 또는 응답 없음 — 모의 데이터" className="text-dracula-orange">
+              <span title="KIS API 미설정 또는 응답 없음 — 모의 데이터" className="text-caution">
                 <Icon name="info" size={11} aria-hidden />
               </span>
             )}

@@ -32,7 +32,7 @@ const EXIT_REASON_LABEL: Record<string, { label: string; tone: "green" | "red" |
 
 const SIGNAL_DIRECTION_LABEL: Record<string, string> = { BUY: "매수", SELL: "매도" };
 
-const RELIABILITY_TONE: Record<string, "green" | "purple" | "orange" | "red"> = { A: "green", B: "purple", C: "orange", D: "red" };
+const RELIABILITY_TONE: Record<string, "green" | "purple" | "caution" | "red"> = { A: "green", B: "purple", C: "caution", D: "red" };
 const RELIABILITY_TEXT: Record<string, string> = {
   A: "충분한 거래 횟수와 검증 기간을 갖춘 신뢰할 수 있는 결과입니다.",
   B: "전반적으로 신뢰할 수 있으나 더 긴 검증 기간이 필요합니다.",

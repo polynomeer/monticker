@@ -35,7 +35,7 @@ const sections: LegalSection[] = [
       <p>
         회원 탈퇴 시 지체 없이 파기합니다. 다만 관계 법령에 따라 보존이 필요한 거래 기록(전자상거래
         등에서의 소비자보호에 관한 법률 등)은 해당 법령이 정한 기간 동안 보관합니다.{" "}
-        <span className="text-dracula-orange">[정확한 보유기간은 법률 검토 후 확정]</span>
+        <span className="text-caution">[정확한 보유기간은 법률 검토 후 확정]</span>
       </p>
     ),
   },
@@ -83,7 +83,7 @@ const sections: LegalSection[] = [
   {
     heading: "8. 개인정보 보호책임자",
     body: (
-      <p className="text-dracula-orange">
+      <p className="text-caution">
         [운영자명], [연락처 이메일] — 사업자 등록 및 정식 운영 개시 전 확정 예정
       </p>
     ),
