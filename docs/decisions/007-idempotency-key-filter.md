@@ -1,7 +1,7 @@
 # ADR-007: Idempotency Key Filter for Mutating Order Endpoints
 
 ## Status
-Accepted
+Accepted — 일부 Superseded by [ADR-110](110-brokerage-order-idempotency-in-flight-lock.md) (`POST /api/brokerage/orders`: 처리 중 잠금·본문 바인딩·결과 불명 고정)
 
 ## Context
 
