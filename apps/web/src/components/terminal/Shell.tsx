@@ -25,7 +25,8 @@ const RAIL: (RailItem | null)[] = [
   { label: "트레이딩", icon: "candles", href: "/stocks/search", match: ["/stocks", "/compare"] },
   { label: "스크리너", icon: "filter", href: "/screener", match: ["/screener"] },
   { label: "관심종목", icon: "star", href: "/watchlist", match: ["/watchlist"] },
-  { label: "포트폴리오", icon: "pie", href: "/portfolio", match: ["/portfolio", "/matching", "/watch-rules"] },
+  // ADR-115 — 모의 포트폴리오는 내 자산의 모의투자 탭이 됐다. 체결 엔진·자동 주문 규칙도 여기 묶는다
+  { label: "내 자산", icon: "pie", href: "/assets", match: ["/assets", "/portfolio", "/matching", "/watch-rules"] },
   { label: "지갑", icon: "wallet", href: "/wallet", match: ["/wallet", "/settlement"] },
   { label: "퀀트랩", icon: "flask", href: "/quant-lab", match: ["/quant-lab", "/backtest", "/analytics"] },
   { label: "전략 마켓", icon: "store", href: "/quant-lab/market", match: ["/quant-lab/market", "/quant-lab/earnings"] },

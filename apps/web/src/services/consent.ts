@@ -3,7 +3,8 @@ import { authFetch } from "./api";
 /** ADR-068 — 동의 항목. 서버 ConsentType과 같은 이름. */
 export type ConsentType =
   | "TERMS" | "PRIVACY" | "AGE_OVER_19" | "MARKETING"
-  | "BROKERAGE_DELEGATION" | "BROKERAGE_NO_CUSTODY" | "BROKERAGE_LOSS_ATTRIBUTION";
+  | "BROKERAGE_DELEGATION" | "BROKERAGE_NO_CUSTODY" | "BROKERAGE_LOSS_ATTRIBUTION"
+  | "PORTFOLIO_DATA_COLLECTION";
 
 export interface ConsentState {
   type: ConsentType;

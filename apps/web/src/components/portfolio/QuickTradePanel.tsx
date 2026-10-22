@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { usePaperTrade, type Portfolio } from "@/hooks/usePaperTrade";
 import { authFetch } from "@/services/api";
+import { useRiskPreview } from "@/hooks/useRiskPreview";
+import { RULE_LABELS } from "@/components/risk/useRiskDecisions";
 import TradeReceipt from "@/components/wallet/TradeReceipt";
 import { Btn, BuySell, Field, Icon, KV, fmtNum } from "@/components/terminal";
 import type { StockMeta } from "./useStockMeta";
@@ -71,7 +74,19 @@ export function QuickTradePanel({ portfolio, meta, sectorValue }: {
   const qtyValid = Number.isInteger(n) && n > 0 && n <= MAX_QTY;
   const pending = buy.isPending || sell.isPending;
 
-  // 주문 후 섹터 비중 — 섹터를 아는 종목만
+  // 주문 전 리스크 — ADR-092 미리보기(감사 기록 없음, 400ms 디바운스). 이 패널은 모의 주문이라 미리보기가 판정하는 모의계좌와
+  // 같은 계좌다. 한도에 걸리면 제출을 막고 이유를 보여 준다 — 제출 시 서버 게이트가 다시 판정하는 것은 그대로다.
+  const risk = useRiskPreview(
+    stock ? { stockId: stock.id, side, quantity: n, estimatedPrice: price } : null,
+    !!stock && qtyValid && price > 0,
+  );
+  const failed = risk.data && !risk.data.approved ? risk.data.checks.find((c) => !c.passed) ?? null : null;
+  const riskBlocked = !!risk.data && !risk.data.approved;
+  const riskReason = riskBlocked
+    ? `${failed ? `${RULE_LABELS[failed.rule] ?? failed.rule} 한도에 걸립니다` : "리스크 한도에 걸립니다"}${failed?.detail ? ` · ${failed.detail}` : ""}`
+    : null;
+
+  // 주문 후 섹터 비중(참고) — 섹터를 아는 종목만. 차단 여부는 위 리스크 미리보기(섹터 한도를 설정했으면 섹터 규칙 포함)가 정한다.
   const sector = stock ? meta.get(stock.id)?.sector ?? null : null;
   const total = portfolio?.totalValue ?? 0;
   const afterPct = sector && total > 0 && qtyValid
@@ -82,6 +97,7 @@ export function QuickTradePanel({ portfolio, meta, sectorValue }: {
     setError("");
     if (!stock) { setError("종목을 선택해주세요."); return; }
     if (!qtyValid) { setError("수량은 1 이상의 정수여야 합니다."); return; }
+    if (riskBlocked) return;
     if (n > max) { setError(side === "BUY" ? `잔고 부족 (최대 ${fmtNum(max)}주 가능)` : `보유 수량 초과 (최대 ${fmtNum(max)}주)`); return; }
     try {
       const m = side === "BUY" ? buy : sell;
@@ -140,10 +156,25 @@ export function QuickTradePanel({ portfolio, meta, sectorValue }: {
       <BuySell value={side} onChange={setSide} />
       <Field label="수량" unit="주" type="number" inputMode="numeric" min={1} max={MAX_QTY} value={qty} onChange={(e) => setQty(e.target.value)} className="flex-none" />
       <KV k="예상 금액" v={stock && qtyValid ? `${fmtNum(amount)}원` : "—"} />
-      <KV k={`주문 후 ${sector ?? "섹터"} 비중`} v={afterPct != null ? `${afterPct.toFixed(1)}%` : "—"} valueClassName={afterPct != null && afterPct >= 40 ? "text-caution" : undefined} />
+      <KV k={`주문 후 ${sector ?? "섹터"} 비중 (참고)`} v={afterPct != null ? `${afterPct.toFixed(1)}%` : "—"} valueClassName={afterPct != null && afterPct >= 40 ? "text-caution" : undefined} />
       {stock && <span className="num text-2xs text-tm-muted">{side === "BUY" ? `가용 현금 ${fmtNum(cash)}원 · 최대 ${fmtNum(max)}주` : `보유 ${fmtNum(held)}주`}</span>}
+      {risk.pending && !risk.data && <span aria-live="polite" className="text-2xs text-tm-muted">리스크 한도 점검 중...</span>}
+      {risk.error && <span className="text-2xs text-tm-muted">{risk.error.message} 주문할 때 서버가 다시 판정합니다.</span>}
+      {riskReason && (
+        <p role="alert" className="m-0 flex flex-wrap items-center gap-x-2 text-xs text-[#ff8a8a]">
+          <span>{riskReason}</span>
+          <Link href="/risk" className="text-2xs">리스크 한도 보기</Link>
+        </p>
+      )}
       {error && <p role="alert" className="m-0 text-xs text-[#ff8a8a]">{error}</p>}
-      <Btn kind={side === "BUY" ? "buy" : "sell"} size="lg" full onClick={submit} disabled={pending || !stock || price <= 0}>
+      <Btn
+        kind={side === "BUY" ? "buy" : "sell"}
+        size="lg"
+        full
+        onClick={submit}
+        disabled={pending || !stock || price <= 0 || riskBlocked}
+        aria-disabled={pending || !stock || price <= 0 || riskBlocked}
+      >
         {pending ? "처리 중..." : side === "BUY" ? "모의 매수" : "모의 매도"}
       </Btn>
       {receiptTradeId && receipt && <TradeReceipt receipt={receipt} onClose={() => setReceiptTradeId(null)} />}

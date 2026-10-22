@@ -191,3 +191,47 @@ export interface ImportBatch {
   skipped: number;
   createdAt: string;
 }
+
+// ── 분석(ADR-111) ─────────────────────────────────────────────────────
+export interface FxRate { currency: string; krwRate: number; asOf: string | null; mocked: boolean }
+
+export interface KrwSummary {
+  marketValueKrw: number;
+  /** 매수일 환율 기준 원가 — 매수일 환율을 모르는 종목이 있으면 null */
+  costBasisKrw: number | null;
+  unrealizedPnlKrw: number | null;
+  pricePnlKrw: number;
+  fxPnlKrw: number | null;
+  /** 원화로 바꿀 수 없어 합계에서 뺀 통화 */
+  excludedCurrencies: string[];
+  unpricedCount: number;
+  fxMocked: boolean;
+}
+
+export type AllocationDimension = "SECTOR" | "COUNTRY" | "CURRENCY" | "ACCOUNT_KIND" | "INSTITUTION";
+export interface AllocationSlice { key: string; valueKrw: number; weight: number }
+export interface AllocationView { dimension: AllocationDimension; slices: AllocationSlice[] }
+
+export interface DividendMonth { month: string; byCurrency: Record<string, number>; krw: number | null }
+export interface DividendStock { stockId: number | null; instrumentCode: string | null; name: string | null; currency: string; trailing12m: number }
+export interface DividendSummary { trailing12mKrw: number | null; yieldOnCost: number | null; months: DividendMonth[]; topStocks: DividendStock[] }
+
+export interface ReturnView {
+  currency: string;
+  /** 연환산 돈 가중 수익률(%) — reason이 있으면 null */
+  xirr: number | null;
+  invested: number;
+  returned: number;
+  currentValue: number;
+  multiple: number | null;
+  since: string | null;
+  reason: string | null;
+}
+
+export interface PortfolioAnalysis {
+  fx: FxRate[];
+  krw: KrwSummary;
+  allocations: AllocationView[];
+  dividends: DividendSummary;
+  returns: ReturnView[];
+}

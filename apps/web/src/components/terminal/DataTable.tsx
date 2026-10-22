@@ -25,7 +25,8 @@ export function DataTable<T>({
   const pad = dense ? "px-2.5 py-[7px]" : "px-3 py-2.5";
   const align = (a?: string) => (a === "right" ? "text-right" : a === "center" ? "text-center" : "text-left");
   return (
-    <div className="overflow-x-auto">
+    // relative — 헤더의 sr-only(절대 위치) 라벨이 스크롤 상자 밖으로 빠져 페이지 가로 스크롤을 만들지 않게
+    <div className="relative overflow-x-auto">
       <table className="w-full border-collapse text-13 text-dracula-fg" style={minWidth ? { minWidth } : undefined}>
         <thead>
           <tr>

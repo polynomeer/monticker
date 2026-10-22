@@ -1,7 +1,7 @@
 # ADR-066: 웹 UI를 트레이딩 터미널 셸로 전환 — 다크 전용, 상단 바 + 아이콘 레일
 
 ## Status
-Accepted
+Superseded by ADR-112 (상단 바·아이콘 레일·계좌 칩·다크 전용 결정만. 공통 키트와 `TerminalPage` 구조는 유지)
 
 ## Context
 

@@ -50,6 +50,13 @@ class EventTimelineService(
     fun getLatestPerStock(stockIds: Collection<Long>): List<StockEvent> =
         if (stockIds.isEmpty()) emptyList() else eventRepository.findLatestPerStock(stockIds.distinct())
 
+    /** 여러 종목의 최근 이벤트(보유 종목 피드, ADR-108) — 커서 (beforeTime, beforeId)보다 앞선 것만, 최신순 */
+    fun getRecentForStocks(stockIds: Collection<Long>, beforeTime: Instant, beforeId: Long, limit: Int): List<StockEvent> =
+        if (stockIds.isEmpty()) emptyList()
+        else eventRepository.findRecentByStockIds(
+            stockIds.distinct(), beforeTime, beforeId, org.springframework.data.domain.PageRequest.of(0, limit),
+        )
+
     fun getById(id: Long): StockEvent =
         eventRepository.findById(id).orElseThrow { NoSuchElementException("이벤트를 찾을 수 없습니다: $id") }
 }

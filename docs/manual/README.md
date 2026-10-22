@@ -24,7 +24,7 @@ monticker를 사용하는 **최종 사용자**를 위한 문서입니다. 주식
 - [ ] `watch-rules.png`, `watch-rules-history.png` — `/watch-rules` 내 규칙 / 발동 기록 → 10장
 - [ ] `risk.png` — `/risk`(섹터 한도, "적용 대기 중인 변경"이 보이게) → 11장
 - [ ] `wallet.png`, `wallet-timeline.png`, `wallet-score.png` — `/wallet` 돈의 이동 지도 / 원장 타임라인 / 점수 세부 지표 → 12장. 새 화면은 탭이 아니라 패널이므로 스크립트의 `clickText("원장 타임라인")`·`clickText("투자 점수")` 단계를 고칠 것
-- [ ] `portfolio.png` — `/portfolio`(평균단가 오버레이의 매수·매도 마커가 보이게) → 13장
+- [ ] `portfolio.png` — `/assets?view=PAPER`(평균단가 오버레이의 매수·매도 마커가 보이게) → 13장
 - [ ] `settlement.png` — `/settlement`(정산 캘린더·다가오는 휴장일) → 14장
 - [ ] `backtest.png` — `/backtest`(캔들 + 매매 마커) → 15장
 - [ ] `quant-lab.png`, `quant-lab-builder.png`, `quant-lab-backtest.png` — `/quant-lab`, `/quant-lab/builder`, `/quant-lab/{id}` → 16장

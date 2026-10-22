@@ -159,4 +159,35 @@ class ConsentServiceTest {
             service.requireMissingAndRecord(1L, ConsentGroup.SIGNUP, listOf("TERMS"), ConsentSource.CONSENT_PROMPT)
         }
     }
+
+    // ── ADR-106 통합 포트폴리오 동의(기능 단위) ──────────────────────────────
+
+    @Test
+    fun `portfolio data consent must come with the first account and is not asked again once agreed`() {
+        every { repo.findAllByUserIdOrderByRecordedAtDescIdDesc(1L) } returns emptyList()
+        assertThrows<IllegalArgumentException> {
+            service.requireMissingAndRecord(1L, ConsentGroup.PORTFOLIO_DATA, emptyList(), ConsentSource.PORTFOLIO)
+        }.also { assertThat(it.message).contains("계좌 정보 수집·이용") }
+
+        every { repo.findAllByUserIdOrderByRecordedAtDescIdDesc(1L) } returns listOf(row(ConsentType.PORTFOLIO_DATA_COLLECTION, agreed = true))
+        assertThat(service.requireMissingAndRecord(1L, ConsentGroup.PORTFOLIO_DATA, emptyList(), ConsentSource.PORTFOLIO)).isEmpty()
+    }
+
+    @Test
+    fun `withdrawing a feature consent records agreed false for its items and signup consent cannot be withdrawn this way`() {
+        val saved = slot<Iterable<UserConsent>>()
+        every { repo.saveAll(capture(saved)) } answers { saved.captured.toList() }
+
+        service.withdrawFeature(1L, ConsentGroup.PORTFOLIO_DATA, ConsentSource.PORTFOLIO)
+
+        assertThat(saved.captured.map { it.consentType to it.agreed }).containsExactly(ConsentType.PORTFOLIO_DATA_COLLECTION to false)
+        assertThrows<IllegalArgumentException> { service.withdrawFeature(1L, ConsentGroup.SIGNUP, ConsentSource.SETTINGS) }
+    }
+
+    @Test
+    fun `the login re-consent gate only looks at signup items, not feature consents`() {
+        every { repo.findAllByUserIdOrderByRecordedAtDescIdDesc(1L) } returns ConsentGroup.SIGNUP.required.map { row(it, agreed = true) }
+        assertThat(service.missingRequired(1L, ConsentGroup.SIGNUP)).isEmpty()
+        assertThat(service.missingRequired(1L, ConsentGroup.PORTFOLIO_DATA)).containsExactly(ConsentType.PORTFOLIO_DATA_COLLECTION)
+    }
 }

@@ -213,3 +213,14 @@ confirm하면 토스가 2회차를 4xx로 거절하지만, 그때 우리는 "결
 - 갱신 실패 건 재시도 스케줄을 도입할 때 — `waitDurationInOpenState`와 배치 주기의 관계를 다시 계산
 - PG를 추가하거나 교체할 때 — `PgClient` 인터페이스의 `findPaymentByOrderId` 계약을 새 PG가 만족하는지
 - PENDING 적체 청소 배치를 만들 때
+
+## Notes
+
+- 2026-10 — 배치가 읽은 뒤 바뀐 구독을 청구하던 틈을 닫았다([ADR-114](114-account-deletion-data-retention.md) Notes). 갱신 배치는 청크를 먼저
+  읽고 하나씩 청구하므로, 그 사이 해지·탈퇴가 커밋돼도 배치가 든 엔티티는 ACTIVE였고 빌링키도 락 없이 읽었다 — 한 번 더 청구될 수 있었다.
+  이제 `renewSubscription`은 구독 행을 `PESSIMISTIC_WRITE`로 다시 읽어(그리고 refresh해) 판단하고, `cancel`·`closeForAccountDeletion`도
+  같은 락을 쥔다. 다시 읽은 구독이 ACTIVE가 아니거나 **만료일이 배치가 읽은 값과 다르면** `Skipped`다. 만료일 조건은 이 ADR의 멱등성을
+  지키려는 것이다: orderId는 (구독 id, 만료시각)에서 나오므로, 다른 실행이 이미 연장한 구독을 새 만료일로 갱신하면 멱등 기록에 걸리지 않는
+  다음 주기 orderId로 미리 청구하게 된다. 같은 주기 안에서의 재시도(SUCCESS 기록 → 연장만, PENDING → PG 재조회)는 그대로다.
+  해지 전에 불확정(PENDING)으로 남은 결제는 갱신이 건너뛰므로 PENDING 적체 정리 배치(ADR-059)가 PG에 되물어 정리한다.
+
