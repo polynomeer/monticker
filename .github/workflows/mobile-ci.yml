@@ -60,3 +60,7 @@ jobs:
 
       - name: TypeScript check
         run: pnpm exec tsc --noEmit
+
+      # 순수 로직(색 해석·숫자 표시 등) — Node 24는 타입 표기를 그대로 지워 실행한다
+      - name: Unit tests
+        run: pnpm test
