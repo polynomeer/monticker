@@ -2,12 +2,14 @@ import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import type {
-  IntradaySeries, PaperPortfolio, QuantSignalFeedItem, RiskExposure, ScreenerQuote, StockEvent, WatchlistGroup,
+  BrokerageBalanceResponse, IntradaySeries, PaperPortfolio, QuantSignalFeedItem, RiskExposure, ScreenerQuote, StockEvent, WatchlistGroup,
 } from "@monticker/types";
 import { useTheme } from "@/theme/ThemeProvider";
 import { font } from "@/theme/type";
 import { useAuthState } from "@/services/useAuth";
 import { useApi } from "@/services/useApi";
+import { useTradingMode } from "@/services/mode";
+import { useStocksBySymbols } from "@/services/stockLookup";
 import { Button, Card, EmptyState, GlassButton, Icon, Screen, SectionLabel } from "@/components/ui";
 import { MarketStrip } from "@/components/home/MarketStrip";
 import { FeedCard } from "@/components/home/FeedCard";
@@ -22,14 +24,25 @@ export default function HomeScreen() {
   const router = useRouter();
   const auth = useAuthState();
   const signedIn = auth === "signedIn";
+  // 보유는 지금 모드의 계좌 — 실전이면 증권사 잔고, 모의면 모의 포트폴리오(서로 섞지 않는다)
+  const live = useTradingMode().mode === "live";
 
   const groups = useApi<WatchlistGroup[]>(signedIn ? "/api/watchlists" : null, { auth: true, refreshMs: 60_000 });
-  const portfolio = useApi<PaperPortfolio>(signedIn ? "/api/paper/portfolio" : null, { auth: true, refreshMs: 60_000 });
+  const portfolio = useApi<PaperPortfolio>(signedIn && !live ? "/api/paper/portfolio" : null, { auth: true, refreshMs: 60_000 });
+  const brokerBalance = useApi<BrokerageBalanceResponse>(signedIn && live ? "/api/brokerage/account/balance" : null, { auth: true, refreshMs: 60_000 });
+  const liveStocks = useStocksBySymbols((brokerBalance.data?.holdings ?? []).filter((h) => Number(h.quantity) > 0).map((h) => h.symbol));
   const signals = useApi<QuantSignalFeedItem[]>(signedIn ? "/api/quant/signals/feed?limit=10" : null, { auth: true, refreshMs: 60_000 });
-  const exposure = useApi<RiskExposure>(signedIn ? "/api/risk/exposure" : null, { auth: true, refreshMs: 60_000 });
+  // 일간 손실 경고는 모의 계좌 기준이라 실전 모드에서는 띄우지 않는다(ADR-025 — 실전 화면에 모의 숫자를 쓰지 않는다)
+  const exposure = useApi<RiskExposure>(signedIn && !live ? "/api/risk/exposure" : null, { auth: true, refreshMs: 60_000 });
 
   const watchIds = useMemo(() => [...new Set((groups.data ?? []).flatMap((g) => g.items.map((i) => i.stockId)))], [groups.data]);
-  const heldIds = useMemo(() => new Set((portfolio.data?.holdings ?? []).filter((h) => h.quantity > 0).map((h) => h.stockId)), [portfolio.data]);
+  const liveIdKey = [...liveStocks.values()].map((st) => st.id).join(",");
+  const heldIds = useMemo(
+    () => live
+      ? new Set(liveIdKey ? liveIdKey.split(",").map(Number) : [])
+      : new Set((portfolio.data?.holdings ?? []).filter((h) => h.quantity > 0).map((h) => h.stockId)),
+    [live, liveIdKey, portfolio.data],
+  );
   const myIds = useMemo(() => [...new Set([...heldIds, ...watchIds])].slice(0, 50), [heldIds, watchIds]);
 
   const latest = useApi<StockEvent[]>(signedIn && myIds.length ? `/api/events/latest?stockIds=${myIds.join(",")}` : null, { refreshMs: 30_000 });
@@ -68,7 +81,7 @@ export default function HomeScreen() {
 
   const loading = signedIn ? groups.loading || latest.loading : recent.loading;
   const refresh = async () => {
-    await Promise.all([groups.reload(), portfolio.reload(), signals.reload(), exposure.reload(), latest.reload(), recent.reload(), quotes.reload()]);
+    await Promise.all([groups.reload(), portfolio.reload(), brokerBalance.reload(), signals.reload(), exposure.reload(), latest.reload(), recent.reload(), quotes.reload()]);
   };
 
   return (

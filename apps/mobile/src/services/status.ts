@@ -21,14 +21,15 @@ const REFRESH_MS = 30_000;
 async function count(mode: TradingMode): Promise<StatusSummary | null> {
   const [rules, orders] = await Promise.all([
     authFetch("/api/quant/rulesets"),
-    mode === "live" ? authFetch("/api/brokerage/orders") : authFetch("/api/risk/exposure"),
+    mode === "live" ? authFetch("/api/brokerage/orders?page=0&size=50") : authFetch("/api/risk/exposure"),
   ]);
   if (!rules.ok || !orders.ok) return null;
   const list = (await rules.json()) as RuleSet[];
   const runningStrategies = list.filter((r) => r.status === "RUNNING").length;
   if (mode === "live") {
-    const live = (await orders.json()) as BrokerageOrderResponse[];
-    return { runningStrategies, openOrders: live.filter((o) => OPEN_LIVE.includes(o.status)).length };
+    // 최근 50건 안의 미체결만 센다(페이지 응답)
+    const live = (await orders.json()) as { content: BrokerageOrderResponse[] };
+    return { runningStrategies, openOrders: live.content.filter((o) => OPEN_LIVE.includes(o.status)).length };
   }
   const exposure = (await orders.json()) as { activeOrderCount: number };
   return { runningStrategies, openOrders: exposure.activeOrderCount };
