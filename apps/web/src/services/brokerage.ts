@@ -65,10 +65,14 @@ export async function getBrokerageBalance(): Promise<BrokerageBalanceResponse> {
   return res.json();
 }
 
-export async function submitBrokerageOrder(req: SubmitBrokerageOrderRequest): Promise<BrokerageOrderResponse> {
+/**
+ * ADR-110 — idempotencyKey는 사용자가 확인한 주문 한 건마다 하나다. 같은 키로 다시 보내면 서버는 실행하지 않고
+ * 앞선 결과(처리 중이면 409, 결과 불명이면 "주문 결과 확인이 필요합니다")를 돌려준다. 다른 주문에 같은 키를 쓰면 422다.
+ */
+export async function submitBrokerageOrder(req: SubmitBrokerageOrderRequest, idempotencyKey: string): Promise<BrokerageOrderResponse> {
   const res = await authFetch("/api/brokerage/orders", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Idempotency-Key": idempotencyKey },
     body: JSON.stringify(req),
   });
   await throwIfNotOk(res);
