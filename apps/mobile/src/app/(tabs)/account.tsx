@@ -8,10 +8,12 @@ import { setTradingMode, useTradingMode, type TradingMode } from "@/services/mod
 import { getWebBase } from "@/services/api";
 import { Card, GlassButton, GroupedList, Icon, ListRow, Screen, Segmented } from "@/components/ui";
 import { SignInRequired } from "@/components/SignInRequired";
+import { PaperAccount } from "@/components/account/PaperAccount";
+import { LiveAccount } from "@/components/account/LiveAccount";
 
 /**
  * 내 계좌(ADR-113) — 모의 | 실전 분할 버튼이 앱 전체 모드를 바꾼다. 실전은 증권사 연동이 있을 때만.
- * 보유·주문·전략 내용은 다음 단계(M5·M6)에서 채운다.
+ * 파일·손 입력으로 모은 다른 증권 계좌(ADR-106·110)는 맨 아래 줄에서 연다 — 연동 잔고와 합치지 않는다.
  */
 export default function AccountScreen() {
   const { c } = useTheme();
@@ -19,6 +21,7 @@ export default function AccountScreen() {
   const auth = useAuthState();
   const { mode } = useTradingMode();
   const [notice, setNotice] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   if (auth === "signedOut") return <SignInRequired message="모의투자 계좌와 연동한 증권 계좌를 보려면 로그인해 주세요" />;
 
@@ -31,6 +34,8 @@ export default function AccountScreen() {
   return (
     <Screen
       title="내 계좌"
+      bottomSpace={120}
+      onRefresh={() => setRefreshKey((k) => k + 1)}
       leading={
         <View style={s.segment}>
           <Segmented
@@ -53,6 +58,9 @@ export default function AccountScreen() {
           <Text style={[font.subhead, { color: c.accent }]} onPress={() => Linking.openURL(`${getWebBase()}/brokerage`)} accessibilityRole="link">웹에서 연동하기</Text>
         </Card>
       )}
+
+      {mode === "live" ? <LiveAccount key={`l${refreshKey}`} /> : <PaperAccount key={`p${refreshKey}`} />}
+
       <GroupedList>
         <ListRow label="다른 증권 계좌" value="파일·직접 입력" onPress={() => router.push("/accounts")} />
       </GroupedList>
