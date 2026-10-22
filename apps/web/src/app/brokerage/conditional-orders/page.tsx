@@ -9,17 +9,18 @@ import {
 import { useToast } from "@/hooks/useToast";
 import { ApiError } from "@/services/brokerage";
 import {
-  Bar, Btn, BuySell, DataTable, Field, Icon, Notice, Panel, PanelCol, PanelRow, Pill, Seg, SelectBox, StockCell, TerminalPage,
-  fmtNum, type Column,
+  Bar, Btn, BuySell, ConfirmDialog, DataTable, Field, Icon, KV, Notice, Panel, PanelCol, PanelRow, Pill, Seg, SelectBox, StockCell,
+  TerminalPage, fmtNum, type Column,
 } from "@/components/terminal";
 import {
   COND_STATUS, ConditionalCancelButton, ConditionalStatusCell, TRIGGER_LABEL, TRIGGER_TONE, isBelowTrigger,
 } from "@/components/brokerage/ConditionalOrderRow";
 import { TradingHaltBanner } from "@/components/brokerage/TradingHaltBanner";
 import {
-  LiveNotice, LoginRequired, NoAccount, ORDER_STATUS, PagerButtons, SelectedStock, SkeletonRows, StockSearchBox, fmtDateTime, sideLabel,
-  type StockHit,
+  LiveNotice, LoginRequired, NoAccount, ORDER_STATUS, PagerButtons, SelectedStock, SkeletonRows, StockSearchBox, fmtDateTime, maskAccount,
+  sideLabel, type StockHit,
 } from "@/components/brokerage/shared";
+import { brokerageProviderLabel } from "@/lib/brokerageProvider";
 import { DEFAULT_VALID_DAYS, VALID_DAYS_OPTIONS, lastValidDateLabel } from "@/lib/conditionalValidity";
 import type {
   BrokerageOrderSide, BrokerageOrderType, ConditionalOrderQuote, ConditionalOrderResponse, ConditionalTriggerEvent, ConditionalTriggerType,
@@ -53,6 +54,8 @@ export default function ConditionalOrderPage() {
   const [validDays, setValidDays] = useState<number>(DEFAULT_VALID_DAYS);
   const [logTab, setLogTab] = useState<"triggers" | "closed">("triggers");
   const [triggerPage, setTriggerPage] = useState(0);
+  // 등록 전 확인 창 — 조건이 충족되면 확인 없이 실계좌로 나가므로, 등록하는 순간이 사용자가 내용을 보는 마지막 기회다.
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
 
@@ -65,7 +68,7 @@ export default function ConditionalOrderPage() {
 
   const orders = ordersData?.content ?? [];
   const active = orders.filter(o => o.status === "ACTIVE");
-  // 발동하지 않고 끝난 것(해지·만료). 발동한 것은 서버 발동 기록(전체 기준)에서 본다.
+  // 발동하지 않고 끝난 것(취소·만료). 발동한 것은 서버 발동 기록(전체 기준)에서 본다.
   const closed = orders.filter(o => o.status !== "ACTIVE" && !o.triggeredAt);
   // 감시 중인 종목 시세를 한 번에(종목마다 검색+시세 두 번씩 부르던 것을 대체). 종목은 서버가 내 ACTIVE 주문에서 정한다.
   const { data: quoteList } = useConditionalOrderQuotes(!!account);
@@ -177,7 +180,7 @@ export default function ConditionalOrderPage() {
     { key: "limit", header: "지정가", align: "right", cell: o => <span className="num">{o.orderType === "LIMIT" ? fmtNum(o.limitPrice) : "시장가"}</span> },
     { key: "qty", header: "수량", align: "right", cell: o => <span className="num">{fmtNum(o.quantity)}</span> },
     { key: "status", header: "상태", cell: o => <ConditionalStatusCell o={o} /> },
-    { key: "act", header: <span className="sr-only">해지</span>, align: "right", cell: o => <ConditionalCancelButton o={o} /> },
+    { key: "act", header: <span className="sr-only">감시 취소</span>, align: "right", cell: o => <ConditionalCancelButton o={o} /> },
   ];
 
   const triggerCols: Column<ConditionalTriggerEvent>[] = [
@@ -240,7 +243,7 @@ export default function ConditionalOrderPage() {
       <TradingHaltBanner enabled={!!account} note="걸어둔 조건부 주문은 그대로 유지되며, 중단이 해제되면 자동으로 다시 감시합니다." />
 
       <PanelRow>
-        <Panel tabs={["조건부 주문 등록"]} actions={[]} closable={false} className="flex-[0_1_360px] self-start" bodyClassName="gap-2.5">
+        <Panel tabs={["새 조건부 주문"]} actions={[]} closable={false} className="flex-[0_1_360px] self-start" bodyClassName="gap-2.5">
           {stock
             ? <SelectedStock stock={stock} price={currentPrice} onClear={() => { setStock(null); setCurrentPrice(0); setFormError(null); }} />
             : <StockSearchBox onSelect={selectStock} />}
@@ -368,11 +371,44 @@ export default function ConditionalOrderPage() {
               <Btn
                 size="lg"
                 full
-                onClick={mode === "SINGLE" ? handleSubmitSingle : handleSubmitOco}
+                onClick={() => { setFormError(null); setConfirmOpen(true); }}
                 disabled={!(mode === "SINGLE" ? isSingleValid : isOcoValid) || isPending}
               >
                 {isPending ? "등록 중..." : "조건부 주문 등록"}
               </Btn>
+              {confirmOpen && (
+                <ConfirmDialog
+                  title="실계좌 조건부 주문을 등록할까요?"
+                  confirmLabel={isPending ? "등록 중..." : "등록"}
+                  confirmKind="live"
+                  pending={isPending}
+                  onCancel={() => setConfirmOpen(false)}
+                  onConfirm={async () => {
+                    // 확인 창이 열린 동안 폼은 바뀌지 않는다(모달). 그래도 지금 유효할 때만 보낸다.
+                    if (!(mode === "SINGLE" ? isSingleValid : isOcoValid)) { setConfirmOpen(false); return; }
+                    await (mode === "SINGLE" ? handleSubmitSingle() : handleSubmitOco());
+                    setConfirmOpen(false);
+                  }}
+                >
+                  <div className="flex flex-col gap-2">
+                    <KV k="계좌" v={`${account ? brokerageProviderLabel(account.provider) : "—"} ${maskAccount(account?.accountNumber)}`} />
+                    <KV k="종목" v={`${stock.name} ${stock.symbol}`} mono={false} />
+                    <KV
+                      k="조건"
+                      v={mode === "SINGLE"
+                        ? `${TRIGGER_LABEL[triggerType]} · ${fmtNum(Number(triggerPrice))}원 ${isBelowType ? "이하" : "이상"}`
+                        : `손절 ${fmtNum(Number(stopLossPrice))}원 이하 · 익절 ${fmtNum(Number(takeProfitPrice))}원 이상 (OCO)`}
+                      mono={false}
+                    />
+                    <KV k="지정가" v={mode === "SINGLE" && orderType === "LIMIT" ? `${fmtNum(Number(limitPrice))}원` : "시장가"} mono={false} />
+                    <KV k="수량" v={`${sideLabel(side)} ${fmtNum(quantity)}주`} valueClassName={side === "BUY" ? "text-up" : "text-down"} mono={false} />
+                    <KV k="유효 기간" v={`${validDays}일 (${lastValidDateLabel(validDays)}까지)`} mono={false} />
+                  </div>
+                  <Notice tone="warn" icon="alert">
+                    갭 하락으로 지정가에 체결되지 않을 수 있어요 · 조건 충족 시 확인 없이 실계좌로 제출됩니다
+                  </Notice>
+                </ConfirmDialog>
+              )}
             </>
           )}
         </Panel>
@@ -384,7 +420,7 @@ export default function ConditionalOrderPage() {
             )}
           </Panel>
           <Panel
-            tabs={[{ key: "triggers", label: "발동 기록" }, { key: "closed", label: "해지·만료" }]}
+            tabs={[{ key: "triggers", label: "발동 기록" }, { key: "closed", label: "취소·만료" }]}
             active={logTab}
             onTabChange={k => setLogTab(k as "triggers" | "closed")}
             closable={false}
@@ -403,7 +439,7 @@ export default function ConditionalOrderPage() {
             ) : (
               <>
                 {ordersLoading ? <SkeletonRows n={2} /> : (
-                  <DataTable columns={historyCols} rows={closed} rowKey={o => o.id} minWidth={600} empty="해지·만료된 조건부 주문이 없습니다(이 페이지 기준)." />
+                  <DataTable columns={historyCols} rows={closed} rowKey={o => o.id} minWidth={600} empty="취소·만료된 조건부 주문이 없습니다(이 페이지 기준)." />
                 )}
                 <PagerButtons page={page} totalPages={ordersData?.totalPages ?? 0} onChange={setPage} />
               </>

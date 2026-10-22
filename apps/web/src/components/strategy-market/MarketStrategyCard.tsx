@@ -7,7 +7,9 @@ import { authFetch } from "@/services/api";
 import { getStrategySignals } from "@/services/strategyMarket";
 import { useToast } from "@/hooks/useToast";
 import { Btn, Pill, Sparkline, Stat, fmtPct } from "@/components/terminal";
-import { fmtMatch, fmtMdd, matchTone } from "@/components/quant/parts";
+import { PastPerformanceNote, fmtMatch, fmtMdd, forwardWeeks, matchTone } from "@/components/quant/parts";
+
+export { forwardWeeks };
 
 export function fmtWon(n: number) { return n.toLocaleString("ko-KR", { maximumFractionDigits: 0 }); }
 
@@ -46,11 +48,6 @@ function SignalFeed({ marketId }: { marketId: number }) {
   );
 }
 
-export function forwardWeeks(startedAt: string, stoppedAt?: string | null) {
-  const end = stoppedAt ? new Date(stoppedAt).getTime() : Date.now();
-  return Math.max(0, Math.floor((end - new Date(startedAt).getTime()) / (7 * 86400_000)));
-}
-
 /** 시안 market()의 mcard — 성과는 마켓 목록 API가 같이 준 요약(ADR-078)을 쓴다. */
 export function MarketStrategyCard({ strategy }: { strategy: MarketStrategy }) {
   const bt = strategy.performance?.backtest ?? null;
@@ -78,6 +75,11 @@ export function MarketStrategyCard({ strategy }: { strategy: MarketStrategy }) {
     onError: () => toast({ type: "error", title: "해제 실패", message: "다시 시도해주세요." }),
   });
 
+  // 검증 배지(포워드 12주·일치율 85%) 심사는 아직 없다 — 모든 카드가 "검증 전"이다. 검증 전 카드는 숫자를 흐리게 하고
+  // 표본(포워드 기간)을 배지에 같이 적어, 짧은 기록의 숫자가 검증된 성과처럼 읽히지 않게 한다.
+  const verified = false;
+  const weeks = fw ? forwardWeeks(fw.startedAt, fw.stoppedAt) : 0;
+
   // ADR-080 — 유료 전략 결제는 서버에서도 닫혀 있다(409). 무료 전략만 구독할 수 있다.
   const isPaid = strategy.price > 0;
 
@@ -90,8 +92,7 @@ export function MarketStrategyCard({ strategy }: { strategy: MarketStrategy }) {
             by {strategy.author_nickname} · 구독 <span className="num">{strategy.subscribe_count.toLocaleString()}</span>
           </span>
         </div>
-        {/* 검증 배지(포워드 12주·일치율) 심사는 아직 없다 */}
-        <Pill tone="muted">검증 전</Pill>
+        {!verified && <Pill tone="muted" className="flex-none">검증 전 · 표본 {weeks}주</Pill>}
       </div>
 
       {strategy.description && (
@@ -103,21 +104,28 @@ export function MarketStrategyCard({ strategy }: { strategy: MarketStrategy }) {
         <div className="grid h-14 place-items-center rounded-lg bg-tm-inner text-2xs text-tm-muted">백테스트 곡선 없음</div>
       )}
 
-      <div className="grid grid-cols-3 gap-2">
+      {/* 지표 순서: 손실 폭(MDD) → 실시간 기록 길이(포워드) → 수익(CAGR). 수익률보다 위험과 표본을 먼저 읽게 한다. */}
+      <div className={`grid grid-cols-3 gap-2 ${verified ? "" : "opacity-60"}`} data-testid="strategy-metrics">
         <Stat
-          label="CAGR"
+          label="MDD · 백테스트"
+          value={fmtMdd(bt?.mdd)}
+          valueClassName={bt?.mdd == null ? "text-tm-muted" : bt.mdd > 0.05 ? "text-down" : undefined}
+          sub={bt?.sharpe != null ? `샤프 ${bt.sharpe.toFixed(2)}` : undefined}
+        />
+        <Stat
+          label="포워드 기간"
+          value={fw ? `${weeks}주` : "—"}
+          valueClassName={fw ? undefined : "text-tm-muted"}
+          sub={fw ? <span className={matchTone(fw.matchRate)}>일치 {fmtMatch(fw.matchRate, fw.comparedSignals)}</span> : "포워드 기록 없음"}
+        />
+        <Stat
+          label="CAGR · 백테스트"
           value={fmtPct(bt?.annualReturn ?? null, 1)}
           valueClassName={bt?.annualReturn == null ? "text-tm-muted" : bt.annualReturn >= 0 ? "text-up" : "text-down"}
           sub={bt ? `${bt.startDate.slice(0, 7)}~${bt.endDate.slice(0, 7)}` : undefined}
         />
-        <Stat label="MDD" value={fmtMdd(bt?.mdd)} valueClassName={bt?.mdd == null ? "text-tm-muted" : bt.mdd > 0.05 ? "text-down" : undefined} sub={bt?.sharpe != null ? `샤프 ${bt.sharpe.toFixed(2)}` : undefined} />
-        <Stat
-          label="포워드"
-          value={fw ? `${forwardWeeks(fw.startedAt, fw.stoppedAt)}주` : "—"}
-          valueClassName={fw ? undefined : "text-tm-muted"}
-          sub={fw ? <span className={matchTone(fw.matchRate)}>일치 {fmtMatch(fw.matchRate, fw.comparedSignals)}</span> : "포워드 기록 없음"}
-        />
       </div>
+      <PastPerformanceNote />
 
       <div className="flex items-center justify-between gap-2 border-t border-tm-line pt-2.5">
         <span className="text-xs text-tm-muted">
