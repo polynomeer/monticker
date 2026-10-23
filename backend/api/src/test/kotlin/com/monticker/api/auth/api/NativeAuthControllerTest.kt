@@ -1,7 +1,7 @@
 package com.monticker.api.auth.api
 
 import com.monticker.api.common.http.ClientIpResolver
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.json.JsonMapper
 import com.monticker.api.auth.application.AuthService
 import com.monticker.api.auth.application.TokenPair
 import com.monticker.api.auth.infrastructure.CustomOAuth2UserService
@@ -15,8 +15,8 @@ import org.mockito.ArgumentMatchers.anyString
 import org.mockito.BDDMockito.given
 import org.mockito.Answers
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest
-import org.springframework.boot.test.mock.mockito.MockBean
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import com.monticker.api.common.redis.RedisGuard
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.springframework.context.annotation.Import
@@ -41,15 +41,15 @@ import org.springframework.test.web.servlet.post
 class NativeAuthControllerTest {
 
     @Autowired lateinit var mvc: MockMvc
-    @Autowired lateinit var objectMapper: ObjectMapper
-    @MockBean lateinit var authService: AuthService
-    @MockBean lateinit var jwtTokenProvider: JwtTokenProvider
+    @Autowired lateinit var objectMapper: JsonMapper
+    @MockitoBean lateinit var authService: AuthService
+    @MockitoBean lateinit var jwtTokenProvider: JwtTokenProvider
     // RateLimitFilter가 redis.opsForValue().increment(...)를 체이닝으로 호출하므로 deep stub 필요
     // (기본 Mockito 목은 opsForValue()가 null을 반환해 NPE가 남)
-    @MockBean(answer = Answers.RETURNS_DEEP_STUBS) lateinit var redis: StringRedisTemplate
-    @MockBean lateinit var oauth2SuccessHandler: OAuth2SuccessHandler
-    @MockBean lateinit var customOAuth2UserService: CustomOAuth2UserService
-    @MockBean lateinit var cookieAuthorizationRequestRepository: HttpCookieOAuth2AuthorizationRequestRepository
+    @MockitoBean(answers = Answers.RETURNS_DEEP_STUBS) lateinit var redis: StringRedisTemplate
+    @MockitoBean lateinit var oauth2SuccessHandler: OAuth2SuccessHandler
+    @MockitoBean lateinit var customOAuth2UserService: CustomOAuth2UserService
+    @MockitoBean lateinit var cookieAuthorizationRequestRepository: HttpCookieOAuth2AuthorizationRequestRepository
 
     private fun json(vararg pairs: Pair<String, String>) = objectMapper.writeValueAsString(mapOf(*pairs))
 
