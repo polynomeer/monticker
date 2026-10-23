@@ -1,6 +1,6 @@
 package com.monticker.api.analytics.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.json.JsonMapper
 import com.monticker.api.analytics.domain.PortfolioOptimization
 import com.monticker.api.analytics.infrastructure.PortfolioOptimizationRepository
 import com.monticker.api.common.cache.CacheConfig
@@ -71,7 +71,7 @@ data class OptimizationResult(
 @Service
 class PortfolioOptimizerService(
     private val queryService: PortfolioOptimizerQueryService,
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: JsonMapper,
     private val optimizationRepository: PortfolioOptimizationRepository,
     /**
      * 샤프 비율의 연 무위험 수익률(소수, 0.03 = 3%). 기본 0 — 국내·해외 종목을 섞어 분석하므로 특정 통화의

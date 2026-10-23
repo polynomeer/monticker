@@ -29,7 +29,7 @@ class RiskRuleQueryServiceIntegrationTest : PostgresIntegrationTest() {
         jdbcTemplate.update("INSERT INTO paper_accounts (user_id, cash) VALUES (?, ?)", id, BigDecimal(cash))
         return id
     }
-    private fun stocks(n: Int): List<Long> = jdbcTemplate.queryForList("SELECT id FROM stocks ORDER BY id LIMIT $n", Long::class.java)
+    private fun stocks(n: Int): List<Long> = jdbcTemplate.queryForList("SELECT id FROM stocks ORDER BY id LIMIT $n", Long::class.java).filterNotNull()
 
     private fun fill(userId: Long, stockId: Long, side: String, qty: Int, price: String, at: Instant = Instant.now()) {
         val orderId = jdbcTemplate.queryForObject(

@@ -3,8 +3,8 @@ package com.monticker.api.batch
 import com.monticker.api.common.aop.Audited
 import com.monticker.api.common.aop.RateLimited
 import org.slf4j.LoggerFactory
-import org.springframework.batch.core.Job
-import org.springframework.batch.core.JobParametersBuilder
+import org.springframework.batch.core.job.Job
+import org.springframework.batch.core.job.parameters.JobParametersBuilder
 import org.springframework.batch.core.launch.JobLauncher
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.http.ResponseEntity

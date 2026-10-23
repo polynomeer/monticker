@@ -1,6 +1,6 @@
 package com.monticker.api.analytics.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.api.support.TestJson
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.monticker.api.analytics.infrastructure.DetectedPatternRepository
 import com.monticker.api.backtest.domain.DailyCandle
@@ -16,7 +16,7 @@ import java.time.LocalDate
 class PatternRecognizerServiceTest {
 
     private val jdbc = mockk<JdbcTemplate>()
-    private val objectMapper = ObjectMapper().registerModule(JavaTimeModule())
+    private val objectMapper = TestJson.boot
     private val detectedPatternRepository = mockk<DetectedPatternRepository>()
     private val queryService = PatternRecognizerQueryService(jdbc)
     private val service = PatternRecognizerService(queryService, objectMapper, detectedPatternRepository)

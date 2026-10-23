@@ -94,7 +94,7 @@ class RiskController(
     private val orderRepo: OrderRepository,
     private val jdbc: JdbcTemplate,
 ) {
-    private fun userId(): Long = SecurityContextHolder.getContext().authentication.principal as Long
+    private fun userId(): Long = SecurityContextHolder.getContext().authentication!!.principal as Long
 
     @GetMapping("/limits")
     fun getRiskLimits(): ResponseEntity<RiskLimitsDto> = ResponseEntity.ok(limitService.view(userId()).toDto())

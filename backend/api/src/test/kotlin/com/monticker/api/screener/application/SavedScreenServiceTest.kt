@@ -1,7 +1,7 @@
 package com.monticker.api.screener.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.monticker.api.support.TestJson
+import tools.jackson.databind.json.JsonMapper
 import com.monticker.api.common.exception.BusinessRuleException
 import com.monticker.api.screener.domain.ScreenerCriteria
 import com.monticker.api.screener.domain.ScreenerEventFilter
@@ -20,7 +20,7 @@ import java.time.Instant
 class SavedScreenServiceTest {
 
     private val repo = mockk<SavedScreenRepository>(relaxed = true)
-    private val mapper: ObjectMapper = jacksonObjectMapper()
+    private val mapper: JsonMapper = TestJson.boot
     private val service = SavedScreenService(repo, mapper)
 
     private fun row(id: Long, json: String) = SavedScreenRow(id, 1L, "s$id", json, Instant.EPOCH, Instant.EPOCH)

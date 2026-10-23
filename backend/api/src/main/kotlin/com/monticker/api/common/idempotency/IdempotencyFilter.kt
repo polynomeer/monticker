@@ -1,7 +1,7 @@
 package com.monticker.api.common.idempotency
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.SerializationFeature
+import tools.jackson.databind.SerializationFeature
+import tools.jackson.databind.json.JsonMapper
 import com.monticker.api.common.redis.RedisGuard
 import jakarta.servlet.FilterChain
 import jakarta.servlet.ReadListener
@@ -51,7 +51,7 @@ import java.util.Optional
 @Component
 class IdempotencyFilter(
     private val redis: StringRedisTemplate,
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: JsonMapper,
     private val guard: RedisGuard,
 ) : OncePerRequestFilter() {
 

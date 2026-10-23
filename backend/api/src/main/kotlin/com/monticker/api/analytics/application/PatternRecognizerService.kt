@@ -1,6 +1,6 @@
 package com.monticker.api.analytics.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.json.JsonMapper
 import com.monticker.api.analytics.domain.DetectedPattern
 import com.monticker.api.analytics.infrastructure.DetectedPatternRepository
 import com.monticker.api.common.cache.CacheConfig
@@ -30,7 +30,7 @@ data class PatternMatch(
 @Service
 class PatternRecognizerService(
     private val queryService: PatternRecognizerQueryService,
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: JsonMapper,
     private val detectedPatternRepository: DetectedPatternRepository,
 ) {
     @Cacheable(cacheNames = [CacheConfig.PATTERN], key = "#stockId + ':' + #lookbackDays")

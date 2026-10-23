@@ -1,6 +1,6 @@
 package com.monticker.api.quant.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.api.support.TestJson
 import com.monticker.api.quant.domain.RuleSetDocument
 import com.monticker.api.quant.domain.RuleSetStatus
 import com.monticker.api.quant.infrastructure.QuantBacktestResultRepository
@@ -19,7 +19,7 @@ class RuleSetServiceTest {
     private val backtestResultRepository = mockk<QuantBacktestResultRepository>()
     private val jdbc = mockk<JdbcTemplate>()
     private val performanceQuery = mockk<StrategyPerformanceQuery>()
-    private val service = RuleSetService(ruleSetRepository, backtestResultRepository, jdbc, ObjectMapper(), performanceQuery)
+    private val service = RuleSetService(ruleSetRepository, backtestResultRepository, jdbc, TestJson.boot, performanceQuery)
 
     private fun doc(status: String) = RuleSetDocument(id = "rs1", userId = 1L, name = "original", status = status)
 

@@ -25,7 +25,7 @@ class RateLimitFilterTest {
     private val valueOps = mockk<ValueOperations<String, String>>()
     private val redis = mockk<StringRedisTemplate> {
         every { opsForValue() } returns valueOps
-        every { expire(any<String>(), any()) } returns true
+        every { expire(any<String>(), any<java.time.Duration>()) } returns true
     }
     private val registry = SimpleMeterRegistry()
 

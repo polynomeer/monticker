@@ -20,6 +20,6 @@ class ActiveConditionalStocks(private val jdbc: JdbcTemplate) {
     fun refresh() {
         stockIds = jdbc.queryForList(
             "SELECT DISTINCT stock_id FROM conditional_orders WHERE status = 'ACTIVE'", Long::class.java,
-        ).toSet()
+        ).filterNotNull().toSet()
     }
 }

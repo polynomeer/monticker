@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*
 @RequestMapping("/api/quant/market")
 class MarketSignalController(private val service: MarketSignalQueryService) {
 
-    private fun userId(): Long = SecurityContextHolder.getContext().authentication.principal as Long
+    private fun userId(): Long = SecurityContextHolder.getContext().authentication!!.principal as Long
 
     /** 내가 구독 중인 전략들의 최근 신호 + 이번 달 신호 수 */
     @GetMapping("/signals")

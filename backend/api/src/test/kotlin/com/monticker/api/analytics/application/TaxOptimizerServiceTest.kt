@@ -1,6 +1,6 @@
 package com.monticker.api.analytics.application
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.api.support.TestJson
 import com.monticker.api.analytics.infrastructure.TaxHarvestingLogRepository
 import io.mockk.every
 import io.mockk.mockk
@@ -12,7 +12,7 @@ import java.math.BigDecimal
 class TaxOptimizerServiceTest {
 
     private val jdbc = mockk<JdbcTemplate>()
-    private val objectMapper = ObjectMapper()
+    private val objectMapper = TestJson.boot
     private val logRepo = mockk<TaxHarvestingLogRepository>()
     private val queryService = TaxHarvestingQueryService(jdbc)
     private val service = TaxOptimizerService(queryService, objectMapper, logRepo)

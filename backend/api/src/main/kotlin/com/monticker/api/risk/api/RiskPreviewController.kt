@@ -58,7 +58,7 @@ data class RiskPreviewRequest(
 @RequestMapping("/api/risk")
 class RiskPreviewController(private val riskChecker: RiskCheckerService) {
 
-    private fun userId(): Long = SecurityContextHolder.getContext().authentication.principal as Long
+    private fun userId(): Long = SecurityContextHolder.getContext().authentication!!.principal as Long
 
     @RateLimited(limit = 60, windowSec = 60, keyPrefix = "risk.preview")
     @PostMapping("/preview")

@@ -29,7 +29,7 @@ class BrokerageOrderStatusSyncJob(
             LIMIT $BATCH
             """.trimIndent(),
             Long::class.java,
-        )
+        ).filterNotNull()
         ids.forEach { id ->
             runCatching { brokerageService.syncSubmittedOrder(id) }
                 .onFailure {

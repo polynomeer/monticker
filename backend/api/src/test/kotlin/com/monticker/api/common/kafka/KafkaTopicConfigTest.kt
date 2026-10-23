@@ -32,8 +32,10 @@ class KafkaTopicConfigTest {
     @Test
     fun `재시도 토픽 이름이 Spring Kafka RetryableTopic 의 실제 명명 규칙과 일치한다`() {
         // 우리 규칙을 문자열로 재현한 게 아니라, 라이브러리가 attempts=4 에서 실제로 만드는 suffix와 대조한다
+        // 백오프는 컨슈머들과 같은 지수형(@BackOff multiplier = 2.0)이어야 한다 — 간격이 같으면(고정 백오프) Spring Kafka 4의
+        // 기본값(sameIntervalTopicReuseStrategy = SINGLE_TOPIC)이 재시도 토픽을 "-retry" 하나로 합쳐 이 이름과 달라진다.
         val spring = RetryTopicConfigurationBuilder.newInstance()
-            .maxAttempts(4).suffixTopicsWithIndexValues().dltSuffix("-dlt")
+            .maxAttempts(4).exponentialBackoff(2_000, 2.0, Long.MAX_VALUE).suffixTopicsWithIndexValues().dltSuffix("-dlt")
             .create(mockk<KafkaOperations<Any, Any>>())
         val expected = spring.destinationTopicProperties.map { "trading.order-filled" + it.suffix() }
             .filter { it != "trading.order-filled" }          // 원본 토픽 자신은 제외

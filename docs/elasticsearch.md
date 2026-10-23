@@ -2,8 +2,12 @@
 
 monticker 백엔드에 적용된 ES 인덱스·API·파이프라인 레퍼런스.
 
-- **ES 버전**: 8.18.1 — api·worker의 `elasticsearch-java` 클라이언트(Spring Boot BOM) 버전과 맞춘다. 서버가 더 낮으면 응답 해석이 깨진다(8.13.4에서 health 체크가 항상 DOWN)
-- **Spring Data ES**: 5.x
+- **ES 버전**: 9.4.5 — api의 `elasticsearch-java` 클라이언트(Spring Boot BOM) 버전과 맞춘다. 서버가 더 낮으면 응답 해석이 깨진다(8.13.4에서 health 체크가 항상 DOWN). 클라이언트 9(Boot 4)는 서버 8.x에 붙지 못한다(`compatible-with=9` 헤더 거부) — 서버를 먼저 올린다(docs/dependency-upgrade-plan.md B4-4)
+- **Spring Data ES**: 6.x (Spring Boot 4)
+- **8.x → 9 업그레이드**: 8.18의 데이터 디렉터리에서 9는 바로 뜨지 않는다("upgrade to version [8.19.0] first"). 8.19를 한 번 띄워 노드 메타데이터를 올리고 `GET _migration/deprecations`가 비었는지 본 뒤 9로 올린다. 로컬은 볼륨을 지우고 재색인해도 된다:
+  ```bash
+  docker compose rm -sf elasticsearch && docker volume rm monticker_elasticsearch_data   # 이후 POST /api/admin/search/reindex/{index}
+  ```
 - **분석기**: nori_analyzer (한국어 형태소)
 - **인덱스**: 6개 · **도메인**: 8개 · **신규 API**: 14개
 

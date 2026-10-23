@@ -44,7 +44,7 @@ class PriceBroadcaster(
             val message = toMessage(tick)
             // /topic/market(전역) 발행은 ADR-039로 폐지했다 — 구독자 수 × 전체 틱 레이트를 곱하던 경로.
             // 시장 전체 요약은 MarketSummaryBroadcastConsumer가 /topic/market/summary 로 1초 1회 보낸다.
-            messagingTemplate.convertAndSend("/topic/stocks/$stockId", message)
+            messagingTemplate.convertAndSend("/topic/stocks/$stockId", message as Any)   // Map이라 (payload, headers) 오버로드와 겹친다
             messagesOut.increment()
         }
     }

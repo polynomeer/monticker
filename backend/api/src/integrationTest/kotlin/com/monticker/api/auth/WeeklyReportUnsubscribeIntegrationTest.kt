@@ -1,6 +1,6 @@
 package com.monticker.api.auth
 
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.monticker.api.support.TestJson
 import com.monticker.api.auth.application.NotificationPreferenceService
 import com.monticker.api.common.consent.ConsentService
 import com.monticker.api.common.exception.ExternalServiceUnavailableException
@@ -28,7 +28,7 @@ class WeeklyReportUnsubscribeIntegrationTest : PostgresIntegrationTest() {
                 legacy[firstArg<String>().removePrefix("notif:pref:").toLong()]
             }
         }
-        return NotificationPreferenceService(jdbcTemplate, redis, jacksonObjectMapper(), mockk<ConsentService>(relaxed = true))
+        return NotificationPreferenceService(jdbcTemplate, redis, TestJson.boot, mockk<ConsentService>(relaxed = true))
     }
 
     private fun newUser(deleted: Boolean = false): Long = jdbcTemplate.queryForObject(

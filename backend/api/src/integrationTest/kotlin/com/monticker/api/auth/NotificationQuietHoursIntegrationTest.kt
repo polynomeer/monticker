@@ -1,6 +1,6 @@
 package com.monticker.api.auth
 
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.monticker.api.support.TestJson
 import com.monticker.api.auth.api.NotificationPreferenceRequest
 import com.monticker.api.auth.application.NotificationPreferenceService
 import com.monticker.api.common.consent.ConsentService
@@ -18,7 +18,7 @@ import java.time.LocalTime
 class NotificationQuietHoursIntegrationTest : PostgresIntegrationTest() {
 
     private val redis = mockk<StringRedisTemplate>(relaxed = true) { every { opsForValue().get(any()) } returns null }
-    private val service = NotificationPreferenceService(jdbcTemplate, redis, jacksonObjectMapper(), mockk<ConsentService>(relaxed = true))
+    private val service = NotificationPreferenceService(jdbcTemplate, redis, TestJson.boot, mockk<ConsentService>(relaxed = true))
 
     private fun newUser(): Long = jdbcTemplate.queryForObject(
         "INSERT INTO users (email, nickname) VALUES (?, ?) RETURNING id",

@@ -2,7 +2,7 @@ package com.monticker.api.batch
 
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
-import org.springframework.batch.item.ExecutionContext
+import org.springframework.batch.infrastructure.item.ExecutionContext
 
 /**
  * 2026-10 설계 리뷰 10a — 처리하면 조회 조건에서 빠지는 대상을 offset으로 페이징하면 청크 커밋마다

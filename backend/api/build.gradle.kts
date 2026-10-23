@@ -1,7 +1,7 @@
 plugins {
 	kotlin("jvm") version "2.4.21"
 	kotlin("plugin.spring") version "2.4.21"
-	id("org.springframework.boot") version "3.5.16"
+	id("org.springframework.boot") version "4.1.1"
 	id("io.spring.dependency-management") version "1.1.7"
 	kotlin("plugin.jpa") version "2.4.21"
 }
@@ -9,7 +9,7 @@ plugins {
 // Spring Modulith BOM
 dependencyManagement {
 	imports {
-		mavenBom("org.springframework.modulith:spring-modulith-bom:1.4.13")
+		mavenBom("org.springframework.modulith:spring-modulith-bom:2.1.1")
 		mavenBom("org.testcontainers:testcontainers-bom:2.0.5")
 	}
 }
@@ -34,12 +34,10 @@ dependencies {
 	implementation("org.springframework.modulith:spring-modulith-starter-jpa")
 	implementation("org.springframework.modulith:spring-modulith-events-api")
 	implementation("org.springframework.modulith:spring-modulith-events-kafka")
-	implementation("org.springframework.kafka:spring-kafka")
-	implementation("org.springframework.retry:spring-retry")
+	implementation("org.springframework.boot:spring-boot-starter-kafka")
 	testImplementation("org.springframework.modulith:spring-modulith-starter-test")
-	// Spring State Machine
-	implementation("io.micrometer:micrometer-tracing-bridge-otel")
-	implementation("io.opentelemetry:opentelemetry-api")
+	// Boot 4는 자동 구성이 기술별 모듈로 나뉘었다 — 라이브러리만 두면 자동 구성이 붙지 않는다. starter로 받는다
+	implementation("org.springframework.boot:spring-boot-starter-opentelemetry")
 	implementation("io.micrometer:micrometer-registry-prometheus")
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 	implementation("org.springframework.boot:spring-boot-starter-data-mongodb")
@@ -48,13 +46,19 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-data-redis")
 	implementation("org.springframework.boot:spring-boot-starter-security")
 	implementation("org.springframework.boot:spring-boot-starter-validation")
-	implementation("org.springframework.boot:spring-boot-starter-aop")
-	implementation("org.springframework.boot:spring-boot-starter-batch")
-	implementation("org.springframework.boot:spring-boot-starter-web")
+	implementation("org.springframework.boot:spring-boot-starter-aspectj")
+	// Boot 4의 starter-batch는 메모리 저장소다 — JDBC 저장소가 아니면 정산·청소 잡 이력이 BATCH_* 테이블에 남지 않는다
+	implementation("org.springframework.boot:spring-boot-starter-batch-jdbc")
+	implementation("org.springframework.boot:spring-boot-starter-webmvc")
 	implementation("org.springframework.boot:spring-boot-starter-mail")
 	implementation("org.springframework.boot:spring-boot-starter-websocket")
+	// Boot 매퍼(MVC·Modulith 아웃박스·Kafka)는 Jackson 3다(ADR-104). Kotlin 모듈은 Jackson 3용을 따로 받는다
+	implementation("tools.jackson.module:jackson-module-kotlin")
+	// 직접 만든 매퍼는 B4-6까지 Jackson 2로 남는다 — Boot 4는 Jackson 2를 끌어오지 않으니 명시한다
 	implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
-	implementation("org.flywaydb:flyway-core")
+	implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
+	// Boot 4는 flyway-core만으로는 Flyway를 자동 구성하지 않는다 — starter가 없으면 마이그레이션이 조용히 안 돈다
+	implementation("org.springframework.boot:spring-boot-starter-flyway")
 	implementation("org.flywaydb:flyway-database-postgresql")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	runtimeOnly("org.postgresql:postgresql")
@@ -66,12 +70,16 @@ dependencies {
 	implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.4.0")
 	implementation("io.github.resilience4j:resilience4j-micrometer:2.4.0")
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
+	// Boot 4는 MockMvc 등 기술별 테스트 지원도 모듈로 나뉘었다
+	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+	testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
 	testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
-	testImplementation("org.springframework.security:spring-security-test")
+	// Boot 4 — @WebMvcTest가 SecurityConfig(HttpSecurity)를 띄우려면 보안 테스트 자동 구성 모듈이 있어야 한다
+	testImplementation("org.springframework.boot:spring-boot-starter-security-test")
 	testImplementation("io.mockk:mockk:1.14.11")
-	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0")
-	implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
-	implementation("net.logstash.logback:logstash-logback-encoder:7.4")
+	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1")
+	implementation("org.springframework.boot:spring-boot-starter-security-oauth2-client")
+	implementation("net.logstash.logback:logstash-logback-encoder:9.0")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

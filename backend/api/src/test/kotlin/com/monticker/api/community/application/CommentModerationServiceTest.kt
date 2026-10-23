@@ -1,7 +1,7 @@
 package com.monticker.api.community.application
 
+import com.monticker.api.support.TestJson
 import com.anthropic.client.AnthropicClient
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.monticker.api.common.config.AnthropicConfig
 import io.mockk.every
 import io.mockk.mockk
@@ -12,7 +12,7 @@ class CommentModerationServiceTest {
 
     private val anthropicClient = mockk<AnthropicClient>()
     private val anthropicConfig = mockk<AnthropicConfig>()
-    private val objectMapper = jacksonObjectMapper()
+    private val objectMapper = TestJson.boot
 
     private val service = CommentModerationService(anthropicClient, anthropicConfig, objectMapper)
 

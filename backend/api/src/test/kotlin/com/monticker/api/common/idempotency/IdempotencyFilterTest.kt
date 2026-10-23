@@ -1,6 +1,6 @@
 package com.monticker.api.common.idempotency
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.monticker.api.support.TestJson
 import com.monticker.api.common.redis.RedisGuard
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every
@@ -34,7 +34,7 @@ class IdempotencyFilterTest {
     private val valueOps = mockk<ValueOperations<String, String>>()
     private val redis = mockk<StringRedisTemplate> { every { opsForValue() } returns valueOps }
     private val registry = SimpleMeterRegistry()
-    private val filter = IdempotencyFilter(redis, ObjectMapper(), RedisGuard(registry))
+    private val filter = IdempotencyFilter(redis, TestJson.boot, RedisGuard(registry))
 
     @BeforeEach
     fun auth() {

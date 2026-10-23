@@ -1,7 +1,7 @@
 package com.monticker.api.ai
 
+import com.monticker.api.support.TestJson
 import com.anthropic.client.AnthropicClient
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.monticker.api.common.config.AnthropicConfig
 import com.monticker.api.event.application.EventTimelineService
 import com.monticker.api.news.application.NewsService
@@ -22,7 +22,7 @@ class OrderProposalServiceTest {
     private val stockService = mockk<StockService>()
     private val anthropicClient = mockk<AnthropicClient>()
     private val anthropicConfig = mockk<AnthropicConfig>()
-    private val objectMapper = jacksonObjectMapper()
+    private val objectMapper = TestJson.boot
 
     private val service = OrderProposalService(
         orderProposalRepository, eventTimelineService, newsService,

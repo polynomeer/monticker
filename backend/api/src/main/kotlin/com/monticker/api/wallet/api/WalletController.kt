@@ -35,7 +35,7 @@ class WalletController(
 ) {
 
     private fun userId(): Long =
-        SecurityContextHolder.getContext().authentication.principal as Long
+        SecurityContextHolder.getContext().authentication!!.principal as Long
 
     @GetMapping
     fun getWalletMap() = ResponseEntity.ok(walletService.getWalletMap(userId()))
@@ -100,7 +100,7 @@ class TradeReceiptController(
 ) {
 
     private fun userId(): Long =
-        SecurityContextHolder.getContext().authentication.principal as Long
+        SecurityContextHolder.getContext().authentication!!.principal as Long
 
     @GetMapping("/{id}/receipt")
     fun getReceipt(@PathVariable id: Long): ResponseEntity<*> =

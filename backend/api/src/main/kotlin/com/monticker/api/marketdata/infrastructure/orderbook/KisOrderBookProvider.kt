@@ -1,6 +1,6 @@
 package com.monticker.api.marketdata.infrastructure.orderbook
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.json.JsonMapper
 import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Component
@@ -14,7 +14,7 @@ import java.time.Instant
 @Component
 class KisOrderBookProvider(
     private val redisTemplate: StringRedisTemplate,
-    private val mapper: ObjectMapper,
+    private val mapper: JsonMapper,
 ) : OrderBookProvider {
 
     private val log = LoggerFactory.getLogger(javaClass)
@@ -30,10 +30,11 @@ class KisOrderBookProvider(
         return try {
             val root = mapper.readTree(json)
             OrderBookSnapshot(
-                asks = root["asks"].map { n ->
+                // Jackson 3.1의 JsonNode.map(Function)은 노드 자체에 적용된다 — 원소마다는 values()로
+                asks = root["asks"].values().map { n ->
                     OrderLevel(n["price"].decimalValue(), n["quantity"].longValue())
                 },
-                bids = root["bids"].map { n ->
+                bids = root["bids"].values().map { n ->
                     OrderLevel(n["price"].decimalValue(), n["quantity"].longValue())
                 },
                 updatedAt = root["updatedAt"]?.asText()

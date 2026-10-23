@@ -123,8 +123,9 @@ class RebalanceController(
     }
 
     @GetMapping("/target")
-    fun getTarget(@RequestHeader("Authorization") token: String): ResponseEntity<RebalanceTargetResponse?> {
-        val target = targetService.get(userId(token)) ?: return ResponseEntity.ok(null)
+    fun getTarget(@RequestHeader("Authorization") token: String): ResponseEntity<RebalanceTargetResponse> {
+        // 목표가 없으면 200 빈 본문(예전 ok(null)과 같다) — Spring 7은 ResponseEntity 본문 타입을 non-null로 본다
+        val target = targetService.get(userId(token)) ?: return ResponseEntity.ok().build()
         return ResponseEntity.ok(target.toResponse(targetService.parseWeights(target)))
     }
 

@@ -1,6 +1,6 @@
 package com.monticker.api.auth.application
 
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.monticker.api.support.TestJson
 import com.monticker.api.auth.api.NotificationPreferenceRequest
 import io.mockk.every
 import io.mockk.mockk
@@ -22,7 +22,7 @@ class NotificationPreferenceServiceTest {
     private val jdbc = mockk<JdbcTemplate>(relaxed = true)
     private val redis = mockk<StringRedisTemplate>(relaxed = true)
     private val consents = mockk<ConsentService> { every { isAgreed(any(), ConsentType.MARKETING) } returns false }
-    private val service = NotificationPreferenceService(jdbc, redis, jacksonObjectMapper(), consents)
+    private val service = NotificationPreferenceService(jdbc, redis, TestJson.boot, consents)
 
     @Test
     fun `행이 없으면 옛 Redis 값을 읽는다 - 모르는 필드가 빠져 있어도 기본값으로 채운다`() {

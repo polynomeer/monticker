@@ -1,7 +1,7 @@
 package com.monticker.api.wallet.application
 
 import com.monticker.api.common.http.HttpTimeouts
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.json.JsonMapper
 import com.monticker.api.wallet.domain.BehaviorGrade
 import com.monticker.api.wallet.events.GradeChangedEvent
 import org.slf4j.LoggerFactory
@@ -25,7 +25,7 @@ import java.time.Duration
 @Component
 class GradeChangedEventListener(
     private val jdbc: JdbcTemplate,
-    private val objectMapper: ObjectMapper,
+    private val objectMapper: JsonMapper,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
@@ -38,7 +38,7 @@ class GradeChangedEventListener(
             "SELECT token FROM device_tokens WHERE user_id = ? AND is_active = true",
             String::class.java,
             event.userId,
-        )
+        ).filterNotNull()
         if (tokens.isEmpty()) {
             log.debug("[GradeChanged] userId={} — device token 없음, 푸시 건너뜀", event.userId)
             return

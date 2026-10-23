@@ -109,7 +109,7 @@ class StrategyMarketController(
         val performance = performanceQuery.summarize(rulesetIds)
 
         val subscribedMarketIds: Set<Long> = if (userId != null) {
-            jdbc.queryForList("SELECT market_id FROM strategy_subscriptions WHERE user_id = ?", Long::class.java, userId).toSet()
+            jdbc.queryForList("SELECT market_id FROM strategy_subscriptions WHERE user_id = ?", Long::class.java, userId).filterNotNull().toSet()
         } else emptySet()
 
         return rows.map { row ->

@@ -36,7 +36,7 @@ class ConditionalOrderReaper(
             LIMIT 50
             """.trimIndent(),
             Long::class.java,
-        )
+        ).filterNotNull()
         stuck.forEach { reap(it) }
     }
 
