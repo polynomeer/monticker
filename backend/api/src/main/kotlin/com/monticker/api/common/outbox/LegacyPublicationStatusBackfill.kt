@@ -10,8 +10,8 @@ import org.springframework.stereotype.Component
  * 2.x의 재전송은 1분이 지난 미완료 행을 고른 뒤 `… WHERE id = ? AND status != RESUBMITTED`로 행을 가져가는데,
  * **status가 NULL인 행은 가져가지 못하고 조용히 건너뛴다**(SQL에서 `NULL != x`는 참이 아니다). 업그레이드 직전에 쌓인
  * 행과 롤링 배포 중 구버전 pod가 계속 쓰는 행이 영원히 재전송되지 않는다. 재전송 직전마다 그런 행을 FAILED로 표시한다.
- * `completion_attempts`도 0으로 채운다 — JPA 엔티티의 primitive int라 NULL 행 하나가 조회 전체를 깨뜨린다(V102가
- * 기본값을 두지만, V102 이전에 이 컬럼 없이 들어온 행이 남아 있을 수 있다).
+ * `completion_attempts`도 0으로 채운다 — JPA 엔티티의 primitive int라 NULL 행 하나가 조회 전체를 깨뜨린다(V108가
+ * 기본값을 두지만, V108 이전에 이 컬럼 없이 들어온 행이 남아 있을 수 있다).
  *
  * 구버전이 모두 내려간 뒤에는 항상 0건이다 — 그 뒤 한 릴리스가 지나면 지운다(ADR-104 Revisit When).
  */

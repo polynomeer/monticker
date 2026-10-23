@@ -16,10 +16,10 @@ import java.util.function.Supplier
 import javax.sql.DataSource
 
 /**
- * B4-5 — Spring Batch 6에서 [BatchConfig]가 **JDBC 저장소**를 쓰는지 실제 Postgres(Flyway V17·V103)로 본다.
+ * B4-5 — Spring Batch 6에서 [BatchConfig]가 **JDBC 저장소**를 쓰는지 실제 Postgres(Flyway V17·V109)로 본다.
  *
  * Batch 6의 `@EnableBatchProcessing`은 그것만으로는 메모리 저장소라, 빌드·기동이 다 되는데 잡 실행 이력만 조용히
- * BATCH_* 테이블에서 사라진다. 인스턴스 id가 V103의 새 시퀀스(구 BATCH_JOB_SEQ보다 1,000,000 앞)에서 나오는지도 본다.
+ * BATCH_* 테이블에서 사라진다. 인스턴스 id가 V109의 새 시퀀스(구 BATCH_JOB_SEQ보다 1,000,000 앞)에서 나오는지도 본다.
  */
 class BatchJdbcJobRepositoryIntegrationTest : PostgresIntegrationTest() {
 

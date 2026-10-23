@@ -52,7 +52,7 @@ UPDATE event_publication SET status = 'RESUBMITTED', completion_attempts = compl
 - 완료된 1.4 행(status NULL, completion_date 있음)은 그대로 둔다. 2.1의 정리 쿼리가 `STATUS = 'COMPLETED' OR STATUS IS NULL`을 함께 지운다.
 
 **api에서 더한 것 (B4-5b)**
-- **JPA 레지스트리의 `completionAttempts`는 primitive int다.** `completion_attempts`가 NULL인 행을 하나라도 읽으면 Hibernate가 실패해 재전송 조회 전체가 깨진다(JDBC 레지스트리인 worker는 NULL을 읽는다). V102가 기존 행을 0으로 채우고 `DEFAULT 0`을 둔다. 구버전 pod가 이 컬럼 없이 넣는 행도 0이 된다. api의 `LegacyPublicationStatusBackfill`도 매 주기 NULL을 0으로 채운다.
+- **JPA 레지스트리의 `completionAttempts`는 primitive int다.** `completion_attempts`가 NULL인 행을 하나라도 읽으면 Hibernate가 실패해 재전송 조회 전체가 깨진다(JDBC 레지스트리인 worker는 NULL을 읽는다). V108가 기존 행을 0으로 채우고 `DEFAULT 0`을 둔다. 구버전 pod가 이 컬럼 없이 넣는 행도 0이 된다. api의 `LegacyPublicationStatusBackfill`도 매 주기 NULL을 0으로 채운다.
 - **Boot 매퍼 규칙의 예외** — 다음 두 곳은 Boot 매퍼 대신 Jackson 2로 직접 만든 매퍼를 쓴다(B4-6에서 다룬다):
   - **Redis 캐시(`CacheConfig`)**: Jackson 3은 `DefaultTyping.EVERYTHING`을 없앴다. final인 Kotlin data class는 루트에 타입 정보가 실리지 않아 캐시를 읽을 때 `ClassCastException`이 난다. Boot 3.5 매퍼와 같은 설정의 Jackson 2 매퍼 + EVERYTHING을 쓰고, 키 접두사를 `v2:`로 바꿔 롤링 배포 중 구·신 버전 값을 섞지 않는다(TTL ≤ 1시간).
   - **트리 모델로 외부 응답을 읽는 코드(`YahooCandleReader`)**: Jackson 3의 `decimalValue()`·`longValue()`는 null 노드에서 예외를 던진다(Jackson 2는 0). 빠진 봉이 null로 오는 Yahoo 응답 전체를 버리게 된다.

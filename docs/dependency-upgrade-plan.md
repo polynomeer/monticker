@@ -154,8 +154,8 @@ Kotlin 컴파일러 플러그인(`plugin.spring`·`plugin.jpa`)은 `kotlin("jvm"
     - 덤: worker의 `mail.smtp.auth·starttls`가 `spring.kafka` 아래에 잘못 들여쓰여 JavaMail에 닿지 않았다(별도 커밋으로 고침).
 - **B4-5b(api)에서 찾은 것** — B4-5a의 항목(Kafka 템플릿 주입, 1.x 아웃박스 행, 자동 구성 모듈, 속성 이름, OTLP)에 더해:
   - **ES 클라이언트 9는 서버 8.x와 붙지 않는다** → B4-4가 배포 선행 조건(위).
-  - Modulith JPA 엔티티의 `completionAttempts`가 primitive int라 NULL 행 하나가 재전송 조회를 통째로 깨뜨린다 → V102(`DEFAULT 0`).
-  - Batch 6: `@EnableBatchProcessing`만으로는 메모리 저장소(실행 이력이 BATCH_* 테이블에 안 남는다) → `@EnableJdbcJobRepository`. 시퀀스는 RENAME 대신 V103으로 `BATCH_JOB_INSTANCE_SEQ`를 1,000,000 앞에서 새로 만든다(롤링 배포 중 Batch 5 pod 보호). 통합 테스트(`BatchJdbcJobRepositoryIntegrationTest`).
+  - Modulith JPA 엔티티의 `completionAttempts`가 primitive int라 NULL 행 하나가 재전송 조회를 통째로 깨뜨린다 → V108(`DEFAULT 0`).
+  - Batch 6: `@EnableBatchProcessing`만으로는 메모리 저장소(실행 이력이 BATCH_* 테이블에 안 남는다) → `@EnableJdbcJobRepository`. 시퀀스는 RENAME 대신 V109으로 `BATCH_JOB_INSTANCE_SEQ`를 1,000,000 앞에서 새로 만든다(롤링 배포 중 Batch 5 pod 보호). 통합 테스트(`BatchJdbcJobRepositoryIntegrationTest`).
   - `spring.data.mongodb.uri` → `spring.mongodb.uri`(옛 키는 조용히 `localhost:27017/test`로 붙는다).
   - Spring Data Redis 4 캐시 writer가 기본 비동기 쓰기 → `immediateWrites()`. 캐시 직렬화는 Jackson 2 유지 + 키 `v2:` 접두사(ADR-104).
   - Jackson 3: `decimalValue()`가 null 노드에서 예외(Yahoo 파서는 Jackson 2 유지), 3.1의 `JsonNode.map(Function)`이 Kotlin `map`을 가림.
@@ -286,5 +286,5 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 | B4-3 직렬화 고정 테스트 | 완료 | #225 | worker·api·Go 양쪽에 같은 JSON 고정, gateway-ci 신설 |
 | B4-4 ES 9 서버 | 로컬 완료 | — | 로컬 9.4.5(B4-5b PR). 운영은 8.19 → 9, **B4-5b 배포 전에** — 일정 필요 |
 | B4-5a worker Boot 4.1 | 완료 | #229 | ADR-104. 통합 테스트·로컬 기동(api 3.5와 혼합)으로 확인 |
-| B4-5b api Boot 4.1 | PR | #233 | ES 9 선행. V102·V103, Batch JDBC 저장소, 캐시 동기 쓰기 |
+| B4-5b api Boot 4.1 | PR | #233 | ES 9 선행. V108·V109, Batch JDBC 저장소, 캐시 동기 쓰기 |
 | B4-6 | 진행 중 | #235 #236 | worker 완료. api는 #233 뒤 |
