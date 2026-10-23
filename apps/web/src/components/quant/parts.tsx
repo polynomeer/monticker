@@ -31,7 +31,25 @@ export function fmtMatch(rate: number | null | undefined, compared: number | nul
 
 export function matchTone(rate: number | null | undefined): string {
   if (rate == null) return "text-tm-muted";
-  return rate >= 0.85 ? "text-dracula-green" : rate >= 0.6 ? "text-dracula-orange" : "text-down";
+  return rate >= 0.85 ? "text-dracula-green" : rate >= 0.6 ? "text-caution" : "text-down";
+}
+
+/** 포워드 테스트가 돈 기간(주). 멈췄으면 멈춘 날까지. */
+export function forwardWeeks(startedAt: string, stoppedAt?: string | null) {
+  const end = stoppedAt ? new Date(stoppedAt).getTime() : Date.now();
+  return Math.max(0, Math.floor((end - new Date(startedAt).getTime()) / (7 * 86400_000)));
+}
+
+/** 이용약관 제9조 — 모든 전략 카드에 붙이는 성과 고지. 문구를 한 곳에서만 고친다. */
+export const PAST_PERFORMANCE_NOTICE = "과거 성과는 미래 수익을 보장하지 않습니다";
+
+/** 카드 한 장에 붙는 짧은 성과 고지(약관 제9조). */
+export function PastPerformanceNote({ className }: { className?: string }) {
+  return (
+    <p className={cn("m-0 text-2xs leading-snug text-tm-muted", className)}>
+      {PAST_PERFORMANCE_NOTICE} · 투자 판단과 책임은 본인에게 있습니다
+    </p>
+  );
 }
 
 /** 백엔드 MDD는 양수 %(고점 대비 낙폭)다 — 손실로 읽히게 음수로 표기한다. */

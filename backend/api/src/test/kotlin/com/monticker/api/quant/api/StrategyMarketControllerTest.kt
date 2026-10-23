@@ -173,6 +173,21 @@ class StrategyMarketControllerTest {
         verify(exactly = 0) { jdbc.update(any<String>(), *anyVararg()) }
     }
 
+    // ADR-114 Note — 크리에이터가 탈퇴해 판매 중지된 전략은 구독할 수 없다. 판매 중지와 직렬화하려고 행을 FOR SHARE로 읽는다.
+    @Test
+    fun `subscribe reads only listed strategies and locks the row against delisting`() {
+        every { jwtTokenProvider.getUserId("token") } returns 9L
+        every { jdbc.queryForMap(any<String>(), 5L) } throws org.springframework.dao.EmptyResultDataAccessException(1)
+
+        assertThrows<NoSuchElementException> { controller.subscribe("Bearer token", 5L) }
+        verify { jdbc.queryForMap(match<String> { it.contains("delisted_at IS NULL") && it.endsWith("FOR SHARE") }, 5L) }
+    }
+
+    @Test
+    fun `market visibility excludes delisted strategies`() {
+        assertThat(MARKET_VISIBLE_FROM).contains("sm.delisted_at IS NULL")
+    }
+
     // ── count — 목록과 같은 공개 범위만 센다 ─────────────────────────────────────
 
     @Test

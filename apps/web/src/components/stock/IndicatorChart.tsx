@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useRef } from "react";
-import { useTheme } from "next-themes";
+import { useMarketColors, useThemePalette } from "@/stores/themeStore";
 import type { CandleData } from "./chart/types";
 
 let echartsPromise: Promise<typeof import("echarts")> | null = null;
@@ -53,7 +53,8 @@ interface Props {
 export default function IndicatorChart({ candles, showRSI = false, showMACD = false }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef     = useRef<import("echarts").ECharts | null>(null);
-  const { resolvedTheme } = useTheme();
+  const ct  = useMarketColors();
+  const pal = useThemePalette();
 
   const visible = showRSI || showMACD;
   const panelCount = (showRSI ? 1 : 0) + (showMACD ? 1 : 0);
@@ -67,10 +68,10 @@ export default function IndicatorChart({ candles, showRSI = false, showMACD = fa
       if (disposed || !containerRef.current) return;
       if (chartRef.current) chartRef.current.dispose();
 
-      const isDark = true; // 터미널 디자인은 다크 전용
-      const bg     = isDark ? "#282a36" : "#ffffff";
-      const grid   = isDark ? "#34364a" : "#e5e7eb";
-      const text   = isDark ? "#a4abcf" : "#6b7280";
+      // 앱 테마 팔레트(드라큘라는 이전과 같은 값)·사용자 상승/하락 색
+      const bg     = pal.panel;
+      const grid   = pal.line;
+      const text   = pal.muted;
       const dates  = candles.map(c => new Date(c.time * 1000).toISOString().slice(0, 10));
 
       const grids: object[]   = [];
@@ -100,10 +101,10 @@ export default function IndicatorChart({ candles, showRSI = false, showMACD = fa
         series.push(
           { name: "RSI", type: "line", xAxisIndex: gridIdx, yAxisIndex: gridIdx,
             data: rsi, smooth: false, symbol: "none",
-            lineStyle: { color: "#8be9fd", width: 1.5 },
+            lineStyle: { color: pal.cyan, width: 1.5 },
             markLine: { silent: true, symbol: ["none","none"],
-              data: [{ yAxis: 70, lineStyle: { color: "#f6465d", type: "dashed", opacity: 0.5 } },
-                     { yAxis: 30, lineStyle: { color: "#0ecb81", type: "dashed", opacity: 0.5 } }] } },
+              data: [{ yAxis: 70, lineStyle: { color: ct.downColor, type: "dashed", opacity: 0.5 } },
+                     { yAxis: 30, lineStyle: { color: ct.upColor, type: "dashed", opacity: 0.5 } }] } },
         );
         gridIdx++;
       }
@@ -123,14 +124,14 @@ export default function IndicatorChart({ candles, showRSI = false, showMACD = fa
         });
         series.push(
           { name: "MACD", type: "line", xAxisIndex: gridIdx, yAxisIndex: gridIdx,
-            data: macdLine, symbol: "none", lineStyle: { color: "#ff79c6", width: 1.5 } },
+            data: macdLine, symbol: "none", lineStyle: { color: pal.pink, width: 1.5 } },
           { name: "Signal", type: "line", xAxisIndex: gridIdx, yAxisIndex: gridIdx,
-            data: signal, symbol: "none", lineStyle: { color: "#f1fa8c", width: 1.2 } },
+            data: signal, symbol: "none", lineStyle: { color: pal.yellow, width: 1.2 } },
           { name: "Histogram", type: "bar", xAxisIndex: gridIdx, yAxisIndex: gridIdx,
             barCategoryGap: "0%",
             data: histogram.map(v => ({
               value: v,
-              itemStyle: { color: v >= 0 ? "#0ecb8199" : "#f6465d99" },
+              itemStyle: { color: v >= 0 ? `${ct.upColor}99` : `${ct.downColor}99` },
             })) },
         );
       }
@@ -143,7 +144,7 @@ export default function IndicatorChart({ candles, showRSI = false, showMACD = fa
       chart.setOption({
         backgroundColor: bg, animation: false,
         legend: { top: 4, right: 80, textStyle: { color: text, fontSize: 10 }, itemWidth: 12, itemHeight: 2 },
-        tooltip: { trigger: "axis", backgroundColor: isDark ? "#21222c" : "#fff", borderColor: grid, textStyle: { color: text, fontSize: 11 } },
+        tooltip: { trigger: "axis", backgroundColor: pal.inner, borderColor: grid, textStyle: { color: text, fontSize: 11 } },
         grid: grids, xAxis: xAxes, yAxis: yAxes, series, dataZoom,
       });
 
@@ -162,7 +163,7 @@ export default function IndicatorChart({ candles, showRSI = false, showMACD = fa
         chartRef.current = null;
       }
     };
-  }, [candles, showRSI, showMACD, resolvedTheme, visible, height, panelCount]);
+  }, [candles, showRSI, showMACD, visible, height, panelCount, pal, ct.upColor, ct.downColor]);
 
   if (!visible || candles.length === 0) return null;
 

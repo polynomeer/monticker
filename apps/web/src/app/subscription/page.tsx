@@ -62,7 +62,7 @@ const STATUS_LABELS: Record<string, { label: string; tone: string }> = {
 const PAYMENT_LABELS: Record<string, { label: string; tone: string }> = {
   SUCCESS: { label: "결제 완료", tone: "text-dracula-green" },
   FAILED: { label: "결제 실패", tone: "text-[#ff8a8a]" },
-  PENDING: { label: "처리 중", tone: "text-dracula-orange" },
+  PENDING: { label: "처리 중", tone: "text-caution" },
   REFUNDED: { label: "환불", tone: "text-tm-muted" },
 };
 
@@ -244,7 +244,7 @@ export default function SubscriptionPage() {
       crumb="계정"
       stats={[
         { label: "현재 플랜", value: currentCode ?? "—" },
-        { label: "다음 결제일", value: nextBillingText(mySub), tone: mySub?.noChargeReason === "NO_BILLING_KEY" ? "text-dracula-orange" : undefined },
+        { label: "다음 결제일", value: nextBillingText(mySub), tone: mySub?.noChargeReason === "NO_BILLING_KEY" ? "text-caution" : undefined },
         { label: "결제 수단", value: billingStatus?.registered ? "토스페이먼츠" : "미등록" },
       ]}
     >
@@ -338,7 +338,7 @@ export default function SubscriptionPage() {
               : nextBillingText(mySub)}
           />
           {mySub?.noChargeReason === "NO_BILLING_KEY" && (
-            <span className="text-xs text-dracula-orange">자동결제 카드가 없어 만료일에 갱신 결제가 되지 않습니다. 카드를 등록해주세요.</span>
+            <span className="text-xs text-caution">자동결제 카드가 없어 만료일에 갱신 결제가 되지 않습니다. 카드를 등록해주세요.</span>
           )}
           <KV k={mySub?.status === "CANCELLED" ? "이용 종료일" : "만료일"} v={fmtDate(mySub?.expiresAt)} />
           <div className="flex flex-wrap items-center justify-between gap-2">

@@ -53,9 +53,10 @@ export interface EventMeta {
 
 export type EventLayer = "disclosure" | "news" | "volume" | "price";
 
+// 공시는 청록 — 주황은 실전 전용(ADR-112). 뉴스는 공시와 갈리도록 보조 회색
 export const EVENT_META: Record<string, EventMeta> = {
-  DISCLOSURE_PUBLISHED: { label: "공시", letter: "D", color: "#ffb86c", layer: "disclosure" },
-  NEWS_PUBLISHED: { label: "뉴스", letter: "N", color: "#8be9fd", layer: "news" },
+  DISCLOSURE_PUBLISHED: { label: "공시", letter: "D", color: "#8be9fd", layer: "disclosure" },
+  NEWS_PUBLISHED: { label: "뉴스", letter: "N", color: "#c3c8e2", layer: "news" },
   VOLUME_SURGE: { label: "거래량", letter: "V", color: "#bd93f9", layer: "volume" },
   PRICE_SPIKE: { label: "급등", letter: "P", color: "#50fa7b", layer: "price" },
   PRICE_DROP: { label: "급락", letter: "P", color: "#ff79c6", layer: "price" },

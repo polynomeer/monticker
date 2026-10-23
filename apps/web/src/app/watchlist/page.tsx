@@ -19,7 +19,7 @@ import GroupDeleteConfirm from "@/components/watchlist/GroupDeleteConfirm";
 import { useWatchRules } from "@/hooks/useWatchRules";
 import { applyMove, moveTarget, type MoveDir } from "@/components/watchlist/order";
 import { useIntradaySeriesChunked } from "@/hooks/useIntradaySeries";
-import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
+import { useMarketColors } from "@/stores/themeStore";
 import { downloadCsv, kstDateStamp } from "@/components/portfolio/csv";
 
 interface AlertRule { id: number; stockId: number | null; ruleType: string; }
@@ -66,7 +66,7 @@ export default function WatchlistPage() {
   const quoteByStockId = useQuotes(stockIds, "watchlist-page", 15_000);
   // 오늘 열 — 장중 10분 간격 종가(/api/market/intraday, 50개씩 나눠 요청)
   const intradayByStockId = useIntradaySeriesChunked(stockIds, isLoggedIn);
-  const chartTheme = useThemeStore((s) => CHART_THEMES[s.chartTheme]);
+  const chartTheme = useMarketColors();
   const { data: events = [] } = useRecentEvents();
 
   const { data: alertRules = [] } = useQuery<AlertRule[]>({

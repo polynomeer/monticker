@@ -183,7 +183,7 @@ export default function NotificationSettingsPage() {
                 </Row>
               </div>
               {!pref.allEnabled && (
-                <p className="m-0 mt-2 text-xs text-dracula-orange">전체 알림이 꺼져 있어 아래 설정과 무관하게 끌 수 있는 알림은 보내지 않습니다.</p>
+                <p className="m-0 mt-2 text-xs text-caution">전체 알림이 꺼져 있어 아래 설정과 무관하게 끌 수 있는 알림은 보내지 않습니다.</p>
               )}
 
               <H2>가격·이벤트</H2>
@@ -222,7 +222,7 @@ export default function NotificationSettingsPage() {
                   sub="매주 월요일 오전 · 이메일 — 지난주 모의투자의 계획·손절 준수율, 감정 분포, 행동 점수 변화 (거래가 있던 주만)"
                   extra={
                     pref.weeklyReportEmail && !pref.emailEnabled ? (
-                      <span className="text-xs text-dracula-orange">이메일 채널이 꺼져 있어 보내지 않습니다</span>
+                      <span className="text-xs text-caution">이메일 채널이 꺼져 있어 보내지 않습니다</span>
                     ) : undefined
                   }
                 >

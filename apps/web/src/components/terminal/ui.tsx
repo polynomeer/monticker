@@ -8,16 +8,17 @@ import { cn } from "@/lib/utils";
 import { Icon, type IconName } from "./Icon";
 
 // ── 버튼 ───────────────────────────────────────────────────────────────
-export type BtnKind = "primary" | "buy" | "sell" | "ghost" | "soft" | "danger" | "warn";
+export type BtnKind = "primary" | "buy" | "sell" | "ghost" | "soft" | "danger" | "live";
 
 const BTN_KIND: Record<BtnKind, string> = {
-  primary: "bg-dracula-purple text-tm-page font-bold hover:brightness-110",
+  primary: "bg-dracula-purple text-tm-on-accent font-bold hover:brightness-110",
   buy: "bg-up text-tm-page font-bold hover:brightness-110",
   sell: "bg-down text-tm-page font-bold hover:brightness-110",
   ghost: "border border-tm-line2 text-dracula-fg font-semibold hover:bg-tm-raised",
   soft: "bg-tm-raised text-dracula-fg font-semibold hover:bg-tm-line2",
   danger: "border border-[#6b3a44] text-[#ff8a8a] font-semibold hover:bg-[#3d252b]",
-  warn: "bg-dracula-orange text-tm-page font-bold hover:brightness-110",
+  // 실주문 실행 전용(ADR-112) — 주황은 실전에만 쓴다
+  live: "bg-live text-tm-page font-bold hover:brightness-110",
 };
 
 const BTN_SIZE = { sm: "h-7 px-2.5 text-xs", md: "h-10 px-4 text-sm", lg: "h-11 px-4 text-sm", xl: "h-12 px-5 text-15" };
@@ -191,7 +192,7 @@ export function Checkbox({ checked, onChange, label, sub, disabled }: { checked:
       onClick={() => onChange?.(!checked)}
       className="flex items-start gap-2.5 text-left text-13 text-dracula-fg disabled:opacity-50"
     >
-      <span className={cn("grid h-[18px] w-[18px] flex-none place-items-center rounded-[5px]", checked ? "bg-dracula-purple text-tm-page" : "border-[1.5px] border-tm-line2 text-transparent")}>
+      <span className={cn("grid h-[18px] w-[18px] flex-none place-items-center rounded-[5px]", checked ? "bg-dracula-purple text-tm-on-accent" : "border-[1.5px] border-tm-line2 text-transparent")}>
         <Icon name="check" size={13} strokeWidth={3} />
       </span>
       <span className="flex flex-col gap-0.5">
@@ -219,11 +220,13 @@ export function Chip({ children, dot, active, onClick, className }: { children: 
   return onClick ? <button type="button" aria-pressed={active} onClick={onClick} className={cls}>{inner}</button> : <span className={cls}>{inner}</span>;
 }
 
-export type Tone = "green" | "red" | "orange" | "cyan" | "purple" | "yellow" | "muted" | "pink";
+export type Tone = "green" | "red" | "live" | "caution" | "cyan" | "purple" | "yellow" | "muted" | "pink";
 const TONE: Record<Tone, string> = {
   green: "bg-[#22392c] text-dracula-green",
   red: "bg-[#47262d] text-[#ff8a8a]",
-  orange: "bg-[#43342a] text-dracula-orange",
+  // 주황(live)은 실전 표식 전용, 경고·주의·"모의 데이터"는 caution(ADR-112)
+  live: "bg-[#43342a] text-live",
+  caution: "bg-[#3d3f2a] text-caution",
   cyan: "bg-[#213a44] text-dracula-cyan",
   purple: "bg-[#3a2f52] text-[#e2d0ff]",
   yellow: "bg-[#3d3f2a] text-dracula-yellow",
@@ -238,8 +241,8 @@ export function Pill({ children, tone = "muted", className }: { children: ReactN
 /** 실계좌 화면 표식 — 모의투자 화면과 혼동하지 않도록 실거래 경로에는 반드시 붙인다. */
 export function LiveBadge() {
   return (
-    <span className="inline-flex h-[26px] items-center gap-1.5 rounded-full bg-[#43342a] px-2.5 text-xs font-bold text-dracula-orange">
-      <span className="h-[7px] w-[7px] rounded-full bg-dracula-orange" />
+    <span className="inline-flex h-[26px] items-center gap-1.5 rounded-full bg-[#43342a] px-2.5 text-xs font-bold text-live">
+      <span className="h-[7px] w-[7px] rounded-full bg-live" />
       실계좌
     </span>
   );
@@ -316,7 +319,9 @@ export function H2({ children, sub }: { children: ReactNode; sub?: ReactNode }) 
 
 const NOTICE = {
   info: { box: "bg-[#252d40] border-[#33415e]", icon: "text-dracula-cyan" },
-  warn: { box: "bg-[#3a2f26] border-[#5a4430]", icon: "text-dracula-orange" },
+  warn: { box: "bg-[#33352a] border-[#55583a]", icon: "text-caution" },
+  // 실전 경고 전용(ADR-112) — 일반 경고(warn)와 달리 주황
+  live: { box: "bg-[#3a2f26] border-[#5a4430]", icon: "text-live" },
   danger: { box: "bg-[#3d252b] border-[#64363f]", icon: "text-[#ff8a8a]" },
   ok: { box: "bg-[#22352a] border-[#2f4d39]", icon: "text-dracula-green" },
 };
@@ -362,8 +367,9 @@ export function StockCell({ name, code, href }: { name: string; code?: string; h
   return href ? <Link href={href} className="text-dracula-fg hover:text-dracula-fg">{body}</Link> : body;
 }
 
+// 공시는 청록(ADR-112 — 주황은 실전 전용), 뉴스는 공시와 갈리도록 보조 회색
 export const EVENT_COLOR: Record<string, string> = {
-  뉴스: "#8be9fd", 공시: "#ffb86c", 거래량: "#bd93f9", 급등: "#50fa7b", 급락: "#ff79c6", 배당: "#f1fa8c", 시그널: "#50fa7b", 감성: "#ff79c6",
+  뉴스: "#c3c8e2", 공시: "#8be9fd", 거래량: "#bd93f9", 급등: "#50fa7b", 급락: "#ff79c6", 배당: "#f1fa8c", 시그널: "#50fa7b", 감성: "#ff79c6",
 };
 
 export function EventBadge({ type }: { type?: string | null }) {

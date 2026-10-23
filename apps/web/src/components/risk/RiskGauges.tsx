@@ -13,8 +13,8 @@ export interface Gauge {
 
 export const LEVELS = [
   { name: "안전", text: "text-dracula-green", bg: "bg-dracula-green" },
-  { name: "보통", text: "text-dracula-yellow", bg: "bg-dracula-yellow" },
-  { name: "주의", text: "text-dracula-orange", bg: "bg-dracula-orange" },
+  { name: "보통", text: "text-tm-soft", bg: "bg-tm-soft" },
+  { name: "주의", text: "text-caution", bg: "bg-caution" },
   { name: "위험", text: "text-dracula-red", bg: "bg-dracula-red" },
 ] as const;
 

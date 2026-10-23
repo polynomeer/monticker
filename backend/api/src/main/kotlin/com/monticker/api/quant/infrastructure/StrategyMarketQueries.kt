@@ -4,12 +4,13 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
 
 /**
- * 마켓 목록·총수·검색이 같은 행 집합을 보도록 FROM 절을 한곳에 둔다. 목록에 없는 행(작성자 계정이
+ * 마켓 목록·총수·검색이 같은 행 집합을 보도록 FROM 절을 한곳에 둔다. 판매 중지된 전략(delisted_at, ADR-114 Note)은 빠진다. 목록에 없는 행(작성자 계정이
  * 사라진 전략 등)이 총수나 검색에만 잡히거나, 나중에 비공개·숨김 조건이 생겼을 때 한쪽만 고쳐지는 걸 막는다.
  * 여기에 WHERE를 붙여도 검색은 이 조각을 CTE 안에 감싸 쓰므로 그대로 동작한다.
  */
 const val MARKET_VISIBLE_FROM = """FROM strategy_market sm
-               JOIN users u ON u.id = sm.user_id"""
+               JOIN users u ON u.id = sm.user_id
+               WHERE sm.delisted_at IS NULL"""
 
 /**
  * 마켓 카드 한 행의 컬럼. 작성자는 닉네임으로만 싣는다 — 이메일은 로그인 ID다(보안 리뷰 2026-10).

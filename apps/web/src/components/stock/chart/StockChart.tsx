@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo }       from "react";
-import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
+import { useMarketColors, useThemePalette } from "@/stores/themeStore";
 import { useReducedMotion } from "@/stores/a11yStore";
 import type { ChartTheme, CandleData, EventMarker, IndicatorKey, OrderLine, DrawingTool, Drawing, SignalMarker, SentimentMarker, TradeMarker, ChartInterval, ChartType } from "./types";
 import EChartsAdapter from "./EChartsAdapter";
@@ -42,22 +42,24 @@ export default function StockChart({
   trades, interval, chartType, activeDrawingTool, drawings, onDrawingsChange,
   magnet, drawingsLocked, onDrawingToolDone,
 }: Props) {
-  const { chartTheme }    = useThemeStore();
-  const ct                = CHART_THEMES[chartTheme] ?? CHART_THEMES.default;
+  const ct                = useMarketColors();
+  const pal               = useThemePalette();
   const reduceMotion      = useReducedMotion();
 
   // 매 렌더 새 객체를 넘기면 EChartsAdapter가 (theme이 deps라) 차트를 통째로
   // dispose+재생성한다 — 드로잉 한 점 찍을 때마다 화면이 깜빡이는 원인이 되므로
   // 실제 색상 값이 바뀔 때만 참조가 바뀌도록 고정한다.
-  // 터미널 디자인은 다크 전용 — 패널 배경(tm-panel)·보조 글자(tm-muted)·구분선(tm-line)에 맞춘다.
+  // 패널 배경(tm-panel)·보조 글자(tm-muted)·구분선(tm-line)·강조(dracula-purple)는 앱 테마 팔레트 — 테마를 바꾸면
+  // 팔레트 참조가 바뀌어 차트를 새 색으로 다시 만든다. 드라큘라 값은 이전과 같다.
   const theme: ChartTheme = useMemo(() => ({
-    bg:        "#282a36",
-    text:      "#a4abcf",
-    grid:      "#34364a",
+    bg:        pal.panel,
+    text:      pal.muted,
+    grid:      pal.line,
     upColor:   ct.upColor,
     downColor: ct.downColor,
-    accent:    "#bd93f9", // dracula-purple — 라인·영역 차트 선
-  }), [ct.upColor, ct.downColor]);
+    accent:    pal.accent, // 라인·영역 차트 선
+    palette:   pal,
+  }), [ct.upColor, ct.downColor, pal]);
 
   if (candles.length === 0) {
     return (

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { BtnLink, BuySell, Btn, Chip, Field, Icon, SelectBox, fmtNum } from "@/components/terminal";
+import { BtnLink, BuySell, Btn, Chip, Field, Icon, Pill, SelectBox, fmtNum } from "@/components/terminal";
 import TradeReceipt from "@/components/wallet/TradeReceipt";
 import { sellableQuantity, usePaperOpenOrders, usePaperOrder, usePaperPortfolio } from "@/hooks/usePaperTrade";
 import { useAuth } from "@/hooks/useAuth";
@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 interface Props {
   stock: { id: number; symbol: string; name: string };
   currentPrice: number;
-  /** 실전 계좌가 연동돼 있으면 실전투자 화면 안내를 보여 준다(이 폼은 실주문을 보내지 않는다) */
+  /** 실전 계좌가 연동돼 있으면 안내 링크가 이 종목의 실전 주문 화면으로 간다(이 폼은 실주문을 보내지 않는다) */
   brokerageConnected?: boolean;
 }
 
@@ -57,7 +57,7 @@ const EMOTION_TAGS = [
 /**
  * 시안 Main의 주문 패널 — 모의투자 주문(`POST /api/paper/orders`, ADR-074). 시장가는 즉시 체결,
  * 지정가는 교차하면 즉시 체결·아니면 미체결로 남아 서버 스위퍼가 시세 교차 시 체결한다.
- * 실전 탭은 이 폼에서 주문을 보내지 않는다 — 실주문은 검증 경로가 있는 실전투자 화면에서만.
+ * 실전 주문은 이 폼에 없다 — 실주문은 검증 경로가 있는 실전투자 화면에서만.
  */
 export default function OrderForm({ stock, currentPrice, brokerageConnected }: Props) {
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
@@ -181,22 +181,20 @@ export default function OrderForm({ stock, currentPrice, brokerageConnected }: P
     <>
       {receiptTradeId && receipt && <TradeReceipt receipt={receipt} onClose={() => setReceiptTradeId(null)} />}
 
-      {/* 계좌 선택 — 실전은 이 폼에서 주문하지 않는다 */}
-      <div className="flex gap-0.5 rounded-lg bg-tm-inner p-[3px]">
-        <button type="button" aria-pressed className="h-[30px] flex-1 rounded-md bg-tm-line2 px-3 text-13 font-semibold">모의투자</button>
-        <button
-          type="button"
-          aria-pressed={false}
-          disabled
-          title="실전 주문은 실전투자 화면에서 합니다"
-          className="h-[30px] flex-1 cursor-not-allowed rounded-md px-3 text-13 text-tm-muted"
-        >
-          {brokerageConnected ? "실전 · 실전투자 화면" : "실전 · 연동 필요"}
-        </button>
+      {/* 이 폼은 모의투자 주문만 낸다 — 실전 선택지를 두면 실주문으로 오해한다(디자인 리뷰 P0). 실주문은 검증 경로가 있는 실전투자 화면에서만. */}
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-2">
+          <Pill tone="cyan">모의</Pill>
+          <span className="text-13 font-semibold">모의투자 주문</span>
+        </div>
+        <span className="text-2xs text-tm-muted">
+          실전 주문은{" "}
+          <Link href={brokerageConnected ? `/brokerage/orders?symbol=${encodeURIComponent(stock.symbol)}` : "/brokerage"}>
+            실전투자 화면
+          </Link>
+          에서 합니다{brokerageConnected ? "" : " (증권사 계좌 연동 필요)"}.
+        </span>
       </div>
-      {brokerageConnected && (
-        <Link href="/brokerage" className="-mt-1.5 text-2xs">실전 주문은 실전투자 화면에서 할 수 있어요 →</Link>
-      )}
 
       {!isLoggedIn ? (
         <div className="flex flex-col items-center gap-2 py-8 text-center">
@@ -301,7 +299,7 @@ export default function OrderForm({ stock, currentPrice, brokerageConnected }: P
           <div className="flex flex-col gap-[7px] rounded-lg bg-tm-inner px-3 py-2.5">
             <div className="flex items-center justify-between">
               <span className="text-2xs text-tm-muted">주문 전 리스크 체크</span>
-              <span aria-live="polite" className={cn("text-2xs font-semibold", risk.data && !risk.pending && (risk.data.approved ? "text-dracula-green" : "text-dracula-orange"))}>
+              <span aria-live="polite" className={cn("text-2xs font-semibold", risk.data && !risk.pending && (risk.data.approved ? "text-dracula-green" : "text-caution"))}>
                 {risk.idle ? "" : risk.pending ? "점검 중..." : risk.data ? (risk.data.approved ? "통과" : "한도 초과") : ""}
               </span>
             </div>
@@ -315,10 +313,10 @@ export default function OrderForm({ stock, currentPrice, brokerageConnected }: P
             {risk.data?.checks.map((c) => (
               <div key={c.rule} className={cn("flex justify-between gap-2 text-xs", risk.pending && "opacity-50")} title={c.detail}>
                 <span className="flex items-center gap-1.5 text-tm-soft">
-                  <Icon name={c.passed ? "check" : "alert"} size={14} strokeWidth={c.passed ? 2.4 : 2} className={c.passed ? "text-dracula-green" : "text-dracula-orange"} />
+                  <Icon name={c.passed ? "check" : "alert"} size={14} strokeWidth={c.passed ? 2.4 : 2} className={c.passed ? "text-dracula-green" : "text-caution"} />
                   {RULE_LABEL[c.rule] ?? c.rule}
                 </span>
-                <span className={cn("num", !c.passed && "text-dracula-orange")}>{ruleValue(c)}</span>
+                <span className={cn("num", !c.passed && "text-caution")}>{ruleValue(c)}</span>
               </div>
             ))}
           </div>

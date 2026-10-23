@@ -55,4 +55,16 @@ interface StockEventRepository : JpaRepository<StockEvent, Long> {
         nativeQuery = true,
     )
     fun findLatestPerStock(stockIds: Collection<Long>): List<StockEvent>
+
+    /**
+     * 여러 종목의 이벤트를 (시각, id) 역순으로(보유 종목 피드, ADR-108). 커서 (beforeTime, beforeId)보다 앞선 것만 —
+     * 시각만으로 자르면 같은 시각 이벤트가 페이지 경계에서 빠진다.
+     */
+    @Query("""
+        SELECT e FROM StockEvent e
+        WHERE e.stockId IN :stockIds
+          AND (e.eventTime < :beforeTime OR (e.eventTime = :beforeTime AND e.id < :beforeId))
+        ORDER BY e.eventTime DESC, e.id DESC
+    """)
+    fun findRecentByStockIds(stockIds: Collection<Long>, beforeTime: Instant, beforeId: Long, pageable: Pageable): List<StockEvent>
 }

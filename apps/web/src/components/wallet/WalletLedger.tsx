@@ -14,7 +14,7 @@ const EVENT_META: Record<string, { label: string; color: string; flow?: string; 
   DEPOSIT:                   { label: "입금",           color: "text-dracula-green",  flow: "외부 → 현금",       group: "cash" },
   WITHDRAWAL:                { label: "출금",           color: "text-[#ff8a8a]",      flow: "현금 → 외부",       group: "cash" },
   FILL:                      { label: "체결",           color: "text-dracula-cyan",                              group: "fill" },
-  PARTIAL_FILL:              { label: "부분체결",       color: "text-dracula-orange",                            group: "fill" },
+  PARTIAL_FILL:              { label: "부분체결",       color: "text-caution",                            group: "fill" },
   CASH_RESERVED:             { label: "예약",           color: "text-dracula-yellow", flow: "현금 → 예약금",     group: "fill" },
   CASH_UNRESERVED:           { label: "예약해제",       color: "text-dracula-yellow", flow: "예약금 → 현금",     group: "fill" },
   FEE:                       { label: "수수료",         color: "text-[#ff8a8a]",                                 group: "fill" },

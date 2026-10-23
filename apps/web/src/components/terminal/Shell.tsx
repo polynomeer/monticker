@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useConsentStatus } from "@/hooks/useConsents";
@@ -25,7 +25,8 @@ const RAIL: (RailItem | null)[] = [
   { label: "트레이딩", icon: "candles", href: "/stocks/search", match: ["/stocks", "/compare"] },
   { label: "스크리너", icon: "filter", href: "/screener", match: ["/screener"] },
   { label: "관심종목", icon: "star", href: "/watchlist", match: ["/watchlist"] },
-  { label: "포트폴리오", icon: "pie", href: "/portfolio", match: ["/portfolio", "/matching", "/watch-rules"] },
+  // ADR-115 — 모의 포트폴리오는 내 자산의 모의투자 탭이 됐다. 체결 엔진·자동 주문 규칙도 여기 묶는다
+  { label: "내 자산", icon: "pie", href: "/assets", match: ["/assets", "/portfolio", "/matching", "/watch-rules"] },
   { label: "지갑", icon: "wallet", href: "/wallet", match: ["/wallet", "/settlement"] },
   { label: "퀀트랩", icon: "flask", href: "/quant-lab", match: ["/quant-lab", "/backtest", "/analytics"] },
   { label: "전략 마켓", icon: "store", href: "/quant-lab/market", match: ["/quant-lab/market", "/quant-lab/earnings"] },
@@ -78,12 +79,22 @@ function Rail() {
 }
 
 // ── 상단 바 ────────────────────────────────────────────────────────────
+/**
+ * monticker 마크 — 몬스터 몸 + 눈 둘 + 차트선 입(끝 핑크 점 = 현재가). 원본: assets/brand/mark.svg
+ * 눈·입은 마스크로 뚫어 어떤 배경 위에서도 배경색이 비친다. 몸 색은 currentColor.
+ */
 export function LogoMark({ size = 26 }: { size?: number }) {
+  const maskId = `mt-logo-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   return (
-    <svg width={size} height={size} viewBox="0 0 26 26" fill="none" aria-hidden className="text-dracula-purple">
-      <rect x="1" y="1" width="24" height="24" rx="7" stroke="currentColor" strokeWidth="2" />
-      <path d="M6 17 L10 12 L13 14 L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="19" cy="7" r="2.2" fill="currentColor" />
+    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden className="text-dracula-purple">
+      <mask id={maskId}>
+        <rect width="100" height="100" fill="#fff" />
+        <circle cx="40" cy="44" r="5.5" fill="#000" />
+        <circle cx="60" cy="44" r="5.5" fill="#000" />
+        <polyline points="36,62 43,58 49,61 56,55 63,56" fill="none" stroke="#000" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+      </mask>
+      <path d="M18 50 a32 32 0 0 1 64 0 V86 L71 76 L60 86 L50 76 L40 86 L29 76 L18 86 Z" fill="currentColor" mask={`url(#${maskId})`} />
+      <circle cx="64.5" cy="55.5" r="4" className="fill-dracula-pink" />
     </svg>
   );
 }
@@ -113,7 +124,7 @@ export function SymbolPill({ name, code, market }: { name: string; code?: string
   return (
     <Link href="/stocks/search" className="flex h-9 items-center gap-2.5 rounded-lg bg-tm-panel px-2.5 text-dracula-fg hover:bg-tm-raised">
       <Icon name="search" size={16} className="text-tm-muted" />
-      <span className="grid h-5 w-5 place-items-center rounded-md bg-dracula-purple text-2xs font-bold text-tm-page">{name.slice(0, 1)}</span>
+      <span className="grid h-5 w-5 place-items-center rounded-md bg-dracula-purple text-2xs font-bold text-tm-on-accent">{name.slice(0, 1)}</span>
       <h1 className="m-0 text-sm font-bold">{name}</h1>
       {code && <span className="num text-2xs text-tm-muted">{code}</span>}
       {market && <span className="rounded-sm bg-tm-raised px-1.5 py-px text-2xs text-tm-soft">{market}</span>}
@@ -147,7 +158,7 @@ function UserMenu() {
 
   if (!isLoggedIn) {
     return (
-      <Link href="/login" className="inline-flex h-9 items-center rounded-lg bg-dracula-purple px-3.5 text-13 font-bold text-tm-page">
+      <Link href="/login" className="inline-flex h-9 items-center rounded-lg bg-dracula-purple px-3.5 text-13 font-bold text-tm-on-accent">
         로그인
       </Link>
     );
@@ -210,13 +221,13 @@ function TopBar({ left, stats, account }: { left: ReactNode; stats: TopStat[]; a
           data-account={account.kind}
           className={cn(
             "flex h-9 items-center gap-2 rounded-lg border px-3 text-13 text-dracula-fg hover:bg-tm-raised",
-            live ? "border-dracula-orange/60" : "border-tm-line2",
+            live ? "border-live/60" : "border-tm-line2",
           )}
         >
-          <span aria-hidden className={cn("h-[7px] w-[7px] rounded-full", live ? "bg-dracula-orange" : "bg-dracula-yellow")} />
+          <span aria-hidden className={cn("h-[7px] w-[7px] rounded-full", live ? "bg-live" : "bg-dracula-yellow")} />
           {live ? "실전" : "모의투자"} 계좌
           {chip.amount !== undefined && (
-            <span className={cn("num", live ? "text-dracula-orange" : "text-tm-muted")} title={chip.amountLabel}>
+            <span className={cn("num", live ? "text-live" : "text-tm-muted")} title={chip.amountLabel}>
               <span className="sr-only">{chip.amountLabel} </span>
               {chip.amount}
             </span>

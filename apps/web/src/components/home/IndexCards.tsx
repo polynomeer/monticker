@@ -1,7 +1,7 @@
 "use client";
 
 import { Pill, Sparkline, Tile, dirClass, fmtPct, fmtSigned } from "@/components/terminal";
-import { useThemeStore, CHART_THEMES } from "@/stores/themeStore";
+import { useMarketColors } from "@/stores/themeStore";
 import { fmtIndexValue, kstTime, useMarketIndices } from "./data";
 
 // 시안의 지수 카드(KOSPI·KOSDAQ·USD/KRW). 값은 GET /api/market/indices(ADR-071).
@@ -15,14 +15,14 @@ const SLOTS = [
 export function MockTag() {
   return (
     <span title="실시세 공급자가 연결되지 않아 개발용 모의 값입니다(ADR-071)">
-      <Pill tone="orange" className="h-[18px] px-1.5 text-[0.625rem]">모의</Pill>
+      <Pill tone="caution" className="h-[18px] px-1.5 text-[0.625rem]">모의</Pill>
     </span>
   );
 }
 
 export default function IndexCards() {
   const { data = [], isLoading } = useMarketIndices();
-  const theme = useThemeStore((s) => CHART_THEMES[s.chartTheme]);
+  const theme = useMarketColors();
   const byCode = new Map(data.map((d) => [d.code, d]));
 
   return (

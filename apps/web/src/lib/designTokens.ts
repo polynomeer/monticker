@@ -1,5 +1,6 @@
-// 색 토큰의 단일 출처 — tailwind.config.ts가 이 값으로 `dracula-*`·`tm-*` 클래스를 만들고,
-// 캔버스 차트(ECharts 어댑터)처럼 CSS 클래스를 못 쓰는 곳은 여기서 직접 읽는다.
+// 드라큘라(기본 테마) 색의 단일 출처 — src/lib/themes.ts가 이 값으로 기본 테마 팔레트를 만들고, globals.css :root의
+// CSS 변수가 같은 값이다(themes.test.ts가 검사). Tailwind 클래스(`dracula-*`·`tm-*`)는 그 변수를 읽어 테마를 따른다.
+// 캔버스 차트처럼 CSS를 못 쓰는 곳은 테마를 따르려면 useThemePalette()를 쓴다 — 여기 값은 드라큘라 고정이다.
 // 상승/하락 색은 사용자 차트 테마(themeStore)라 여기 두지 않는다.
 
 export const dracula = {
@@ -15,6 +16,19 @@ export const dracula = {
   orange: "#ffb86c",
   red: "#ff5555",
   yellow: "#f1fa8c",
+} as const;
+
+/**
+ * 의미 색(ADR-112) — 화면 코드는 팔레트 이름 대신 이것을 쓴다(`text-live`, `bg-caution/15`).
+ * 주황은 실전(실제 돈) 전용이다: 실전 배지·실전 경고·실주문 확인 말고는 쓰지 않는다.
+ */
+export const role = {
+  /** 실전 계좌·실주문 */
+  live: dracula.orange,
+  /** 경고·주의·"모의 데이터" 표식 */
+  caution: dracula.yellow,
+  /** 공시 이벤트 */
+  disclosure: dracula.cyan,
 } as const;
 
 /** 터미널 디자인 시안(ADR-066) 표면 토큰 — 페이지 < 패널 < 인셋/강조 순서로 밝아진다 */

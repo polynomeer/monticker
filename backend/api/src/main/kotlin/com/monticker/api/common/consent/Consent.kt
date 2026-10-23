@@ -14,6 +14,8 @@ enum class ConsentType {
     BROKERAGE_DELEGATION,
     BROKERAGE_NO_CUSTODY,
     BROKERAGE_LOSS_ATTRIBUTION,
+    /** ADR-106 — 통합 포트폴리오에 계좌·거래 정보(손 입력·파일 업로드)를 저장·분석하는 데 대한 동의 */
+    PORTFOLIO_DATA_COLLECTION,
 }
 
 /** 동의를 받는 지점별 필수·선택 항목. */
@@ -25,6 +27,10 @@ enum class ConsentGroup(val required: Set<ConsentType>, val optional: Set<Consen
     BROKERAGE_CONNECT(
         required = setOf(ConsentType.BROKERAGE_DELEGATION, ConsentType.BROKERAGE_NO_CUSTODY, ConsentType.BROKERAGE_LOSS_ATTRIBUTION),
     ),
+    /** ADR-106 — 통합 포트폴리오 첫 계좌를 만들 때. 철회하면 계좌·거래를 함께 지운다(ConsentService.withdrawFeature) */
+    PORTFOLIO_DATA(
+        required = setOf(ConsentType.PORTFOLIO_DATA_COLLECTION),
+    ),
 }
 
 /**
@@ -35,19 +41,20 @@ enum class ConsentGroup(val required: Set<ConsentType>, val optional: Set<Consen
 object ConsentDocuments {
     private val VERSIONS = mapOf(
         ConsentType.TERMS to "terms-draft-2026-10",
-        ConsentType.PRIVACY to "privacy-draft-2026-10",
+        ConsentType.PRIVACY to "privacy-draft-2026-10-21",
         ConsentType.AGE_OVER_19 to "v1",
         ConsentType.MARKETING to "v1",
         ConsentType.BROKERAGE_DELEGATION to "v1",
         ConsentType.BROKERAGE_NO_CUSTODY to "v1",
         ConsentType.BROKERAGE_LOSS_ATTRIBUTION to "v1",
+        ConsentType.PORTFOLIO_DATA_COLLECTION to "portfolio-data-draft-2026-10",
     )
 
     fun versionOf(type: ConsentType): String = VERSIONS.getValue(type)
 }
 
 /** 어디서 받은 동의인가 — 같은 항목이라도 받은 지점이 증빙에 필요하다. */
-enum class ConsentSource { SIGNUP, SOCIAL_SIGNUP, CONSENT_PROMPT, BROKERAGE_CONNECT, SETTINGS }
+enum class ConsentSource { SIGNUP, SOCIAL_SIGNUP, CONSENT_PROMPT, BROKERAGE_CONNECT, SETTINGS, PORTFOLIO }
 
 /**
  * 동의·철회 기록. 추가만 한다(append-only) — 현재 상태는 항목별 가장 최근 행이다. 철회도 행을 지우지 않고

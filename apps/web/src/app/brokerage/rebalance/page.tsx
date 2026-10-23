@@ -288,7 +288,7 @@ export default function RebalancePage() {
     } },
     { key: "diff", header: "괴리", align: "right", cell: r => {
       const d = diffOf(r);
-      return <span className={cn("num", d != null && th > 0 && Math.abs(d) >= th ? "text-dracula-orange" : "text-tm-muted")}>{d == null ? "—" : `${d > 0 ? "+" : ""}${d.toFixed(1)}%p`}</span>;
+      return <span className={cn("num", d != null && th > 0 && Math.abs(d) >= th ? "text-caution" : "text-tm-muted")}>{d == null ? "—" : `${d > 0 ? "+" : ""}${d.toFixed(1)}%p`}</span>;
     } },
     { key: "sugg", header: "제안", cell: r => { const s = suggestionOf(r); return s ? <Pill tone={s.tone}>{s.label}</Pill> : <span className="text-tm-muted">—</span>; } },
     { key: "rm", header: <span className="sr-only">삭제</span>, align: "right", cell: r => r.inTarget
@@ -319,7 +319,7 @@ export default function RebalancePage() {
       title="리밸런싱"
       crumb="실전투자 · 목표 비중과 괴리 확인 후 직접 실행"
       stats={[
-        { label: "최대 괴리", value: maxDiffRow && maxDiff != null ? `${maxDiffRow.name} ${maxDiff > 0 ? "+" : ""}${maxDiff.toFixed(1)}%p` : "—", tone: maxDiff != null && th > 0 && Math.abs(maxDiff) >= th ? "text-dracula-orange" : undefined },
+        { label: "최대 괴리", value: maxDiffRow && maxDiff != null ? `${maxDiffRow.name} ${maxDiff > 0 ? "+" : ""}${maxDiff.toFixed(1)}%p` : "—", tone: maxDiff != null && th > 0 && Math.abs(maxDiff) >= th ? "text-caution" : undefined },
         { label: "대상 종목", value: legs ? `${legs.length}개` : total ? `${targetCount}개` : "—" },
         { label: "임계값", value: `${Number(thresholdPct) || 0}%p` },
         { label: "마지막 실행", value: (lastExecution ?? latestExecution) ? new Date((lastExecution ?? latestExecution)!.requestedAt).toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" }) : "—" },
@@ -383,7 +383,7 @@ export default function RebalancePage() {
               <span className="num">{cashPct.toFixed(1)}%</span>
             </div>
           )}
-          {balanceError && <p className="px-3 text-xs text-dracula-orange">잔고를 확인할 수 없어 현재 비중을 표시하지 않습니다.</p>}
+          {balanceError && <p className="px-3 text-xs text-caution">잔고를 확인할 수 없어 현재 비중을 표시하지 않습니다.</p>}
 
           <div className="flex flex-col gap-2 px-1.5 pt-1">
             {fromAnalytics && isDirty && (
@@ -393,7 +393,7 @@ export default function RebalancePage() {
             {optimizeInfo && optimizeInfo.suggestion && <Notice tone="info">{optimizeInfo.suggestion}</Notice>}
             {saveError && <Notice tone="danger">{saveError}</Notice>}
             {isDirty && (
-              <span className="text-xs text-dracula-orange">저장되지 않은 변경사항이 있습니다 — 저장해야 오른쪽 미리보기/실행에 반영됩니다.</span>
+              <span className="text-xs text-caution">저장되지 않은 변경사항이 있습니다 — 저장해야 오른쪽 미리보기/실행에 반영됩니다.</span>
             )}
           </div>
         </Panel>
@@ -457,18 +457,18 @@ export default function RebalancePage() {
 
               {legs && legs.length > 0 && (
                 confirming && !isDirty ? (
-                  <div role="region" aria-label="리밸런싱 실행 확인" className="flex flex-col gap-2.5 rounded-xl border-[1.5px] border-dracula-orange bg-tm-inner p-3.5">
-                    <span className="flex items-center gap-2 font-bold"><Icon name="alert" size={18} className="text-dracula-orange" />실제 주문 {legs.length}건을 제출할까요?</span>
+                  <div role="region" aria-label="리밸런싱 실행 확인" className="flex flex-col gap-2.5 rounded-xl border-[1.5px] border-live bg-tm-inner p-3.5">
+                    <span className="flex items-center gap-2 font-bold"><Icon name="alert" size={18} className="text-live" />실제 주문 {legs.length}건을 제출할까요?</span>
                     <span className="text-xs text-tm-muted">서버가 실행 시점의 잔고로 다시 계산하므로 수량은 미리보기와 다를 수 있습니다.</span>
                     <div className="flex gap-2">
                       <Btn kind="ghost" className="flex-1" onClick={() => setConfirming(false)} disabled={executeMutation.isPending}>취소</Btn>
-                      <Btn kind="warn" className="flex-2" onClick={handleExecute} disabled={executeMutation.isPending || isDirty}>
+                      <Btn kind="live" className="flex-2" onClick={handleExecute} disabled={executeMutation.isPending || isDirty}>
                         {executeMutation.isPending ? "실행 중..." : `주문 ${legs.length}건 실행`}
                       </Btn>
                     </div>
                   </div>
                 ) : (
-                  <Btn kind="warn" size="lg" full onClick={() => setConfirming(true)} disabled={executeMutation.isPending || isDirty}>
+                  <Btn kind="live" size="lg" full onClick={() => setConfirming(true)} disabled={executeMutation.isPending || isDirty}>
                     {executeMutation.isPending ? "실행 중..." : isDirty ? "저장되지 않은 변경사항이 있습니다" : `주문 ${legs.length}건 직접 실행`}
                   </Btn>
                 )

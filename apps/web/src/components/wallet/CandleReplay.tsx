@@ -116,7 +116,7 @@ export default function CandleReplay({ date, events }: { date: string; events: R
           aria-label={playing ? "일시정지" : "재생"}
           onClick={play}
           disabled={candles.length === 0}
-          className="grid h-11 w-11 place-items-center rounded-full bg-dracula-purple text-tm-page disabled:opacity-50"
+          className="grid h-11 w-11 place-items-center rounded-full bg-dracula-purple text-tm-on-accent disabled:opacity-50"
         >
           <Icon name={playing ? "pause" : "play"} size={18} strokeWidth={2.4} />
         </button>

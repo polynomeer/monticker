@@ -30,6 +30,7 @@ class JwtTokenProvider(
             .subject(userId.toString())
             .issuer(ISSUER)
             .audience().add(AUDIENCE).and()
+            .claim(TYPE_CLAIM, TYPE_ACCESS)
             .claim("email", email)
             .claim("role", role)
             .issuedAt(Date(now))
@@ -48,6 +49,7 @@ class JwtTokenProvider(
             .subject(userId.toString())
             .issuer(ISSUER)
             .audience().add(AUDIENCE).and()
+            .claim(TYPE_CLAIM, TYPE_REFRESH)
             .issuedAt(Date(now))
             .expiration(Date(now + refreshTokenExpiryMs))
             .signWith(key)
@@ -60,6 +62,19 @@ class JwtTokenProvider(
 
     fun getUserId(token: String): Long =
         parseClaims(token).subject.toLong()
+
+    /**
+     * refresh token에서만 사용자 ID를 읽는다 — access token이면 [IllegalArgumentException].
+     * 두 토큰은 같은 키·iss·aud로 서명되므로 서명 검증만으로는 구분되지 않는다. 구분하지 않으면 access token을 refresh 경로에
+     * 넣었을 때 DB에 행이 없어 재사용 탐지(모든 세션 폐기)가 돌아, access token을 가진 쪽(XSS·로그 유출)이 피해자를 계속
+     * 로그아웃시킬 수 있다(ADR-109 보안 검토 M1). `typ` 클레임 이전에 발급된 토큰은 role 클레임 유무로 가른다.
+     */
+    fun getRefreshUserId(token: String): Long {
+        val claims = parseClaims(token)
+        val type = claims[TYPE_CLAIM] as? String
+        require(type == TYPE_REFRESH || (type == null && claims["role"] == null)) { "refresh token이 아닙니다." }
+        return claims.subject.toLong()
+    }
 
     fun getEmail(token: String): String =
         parseClaims(token)["email"] as String
@@ -81,5 +96,8 @@ class JwtTokenProvider(
     companion object {
         private const val ISSUER = "monticker-api"
         private const val AUDIENCE = "monticker-web"
+        private const val TYPE_CLAIM = "typ"
+        private const val TYPE_ACCESS = "access"
+        private const val TYPE_REFRESH = "refresh"
     }
 }

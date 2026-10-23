@@ -212,3 +212,16 @@ export interface ForwardTestResult {
   equityCurve: ForwardTestEquityPoint[];
   signals: ForwardTestSignal[];
 }
+
+/** GET /api/quant/signals/feed — 내 룰셋·구독 전략의 포워드 테스트 신호(ADR-035) */
+export interface QuantSignalFeedItem {
+  id: number;
+  ruleSetId: string;
+  ruleSetName: string;
+  source: "MINE" | "SUBSCRIBED";
+  stockId: number;
+  symbol: string;
+  stockName: string;
+  direction: "BUY" | "SELL";
+  signalTime: string;
+}

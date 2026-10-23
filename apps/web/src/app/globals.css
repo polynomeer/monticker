@@ -48,8 +48,10 @@
 @custom-variant hover (&:hover);
 
 /* ── 접근성(a11yStore) — 언레이어드 규칙: @layer(utilities 포함)보다 항상 우선한다 ──
-   색이 고정 hex Tailwind 토큰이라 CSS 변수 재정의가 불가해, 실제로 저대비인 체계적 토큰만 골라 덮는다.
-   전 컴포넌트 팔레트 교체가 아니라 가장 큰 가독성 저해 지점(뮤트 텍스트·옅은 테두리·포커스)을 표적한다. */
+   고대비는 테마와 따로 켜는 덧씌우기다: 저대비인 체계적 토큰(뮤트 텍스트·옅은 테두리·포커스)만 골라 덮는다.
+   토큰이 테마 변수(--tm-*)가 됐지만 같은 토큰을 배경·테두리에서 다른 값으로 덮어야 해 변수 재정의 대신 클래스 덮기를 유지한다.
+   아래 다크 값(검정 표면·밝은 글자)은 다크 테마에만 건다 — 라이트 테마(light·paper)는 맨 아래 블록이 반대로 진하게 한다.
+   '하이 콘트라스트' 테마(data-theme="contrast")와 함께 켜면 표면이 #000/#14141a로 거의 같고 글자·테두리만 조금 더 밝아진다. */
 /* 글자 크기(큰 글씨) — root font-size 확대(rem 기반이라 앱 전체 비례 확대) */
 html[data-text-size="small"]  { font-size: 87.5%; }
 html[data-text-size="large"]  { font-size: 112.5%; }
@@ -61,41 +63,181 @@ html[data-contrast="high"]:not(.dark) .text-gray-600 { color: #1f2937 !important
 html[data-contrast="high"]:not(.dark) .border-gray-100,
 html[data-contrast="high"]:not(.dark) .border-gray-200 { border-color: #9ca3af !important; }
 /* 고대비 — 다크: 뮤트 텍스트(dracula-comment)/옅은 테두리(dracula-line)를 밝게 */
-html.dark[data-contrast="high"] .dark\:text-dracula-comment,
-html.dark[data-contrast="high"] .text-dracula-comment { color: #c8d0ea !important; }
-html.dark[data-contrast="high"] .dark\:border-dracula-line,
-html.dark[data-contrast="high"] .border-dracula-line { border-color: #7a83ad !important; }
+html[data-contrast="high"]:not([data-theme="light"]):not([data-theme="paper"]) .dark\:text-dracula-comment,
+html[data-contrast="high"]:not([data-theme="light"]):not([data-theme="paper"]) .text-dracula-comment { color: #c8d0ea !important; }
+html[data-contrast="high"]:not([data-theme="light"]):not([data-theme="paper"]) .dark\:border-dracula-line,
+html[data-contrast="high"]:not([data-theme="light"]):not([data-theme="paper"]) .border-dracula-line { border-color: #7a83ad !important; }
 /* 고대비 — 터미널 토큰(ADR-066 tm-*): 표면은 더 어둡게(검정 바탕), 그 위 글자·테두리는 더 밝게 해 층 사이 대비를 벌린다.
    대비: muted #dde1f5·soft #f2f4fc는 패널(#14141a) 위에서 WCAG AAA(7:1)를 넘는다. */
-html[data-contrast="high"] .bg-tm-page  { background-color: #000000 !important; }
-html[data-contrast="high"] .bg-tm-panel { background-color: #14141a !important; }
-html[data-contrast="high"] .bg-tm-inner { background-color: #0a0a0e !important; }
-html[data-contrast="high"] .bg-tm-raised,
-html[data-contrast="high"] .hover\:bg-tm-raised:hover { background-color: #2e2f3d !important; }
-html[data-contrast="high"] .bg-tm-line,
-html[data-contrast="high"] .bg-tm-line2,
-html[data-contrast="high"] .hover\:bg-tm-line2:hover { background-color: #5c6185 !important; }
-html[data-contrast="high"] .text-tm-muted,
-html[data-contrast="high"] .placeholder\:text-tm-muted::placeholder { color: #dde1f5 !important; }
-html[data-contrast="high"] .text-tm-soft { color: #f2f4fc !important; }
-html[data-contrast="high"] .border-tm-line { border-color: #6e7499 !important; }
-html[data-contrast="high"] .border-tm-line2,
-html[data-contrast="high"] .hover\:border-tm-line2:hover,
-html[data-contrast="high"] .border-tm-muted,
-html[data-contrast="high"] .hover\:border-tm-muted:hover { border-color: #9aa1c8 !important; }
+html[data-contrast="high"]:not([data-theme="light"]):not([data-theme="paper"]) .bg-tm-page  { background-color: #000000 !important; }
+html[data-contrast="high"]:not([data-theme="light"]):not([data-theme="paper"]) .bg-tm-panel { background-color: #14141a !important; }
+html[data-contrast="high"]:not([data-theme="light"]):not([data-theme="paper"]) .bg-tm-inner { background-color: #0a0a0e !important; }
+html[data-contrast="high"]:not([data-theme="light"]):not([data-theme="paper"]) .bg-tm-raised,
+html[data-contrast="high"]:not([data-theme="light"]):not([data-theme="paper"]) .hover\:bg-tm-raised:hover { background-color: #2e2f3d !important; }
+html[data-contrast="high"]:not([data-theme="light"]):not([data-theme="paper"]) .bg-tm-line,
+html[data-contrast="high"]:not([data-theme="light"]):not([data-theme="paper"]) .bg-tm-line2,
+html[data-contrast="high"]:not([data-theme="light"]):not([data-theme="paper"]) .hover\:bg-tm-line2:hover { background-color: #5c6185 !important; }
+html[data-contrast="high"]:not([data-theme="light"]):not([data-theme="paper"]) .text-tm-muted,
+html[data-contrast="high"]:not([data-theme="light"]):not([data-theme="paper"]) .placeholder\:text-tm-muted::placeholder { color: #dde1f5 !important; }
+html[data-contrast="high"]:not([data-theme="light"]):not([data-theme="paper"]) .text-tm-soft { color: #f2f4fc !important; }
+html[data-contrast="high"]:not([data-theme="light"]):not([data-theme="paper"]) .border-tm-line { border-color: #6e7499 !important; }
+html[data-contrast="high"]:not([data-theme="light"]):not([data-theme="paper"]) .border-tm-line2,
+html[data-contrast="high"]:not([data-theme="light"]):not([data-theme="paper"]) .hover\:border-tm-line2:hover,
+html[data-contrast="high"]:not([data-theme="light"]):not([data-theme="paper"]) .border-tm-muted,
+html[data-contrast="high"]:not([data-theme="light"]):not([data-theme="paper"]) .hover\:border-tm-muted:hover { border-color: #9aa1c8 !important; }
+/* 고대비 — 라이트 테마: 뮤트·보조 글자를 본문색으로, 옅은 테두리를 진한 테두리로 */
+html[data-contrast="high"]:is([data-theme="light"], [data-theme="paper"]) :is(.text-tm-muted, .text-dracula-comment),
+html[data-contrast="high"]:is([data-theme="light"], [data-theme="paper"]) .placeholder\:text-tm-muted::placeholder { color: rgb(var(--tm-soft)) !important; }
+html[data-contrast="high"]:is([data-theme="light"], [data-theme="paper"]) :is(.border-tm-line, .border-dracula-line) { border-color: rgb(var(--tm-line2)) !important; }
+html[data-contrast="high"]:is([data-theme="light"], [data-theme="paper"]) :is(.border-tm-line2, .border-tm-muted) { border-color: rgb(var(--tm-muted)) !important; }
 /* 키보드 포커스 링 — 대비와 무관한 접근성 이득 */
 html[data-contrast="high"] :focus-visible { outline: 2px solid currentColor !important; outline-offset: 2px !important; }
 
 @layer base {
+  /* 테마 색(RGB 채널) — :root = 드라큘라(기본), html[data-theme]가 덮는다. Tailwind 색(dracula-*·tm-*·live 등)이
+     rgb(var(--tm-*))로 읽는다. 값은 src/lib/themes.ts와 같아야 한다(themes.test.ts가 검사).
+     --mt-up/--mt-down은 테마 기본 상승·하락 색 — MarketColorSync가 사용자 시세 색상으로 인라인 덮어쓴다. */
   :root {
-    /* 상승/하락 색(RGB 채널) — MarketColorSync가 사용자 차트 테마로 덮어쓴다 */
-    --mt-up: 14 203 129;
-    --mt-down: 246 70 93;
+    --tm-page: 27 28 36; /* #1b1c24 */
+    --tm-inner: 33 34 44; /* #21222c */
+    --tm-panel: 40 42 54; /* #282a36 */
+    --tm-raised: 52 55 70; /* #343746 */
+    --tm-line: 52 54 74; /* #34364a */
+    --tm-line2: 68 71 90; /* #44475a */
+    --tm-fg: 248 248 242; /* #f8f8f2 */
+    --tm-soft: 195 200 226; /* #c3c8e2 */
+    --tm-muted: 164 171 207; /* #a4abcf */
+    --tm-comment: 98 114 164; /* #6272a4 */
+    --tm-accent: 189 147 249; /* #bd93f9 */
+    --tm-on-accent: 27 28 36; /* #1b1c24 */
+    --tm-cyan: 139 233 253; /* #8be9fd */
+    --tm-green: 80 250 123; /* #50fa7b */
+    --tm-pink: 255 121 198; /* #ff79c6 */
+    --tm-yellow: 241 250 140; /* #f1fa8c */
+    --tm-orange: 255 184 108; /* #ffb86c */
+    --tm-red: 255 85 85; /* #ff5555 */
+    --mt-up: 14 203 129; /* #0ecb81 */
+    --mt-down: 246 70 93; /* #f6465d */
+  }
+  html[data-theme="graphite"] {
+    --tm-page: 15 17 21; /* #0f1115 */
+    --tm-inner: 11 13 16; /* #0b0d10 */
+    --tm-panel: 23 26 32; /* #171a20 */
+    --tm-raised: 35 39 51; /* #232733 */
+    --tm-line: 38 42 51; /* #262a33 */
+    --tm-line2: 54 60 72; /* #363c48 */
+    --tm-fg: 232 234 237; /* #e8eaed */
+    --tm-soft: 196 201 210; /* #c4c9d2 */
+    --tm-muted: 143 150 163; /* #8f96a3 */
+    --tm-comment: 111 118 131; /* #6f7683 */
+    --tm-accent: 91 140 255; /* #5b8cff */
+    --tm-on-accent: 255 255 255; /* #ffffff */
+    --tm-cyan: 56 189 248; /* #38bdf8 */
+    --tm-green: 34 197 94; /* #22c55e */
+    --tm-pink: 244 114 182; /* #f472b6 */
+    --tm-yellow: 250 204 21; /* #facc15 */
+    --tm-orange: 245 158 11; /* #f59e0b */
+    --tm-red: 239 68 68; /* #ef4444 */
+    --mt-up: 22 199 132; /* #16c784 */
+    --mt-down: 234 57 67; /* #ea3943 */
+  }
+  html[data-theme="navy"] {
+    --tm-page: 11 20 38; /* #0b1426 */
+    --tm-inner: 8 16 31; /* #08101f */
+    --tm-panel: 17 29 51; /* #111d33 */
+    --tm-raised: 26 42 71; /* #1a2a47 */
+    --tm-line: 29 44 71; /* #1d2c47 */
+    --tm-line2: 43 62 99; /* #2b3e63 */
+    --tm-fg: 238 243 255; /* #eef3ff */
+    --tm-soft: 197 208 230; /* #c5d0e6 */
+    --tm-muted: 141 155 184; /* #8d9bb8 */
+    --tm-comment: 108 122 152; /* #6c7a98 */
+    --tm-accent: 45 212 191; /* #2dd4bf */
+    --tm-on-accent: 6 36 33; /* #062421 */
+    --tm-cyan: 125 211 252; /* #7dd3fc */
+    --tm-green: 74 222 128; /* #4ade80 */
+    --tm-pink: 249 168 212; /* #f9a8d4 */
+    --tm-yellow: 253 224 71; /* #fde047 */
+    --tm-orange: 251 146 60; /* #fb923c */
+    --tm-red: 242 84 91; /* #f2545b */
+    --mt-up: 34 201 147; /* #22c993 */
+    --mt-down: 242 84 91; /* #f2545b */
+  }
+  html[data-theme="light"] {
+    --tm-page: 245 246 248; /* #f5f6f8 */
+    --tm-inner: 238 240 243; /* #eef0f3 */
+    --tm-panel: 255 255 255; /* #ffffff */
+    --tm-raised: 233 236 242; /* #e9ecf2 */
+    --tm-line: 227 230 236; /* #e3e6ec */
+    --tm-line2: 207 212 221; /* #cfd4dd */
+    --tm-fg: 25 28 34; /* #191c22 */
+    --tm-soft: 61 67 80; /* #3d4350 */
+    --tm-muted: 100 107 120; /* #646b78 */
+    --tm-comment: 143 150 163; /* #8f96a3 */
+    --tm-accent: 109 75 216; /* #6d4bd8 */
+    --tm-on-accent: 255 255 255; /* #ffffff */
+    --tm-cyan: 14 116 144; /* #0e7490 */
+    --tm-green: 21 128 61; /* #15803d */
+    --tm-pink: 190 24 93; /* #be185d */
+    --tm-yellow: 138 106 0; /* #8a6a00 */
+    --tm-orange: 194 65 12; /* #c2410c */
+    --tm-red: 200 30 58; /* #c81e3a */
+    --mt-up: 208 38 60; /* #d0263c */
+    --mt-down: 27 100 218; /* #1b64da */
+  }
+  html[data-theme="paper"] {
+    --tm-page: 246 241 231; /* #f6f1e7 */
+    --tm-inner: 239 232 218; /* #efe8da */
+    --tm-panel: 255 252 245; /* #fffcf5 */
+    --tm-raised: 236 228 211; /* #ece4d3 */
+    --tm-line: 228 220 203; /* #e4dccb */
+    --tm-line2: 207 196 174; /* #cfc4ae */
+    --tm-fg: 43 38 32; /* #2b2620 */
+    --tm-soft: 74 66 55; /* #4a4237 */
+    --tm-muted: 115 104 90; /* #73685a */
+    --tm-comment: 154 143 124; /* #9a8f7c */
+    --tm-accent: 91 75 196; /* #5b4bc4 */
+    --tm-on-accent: 255 255 255; /* #ffffff */
+    --tm-cyan: 15 110 125; /* #0f6e7d */
+    --tm-green: 47 125 50; /* #2f7d32 */
+    --tm-pink: 168 50 110; /* #a8326e */
+    --tm-yellow: 125 96 0; /* #7d6000 */
+    --tm-orange: 180 83 10; /* #b4530a */
+    --tm-red: 179 38 30; /* #b3261e */
+    --mt-up: 198 47 61; /* #c62f3d */
+    --mt-down: 33 96 196; /* #2160c4 */
+  }
+  html[data-theme="contrast"] {
+    --tm-page: 0 0 0; /* #000000 */
+    --tm-inner: 0 0 0; /* #000000 */
+    --tm-panel: 11 11 11; /* #0b0b0b */
+    --tm-raised: 31 31 31; /* #1f1f1f */
+    --tm-line: 58 58 58; /* #3a3a3a */
+    --tm-line2: 112 112 112; /* #707070 */
+    --tm-fg: 255 255 255; /* #ffffff */
+    --tm-soft: 242 242 242; /* #f2f2f2 */
+    --tm-muted: 204 204 204; /* #cccccc */
+    --tm-comment: 168 168 168; /* #a8a8a8 */
+    --tm-accent: 201 167 255; /* #c9a7ff */
+    --tm-on-accent: 0 0 0; /* #000000 */
+    --tm-cyan: 126 232 255; /* #7ee8ff */
+    --tm-green: 107 255 149; /* #6bff95 */
+    --tm-pink: 255 140 207; /* #ff8ccf */
+    --tm-yellow: 255 243 107; /* #fff36b */
+    --tm-orange: 255 169 77; /* #ffa94d */
+    --tm-red: 255 107 125; /* #ff6b7d */
+    --mt-up: 51 226 155; /* #33e29b */
+    --mt-down: 255 107 125; /* #ff6b7d */
   }
 
   html {
     scroll-behavior: smooth;
     color-scheme: dark;
+  }
+  /* 라이트 테마 — 스크롤바·폼 컨트롤·날짜 선택기를 밝게. html.dark 클래스는 그대로 둔다(ThemeProvider 주석) */
+  html[data-theme="light"],
+  html[data-theme="paper"] {
+    color-scheme: light;
   }
 
   body {
@@ -110,7 +252,7 @@ html[data-contrast="high"] :focus-visible { outline: 2px solid currentColor !imp
   }
 
   ::selection {
-    background-color: rgba(189, 147, 249, 0.35);
+    background-color: rgb(var(--tm-accent) / 0.35);
   }
 
   ::-webkit-scrollbar {
@@ -121,13 +263,13 @@ html[data-contrast="high"] :focus-visible { outline: 2px solid currentColor !imp
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background-color: rgba(98, 114, 164, 0.4);
+    background-color: rgb(var(--tm-comment) / 0.4);
     border-radius: 999px;
     border: 2px solid transparent;
     background-clip: content-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(98, 114, 164, 0.65);
+    background-color: rgb(var(--tm-comment) / 0.65);
   }
 }
 
@@ -193,12 +335,12 @@ html[data-motion="reduce"] .tm-flash-down { animation: none !important; }
 
   /* 프리미엄 표면 — 은은한 글래스모피즘 */
   .glass-surface {
-    background-color: rgba(33, 34, 44, 0.72);
+    background-color: rgb(var(--tm-inner) / 0.72);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
   }
   .dark .glass-surface {
-    background-color: rgba(33, 34, 44, 0.72);
+    background-color: rgb(var(--tm-inner) / 0.72);
   }
 
   .no-scrollbar {

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- 안드로이드 적응형 아이콘 전경: 런처가 잘라도 남는 가운데 66% 안에만 그린다. 배경색은 app.json -->
+  <g transform="translate(212 212) scale(6)">
+    <path d="M18 50 a32 32 0 0 1 64 0 V86 L71 76 L60 86 L50 76 L40 86 L29 76 L18 86 Z" fill="#ffffff"/>
+    <circle cx="40" cy="44" r="5" fill="#3a1d86"/>
+    <circle cx="60" cy="44" r="5" fill="#3a1d86"/>
+    <polyline points="36,62 43,58 49,61 56,55 63,56" fill="none" stroke="#3a1d86" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="64.5" cy="55.5" r="3.4" fill="#ff79c6"/>
+  </g>
+</svg>

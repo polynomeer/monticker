@@ -40,7 +40,7 @@ export function PnlContribution({ holdings }: { holdings: Holding[] }) {
 }
 
 // ── 위험 집중도 ─────────────────────────────────────────────────────────
-const SECTOR_COLORS = ["#bd93f9", "#8be9fd", "#ffb86c", "#ff79c6", "#50fa7b", "#f1fa8c"];
+const SECTOR_COLORS = ["#bd93f9", "#8be9fd", "#c3c8e2", "#ff79c6", "#50fa7b", "#f1fa8c"];
 const CASH_COLOR = "#44475a";
 
 export interface SectorSlice { name: string; value: number; pct: number; color: string; }

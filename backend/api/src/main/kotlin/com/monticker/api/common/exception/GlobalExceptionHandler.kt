@@ -1,6 +1,8 @@
 package com.monticker.api.common.exception
 
 import com.monticker.api.common.aop.RiskLimitException
+import com.monticker.api.common.idempotency.IndeterminateOutcome
+import jakarta.servlet.http.HttpServletRequest
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -79,9 +81,12 @@ class GlobalExceptionHandler {
             .body(ErrorResponse(HttpStatus.LOCKED.value(), e.message ?: "실거래 주문이 일시 중단되었습니다", "TRADING_HALTED:${e.scope}"))
 
     // 메시지 키워드 매칭에 기대지 않고 항상 409로 매핑되는 명시적 비즈니스 규칙 예외.
+    // ADR-110 — 결과 불명(주문이 나갔을 수 있음)이면 IdempotencyFilter가 키를 풀지 않도록 요청에 표시한다.
     @ExceptionHandler(BusinessRuleException::class)
-    fun handleBusinessRule(e: BusinessRuleException) =
-        error(HttpStatus.CONFLICT, e.message ?: "처리할 수 없는 상태입니다")
+    fun handleBusinessRule(e: BusinessRuleException, request: HttpServletRequest): ResponseEntity<ErrorResponse> {
+        if (e is IndeterminateOutcome) request.setAttribute(IndeterminateOutcome.REQUEST_ATTRIBUTE, e)
+        return error(HttpStatus.CONFLICT, e.message ?: "처리할 수 없는 상태입니다")
+    }
 
     // 외부 서비스 서킷브레이커 OPEN — 우리 장애가 아니라 의존 서비스 장애. 503 + Retry-After.
     @ExceptionHandler(ExternalServiceUnavailableException::class)
@@ -129,6 +134,19 @@ class GlobalExceptionHandler {
     @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException::class)
     fun handleNoResource(e: org.springframework.web.servlet.resource.NoResourceFoundException) =
         error(HttpStatus.NOT_FOUND, "요청한 경로를 찾을 수 없습니다")
+
+    // 파일 업로드(통합 포트폴리오 CSV, ADR-106) — 아래 Exception 처리기에 걸려 500이 되지 않게 먼저 받는다
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException::class)
+    fun handleUploadTooLarge(e: org.springframework.web.multipart.MaxUploadSizeExceededException) =
+        error(HttpStatus.PAYLOAD_TOO_LARGE, "파일이 너무 큽니다(최대 5MB)")
+
+    @ExceptionHandler(org.springframework.web.multipart.support.MissingServletRequestPartException::class)
+    fun handleMissingPart(e: org.springframework.web.multipart.support.MissingServletRequestPartException) =
+        error(HttpStatus.BAD_REQUEST, "필수 파일이 없습니다: ${e.requestPartName}")
+
+    @ExceptionHandler(org.springframework.web.multipart.MultipartException::class)
+    fun handleMultipart(e: org.springframework.web.multipart.MultipartException) =
+        error(HttpStatus.BAD_REQUEST, "파일 업로드 요청을 읽을 수 없습니다")
 
     // ── 5xx — 서버 오류 ──────────────────────────────────────────────────
 

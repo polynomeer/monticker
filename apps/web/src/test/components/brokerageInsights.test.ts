@@ -41,9 +41,9 @@ describe("증권사 API 지연·마지막 오류 표시", () => {
     expect(fmtLatency(120)).toBe("120ms");
     expect(fmtLatency(2500)).toBe("2.5s");
     expect(latencyStat(base, now)).toMatchObject({ value: "120ms", tone: undefined });
-    expect(latencyStat({ ...base, lastLatencyMs: 2500 }, now).tone).toBe("text-dracula-orange");
+    expect(latencyStat({ ...base, lastLatencyMs: 2500 }, now).tone).toBe("text-caution");
     const failed = { ...base, lastErrorCode: "TIMEOUT" as const, lastErrorAt: base.lastCallAt, lastErrorOperation: "GET_BALANCE" as const };
-    expect(latencyStat(failed, now).tone).toBe("text-dracula-orange");
+    expect(latencyStat(failed, now).tone).toBe("text-caution");
     expect(latencyStat(failed, now).hint).toContain("응답 시간 초과");
   });
 

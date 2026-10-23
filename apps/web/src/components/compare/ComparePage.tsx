@@ -11,7 +11,7 @@ import { useQuotes } from "@/components/stock/parts";
 import { cn } from "@/lib/utils";
 import { beta, kstDayKey } from "./beta";
 
-const COLORS = ["#bd93f9", "#8be9fd", "#ffb86c", "#ff79c6"];
+const COLORS = ["#bd93f9", "#8be9fd", "#f1fa8c", "#ff79c6"];
 const MAX = 4;
 
 const PERIODS = [
