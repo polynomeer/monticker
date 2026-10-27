@@ -77,7 +77,7 @@ dependencies {
 	// Boot 4 — @WebMvcTest가 SecurityConfig(HttpSecurity)를 띄우려면 보안 테스트 자동 구성 모듈이 있어야 한다
 	testImplementation("org.springframework.boot:spring-boot-starter-security-test")
 	testImplementation("io.mockk:mockk:1.14.11")
-	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1")
+	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.2.0")
 	implementation("org.springframework.boot:spring-boot-starter-security-oauth2-client")
 	implementation("net.logstash.logback:logstash-logback-encoder:9.0")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
