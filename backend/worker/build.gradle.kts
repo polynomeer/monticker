@@ -58,7 +58,7 @@ dependencies {
 	implementation("tools.jackson.module:jackson-module-kotlin")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	implementation("com.google.guava:guava:33.7.2-jre")
-	implementation("com.anthropic:anthropic-java:2.73.0")
+	implementation("com.anthropic:anthropic-java:3.3.0")
 	implementation("org.springframework.boot:spring-boot-starter-mail")
 	runtimeOnly("org.postgresql:postgresql")
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
