@@ -8,7 +8,7 @@ plugins {
 
 dependencyManagement {
 	imports {
-		mavenBom("org.springframework.modulith:spring-modulith-bom:2.1.1")
+		mavenBom("org.springframework.modulith:spring-modulith-bom:2.1.2")
 		mavenBom("org.testcontainers:testcontainers-bom:2.0.5")
 	}
 }
