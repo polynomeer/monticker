@@ -7,13 +7,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Chip, EventBadge, Icon, Panel, PanelCol, PanelRow, Pill, Seg, StockCell, TerminalPage, TitleBlock, fmtNum } from "@/components/terminal";
 import { useRecentlyViewedStocks } from "@/hooks/useRecentlyViewedStocks";
 import { cn } from "@/lib/utils";
-import { authFetch } from "@/services/api";
+import { STRATEGY_QUERY_MAX, useDebounced, useSearch, type EventResult, type NewsResult, type StockResult, type StrategyRow } from "@/hooks/useGlobalSearch";
 import { eventMeta, fmtWhen, useQuotes, type Quote } from "./parts";
 
-interface StockResult { id: number; symbol: string; name: string; market: string; sector: string | null; currency: string; }
-interface EventResult { id: number; stockId: number; eventType: string; title: string; eventTime: string; }
-interface NewsResult { id: number; stockId: number | null; title: string; url: string; source: string | null; publishedAt: string; }
-interface StrategyRow { id: number; name: string; description: string | null; price: number | null; subscribe_count: number | null; author_nickname?: string | null; }
 
 type Scope = "all" | "stock" | "event" | "strategy" | "news";
 const SCOPES: { value: Scope; label: string }[] = [
@@ -23,9 +19,6 @@ const SCOPES: { value: Scope; label: string }[] = [
   { value: "strategy", label: "전략" },
   { value: "news", label: "뉴스" },
 ];
-
-/** 서버 전략 검색어 최대 길이(StrategyMarketController.MAX_SEARCH_QUERY_LENGTH) */
-const STRATEGY_QUERY_MAX = 50;
 
 const RECENT_KEY = "monticker:recentSearches";
 function readRecent(): string[] {
@@ -38,35 +31,6 @@ function readRecent(): string[] {
 }
 function writeRecent(v: string[]) {
   try { localStorage.setItem(RECENT_KEY, JSON.stringify(v)); } catch { /* 저장 불가 환경 — 무시 */ }
-}
-
-/** 입력을 200ms 늦춰 쓴다 — 키 입력마다 검색 API를 부르지 않도록. */
-function useDebounced<T>(v: T, ms = 200) {
-  const [d, setD] = useState(v);
-  useEffect(() => {
-    const t = setTimeout(() => setD(v), ms);
-    return () => clearTimeout(t);
-  }, [v, ms]);
-  return d;
-}
-
-/**
- * 검색어별 GET — react-query가 늦게 도착한 이전 검색어 응답을 키로 분리해 최신 결과를 덮어쓰지 않게 한다.
- * authFetch — 전략 검색(/api/quant/market/**)은 로그인이 필요한데 토큰은 쿠키가 아니라 헤더로 가서, 일반 fetch로는
- * 로그인한 사용자도 늘 빈 결과였다. 토큰이 없으면 헤더 없이 보내므로 종목·이벤트 검색(공개)은 그대로다.
- */
-function useSearch<T>(key: string, url: string | null) {
-  return useQuery<T[]>({
-    queryKey: ["search", key, url],
-    queryFn: async ({ signal }) => {
-      const r = await authFetch(url!, { signal });
-      if (!r.ok) return [];
-      const j = await r.json();
-      return Array.isArray(j) ? j : (j?.items ?? j?.content ?? []);
-    },
-    enabled: !!url,
-    staleTime: 30_000,
-  });
 }
 
 /** 종목·이벤트 검색 — 시안 StockSearch.dc.html */
@@ -82,6 +46,11 @@ export default function StockSearch() {
   const enc = encodeURIComponent(q);
 
   useEffect(() => setRecent(readRecent()), []);
+  // 상단 검색창의 "전체 결과"는 ?q=로 넘어온다(ADR-112)
+  useEffect(() => {
+    const initial = new URLSearchParams(window.location.search).get("q");
+    if (initial) setQuery(initial);
+  }, []);
   useEffect(() => setSel(0), [q, scope]);
 
   // "/" 키로 검색창 포커스 (입력 중이 아닐 때)

@@ -1,6 +1,6 @@
 "use client";
 
-import { PanelCol, PanelRow, SearchPill, TerminalPage, dirClass, fmtPct } from "@/components/terminal";
+import { PanelCol, PanelRow, TerminalPage, TitleBlock, dirClass, fmtPct } from "@/components/terminal";
 import IndexCards from "@/components/home/IndexCards";
 import MoversFeed from "@/components/home/MoversFeed";
 import HomeWatchlist from "@/components/home/HomeWatchlist";
@@ -29,7 +29,7 @@ export default function Home() {
   const { data: summary } = useEventSummary();
   return (
     <TerminalPage
-      left={<SearchPill />}
+      left={<TitleBlock title="홈" crumb="마켓 개요" />}
       stats={[
         indexStat("KOSPI", ix.get("KOSPI")),
         indexStat("KOSDAQ", ix.get("KOSDAQ")),

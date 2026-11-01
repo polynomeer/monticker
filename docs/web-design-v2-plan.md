@@ -80,11 +80,19 @@ W1~W3는 셸과 겹치지 않아 먼저 한다.
 
 | 단계 | PR | 상태 |
 |---|---|---|
-| W1 색 역할 | [#261](https://github.com/polynomeer/monticker/pull/261) | 리뷰 중 |
-| W2 안전 UX | [#262](https://github.com/polynomeer/monticker/pull/262) | 리뷰 중 |
-| W3 테마 | [#263](https://github.com/polynomeer/monticker/pull/263) (#261 위에 쌓음) | 리뷰 중 |
-| W4 셸 | — | ADR-115 머지 대기 |
+| W1 색 역할 | [#261](https://github.com/polynomeer/monticker/pull/261) | 머지 |
+| W2 안전 UX | [#262](https://github.com/polynomeer/monticker/pull/262) | 머지 |
+| W3 테마 | [#263](https://github.com/polynomeer/monticker/pull/263) | 머지 |
+| W4 셸 | — | 리뷰 중 |
 | W5 마무리 | — | 대기 |
+
+### W4에서 계획과 달라진 것
+
+- **섹션 탭은 셸이 그린다.** 화면마다 `SectionTabs`를 달지 않고, 셸이 지금 주소로 묶음과 활성 탭을 고른다(`components/terminal/nav.ts`). 화면 코드는 바뀌지 않는다.
+- **레일 묶음:** 지갑·정산·리스크 한도·체결 엔진·자동 주문 규칙은 "내 자산"에 묶고 섹션 탭으로 오간다(예전 레일의 지갑·리스크 항목). 종목 상세(`/stocks/*`)는 "탐색"이 활성이지만 섹션 탭은 없다.
+  설정 탭은 화면 · 알림 · 관심 분야 · 구독 · 증권사 연동(`/brokerage/connect`)이다. 알림 목록(`/alerts`)은 레일에 없고 상단 바의 종으로 간다.
+- **상태 알약의 실전 미체결 수**는 최근 실계좌 주문 50건 기준이다(합친 API가 없다).
+- **검색 화면**은 `?q=`로 검색어를 받는다(상단 검색창의 "전체 결과").
 
 ### W3 남은 하드코딩 — 정리함
 
