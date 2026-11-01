@@ -10,8 +10,9 @@ import type { CandleData } from "@/components/stock/chart/types";
 import { useQuotes } from "@/components/stock/parts";
 import { cn } from "@/lib/utils";
 import { beta, kstDayKey } from "./beta";
+import { themeColorVar } from "@/lib/themes";
 
-const COLORS = ["#bd93f9", "#8be9fd", "#f1fa8c", "#ff79c6"];
+const COLORS = [themeColorVar("accent"), themeColorVar("cyan"), themeColorVar("yellow"), themeColorVar("pink")];
 const MAX = 4;
 
 const PERIODS = [
@@ -280,7 +281,7 @@ export default function ComparePage() {
             <span key={s.symbol} className="inline-flex h-[34px] items-center gap-2 rounded-lg border border-tm-line2 bg-tm-inner pl-3 pr-1.5">
               <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: s.color }} />
               <span className="font-semibold">{nameOf(s)}</span>
-              {!s.resolving && !s.info && <span className="text-2xs text-[#ff8a8a]">찾을 수 없음</span>}
+              {!s.resolving && !s.info && <span className="text-2xs text-danger">찾을 수 없음</span>}
               <IconBtn name="x" label={`${nameOf(s)} 비교에서 제거`} size={24} iconSize={12} onClick={() => setSymbols((p) => p.filter((x) => x !== s.symbol))} />
             </span>
           ))}
@@ -297,7 +298,7 @@ export default function ComparePage() {
                 onBlur={() => setTimeout(() => setAdding(false), 150)}
                 aria-label="비교할 종목 코드"
                 placeholder="종목명 또는 코드"
-                className="h-[34px] w-52 rounded-lg border border-dracula-purple bg-tm-inner px-3 text-13 text-dracula-fg outline-hidden placeholder:text-[#8b92b8]"
+                className="h-[34px] w-52 rounded-lg border border-dracula-purple bg-tm-inner px-3 text-13 text-dracula-fg outline-hidden placeholder:text-tm-muted"
               />
               {suggestions.length > 0 && (
                 <ul className="absolute left-0 top-full z-20 mt-1 max-h-64 w-64 list-none overflow-y-auto rounded-[10px] border border-tm-line2 bg-tm-panel p-1 shadow-glow-line">
@@ -373,7 +374,7 @@ export default function ComparePage() {
                     <span
                       key={b}
                       className="num grid h-10 place-items-center rounded-md text-xs text-dracula-fg"
-                      style={{ background: v == null ? "#21222c" : `rgba(189,147,249,${(Math.max(0, v) * 0.7).toFixed(2)})` }}
+                      style={{ background: v == null ? themeColorVar("inner") : `rgb(var(--tm-accent) / ${(Math.max(0, v) * 0.7).toFixed(2)})` }}
                       title={`${nameOf(stocks[a])} × ${nameOf(stocks[b])}`}
                     >
                       {v == null ? "—" : v.toFixed(2)}

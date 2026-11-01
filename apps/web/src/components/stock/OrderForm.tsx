@@ -293,7 +293,7 @@ export default function OrderForm({ stock, currentPrice, brokerageConnected }: P
             <span className="text-2xs text-tm-muted">
               {isBuy ? "체결 시 익절/손절 매도를 자동 등록합니다(한쪽이 체결되면 다른 쪽 취소)." : "매도 주문에는 익절/손절을 붙이지 않습니다. '조건부' 탭에서 따로 걸 수 있어요."}
             </span>
-            {bracketError && <span className="text-2xs text-[#ff8a8a]">{bracketError}</span>}
+            {bracketError && <span className="text-2xs text-danger">{bracketError}</span>}
           </div>
 
           <div className="flex flex-col gap-[7px] rounded-lg bg-tm-inner px-3 py-2.5">
@@ -303,7 +303,7 @@ export default function OrderForm({ stock, currentPrice, brokerageConnected }: P
                 {risk.idle ? "" : risk.pending ? "점검 중..." : risk.data ? (risk.data.approved ? "통과" : "한도 초과") : ""}
               </span>
             </div>
-            {risk.error && <p role="alert" className="m-0 text-xs text-[#ff8a8a]">{risk.error.message}</p>}
+            {risk.error && <p role="alert" className="m-0 text-xs text-danger">{risk.error.message}</p>}
             {!risk.data && !risk.error && (
               <p className="m-0 text-xs text-tm-muted">
                 {risk.idle ? "수량과 가격을 입력하면 내 리스크 한도(VaR·집중도·손실 한도)에 걸리는지 바로 보여 줍니다." : "점검 중..."}
@@ -332,13 +332,13 @@ export default function OrderForm({ stock, currentPrice, brokerageConnected }: P
             </div>
           </div>
 
-          {error && <p role="alert" className="m-0 text-xs text-[#ff8a8a]">{error}</p>}
+          {error && <p role="alert" className="m-0 text-xs text-danger">{error}</p>}
           {quantity > max && (
-            <p className="m-0 text-xs text-[#ff8a8a]">
+            <p className="m-0 text-xs text-danger">
               {isBuy ? `잔고 부족 (최대 ${max}주 가능)` : `매도 가능 수량 초과 (최대 ${max}주)`}
             </p>
           )}
-          {isLimit && !limitValid && <p className="m-0 text-xs text-[#ff8a8a]">지정가를 0보다 크게 입력하세요</p>}
+          {isLimit && !limitValid && <p className="m-0 text-xs text-danger">지정가를 0보다 크게 입력하세요</p>}
 
           <p className="m-0 text-center text-xs leading-normal text-tm-muted">
             {isLimit

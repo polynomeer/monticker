@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Panel, Sparkline, dirClass, fmtPct } from "@/components/terminal";
 import { useMarketColors } from "@/stores/themeStore";
 import { useDailyCloses, useIsLoggedIn, useQuotes, useWatchlistGroups } from "./data";
+import { themeColorVar } from "@/lib/themes";
 
 /** 관심종목 상위 5개 — 시세는 /api/screener/quotes, 스파크라인은 최근 30일 일봉 종가. */
 export default function HomeWatchlist() {
@@ -30,7 +31,7 @@ export default function HomeWatchlist() {
           {items.map((it) => {
             const q = quotes.get(it.stockId);
             const rate = q?.changeRate ?? null;
-            const color = rate == null ? "#a4abcf" : rate >= 0 ? theme.upColor : theme.downColor;
+            const color = rate == null ? themeColorVar("muted") : rate >= 0 ? theme.upColor : theme.downColor;
             return (
               <li key={it.stockId} className="border-b border-tm-line">
                 <Link href={`/stocks/${it.symbol}`} className="flex items-center gap-2.5 py-2 text-dracula-fg hover:text-dracula-fg">

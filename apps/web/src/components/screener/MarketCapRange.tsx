@@ -4,7 +4,7 @@ import { useEffect, useState, type KeyboardEvent } from "react";
 import { capRangeError, capToEokText, parseCapEok } from "./criteria";
 
 const inputCls =
-  "h-8 w-full min-w-0 rounded-lg border border-tm-line2 bg-tm-inner px-2.5 text-13 text-dracula-fg outline-hidden focus:border-dracula-purple aria-invalid:border-[#ff8a8a]";
+  "h-8 w-full min-w-0 rounded-lg border border-tm-line2 bg-tm-inner px-2.5 text-13 text-dracula-fg outline-hidden focus:border-dracula-purple aria-invalid:border-danger";
 
 /**
  * 시가총액 범위(억원) — 입력 중에는 조회하지 않고 포커스를 벗어나거나 Enter를 누를 때 적용한다.
@@ -69,7 +69,7 @@ export default function MarketCapRange({
         />
       </div>
       {error ? (
-        <span role="alert" className="text-xs text-[#ff8a8a]">{error}</span>
+        <span role="alert" className="text-xs text-danger">{error}</span>
       ) : (minCap != null || maxCap != null) ? (
         <span className="text-2xs text-tm-muted">시가총액 정보가 없는 종목은 결과에서 빠집니다. 일부 시가총액은 모의값일 수 있습니다.</span>
       ) : null}

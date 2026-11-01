@@ -11,6 +11,7 @@ import { PAPER_FILLS_MAX, usePaperFills } from "@/hooks/usePaperFills";
 import type { TradeHistory } from "@/hooks/usePaperTrade";
 import type { StockMeta } from "./useStockMeta";
 import { EmptyNote, Skeleton } from "./PaperStates";
+import { themeColorVar } from "@/lib/themes";
 
 // ── 손익 기여도 ─────────────────────────────────────────────────────────
 /** 종목별 평가손익을 0을 중심으로 좌(손실)·우(이익) 막대로 나눈다. */
@@ -40,8 +41,8 @@ export function PnlContribution({ holdings }: { holdings: Holding[] }) {
 }
 
 // ── 위험 집중도 ─────────────────────────────────────────────────────────
-const SECTOR_COLORS = ["#bd93f9", "#8be9fd", "#c3c8e2", "#ff79c6", "#50fa7b", "#f1fa8c"];
-const CASH_COLOR = "#44475a";
+const SECTOR_COLORS = [themeColorVar("accent"), themeColorVar("cyan"), themeColorVar("soft"), themeColorVar("pink"), themeColorVar("green"), themeColorVar("yellow")];
+const CASH_COLOR = themeColorVar("line2");
 
 export interface SectorSlice { name: string; value: number; pct: number; color: string; }
 

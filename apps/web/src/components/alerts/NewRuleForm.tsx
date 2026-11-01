@@ -12,7 +12,7 @@ import {
 } from "./ruleForm";
 
 const errText = (id: string, msg?: string) =>
-  msg ? <span id={id} role="alert" className="text-2xs text-[#ff8a8a]">{msg}</span> : null;
+  msg ? <span id={id} role="alert" className="text-2xs text-danger">{msg}</span> : null;
 
 /**
  * 알림 화면에서 바로 만드는 새 알림 규칙(기존 POST /api/alerts/rules). 종목은 스크리너 검색(StockPicker)으로 고른다.

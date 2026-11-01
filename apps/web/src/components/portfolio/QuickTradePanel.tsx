@@ -131,7 +131,7 @@ export function QuickTradePanel({ portfolio, meta, sectorValue }: {
                 onChange={(e) => setQuery(e.target.value)}
                 aria-label="종목 매수 검색"
                 placeholder="종목명 또는 티커 검색"
-                className="w-full bg-transparent p-0 text-sm text-dracula-fg outline-hidden placeholder:text-[#8b92b8]"
+                className="w-full bg-transparent p-0 text-sm text-dracula-fg outline-hidden placeholder:text-tm-muted"
               />
             </span>
             <Icon name="search" size={16} className="text-tm-muted" />
@@ -161,12 +161,12 @@ export function QuickTradePanel({ portfolio, meta, sectorValue }: {
       {risk.pending && !risk.data && <span aria-live="polite" className="text-2xs text-tm-muted">리스크 한도 점검 중...</span>}
       {risk.error && <span className="text-2xs text-tm-muted">{risk.error.message} 주문할 때 서버가 다시 판정합니다.</span>}
       {riskReason && (
-        <p role="alert" className="m-0 flex flex-wrap items-center gap-x-2 text-xs text-[#ff8a8a]">
+        <p role="alert" className="m-0 flex flex-wrap items-center gap-x-2 text-xs text-danger">
           <span>{riskReason}</span>
           <Link href="/risk" className="text-2xs">리스크 한도 보기</Link>
         </p>
       )}
-      {error && <p role="alert" className="m-0 text-xs text-[#ff8a8a]">{error}</p>}
+      {error && <p role="alert" className="m-0 text-xs text-danger">{error}</p>}
       <Btn
         kind={side === "BUY" ? "buy" : "sell"}
         size="lg"

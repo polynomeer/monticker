@@ -136,7 +136,7 @@ export default function BrokerageDashboardPage() {
                 : <Pill tone="caution">재인증 필요</Pill>}
               <Pill tone={account.isActive ? "cyan" : "muted"}>{account.isActive ? "활성" : "비활성"}</Pill>
               {!account.tokenValid && (
-                <Link href="/brokerage/connect" className="ml-auto inline-flex h-7 items-center rounded-lg border border-[#6b3a44] px-2.5 text-xs font-semibold text-[#ff8a8a] hover:bg-[#3d252b]">
+                <Link href="/brokerage/connect" className="ml-auto inline-flex h-7 items-center rounded-lg border border-danger/45 px-2.5 text-xs font-semibold text-danger hover:bg-danger/15">
                   재연동
                 </Link>
               )}

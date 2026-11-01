@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Panel, Tile } from "@/components/terminal";
 import { Skeleton } from "./PaperStates";
+import { themeColorVar } from "@/lib/themes";
 
 interface RiskMetrics {
   sharpeRatio: number;
@@ -50,7 +51,7 @@ function ReturnBarChart({ data }: { data: Array<{ date: string; returnPct: numbe
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="none" aria-hidden>
-      <line x1={0} y1={H / 2} x2={W} y2={H / 2} stroke="#44475a" strokeWidth={0.5} />
+      <line x1={0} y1={H / 2} x2={W} y2={H / 2} stroke={themeColorVar("line2")} strokeWidth={0.5} />
       {values.map((v, i) => {
         const barH = Math.max(1, (Math.abs(v) / max) * (H / 2 - 2));
         const x = i * (barW + gap);

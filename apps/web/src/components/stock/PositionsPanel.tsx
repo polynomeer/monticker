@@ -149,7 +149,7 @@ function PaperOpenOrders({ symbol, orders, onCancel, cancelPending }: { symbol: 
           type="button"
           disabled={cancelPending}
           onClick={() => { if (window.confirm(`${symbol} 모의 ${o.side === "BUY" ? "매수" : "매도"} 지정가 주문을 취소할까요?`)) onCancel(o.id); }}
-          className="text-xs text-[#ff8a8a] hover:underline disabled:opacity-40"
+          className="text-xs text-danger hover:underline disabled:opacity-40"
         >
           취소
         </button>
@@ -182,7 +182,7 @@ function OpenOrders({ connected, symbol, orders, onCancel, cancelPending }: { co
           type="button"
           disabled={cancelPending}
           onClick={() => { if (window.confirm(`${symbol} ${o.side === "BUY" ? "매수" : "매도"} 주문을 취소할까요?`)) onCancel(o.id); }}
-          className="text-xs text-[#ff8a8a] hover:underline disabled:opacity-40"
+          className="text-xs text-danger hover:underline disabled:opacity-40"
         >
           취소
         </button>
@@ -207,7 +207,7 @@ function PaperConditional({ stockId, symbol }: { stockId: number; symbol: string
     {
       key: "x", header: "", align: "right",
       cell: (c) => (c.status === "ACTIVE" || c.status === "WAITING_PARENT") ? (
-        <button type="button" disabled={cancel.isPending} onClick={() => cancel.mutate(c.id)} className="text-xs text-[#ff8a8a] hover:underline disabled:opacity-40">취소</button>
+        <button type="button" disabled={cancel.isPending} onClick={() => cancel.mutate(c.id)} className="text-xs text-danger hover:underline disabled:opacity-40">취소</button>
       ) : null,
     },
   ];

@@ -103,7 +103,7 @@ export default function CandleReplay({ date, events }: { date: string; events: R
       {isLoading ? (
         <div className="h-[260px] animate-pulse rounded-lg bg-tm-inner" />
       ) : isError ? (
-        <p role="alert" className="m-0 text-13 text-[#ff8a8a]">분봉을 불러오지 못했습니다.</p>
+        <p role="alert" className="m-0 text-13 text-danger">분봉을 불러오지 못했습니다.</p>
       ) : candles.length === 0 ? (
         <p className="m-0 rounded-lg bg-tm-inner py-8 text-center text-13 text-tm-muted">이날 이 종목의 분봉 기록이 없습니다.</p>
       ) : (

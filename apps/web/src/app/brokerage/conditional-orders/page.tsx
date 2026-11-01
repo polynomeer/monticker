@@ -189,7 +189,7 @@ export default function ConditionalOrderPage() {
       <span className="whitespace-normal">
         {e.symbol} {TRIGGER_LABEL[e.triggerType]} {fmtNum(e.triggerPrice)}{isBelowTrigger(e.triggerType) ? " 이하" : " 이상"}
         {" → "}{sideLabel(e.side)} {fmtNum(e.quantity)}주{e.orderType === "LIMIT" ? ` (지정가 ${fmtNum(e.limitPrice)})` : " (시장가)"}
-        {e.failReason && <span className="block text-2xs text-[#ff8a8a]">{e.failReason}</span>}
+        {e.failReason && <span className="block text-2xs text-danger">{e.failReason}</span>}
       </span>
     ) },
     { key: "res", header: "결과", cell: e => {
@@ -213,7 +213,7 @@ export default function ConditionalOrderPage() {
       <span className="whitespace-normal">
         {o.symbol} {TRIGGER_LABEL[o.triggerType]} {fmtNum(o.triggerPrice)}{isBelowTrigger(o.triggerType) ? " 이하" : " 이상"}
         {" → "}{sideLabel(o.side)} {fmtNum(o.quantity)}주{o.orderType === "LIMIT" ? ` (지정가 ${fmtNum(o.limitPrice)})` : " (시장가)"}
-        {o.failReason && <span className="block text-2xs text-[#ff8a8a]">{o.failReason}</span>}
+        {o.failReason && <span className="block text-2xs text-danger">{o.failReason}</span>}
       </span>
     ) },
     { key: "res", header: "결과", cell: o => { const m = COND_STATUS[o.status]; return <Pill tone={m?.tone ?? "muted"}>{m?.label ?? o.status}</Pill>; } },
@@ -363,7 +363,7 @@ export default function ConditionalOrderPage() {
 
               {formError && (
                 <Notice tone="danger">
-                  <b className="text-[#ff8a8a]">등록에 실패했습니다</b>
+                  <b className="text-danger">등록에 실패했습니다</b>
                   <br />{formError}
                 </Notice>
               )}

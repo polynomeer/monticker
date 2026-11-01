@@ -21,6 +21,7 @@ import {
 import { conditionListReducer, dropPositionFor, DND_MIME, type ConditionListAction, type DropPosition } from "@/components/quant/conditionList";
 import { VersionPanel } from "@/components/quant/VersionPanel";
 import type { VersionRow } from "@/components/quant/ruleVersions";
+import { themeColorVar } from "@/lib/themes";
 
 // ── 상수 ───────────────────────────────────────────────────────────────────────
 
@@ -599,7 +600,7 @@ export default function BuilderPage() {
                   <Stat big label="샤프" value={latest.sharpe == null ? "—" : latest.sharpe.toFixed(2)} valueClassName={latest.sharpe == null ? "text-tm-muted" : undefined} />
                   <Stat big label="거래 수" value={fmtNum(latest.tradeCount)} />
                 </AutoGrid>
-                {curve.length > 1 && <LineChart series={[{ values: curve, color: "#bd93f9", fill: true }]} width={360} height={150} label="빠른 백테스트 수익 곡선" xLabels={[[0, latest.startDate.slice(0, 7)], [0.85, latest.endDate.slice(0, 7)]]} />}
+                {curve.length > 1 && <LineChart series={[{ values: curve, color: themeColorVar("accent"), fill: true }]} width={360} height={150} label="빠른 백테스트 수익 곡선" xLabels={[[0, latest.startDate.slice(0, 7)], [0.85, latest.endDate.slice(0, 7)]]} />}
               </>
             )}
             <div className="flex gap-2">

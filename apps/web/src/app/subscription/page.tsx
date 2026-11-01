@@ -55,13 +55,13 @@ const PLAN_WHO: Record<string, string> = {
 
 const STATUS_LABELS: Record<string, { label: string; tone: string }> = {
   ACTIVE: { label: "활성", tone: "text-dracula-green" },
-  EXPIRED: { label: "만료", tone: "text-[#ff8a8a]" },
+  EXPIRED: { label: "만료", tone: "text-danger" },
   CANCELLED: { label: "해지", tone: "text-tm-muted" },
 };
 
 const PAYMENT_LABELS: Record<string, { label: string; tone: string }> = {
   SUCCESS: { label: "결제 완료", tone: "text-dracula-green" },
-  FAILED: { label: "결제 실패", tone: "text-[#ff8a8a]" },
+  FAILED: { label: "결제 실패", tone: "text-danger" },
   PENDING: { label: "처리 중", tone: "text-caution" },
   REFUNDED: { label: "환불", tone: "text-tm-muted" },
 };
@@ -346,7 +346,7 @@ export default function SubscriptionPage() {
               type="button"
               aria-expanded={showHistory}
               onClick={() => setShowHistory((v) => !v)}
-              className="text-xs text-dracula-purple hover:text-[#d6bcfb]"
+              className="text-xs text-dracula-purple hover:text-accent-soft"
             >
               결제 내역 · 영수증 {showHistory ? "접기" : "보기"}
             </button>

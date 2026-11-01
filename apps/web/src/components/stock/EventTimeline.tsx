@@ -78,7 +78,7 @@ export default function EventTimeline({ stockId, bare = false, highlightEventId,
               }}
               className={cn(
                 "flex gap-2.5 border-b border-tm-line px-1 py-[9px] transition-colors duration-300",
-                flashId === event.id && "rounded-md bg-[#3a2f52] ring-1 ring-dracula-purple",
+                flashId === event.id && "rounded-md bg-dracula-purple/20 ring-1 ring-dracula-purple",
               )}
             >
               <span className="num w-[34px] flex-none pt-0.5 text-2xs text-tm-muted">{fmtWhen(event.eventTime)}</span>

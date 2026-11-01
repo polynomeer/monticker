@@ -95,7 +95,7 @@ export default function PaperConditionalPanel({ stockId, currentPrice }: { stock
         unit="주" type="number" inputMode="numeric" min={1} step={1} value={qty}
         onChange={(e) => setQty(Math.max(1, Math.floor(Number(e.target.value)) || 1))}
       />
-      {error && <p role="alert" className="m-0 text-xs text-[#ff8a8a]">{error}</p>}
+      {error && <p role="alert" className="m-0 text-xs text-danger">{error}</p>}
       <p className="m-0 text-2xs leading-normal text-tm-muted">
         현재가 {currentPrice > 0 ? `${fmtNum(currentPrice)}원` : "—"} · 조건이 맞으면 모의투자 시장가로 주문합니다(리스크 한도 적용). 그 사이 보유를 팔면 발동 시 실패로 남습니다.
       </p>
@@ -127,7 +127,7 @@ export default function PaperConditionalPanel({ stockId, currentPrice }: { stock
                       type="button"
                       disabled={cancel.isPending}
                       onClick={() => cancel.mutate(r.id, { onError: (e) => toast({ type: "error", title: "취소 실패", message: (e as Error).message }) })}
-                      className="text-[#ff8a8a] hover:underline disabled:opacity-40"
+                      className="text-danger hover:underline disabled:opacity-40"
                     >
                       취소
                     </button>

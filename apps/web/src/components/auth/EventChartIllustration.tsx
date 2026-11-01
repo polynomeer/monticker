@@ -1,3 +1,4 @@
+import { themeColorVar } from "@/lib/themes";
 // 로그인·회원가입 브랜드 패널의 장식용 차트. 실제 시세가 아니라 고정된 예시 데이터다 —
 // "이벤트가 표시된 차트 예시"로 라벨을 붙여 실제 데이터로 오인되지 않게 한다.
 
@@ -19,10 +20,10 @@ const DATA: [number, number, number, number, number][] = [
 
 // 이벤트 핀: [캔들 인덱스, 글자, 색, y]
 const PINS: [number, string, string, number][] = [
-  [14, "D", "#8be9fd", 18],
-  [27, "N", "#c3c8e2", 18],
-  [28, "V", "#bd93f9", 42],
-  [29, "Q", "#50fa7b", 18],
+  [14, "D", themeColorVar("cyan"), 18],
+  [27, "N", themeColorVar("soft"), 18],
+  [28, "V", themeColorVar("accent"), 42],
+  [29, "Q", themeColorVar("green"), 18],
 ];
 const BAND: [number, number] = [27, 31];
 
@@ -33,9 +34,9 @@ const TOP = 16;
 const PH = H - VH - 14 - 24 - TOP;
 const UP = "rgb(var(--mt-up))";
 const DOWN = "rgb(var(--mt-down))";
-const LINE = "#34364a";
-const MUTED = "#a4abcf";
-const PAGE = "#1b1c24";
+const LINE = themeColorVar("line");
+const MUTED = themeColorVar("muted");
+const PAGE = themeColorVar("page");
 
 export function EventChartIllustration() {
   const lo = Math.min(...DATA.map((d) => d[2])) * 0.998;
@@ -55,7 +56,7 @@ export function EventChartIllustration() {
           </text>
         </g>
       ))}
-      <rect x={BAND[0] * cw} y={TOP - 8} width={(BAND[1] - BAND[0]) * cw} height={H - TOP - 16} fill="#bd93f9" fillOpacity={0.09} />
+      <rect x={BAND[0] * cw} y={TOP - 8} width={(BAND[1] - BAND[0]) * cw} height={H - TOP - 16} fill={themeColorVar("accent")} fillOpacity={0.09} />
       {DATA.map(([o, h, l, c, v], i) => {
         const cx = i * cw + cw / 2;
         const col = c >= o ? UP : DOWN;

@@ -12,7 +12,7 @@ export function TradingHaltBanner({ enabled, note }: { enabled: boolean; note?: 
   if (!data?.halted) return null;
   return (
     <Notice tone="danger" icon="x">
-      <p className="m-0 text-sm font-semibold text-[#ff8a8a]">실거래 주문이 일시 중단되었습니다</p>
+      <p className="m-0 text-sm font-semibold text-danger">실거래 주문이 일시 중단되었습니다</p>
       <p className="m-0 mt-0.5 text-xs">{data.message}</p>
       {note && <p className="m-0 mt-0.5 text-xs">{note}</p>}
     </Notice>

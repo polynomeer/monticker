@@ -16,6 +16,7 @@ import { EmptyNote, LoginRequired, Skeleton } from "@/components/portfolio/Paper
 import {
   AutoGrid, Bar, BtnLink, Panel, PanelCol, PanelRow, Seg, TerminalPage, Tile, dirClass, fmtNum, fmtPct, fmtSigned, type TopStat,
 } from "@/components/terminal";
+import { themeColorVar } from "@/lib/themes";
 
 interface BehaviorScore {
   behaviorScore: number;
@@ -92,10 +93,10 @@ export default function WalletPage() {
   const pct = (v: number) => (total > 0 ? (v / total) * 100 : 0);
   const buckets = wallet
     ? [
-        { name: "현금", desc: "주문 가능", value: wallet.availableCash, color: "#50fa7b" },
-        { name: "예약금", desc: "미체결 주문에 묶인 돈", value: wallet.reservedCash, color: "#f1fa8c" },
-        { name: "평가액", desc: "보유 종목 현재가 기준", value: wallet.holdingsValue, color: "#bd93f9" },
-        { name: "정산 대기", desc: "체결 후 T+2 정산 전", value: wallet.settlementPending, color: "#8be9fd" },
+        { name: "현금", desc: "주문 가능", value: wallet.availableCash, color: themeColorVar("green") },
+        { name: "예약금", desc: "미체결 주문에 묶인 돈", value: wallet.reservedCash, color: themeColorVar("yellow") },
+        { name: "평가액", desc: "보유 종목 현재가 기준", value: wallet.holdingsValue, color: themeColorVar("accent") },
+        { name: "정산 대기", desc: "체결 후 T+2 정산 전", value: wallet.settlementPending, color: themeColorVar("cyan") },
       ]
     : [];
 
@@ -128,7 +129,7 @@ export default function WalletPage() {
         {walletLoading ? (
           <Skeleton className="h-40" />
         ) : isError || !wallet ? (
-          <p role="alert" className="m-0 py-8 text-center text-13 text-[#ff8a8a]">지갑 정보를 불러오지 못했습니다.</p>
+          <p role="alert" className="m-0 py-8 text-center text-13 text-danger">지갑 정보를 불러오지 못했습니다.</p>
         ) : (
           <>
             <div className="flex h-3.5 gap-0.5 overflow-hidden rounded-full bg-tm-inner" role="img" aria-label={buckets.map((b) => `${b.name} ${pct(b.value).toFixed(1)}%`).join(", ")}>

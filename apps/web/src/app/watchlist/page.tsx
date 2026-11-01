@@ -404,7 +404,7 @@ export default function WatchlistPage() {
               onChange={(e) => setNewGroupName(e.target.value)}
               aria-label="새 관심종목 그룹 이름"
               placeholder="새 그룹 이름"
-              className="h-10 min-w-0 flex-1 rounded-lg border border-tm-line bg-tm-inner px-3 text-sm text-dracula-fg outline-hidden placeholder:text-[#8b92b8] focus:border-dracula-purple"
+              className="h-10 min-w-0 flex-1 rounded-lg border border-tm-line bg-tm-inner px-3 text-sm text-dracula-fg outline-hidden placeholder:text-tm-muted focus:border-dracula-purple"
             />
             <Btn type="submit" disabled={createGroup.isPending}>그룹 추가</Btn>
           </form>

@@ -54,7 +54,7 @@ export default function ForgotPasswordPage() {
               {loading ? "발송 중..." : "재설정 링크 보내기"}
             </Btn>
           </form>
-          <Link href="/login" className="text-center text-13 text-dracula-purple hover:text-[#d6bcfb]">로그인으로 돌아가기</Link>
+          <Link href="/login" className="text-center text-13 text-dracula-purple hover:text-accent-soft">로그인으로 돌아가기</Link>
         </StatusCardFrame>
       )}
     </CenteredPage>
