@@ -2,6 +2,7 @@
 
 import BacktestCandleChart from "./BacktestCandleChart";
 import { AutoGrid, DataTable, LineChart, Panel, Pill, Stat, fmtNum, fmtPct, type Column } from "@/components/terminal";
+import { themeColorVar } from "@/lib/themes";
 
 interface BacktestMetrics {
   totalReturn: number;
@@ -114,7 +115,7 @@ export default function BacktestResultView({ result }: Props) {
         <span className="num text-2xs text-tm-muted">{costLabel(result.costs)}</span>
         {equityCurve.length > 1 ? (
           <LineChart
-            series={[{ values: equityCurve.map((p) => p.equity), color: finalCapital >= initialCapital ? "#bd93f9" : "#ff79c6", fill: true }]}
+            series={[{ values: equityCurve.map((p) => p.equity), color: finalCapital >= initialCapital ? themeColorVar("accent") : themeColorVar("pink"), fill: true }]}
             width={860}
             height={300}
             baseline={initialCapital}

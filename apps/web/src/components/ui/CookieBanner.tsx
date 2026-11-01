@@ -28,9 +28,9 @@ export default function CookieBanner() {
           <Icon name="info" size={16} className="mt-0.5 flex-none text-dracula-cyan" />
           <span>
             monticker는 서비스 개선을 위해 필수 쿠키를 사용합니다.{" "}
-            <Link href="/terms" className="text-dracula-purple hover:text-[#d6bcfb]">이용약관</Link>
+            <Link href="/terms" className="text-dracula-purple hover:text-accent-soft">이용약관</Link>
             {" · "}
-            <Link href="/privacy" className="text-dracula-purple hover:text-[#d6bcfb]">개인정보처리방침</Link>
+            <Link href="/privacy" className="text-dracula-purple hover:text-accent-soft">개인정보처리방침</Link>
           </span>
         </p>
         <div className="flex flex-none gap-2 self-end sm:self-auto">

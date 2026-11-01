@@ -39,7 +39,7 @@ const ROW_COLUMNS: Column<ImportRowResult>[] = [
   { key: "price", header: "단가", align: "right", cell: (r) => <span className="num">{fmtQty(r.price)}</span> },
   { key: "amount", header: "금액", align: "right", cell: (r) => <span className="num">{fmtQty(r.amount)}</span> },
   { key: "cur", header: "통화", cell: (r) => <span className="num text-tm-soft">{r.currency ?? "—"}</span> },
-  { key: "msg", header: "사유", cell: (r) => <span className="whitespace-normal text-xs text-[#ff8a8a]">{r.message ?? ""}</span> },
+  { key: "msg", header: "사유", cell: (r) => <span className="whitespace-normal text-xs text-danger">{r.message ?? ""}</span> },
 ];
 
 /**
@@ -131,7 +131,7 @@ export function ImportPanel({ accountId }: { accountId: number }) {
               value={form.typeValuesText}
               onChange={(e) => update({ typeValuesText: e.target.value })}
               placeholder={"주식매수=매수\n주식매도=매도"}
-              className="rounded-lg border border-tm-line bg-tm-inner px-3 py-2 text-13 text-dracula-fg outline-hidden placeholder:text-[#8b92b8]"
+              className="rounded-lg border border-tm-line bg-tm-inner px-3 py-2 text-13 text-dracula-fg outline-hidden placeholder:text-tm-muted"
             />
           </label>
         </div>
@@ -167,7 +167,7 @@ export function ImportPanel({ accountId }: { accountId: number }) {
             <span>전체 <b className="num">{preview.rowCount}</b>행</span>
             <span className="text-up">새 거래 <b className="num">{preview.newCount}</b></span>
             <span className="text-tm-muted">이미 있음 <b className="num">{preview.duplicateCount}</b></span>
-            <span className={preview.errorCount ? "text-[#ff8a8a]" : "text-tm-muted"}>오류 <b className="num">{preview.errorCount}</b></span>
+            <span className={preview.errorCount ? "text-danger" : "text-tm-muted"}>오류 <b className="num">{preview.errorCount}</b></span>
             {preview.unmatchedCount > 0 && <span className="text-caution">시세 없음 <b className="num">{preview.unmatchedCount}</b></span>}
             <span className="text-2xs text-tm-muted">인코딩 {preview.charset}</span>
           </div>

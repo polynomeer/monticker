@@ -28,9 +28,9 @@ export function StatusCardFrame({ children, className, live }: { children: React
 }
 
 const TONE = {
-  ok: { bg: "bg-[#22392c]", fg: "text-dracula-green", icon: "check" as IconName },
-  error: { bg: "bg-[#47262d]", fg: "text-[#ff8a8a]", icon: "x" as IconName },
-  warn: { bg: "bg-[#3d3f2a]", fg: "text-caution", icon: "alert" as IconName },
+  ok: { bg: "bg-dracula-green/15", fg: "text-dracula-green", icon: "check" as IconName },
+  error: { bg: "bg-danger/20", fg: "text-danger", icon: "x" as IconName },
+  warn: { bg: "bg-caution/15", fg: "text-caution", icon: "alert" as IconName },
   pending: { bg: "bg-tm-raised", fg: "text-dracula-purple", icon: "clock" as IconName },
 };
 

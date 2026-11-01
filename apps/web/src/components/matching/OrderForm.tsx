@@ -27,19 +27,19 @@ const ORDER_TYPES = [{ value: "LIMIT", label: "지정가" }, { value: "MARKET", 
 
 function RiskPreview({ result }: { result: RiskCheckResult }) {
   return (
-    <div className={cn("flex flex-col gap-2 rounded-[10px] border px-3.5 py-3 text-xs", result.approved ? "border-[#2f4d39] bg-[#22352a]" : "border-[#64363f] bg-[#3d252b]")}>
+    <div className={cn("flex flex-col gap-2 rounded-[10px] border px-3.5 py-3 text-xs", result.approved ? "border-dracula-green/35 bg-dracula-green/12" : "border-danger/40 bg-danger/15")}>
       <div className="flex items-center gap-2 font-semibold">
-        <Icon name={result.approved ? "check" : "alert"} size={15} className={result.approved ? "text-dracula-green" : "text-[#ff8a8a]"} />
-        <span className={result.approved ? "text-dracula-green" : "text-[#ff8a8a]"}>
+        <Icon name={result.approved ? "check" : "alert"} size={15} className={result.approved ? "text-dracula-green" : "text-danger"} />
+        <span className={result.approved ? "text-dracula-green" : "text-danger"}>
           {result.approved ? "리스크 한도 통과" : result.blockedBy ?? "리스크 한도 초과"}
         </span>
       </div>
       {result.checks.map((c) => (
         <div key={c.rule} className="flex items-center justify-between gap-2">
-          <span className={c.passed ? "text-tm-muted" : "font-medium text-[#ff8a8a]"}>
+          <span className={c.passed ? "text-tm-muted" : "font-medium text-danger"}>
             {c.passed ? "✓" : "✕"} {RULE_LABEL[c.rule] ?? c.rule}
           </span>
-          <span className={c.passed ? "text-tm-muted" : "text-[#ff8a8a]"}>{c.detail}</span>
+          <span className={c.passed ? "text-tm-muted" : "text-danger"}>{c.detail}</span>
         </div>
       ))}
     </div>
@@ -141,7 +141,7 @@ export function OrderForm({ stockId, setStockId, stocks, presetSide, book }: {
         onChange={(e) => setQuantity(Math.min(MAX_ORDER_QUANTITY, Math.max(1, Math.floor(Number(e.target.value) || 1))))}
         className="flex-none"
       />
-      {cashError && <p id={qtyErrorId} role="alert" className="m-0 text-xs text-[#ff8a8a]">{cashError}</p>}
+      {cashError && <p id={qtyErrorId} role="alert" className="m-0 text-xs text-danger">{cashError}</p>}
       <KV k={isBuy ? "예약될 금액" : "예상 체결 금액"} v={amount != null ? `${fmtNum(amount)}원` : "—"} />
       <KV
         k="예상 슬리피지 (시장가 시)"
@@ -150,17 +150,17 @@ export function OrderForm({ stockId, setStockId, stocks, presetSide, book }: {
       />
 
       {riskResult && <RiskPreview result={riskResult} />}
-      {riskCheckMutation.isError && <p role="alert" className="m-0 text-xs text-[#ff8a8a]">{(riskCheckMutation.error as Error).message}</p>}
+      {riskCheckMutation.isError && <p role="alert" className="m-0 text-xs text-danger">{(riskCheckMutation.error as Error).message}</p>}
 
       {result && (
-        <div role="status" className="flex flex-col gap-1 rounded-[10px] border border-[#2f4d39] bg-[#22352a] px-3.5 py-3 text-xs">
+        <div role="status" className="flex flex-col gap-1 rounded-[10px] border border-dracula-green/35 bg-dracula-green/12 px-3.5 py-3 text-xs">
           <p className="m-0 inline-flex items-center gap-1.5 font-semibold text-dracula-green">
             <Icon name="check" size={14} /> {result.message}
           </p>
           <p className="m-0 text-tm-muted">상태: <span className="text-dracula-fg">{result.order.status}</span></p>
           {result.fills.map((f) => (
             <p key={f.id} className="num m-0 text-tm-muted">
-              체결: {f.quantity}주 @ {fmtNum(f.fillPrice)}원 <span className="ml-2 text-[#ff8a8a]">수수료 {fmtNum(f.fee)}원</span>
+              체결: {f.quantity}주 @ {fmtNum(f.fillPrice)}원 <span className="ml-2 text-danger">수수료 {fmtNum(f.fee)}원</span>
             </p>
           ))}
         </div>
@@ -174,7 +174,7 @@ export function OrderForm({ stockId, setStockId, stocks, presetSide, book }: {
       <Btn kind={isBuy ? "buy" : "sell"} size="lg" full onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending || !isValid || overCash}>
         {submitMutation.isPending ? "처리 중..." : `${isBuy ? "매수" : "매도"} 주문 제출`}
       </Btn>
-      {submitMutation.isError && <p role="alert" className="m-0 text-xs text-[#ff8a8a]">{(submitMutation.error as Error).message}</p>}
+      {submitMutation.isError && <p role="alert" className="m-0 text-xs text-danger">{(submitMutation.error as Error).message}</p>}
       <p className="m-0 text-xs leading-normal text-tm-muted">지정가는 약 3초마다 접수 순으로 확인해, 1분봉 종가가 지정가에 닿으면 그 값으로 전량 체결됩니다(가격·시간 우선 매칭이 아닙니다).</p>
     </>
   );

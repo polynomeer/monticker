@@ -140,7 +140,7 @@ export default function StockSearch() {
               onKeyDown={onKey}
               placeholder="삼성전자, AAPL, HBM ..."
               aria-controls="search-results"
-              className="min-w-0 flex-1 bg-transparent text-lg text-dracula-fg outline-hidden placeholder:text-[#8b92b8] [&::-webkit-search-cancel-button]:hidden"
+              className="min-w-0 flex-1 bg-transparent text-lg text-dracula-fg outline-hidden placeholder:text-tm-muted [&::-webkit-search-cancel-button]:hidden"
             />
             {loading && <span className="text-xs text-tm-muted">검색 중…</span>}
             <button type="button" onClick={() => setQuery("")} className="num rounded-md bg-tm-raised px-2 py-[3px] text-xs text-tm-muted hover:text-dracula-fg" aria-label="검색어 지우기 (ESC)">

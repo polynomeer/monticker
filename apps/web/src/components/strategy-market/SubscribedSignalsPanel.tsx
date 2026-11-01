@@ -96,7 +96,7 @@ export function SubscribedSignalsPanel({ subscribed }: { subscribed: MarketStrat
           })}
         </ul>
       )}
-      {denied && <p className="m-0 text-2xs text-[#ff8a8a]">구독이 바뀌어 실시간 연결이 거부됐습니다. 화면을 새로 고치면 다시 연결합니다.</p>}
+      {denied && <p className="m-0 text-2xs text-danger">구독이 바뀌어 실시간 연결이 거부됐습니다. 화면을 새로 고치면 다시 연결합니다.</p>}
     </Panel>
   );
 }

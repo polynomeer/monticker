@@ -358,7 +358,7 @@ export default function RebalancePage() {
             </label>
             <span className="text-xs text-tm-muted">
               괴리가 이 값 이상인 종목만 대상 · 합계{" "}
-              <b className={cn("num", totalWeightPct > 100 ? "text-[#ff8a8a]" : totalWeightPct === 100 ? "text-dracula-green" : "text-dracula-fg")}>{totalWeightPct.toFixed(1)}%</b>
+              <b className={cn("num", totalWeightPct > 100 ? "text-danger" : totalWeightPct === 100 ? "text-dracula-green" : "text-dracula-fg")}>{totalWeightPct.toFixed(1)}%</b>
             </span>
             <span className="ml-auto flex flex-wrap gap-1.5">
               <Btn kind="ghost" size="sm" icon="zap" onClick={handleOptimize} disabled={rows.length < 2 || optimizing} className="h-[34px]">
@@ -485,13 +485,13 @@ export default function RebalancePage() {
                     ? <Icon name="check" size={16} strokeWidth={2.4} className="text-dracula-green" />
                     : leg.status === "UNKNOWN"
                       ? <Icon name="clock" size={16} className="text-dracula-yellow" />
-                      : <Icon name="x" size={16} strokeWidth={2.4} className="text-[#ff8a8a]" />}
+                      : <Icon name="x" size={16} strokeWidth={2.4} className="text-danger" />}
                   <span className={sideClass(leg.side)}>{sideLabel(leg.side)}</span>
                   <span className="font-semibold">{nameOf(leg.symbol)}</span>
                   <span className="num text-tm-muted">{fmtNum(leg.quantity)}주</span>
                   {leg.status === "UNKNOWN"
                     ? <span className="ml-auto text-dracula-yellow">체결 여부 확인 중 — 주문 내역에서 확인</span>
-                    : leg.failReason && <span className="ml-auto text-[#ff8a8a]">{leg.failReason}</span>}
+                    : leg.failReason && <span className="ml-auto text-danger">{leg.failReason}</span>}
                 </div>
               ))}
             </div>

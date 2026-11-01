@@ -12,17 +12,17 @@ export type LedgerFilter = "all" | "fill" | "settle" | "cash";
 /** 원장 이벤트 → 표시 문구·색, 그리고 돈이 어디서 어디로 움직였는지(확실한 것만). */
 const EVENT_META: Record<string, { label: string; color: string; flow?: string; group: Exclude<LedgerFilter, "all"> }> = {
   DEPOSIT:                   { label: "입금",           color: "text-dracula-green",  flow: "외부 → 현금",       group: "cash" },
-  WITHDRAWAL:                { label: "출금",           color: "text-[#ff8a8a]",      flow: "현금 → 외부",       group: "cash" },
+  WITHDRAWAL:                { label: "출금",           color: "text-danger",      flow: "현금 → 외부",       group: "cash" },
   FILL:                      { label: "체결",           color: "text-dracula-cyan",                              group: "fill" },
   PARTIAL_FILL:              { label: "부분체결",       color: "text-caution",                            group: "fill" },
   CASH_RESERVED:             { label: "예약",           color: "text-dracula-yellow", flow: "현금 → 예약금",     group: "fill" },
   CASH_UNRESERVED:           { label: "예약해제",       color: "text-dracula-yellow", flow: "예약금 → 현금",     group: "fill" },
-  FEE:                       { label: "수수료",         color: "text-[#ff8a8a]",                                 group: "fill" },
+  FEE:                       { label: "수수료",         color: "text-danger",                                 group: "fill" },
   SETTLEMENT:                { label: "정산완료",       color: "text-dracula-green",                             group: "settle" },
   PAPER_SETTLEMENT_COMPLETE: { label: "모의투자 정산",  color: "text-dracula-green",  flow: "정산 대기 → 현금",  group: "settle" },
-  SUBSCRIPTION_PAYMENT:      { label: "구독 결제",      color: "text-[#ff8a8a]",      flow: "현금 → 외부",       group: "cash" },
+  SUBSCRIPTION_PAYMENT:      { label: "구독 결제",      color: "text-danger",      flow: "현금 → 외부",       group: "cash" },
   CREATOR_EARNING_CREDITED:  { label: "전략 수익 적립", color: "text-dracula-green",  flow: "외부 → 현금",       group: "cash" },
-  CREATOR_PAYOUT_PAID:       { label: "수익 출금",      color: "text-[#ff8a8a]",      flow: "현금 → 외부",       group: "cash" },
+  CREATOR_PAYOUT_PAID:       { label: "수익 출금",      color: "text-danger",      flow: "현금 → 외부",       group: "cash" },
   BROKERAGE_SETTLEMENT:      { label: "증권사 정산",    color: "text-dracula-cyan",                              group: "settle" },
 };
 
@@ -78,7 +78,7 @@ export default function WalletLedger({ filter = "all" }: { filter?: LedgerFilter
     </div>
   );
 
-  if (isError) return <p role="alert" className="m-0 py-12 text-center text-13 text-[#ff8a8a]">원장을 불러오지 못했습니다.</p>;
+  if (isError) return <p role="alert" className="m-0 py-12 text-center text-13 text-danger">원장을 불러오지 못했습니다.</p>;
 
   const all = pages?.flatMap(p => p.items) ?? [];
   if (all.length === 0) return (

@@ -3,6 +3,7 @@
 // 종목 화면(트레이딩·검색·비교)이 같이 쓰는 작은 조각들 — 시세 조회 훅, 이벤트 타입 표기, 숫자 포맷.
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { themeColorVar } from "@/lib/themes";
 
 /** /api/screener/quotes 응답 한 줄 — ScreenerItem 중 화면에서 쓰는 필드만 */
 export interface Quote {
@@ -55,16 +56,16 @@ export type EventLayer = "disclosure" | "news" | "volume" | "price";
 
 // 공시는 청록 — 주황은 실전 전용(ADR-112). 뉴스는 공시와 갈리도록 보조 회색
 export const EVENT_META: Record<string, EventMeta> = {
-  DISCLOSURE_PUBLISHED: { label: "공시", letter: "D", color: "#8be9fd", layer: "disclosure" },
-  NEWS_PUBLISHED: { label: "뉴스", letter: "N", color: "#c3c8e2", layer: "news" },
-  VOLUME_SURGE: { label: "거래량", letter: "V", color: "#bd93f9", layer: "volume" },
-  PRICE_SPIKE: { label: "급등", letter: "P", color: "#50fa7b", layer: "price" },
-  PRICE_DROP: { label: "급락", letter: "P", color: "#ff79c6", layer: "price" },
-  SECTOR_MOVE: { label: "섹터", letter: "S", color: "#c3c8e2", layer: "price" },
+  DISCLOSURE_PUBLISHED: { label: "공시", letter: "D", color: themeColorVar("cyan"), layer: "disclosure" },
+  NEWS_PUBLISHED: { label: "뉴스", letter: "N", color: themeColorVar("soft"), layer: "news" },
+  VOLUME_SURGE: { label: "거래량", letter: "V", color: themeColorVar("accent"), layer: "volume" },
+  PRICE_SPIKE: { label: "급등", letter: "P", color: themeColorVar("green"), layer: "price" },
+  PRICE_DROP: { label: "급락", letter: "P", color: themeColorVar("pink"), layer: "price" },
+  SECTOR_MOVE: { label: "섹터", letter: "S", color: themeColorVar("soft"), layer: "price" },
 };
 
 export function eventMeta(type: string): EventMeta {
-  return EVENT_META[type] ?? { label: type.replace(/_/g, " "), letter: "E", color: "#c3c8e2", layer: "price" };
+  return EVENT_META[type] ?? { label: type.replace(/_/g, " "), letter: "E", color: themeColorVar("soft"), layer: "price" };
 }
 
 /** 시안의 원형 이벤트 마커(테두리 + 글자) */

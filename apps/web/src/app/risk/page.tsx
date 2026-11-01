@@ -157,7 +157,7 @@ export default function RiskPage() {
         {
           label: "이번 달 차단",
           value: summary ? `${fmtNum(summary.blockedThisMonth)}건` : "—",
-          tone: summary && summary.blockedThisMonth > 0 ? "text-[#ff8a8a]" : summary ? undefined : "text-tm-muted",
+          tone: summary && summary.blockedThisMonth > 0 ? "text-danger" : summary ? undefined : "text-tm-muted",
         },
       ]
     : [];
@@ -170,7 +170,7 @@ export default function RiskPage() {
         {isLoading ? (
           <Skeleton className="h-40" />
         ) : isError || !exposure ? (
-          <p role="alert" className="m-0 py-8 text-center text-13 text-[#ff8a8a]">리스크 노출도를 불러오지 못했습니다.</p>
+          <p role="alert" className="m-0 py-8 text-center text-13 text-danger">리스크 노출도를 불러오지 못했습니다.</p>
         ) : (
           <>
             <RiskLevel level={level} />
@@ -215,7 +215,7 @@ export default function RiskPage() {
                   </span>
                 ),
               },
-              { key: "x", header: "결과", align: "right", cell: () => <span className="font-semibold text-[#ff8a8a]">차단</span> },
+              { key: "x", header: "결과", align: "right", cell: () => <span className="font-semibold text-danger">차단</span> },
             ]}
             rows={decisions?.items ?? []}
             rowKey={(d) => d.id}
@@ -265,7 +265,7 @@ export default function RiskPage() {
               <SelectBox label="한도 초과 시" value="BLOCK" disabled className="opacity-70">
                 <option value="BLOCK">주문 차단</option>
               </SelectBox>
-              {formError && <p role="alert" className="m-0 text-xs text-[#ff8a8a]">{formError}</p>}
+              {formError && <p role="alert" className="m-0 text-xs text-danger">{formError}</p>}
               <div className="flex gap-2">
                 <Btn kind="primary" size="lg" className="flex-1" onClick={save} disabled={!draft || updateMutation.isPending}>
                   {updateMutation.isPending ? "저장 중..." : "한도 저장"}

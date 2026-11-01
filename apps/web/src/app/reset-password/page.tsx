@@ -88,7 +88,7 @@ function ResetPasswordContent() {
           {loading ? "변경 중..." : "비밀번호 변경"}
         </Btn>
       </form>
-      <Link href="/login" className="text-center text-13 text-dracula-purple hover:text-[#d6bcfb]">로그인으로 돌아가기</Link>
+      <Link href="/login" className="text-center text-13 text-dracula-purple hover:text-accent-soft">로그인으로 돌아가기</Link>
     </StatusCardFrame>
   );
 }

@@ -18,7 +18,7 @@ const STYLES: { key: UsageStyle; icon: IconName; title: string; desc: string }[]
 
 function choiceClass(on: boolean) {
   return on
-    ? "border-[1.5px] border-dracula-purple bg-[#3a2f52] text-dracula-fg font-semibold"
+    ? "border-[1.5px] border-dracula-purple bg-dracula-purple/20 text-dracula-fg font-semibold"
     : "border border-tm-line2 bg-tm-inner text-tm-soft hover:text-dracula-fg";
 }
 

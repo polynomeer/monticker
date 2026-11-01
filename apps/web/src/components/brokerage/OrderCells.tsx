@@ -22,7 +22,7 @@ export function OrderStatusCell({ o }: { o: BrokerageOrderResponse }) {
             : "증권사 응답을 받지 못해 체결 여부를 확인하고 있습니다. 확인이 끝날 때까지 같은 주문을 다시 내지 마세요."}
         </span>
       ) : (
-        o.rejectReason && <span className="max-w-[260px] whitespace-normal text-2xs leading-snug text-[#ff8a8a]">{o.rejectReason}</span>
+        o.rejectReason && <span className="max-w-[260px] whitespace-normal text-2xs leading-snug text-danger">{o.rejectReason}</span>
       )}
     </div>
   );
@@ -55,7 +55,7 @@ export function OrderActions({ o }: { o: BrokerageOrderResponse }) {
   if (o.status === "SUBMITTED") {
     return (
       <button type="button" onClick={handleCancel} disabled={cancelOrder.isPending}
-        className={`${cls} border border-[#6b3a44] text-[#ff8a8a] hover:bg-[#3d252b]`}>
+        className={`${cls} border border-danger/45 text-danger hover:bg-danger/15`}>
         {cancelOrder.isPending ? "취소 중..." : "주문 취소"}
       </button>
     );

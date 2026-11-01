@@ -47,6 +47,9 @@ const config: Config = {
         live: v("orange"),
         caution: v("yellow"),
         disclosure: v("cyan"),
+        // 오류 글자·옅은 강조(W3 남은 하드코딩 정리) — 드라큘라 값은 예전 #ff8a8a·#d6bcfb 그대로
+        danger: v("danger"),
+        "accent-soft": v("accentSoft"),
         // 상승/하락 색 — 사용자 차트 테마(themeStore)를 따라 CSS 변수로 바뀐다.
         // <alpha-value>는 쓰지 않는다: Tailwind v4 호환 계층은 이를 1로 바꾸고 투명도 수식어(bg-up/5)를 버린다.
         // 자리표시자가 없으면 v4가 color-mix로 투명도를 입힌다.

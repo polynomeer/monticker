@@ -42,5 +42,5 @@ export function reconciliationLabel(s: ReconciliationSummary | undefined): { val
   if (s.mismatchCount === 0) {
     return { value: "0건", tone: "text-dracula-green", title: `최근 ${s.windowDays}일 대사 일치 · 마지막 ${s.latest.asOfDate}` };
   }
-  return { value: `${s.mismatchCount}건`, tone: "text-[#ff8a8a]", title: `최근 ${s.windowDays}일 중 불일치 ${s.mismatchCount}일 — 자동 교정하지 않고 조사합니다` };
+  return { value: `${s.mismatchCount}건`, tone: "text-danger", title: `최근 ${s.windowDays}일 중 불일치 ${s.mismatchCount}일 — 자동 교정하지 않고 조사합니다` };
 }

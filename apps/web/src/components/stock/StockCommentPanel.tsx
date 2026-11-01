@@ -119,7 +119,7 @@ export default function StockCommentPanel({ stockId, bare = false }: Props) {
             placeholder="이 종목에 대한 의견을 남겨주세요 (매수·매도 권유는 게시할 수 없습니다)"
             rows={2}
             maxLength={500}
-            className="w-full resize-none rounded-lg border border-tm-line bg-tm-inner px-3 py-2 text-13 text-dracula-fg outline-hidden placeholder:text-[#8b92b8] focus:border-dracula-purple"
+            className="w-full resize-none rounded-lg border border-tm-line bg-tm-inner px-3 py-2 text-13 text-dracula-fg outline-hidden placeholder:text-tm-muted focus:border-dracula-purple"
           />
           <div className="flex items-center gap-2">
             {eventOptions.length > 0 && (
@@ -139,7 +139,7 @@ export default function StockCommentPanel({ stockId, bare = false }: Props) {
               {submitting ? "게시 중..." : "게시"}
             </Btn>
           </div>
-          {error && <p role="alert" className="m-0 text-xs text-[#ff8a8a]">{error}</p>}
+          {error && <p role="alert" className="m-0 text-xs text-danger">{error}</p>}
         </div>
       ) : (
         <p className="m-0 mb-3 text-xs text-tm-muted">로그인 후 댓글을 작성할 수 있습니다.</p>

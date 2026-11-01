@@ -54,7 +54,7 @@ const NEXT_LABEL = ["다음 — 관심 분야 고르기", "다음 — 관심종�
 
 function choiceClass(on: boolean) {
   return on
-    ? "border-[1.5px] border-dracula-purple bg-[#3a2f52] text-dracula-fg font-semibold"
+    ? "border-[1.5px] border-dracula-purple bg-dracula-purple/20 text-dracula-fg font-semibold"
     : "border border-tm-line2 bg-tm-panel text-tm-soft hover:text-dracula-fg";
 }
 
@@ -386,7 +386,7 @@ function PickStocksStep({ isLoggedIn }: { isLoggedIn: boolean }) {
             <Btn onClick={addAll} disabled={adding || selected.length === 0}>
               {adding ? "담는 중..." : `선택한 ${selected.length}개 관심종목에 담기`}
             </Btn>
-            <Link href="/stocks/search" className="text-13 text-dracula-purple hover:text-[#d6bcfb]" onClick={() => localStorage.setItem("onboarding_done", "1")}>
+            <Link href="/stocks/search" className="text-13 text-dracula-purple hover:text-accent-soft" onClick={() => localStorage.setItem("onboarding_done", "1")}>
               종목 검색으로 이동 →
             </Link>
           </div>

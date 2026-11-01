@@ -78,7 +78,7 @@ export default function OrderProposalCard({ stockId, onApprove, disclaimer = DEF
       <p className="m-0 text-2xs text-tm-muted">{disclaimer}</p>
 
       {createMutation.isError && (
-        <p role="alert" className="m-0 text-xs text-[#ff8a8a]">{(createMutation.error as Error).message}</p>
+        <p role="alert" className="m-0 text-xs text-danger">{(createMutation.error as Error).message}</p>
       )}
 
       {proposal && (
@@ -105,7 +105,7 @@ export default function OrderProposalCard({ stockId, onApprove, disclaimer = DEF
             </div>
           )}
           {(approveMutation.isError || rejectMutation.isError) && (
-            <p role="alert" className="m-0 text-[#ff8a8a]">{((approveMutation.error ?? rejectMutation.error) as Error).message}</p>
+            <p role="alert" className="m-0 text-danger">{((approveMutation.error ?? rejectMutation.error) as Error).message}</p>
           )}
         </div>
       )}

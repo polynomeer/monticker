@@ -23,6 +23,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { authFetch } from "@/services/api";
 import { cn } from "@/lib/utils";
 import { EVENT_META, type EventLayer, useQuotes } from "./parts";
+import { themeColorVar } from "@/lib/themes";
 
 export type ChartTab = "chart" | "summary" | "news" | "flow" | "community" | "watchlist";
 
@@ -73,12 +74,12 @@ const SAVING_TOOLS: ReadonlySet<DrawingTool> = new Set(["TREND_LINE", "HORIZONTA
 type ChartLayer = EventLayer | "quant" | "sentiment";
 
 const LAYERS: { key: ChartLayer; label: string; color: string }[] = [
-  { key: "disclosure", label: "공시", color: "#8be9fd" },
-  { key: "news", label: "뉴스", color: "#c3c8e2" },
-  { key: "volume", label: "거래량", color: "#bd93f9" },
-  { key: "price", label: "급등락", color: "#50fa7b" },
-  { key: "quant", label: "퀀트 시그널", color: "#50fa7b" },
-  { key: "sentiment", label: "감성", color: "#ff79c6" },
+  { key: "disclosure", label: "공시", color: themeColorVar("cyan") },
+  { key: "news", label: "뉴스", color: themeColorVar("soft") },
+  { key: "volume", label: "거래량", color: themeColorVar("accent") },
+  { key: "price", label: "급등락", color: themeColorVar("green") },
+  { key: "quant", label: "퀀트 시그널", color: themeColorVar("green") },
+  { key: "sentiment", label: "감성", color: themeColorVar("pink") },
 ];
 
 const NO_DRAWINGS: never[] = [];
@@ -365,7 +366,7 @@ function ChartBody({ stockId, symbol, stockName, currentPrice, dayChange, dayCha
                   !ready && "cursor-not-allowed opacity-50",
                 )}
               >
-                <span className="h-[7px] w-[7px] rounded-full" style={{ background: on ? l.color : "#44475a" }} />
+                <span className="h-[7px] w-[7px] rounded-full" style={{ background: on ? l.color : themeColorVar("line2") }} />
                 {l.label}
                 {count != null && <span className="num text-tm-muted">{count}</span>}
               </button>

@@ -114,7 +114,7 @@ export default function RowMenu({ name, onRemove, onMoveUp, onMoveDown, moveHint
             disabled={disabled}
             onClick={run(onRemove)}
             aria-label={`${name} 관심종목에서 제거`}
-            className={`${itemClass} text-[#ff8a8a]`}
+            className={`${itemClass} text-danger`}
           >
             <Icon name="trash" size={15} />
             관심종목에서 제거

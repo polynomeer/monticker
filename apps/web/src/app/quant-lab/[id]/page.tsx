@@ -17,6 +17,7 @@ import {
 } from "@/components/terminal";
 import { MonthlyHeatmap, TradeHistogram, fmtMatch, fmtMdd, matchTone, rulesetStatus } from "@/components/quant/parts";
 import { defaultBacktestRange } from "@/lib/backtestRange";
+import { themeColorVar } from "@/lib/themes";
 
 type BacktestResult = QuantBacktestResult;
 type Trade = BacktestResult["trades"][number];
@@ -256,14 +257,14 @@ export default function QuantLabDetailPage() {
             ) : latestResult ? (
               <>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <Legend items={chartTab === "equity" ? [{ label: "전략", color: "#bd93f9" }] : chartTab === "dd" ? [{ label: "낙폭 (%)", color: "#ff79c6" }] : [{ label: "거래별 수익률 (%)", color: "#a4abcf" }]} />
+                  <Legend items={chartTab === "equity" ? [{ label: "전략", color: themeColorVar("accent") }] : chartTab === "dd" ? [{ label: "낙폭 (%)", color: themeColorVar("pink") }] : [{ label: "거래별 수익률 (%)", color: themeColorVar("muted") }]} />
                   <span className="num text-2xs text-tm-muted">{latestResult.startDate} ~ {latestResult.endDate} · {stockName}</span>
                 </div>
                 {chartTab === "equity" && curve.length > 1 && (
-                  <LineChart series={[{ values: curve.map(p => p.equity), color: "#bd93f9", fill: true }]} width={880} height={300} xLabels={dateLabels(curve.map(p => p.date))} label="전략 운용 자산 곡선" />
+                  <LineChart series={[{ values: curve.map(p => p.equity), color: themeColorVar("accent"), fill: true }]} width={880} height={300} xLabels={dateLabels(curve.map(p => p.date))} label="전략 운용 자산 곡선" />
                 )}
                 {chartTab === "dd" && curve.length > 1 && (
-                  <LineChart series={[{ values: curve.map(p => p.drawdown), color: "#ff79c6", fill: true }]} width={880} height={300} xLabels={dateLabels(curve.map(p => p.date))} ySuffix="%" yDigits={1} baseline={0} label="낙폭 곡선" />
+                  <LineChart series={[{ values: curve.map(p => p.drawdown), color: themeColorVar("pink"), fill: true }]} width={880} height={300} xLabels={dateLabels(curve.map(p => p.date))} ySuffix="%" yDigits={1} baseline={0} label="낙폭 곡선" />
                 )}
                 {chartTab === "dist" && <TradeHistogram pcts={latestResult.trades.map(t => t.pnlPct)} />}
                 {latestResult.reliabilityScore && (
@@ -313,7 +314,7 @@ export default function QuantLabDetailPage() {
                   />
                 </AutoGrid>
                 {forwardTest.equityCurve.length > 1 && (
-                  <LineChart series={[{ values: forwardTest.equityCurve.map(p => p.equity), color: "#50fa7b", fill: true }]} width={320} height={140} label="포워드 테스트 운용 자산 곡선" />
+                  <LineChart series={[{ values: forwardTest.equityCurve.map(p => p.equity), color: themeColorVar("green"), fill: true }]} width={320} height={140} label="포워드 테스트 운용 자산 곡선" />
                 )}
                 <div className="flex flex-col">
                   <div className="flex items-center justify-between border-b border-tm-line pb-1.5 text-xs">
@@ -365,7 +366,7 @@ export default function QuantLabDetailPage() {
                 value={shareDesc}
                 onChange={e => setShareDesc(e.target.value)}
                 placeholder="이 전략을 소개해주세요 (선택)"
-                className="resize-y rounded-[10px] border border-tm-line2 bg-tm-inner p-3 text-sm leading-relaxed text-dracula-fg outline-hidden placeholder:text-[#8b92b8] focus:border-dracula-purple"
+                className="resize-y rounded-[10px] border border-tm-line2 bg-tm-inner p-3 text-sm leading-relaxed text-dracula-fg outline-hidden placeholder:text-tm-muted focus:border-dracula-purple"
               />
             </label>
             <Field label="월 구독료 (0이면 무료)" unit="원" type="number" min={0} max={1000000} step={1000} value={sharePrice} onChange={e => setSharePrice(Math.min(1_000_000, Math.max(0, Math.floor(+e.target.value))))} />

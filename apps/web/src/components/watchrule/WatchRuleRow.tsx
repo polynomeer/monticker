@@ -135,7 +135,7 @@ export function WatchRuleRow({ rule, stockLabel, onToggle, onDelete, onEdit, pen
             <Btn kind="ghost" size="sm" onClick={() => setConfirmingDelete(false)}>취소</Btn>
           </>
         ) : (
-          <IconBtn name="trash" label={`${stockLabel} 규칙 삭제`} size={30} onClick={() => setConfirmingDelete(true)} className="hover:text-[#ff8a8a]" />
+          <IconBtn name="trash" label={`${stockLabel} 규칙 삭제`} size={30} onClick={() => setConfirmingDelete(true)} className="hover:text-danger" />
         )}
       </div>
     </li>
