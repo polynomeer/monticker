@@ -11,3 +11,4 @@ export * from "./portfolio";
 export * from "./market";
 export * from "./watchlist";
 export * from "./paper";
+export * from "./user";
