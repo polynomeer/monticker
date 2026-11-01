@@ -86,12 +86,11 @@ W1~W3는 셸과 겹치지 않아 먼저 한다.
 | W4 셸 | — | ADR-115 머지 대기 |
 | W5 마무리 | — | 대기 |
 
-### W3 남은 하드코딩 (라이트 계열 공개 전에 처리)
+### W3 남은 하드코딩 — 정리함
 
-| 대상 | 지금 | 처리 |
-|---|---|---|
-| 임의값 hex 클래스(`bg-[#3a2f52]` 등) | 58개 파일 164건, `text-white`·gray 7건 | 의미 토큰(`tm-*`·`caution` 등)으로 바꾼다. 특히 `terminal/ui.tsx`의 태그·알림 박스 배경 |
-| Frontier 차트(`FrontierChart`·`frontierOption`) | 드라큘라 고정 | `useThemePalette()`로 |
-| 차트 범례(`ChartPanel`)·이벤트 메타(`stock/parts.tsx` `EVENT_META`)·`alerts/data.ts` | 드라큘라 고정 | 토큰으로 |
-| `EventChartIllustration`·`AuthShell`·`Toast`·`CookieBanner` | 드라큘라 고정 | 토큰으로 |
-| 실전 주문 리스크 미리보기 | 종목 집중도만 화면 판정(W2) | 증권사 잔고 기준 미리보기 API + ADR-092 보완 ADR (백엔드) |
+- 임의값 hex 클래스 170건(59개 파일)을 의미 토큰으로 바꿨다. 오류 글자 `text-danger`, 틴트 배경은 역할 색 + 투명도(`bg-danger/15`·`bg-caution/15`·
+  `bg-live/15`·`bg-disclosure/15` 등), 선택 배경 `bg-dracula-purple/20`, 옅은 강조 `text-accent-soft`.
+- 테마 역할 색 두 개를 더했다: `danger`(오류·실패 글자, 상승·하락 설정과 무관)와 `accentSoft`. 드라큘라 값은 예전 `#ff8a8a`·`#d6bcfb` 그대로라 기본 테마 모양은 바뀌지 않는다.
+- 차트 범례·이벤트 색(`EVENT_META`·`EVENT_COLOR`·`ChartPanel`)·알림 규칙 색·지갑 막대·로그인 일러스트 등 SVG/DOM에 넘기던 hex는 `themeColorVar()`(CSS 변수)로 바꿨다 — 테마를 바꾸면 다시 그리지 않아도 따라온다.
+- Frontier 차트(ECharts 캔버스)는 `useThemePalette()`로 지금 테마 값을 넘긴다.
+- 남은 것: 실전 주문 리스크 미리보기 API(백엔드, 이 표의 범위 밖). 차트 마커의 팔레트 없을 때 기본값 하나.
