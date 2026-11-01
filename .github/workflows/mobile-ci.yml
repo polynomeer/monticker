@@ -56,7 +56,9 @@ jobs:
         # braces는 @expo/cli > metro > metro-file-map > micromatch, node-forge는 @expo/cli > @expo/code-signing-certificates
         # — 둘 다 앱 번들에 들어가지 않는 개발 도구(CLI·번들러) 경로다. web-ci 주석 참고. 패치가 나오면 --allow를 지울 것.
         # (image-size 예외는 SDK 57로 올리며 경로가 사라져 지웠다.)
-        run: node scripts/ci/audit-scope.js apps/mobile --allow braces --allow node-forge
+        # zod(GHSA-mrhx-c7xc-m3w5)는 4.6.6에서만 고쳐졌다. @expo/cli가 zod 3을 쓰므로 4로 강제하면 CLI가 깨질 수 있고, 이 역시
+        # 앱 번들에 들어가지 않는 개발 도구(CLI) 경로다. Expo가 zod 4로 옮기면 --allow zod를 지울 것.
+        run: node scripts/ci/audit-scope.js apps/mobile --allow braces --allow node-forge --allow zod
 
       - name: TypeScript check
         run: pnpm exec tsc --noEmit
