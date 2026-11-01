@@ -116,6 +116,8 @@ html[data-contrast="high"] :focus-visible { outline: 2px solid currentColor !imp
     --tm-yellow: 241 250 140; /* #f1fa8c */
     --tm-orange: 255 184 108; /* #ffb86c */
     --tm-red: 255 85 85; /* #ff5555 */
+    --tm-danger: 255 138 138; /* #ff8a8a */
+    --tm-accent-soft: 214 188 251; /* #d6bcfb */
     --mt-up: 14 203 129; /* #0ecb81 */
     --mt-down: 246 70 93; /* #f6465d */
   }
@@ -138,6 +140,8 @@ html[data-contrast="high"] :focus-visible { outline: 2px solid currentColor !imp
     --tm-yellow: 250 204 21; /* #facc15 */
     --tm-orange: 245 158 11; /* #f59e0b */
     --tm-red: 239 68 68; /* #ef4444 */
+    --tm-danger: 248 113 113; /* #f87171 */
+    --tm-accent-soft: 147 180 255; /* #93b4ff */
     --mt-up: 22 199 132; /* #16c784 */
     --mt-down: 234 57 67; /* #ea3943 */
   }
@@ -160,6 +164,8 @@ html[data-contrast="high"] :focus-visible { outline: 2px solid currentColor !imp
     --tm-yellow: 253 224 71; /* #fde047 */
     --tm-orange: 251 146 60; /* #fb923c */
     --tm-red: 242 84 91; /* #f2545b */
+    --tm-danger: 249 138 143; /* #f98a8f */
+    --tm-accent-soft: 126 232 214; /* #7ee8d6 */
     --mt-up: 34 201 147; /* #22c993 */
     --mt-down: 242 84 91; /* #f2545b */
   }
@@ -182,6 +188,8 @@ html[data-contrast="high"] :focus-visible { outline: 2px solid currentColor !imp
     --tm-yellow: 138 106 0; /* #8a6a00 */
     --tm-orange: 194 65 12; /* #c2410c */
     --tm-red: 200 30 58; /* #c81e3a */
+    --tm-danger: 200 30 58; /* #c81e3a */
+    --tm-accent-soft: 91 51 173; /* #5b33ad */
     --mt-up: 208 38 60; /* #d0263c */
     --mt-down: 27 100 218; /* #1b64da */
   }
@@ -204,6 +212,8 @@ html[data-contrast="high"] :focus-visible { outline: 2px solid currentColor !imp
     --tm-yellow: 125 96 0; /* #7d6000 */
     --tm-orange: 180 83 10; /* #b4530a */
     --tm-red: 179 38 30; /* #b3261e */
+    --tm-danger: 179 38 30; /* #b3261e */
+    --tm-accent-soft: 74 59 168; /* #4a3ba8 */
     --mt-up: 198 47 61; /* #c62f3d */
     --mt-down: 33 96 196; /* #2160c4 */
   }
@@ -226,6 +236,8 @@ html[data-contrast="high"] :focus-visible { outline: 2px solid currentColor !imp
     --tm-yellow: 255 243 107; /* #fff36b */
     --tm-orange: 255 169 77; /* #ffa94d */
     --tm-red: 255 107 125; /* #ff6b7d */
+    --tm-danger: 255 140 153; /* #ff8c99 */
+    --tm-accent-soft: 226 208 255; /* #e2d0ff */
     --mt-up: 51 226 155; /* #33e29b */
     --mt-down: 255 107 125; /* #ff6b7d */
   }
