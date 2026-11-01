@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Alert, Linking, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import Constants from "expo-constants";
-import type { BrokerageAccountResponse, RiskLimits } from "@monticker/types";
+import type { BrokerageAccountResponse, RiskLimits, UserProfile } from "@monticker/types";
 import { useTheme } from "@/theme/ThemeProvider";
 import { font } from "@/theme/type";
 import type { SchemePreference } from "@/theme/palette";
@@ -41,10 +41,11 @@ export default function SettingsScreen() {
   const router = useRouter();
   const auth = useAuthState();
   const signedIn = auth === "signedIn";
-  const [email, setEmail] = useState<string | null>(null);
+  const [storedEmail, setStoredEmail] = useState<string | null>(null);
   const lock = useAppLockEnabled();
   const [lockAvailable, setLockAvailable] = useState(false);
 
+  const profile = useApi<UserProfile>(signedIn ? "/api/users/me" : null, { auth: true });
   const paper = useApi<{ initialCapital: number }>(signedIn ? "/api/paper/account" : null, { auth: true });
   const broker = useApi<BrokerageAccountResponse>(signedIn ? "/api/brokerage/account" : null, { auth: true });
   const sub = useApi<{ planName: string }>(signedIn ? "/api/subscription/me" : null, { auth: true });
@@ -52,7 +53,10 @@ export default function SettingsScreen() {
   const limits = useApi<RiskLimits>(signedIn ? "/api/risk/limits" : null, { auth: true });
   const [weekly, setWeekly] = useState<boolean | null>(null);
 
-  useEffect(() => { if (signedIn) getSignedInEmail().then(setEmail); else setEmail(null); }, [signedIn]);
+  // 프로필 API가 답하기 전(또는 못 할 때)에는 로그인할 때 저장한 이메일을 보인다
+  useEffect(() => { if (signedIn) getSignedInEmail().then(setStoredEmail); else setStoredEmail(null); }, [signedIn]);
+  const email = profile.data?.email ?? storedEmail;
+  const nickname = profile.data?.nickname ?? email?.split("@")[0] ?? null;
   useEffect(() => { canUseAppLock().then(setLockAvailable); }, []);
   useEffect(() => { if (prefs.data) setWeekly(prefs.data.weeklyReportEmail); }, [prefs.data]);
 
@@ -84,12 +88,12 @@ export default function SettingsScreen() {
   return (
     <Screen title="설정" leading={<BackButton />} bottomSpace={48}>
       {signedIn ? (
-        <Card style={s.profile} accessibilityLabel={`${email ?? "내 계정"}, ${sub.data?.planName ?? "무료"} 플랜`}>
+        <Card style={s.profile} accessibilityLabel={`${nickname ?? "내 계정"}, ${sub.data?.planName ?? "무료"} 플랜`}>
           <View style={[s.avatar, { backgroundColor: c.accent }]}>
-            <Text style={[s.avatarText, { color: c.onAccent }]}>{(email ?? "M").slice(0, 1).toUpperCase()}</Text>
+            <Text style={[s.avatarText, { color: c.onAccent }]}>{(nickname ?? email ?? "M").slice(0, 1).toUpperCase()}</Text>
           </View>
           <View style={s.flex}>
-            <Text style={[font.title, { color: c.text, fontWeight: "600" }]} numberOfLines={1}>{email?.split("@")[0] ?? "내 계정"}</Text>
+            <Text style={[font.title, { color: c.text, fontWeight: "600" }]} numberOfLines={1}>{nickname ?? "내 계정"}</Text>
             <Text style={[font.footnote, { color: c.muted }]} numberOfLines={1}>{[email, `${sub.data?.planName ?? "무료"} 플랜`].filter(Boolean).join(" · ")}</Text>
           </View>
         </Card>
