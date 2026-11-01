@@ -237,7 +237,7 @@ export default function ScreenerPage() {
                   className="h-9 rounded-lg border border-tm-line2 bg-tm-inner px-3 text-13 text-dracula-fg outline-hidden focus:border-dracula-purple"
                 />
               </label>
-              {save.error && <span className="text-xs text-[#ff8a8a]">{(save.error as Error).message}</span>}
+              {save.error && <span className="text-xs text-danger">{(save.error as Error).message}</span>}
               <div className="flex gap-2">
                 <Btn kind="ghost" className="flex-1" onClick={() => { setNaming(null); save.reset(); }}>취소</Btn>
                 <Btn kind="primary" className="flex-1" type="submit" disabled={!naming.trim() || save.isPending}>저장</Btn>
@@ -271,7 +271,7 @@ export default function ScreenerPage() {
           {activeSaved && naming == null && (
             <button
               type="button"
-              className="self-start text-xs text-tm-muted hover:text-[#ff8a8a]"
+              className="self-start text-xs text-tm-muted hover:text-danger"
               onClick={() => { if (window.confirm(`'${activeSaved.name}' 스크린을 삭제할까요?`)) remove.mutate(activeSaved.id); }}
             >
               ‘{activeSaved.name}’ 삭제

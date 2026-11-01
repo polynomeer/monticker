@@ -32,8 +32,8 @@ export default function DisconnectPanel({ onDone }: { onDone?: () => void }) {
 
       {!disconnect.isSuccess &&
         (confirming ? (
-          <div className="flex flex-col gap-2 rounded-[10px] border border-[#64363f] bg-[#3d252b] p-3">
-            <span className="text-13 font-semibold text-[#ff8a8a]">정말 해지할까요? 되돌릴 수 없습니다.</span>
+          <div className="flex flex-col gap-2 rounded-[10px] border border-danger/40 bg-danger/15 p-3">
+            <span className="text-13 font-semibold text-danger">정말 해지할까요? 되돌릴 수 없습니다.</span>
             <div className="flex gap-2">
               <Btn kind="ghost" className="flex-1" onClick={() => setConfirming(false)} disabled={disconnect.isPending}>
                 취소

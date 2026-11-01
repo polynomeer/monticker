@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useId, type ComponentProps, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Icon, type IconName } from "./Icon";
+import { themeColorVar } from "@/lib/themes";
 
 // ── 버튼 ───────────────────────────────────────────────────────────────
 export type BtnKind = "primary" | "buy" | "sell" | "ghost" | "soft" | "danger" | "live";
@@ -16,7 +17,7 @@ const BTN_KIND: Record<BtnKind, string> = {
   sell: "bg-down text-tm-page font-bold hover:brightness-110",
   ghost: "border border-tm-line2 text-dracula-fg font-semibold hover:bg-tm-raised",
   soft: "bg-tm-raised text-dracula-fg font-semibold hover:bg-tm-line2",
-  danger: "border border-[#6b3a44] text-[#ff8a8a] font-semibold hover:bg-[#3d252b]",
+  danger: "border border-danger/45 text-danger font-semibold hover:bg-danger/15",
   // 실주문 실행 전용(ADR-112) — 주황은 실전에만 쓴다
   live: "bg-live text-tm-page font-bold hover:brightness-110",
 };
@@ -128,7 +129,7 @@ export function Field({ label, unit, className, inputClassName, mono = true, ...
     <label className={cn("flex min-h-[52px] min-w-0 flex-1 items-center gap-2 rounded-lg border border-tm-line bg-tm-inner px-3 py-1.5", className)}>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-2xs text-tm-muted">{label}</span>
-        <input className={cn("w-full bg-transparent p-0 text-sm text-dracula-fg outline-hidden placeholder:text-[#8b92b8]", mono && "num", inputClassName)} {...rest} />
+        <input className={cn("w-full bg-transparent p-0 text-sm text-dracula-fg outline-hidden placeholder:text-tm-muted", mono && "num", inputClassName)} {...rest} />
       </span>
       {unit && <span className="text-xs text-tm-muted">{unit}</span>}
     </label>
@@ -140,11 +141,11 @@ export function TextField({ label, icon, hint, error, className, ...rest }: { la
   return (
     <label className={cn("flex flex-col gap-1.5 text-13 text-tm-soft", className)}>
       {label}
-      <span className={cn("flex h-[46px] items-center gap-2.5 rounded-[10px] border bg-tm-inner px-3.5 focus-within:border-dracula-purple", error ? "border-[#ff8a8a]" : "border-tm-line2")}>
+      <span className={cn("flex h-[46px] items-center gap-2.5 rounded-[10px] border bg-tm-inner px-3.5 focus-within:border-dracula-purple", error ? "border-danger" : "border-tm-line2")}>
         {icon && <Icon name={icon} size={16} className="text-tm-muted" />}
-        <input className="min-w-0 flex-1 bg-transparent text-15 text-dracula-fg outline-hidden placeholder:text-[#8b92b8]" {...rest} />
+        <input className="min-w-0 flex-1 bg-transparent text-15 text-dracula-fg outline-hidden placeholder:text-tm-muted" {...rest} />
       </span>
-      {error ? <span className="text-xs text-[#ff8a8a]">{error}</span> : hint ? <span className="text-xs text-tm-muted">{hint}</span> : null}
+      {error ? <span className="text-xs text-danger">{error}</span> : hint ? <span className="text-xs text-tm-muted">{hint}</span> : null}
     </label>
   );
 }
@@ -207,7 +208,7 @@ export function Checkbox({ checked, onChange, label, sub, disabled }: { checked:
 export function Chip({ children, dot, active, onClick, className }: { children: ReactNode; dot?: string; active?: boolean; onClick?: () => void; className?: string }) {
   const cls = cn(
     "inline-flex h-[26px] items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-medium",
-    active ? "border border-dracula-purple bg-[#3a2f52] text-dracula-fg" : "bg-tm-raised text-tm-soft",
+    active ? "border border-dracula-purple bg-dracula-purple/20 text-dracula-fg" : "bg-tm-raised text-tm-soft",
     onClick && "cursor-pointer hover:text-dracula-fg",
     className,
   );
@@ -222,16 +223,16 @@ export function Chip({ children, dot, active, onClick, className }: { children: 
 
 export type Tone = "green" | "red" | "live" | "caution" | "cyan" | "purple" | "yellow" | "muted" | "pink";
 const TONE: Record<Tone, string> = {
-  green: "bg-[#22392c] text-dracula-green",
-  red: "bg-[#47262d] text-[#ff8a8a]",
+  green: "bg-dracula-green/15 text-dracula-green",
+  red: "bg-danger/20 text-danger",
   // 주황(live)은 실전 표식 전용, 경고·주의·"모의 데이터"는 caution(ADR-112)
-  live: "bg-[#43342a] text-live",
-  caution: "bg-[#3d3f2a] text-caution",
-  cyan: "bg-[#213a44] text-dracula-cyan",
-  purple: "bg-[#3a2f52] text-[#e2d0ff]",
-  yellow: "bg-[#3d3f2a] text-dracula-yellow",
+  live: "bg-live/15 text-live",
+  caution: "bg-caution/15 text-caution",
+  cyan: "bg-disclosure/15 text-dracula-cyan",
+  purple: "bg-dracula-purple/20 text-accent-soft",
+  yellow: "bg-caution/15 text-dracula-yellow",
   muted: "bg-tm-raised text-tm-soft",
-  pink: "bg-[#46283c] text-dracula-pink",
+  pink: "bg-dracula-pink/15 text-dracula-pink",
 };
 
 export function Pill({ children, tone = "muted", className }: { children: ReactNode; tone?: Tone; className?: string }) {
@@ -241,7 +242,7 @@ export function Pill({ children, tone = "muted", className }: { children: ReactN
 /** 실계좌 화면 표식 — 모의투자 화면과 혼동하지 않도록 실거래 경로에는 반드시 붙인다. */
 export function LiveBadge() {
   return (
-    <span className="inline-flex h-[26px] items-center gap-1.5 rounded-full bg-[#43342a] px-2.5 text-xs font-bold text-live">
+    <span className="inline-flex h-[26px] items-center gap-1.5 rounded-full bg-live/15 px-2.5 text-xs font-bold text-live">
       <span className="h-[7px] w-[7px] rounded-full bg-live" />
       실계좌
     </span>
@@ -318,12 +319,12 @@ export function H2({ children, sub }: { children: ReactNode; sub?: ReactNode }) 
 }
 
 const NOTICE = {
-  info: { box: "bg-[#252d40] border-[#33415e]", icon: "text-dracula-cyan" },
-  warn: { box: "bg-[#33352a] border-[#55583a]", icon: "text-caution" },
+  info: { box: "bg-dracula-cyan/10 border-dracula-cyan/30", icon: "text-dracula-cyan" },
+  warn: { box: "bg-caution/12 border-caution/35", icon: "text-caution" },
   // 실전 경고 전용(ADR-112) — 일반 경고(warn)와 달리 주황
-  live: { box: "bg-[#3a2f26] border-[#5a4430]", icon: "text-live" },
-  danger: { box: "bg-[#3d252b] border-[#64363f]", icon: "text-[#ff8a8a]" },
-  ok: { box: "bg-[#22352a] border-[#2f4d39]", icon: "text-dracula-green" },
+  live: { box: "bg-live/12 border-live/35", icon: "text-live" },
+  danger: { box: "bg-danger/15 border-danger/40", icon: "text-danger" },
+  ok: { box: "bg-dracula-green/12 border-dracula-green/35", icon: "text-dracula-green" },
 };
 
 export function Notice({ tone = "info", icon, children, className }: { tone?: keyof typeof NOTICE; icon?: IconName; children: ReactNode; className?: string }) {
@@ -369,12 +370,12 @@ export function StockCell({ name, code, href }: { name: string; code?: string; h
 
 // 공시는 청록(ADR-112 — 주황은 실전 전용), 뉴스는 공시와 갈리도록 보조 회색
 export const EVENT_COLOR: Record<string, string> = {
-  뉴스: "#c3c8e2", 공시: "#8be9fd", 거래량: "#bd93f9", 급등: "#50fa7b", 급락: "#ff79c6", 배당: "#f1fa8c", 시그널: "#50fa7b", 감성: "#ff79c6",
+  뉴스: themeColorVar("soft"), 공시: themeColorVar("cyan"), 거래량: themeColorVar("accent"), 급등: themeColorVar("green"), 급락: themeColorVar("pink"), 배당: themeColorVar("yellow"), 시그널: themeColorVar("green"), 감성: themeColorVar("pink"),
 };
 
 export function EventBadge({ type }: { type?: string | null }) {
   if (!type) return <span className="text-tm-muted">—</span>;
-  const c = EVENT_COLOR[type] ?? "#c3c8e2";
+  const c = EVENT_COLOR[type] ?? themeColorVar("soft");
   return (
     <span className="inline-flex items-center gap-1.5 text-xs" style={{ color: c }}>
       <span className="h-[7px] w-[7px] rounded-full" style={{ background: c }} />

@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import CandleReplay from "@/components/wallet/CandleReplay";
 import { addDays, holidaySet, previousBusinessDays, shiftBusinessDays, useMarketCalendar } from "@/components/market/krxCalendar";
+import { themeColorVar } from "@/lib/themes";
 
 /** 백엔드 ReplayEvent — 필드 이름이 qty, 종목명은 없고 심볼만 온다. 예전 응답 모양(quantity·stockName)도 받아 준다. */
 interface ReplayEvent {
@@ -61,7 +62,7 @@ interface EmotionStat { emotion: string; count: number; avgReturnPct: number | n
 
 const TYPE_LABEL: Record<string, string> = { BUY: "매수", SELL: "매도", DEPOSIT: "입금", WITHDRAWAL: "출금", FEE: "수수료" };
 const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
-const EMO_COLORS = ["#50fa7b", "#bd93f9", "#ff79c6", "#c3c8e2", "#8be9fd", "#f1fa8c"];
+const EMO_COLORS = [themeColorVar("green"), themeColorVar("accent"), themeColorVar("pink"), themeColorVar("soft"), themeColorVar("cyan"), themeColorVar("yellow")];
 
 /** 로컬 날짜 YYYY-MM-DD (toISOString은 UTC라 KST 오전에 하루 전 날짜가 된다) */
 function ymd(d: Date) {
@@ -261,7 +262,7 @@ export default function ReplayPage() {
             {isLoading ? (
               <Skeleton className="h-24" />
             ) : error ? (
-              <p role="alert" className="m-0 text-13 text-[#ff8a8a]">데이터를 불러올 수 없습니다.</p>
+              <p role="alert" className="m-0 text-13 text-danger">데이터를 불러올 수 없습니다.</p>
             ) : (
               <AutoGrid min={120}>
                 <Stat big label="총 손익" value={pnl == null ? "—" : fmtSigned(pnl)} valueClassName={dirClass(pnl)} />

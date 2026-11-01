@@ -75,7 +75,7 @@ function Row({ title, sub, preview, children, extra }: { title: string; sub: Rea
 function AlwaysOnRow({ title, sub }: { title: string; sub: string }) {
   return (
     <Row title={title} sub={sub}>
-      <span className="inline-flex h-[22px] items-center rounded-md bg-[#22392c] px-2 text-xs font-semibold text-dracula-green">항상 받음</span>
+      <span className="inline-flex h-[22px] items-center rounded-md bg-dracula-green/15 px-2 text-xs font-semibold text-dracula-green">항상 받음</span>
     </Row>
   );
 }
@@ -261,7 +261,7 @@ export default function NotificationSettingsPage() {
             <Field label="종료 (KST)" type="time" value={pref.quietHoursEnd} onChange={setTime("quietHoursEnd")} disabled={loading || !pref.quietHoursEnabled} />
           </div>
           {quietError ? (
-            <span role="alert" className="text-xs text-[#ff8a8a]">{quietError}</span>
+            <span role="alert" className="text-xs text-danger">{quietError}</span>
           ) : pref.quietHoursEnabled && crossesMidnight(pref.quietHoursStart, pref.quietHoursEnd) ? (
             <span className="text-xs text-tm-muted">다음 날 {pref.quietHoursEnd}까지 이어집니다.</span>
           ) : null}

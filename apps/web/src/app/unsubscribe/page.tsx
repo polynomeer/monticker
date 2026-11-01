@@ -65,7 +65,7 @@ function UnsubscribeContent() {
     >
       <p className="m-0">매주 월요일 보내 드리는 모의투자 행동 리포트 이메일만 끕니다. 로그인은 필요 없습니다.</p>
       {state === "retry" && (
-        <p role="alert" className="m-0 text-13 text-[#ff8a8a]">잠시 후 다시 시도해 주세요. 계속 안 되면 알림 설정에서 끌 수 있습니다.</p>
+        <p role="alert" className="m-0 text-13 text-danger">잠시 후 다시 시도해 주세요. 계속 안 되면 알림 설정에서 끌 수 있습니다.</p>
       )}
     </StatusCard>
   );

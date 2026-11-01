@@ -448,7 +448,7 @@ export function WatchRuleForm(props: Props) {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="종목명 또는 코드 검색"
-                className="min-w-0 flex-1 bg-transparent text-sm text-dracula-fg outline-hidden placeholder:text-[#8b92b8]"
+                className="min-w-0 flex-1 bg-transparent text-sm text-dracula-fg outline-hidden placeholder:text-tm-muted"
               />
             </label>
             {results.length > 0 && (
@@ -537,8 +537,8 @@ export function WatchRuleForm(props: Props) {
         <Checkbox checked disabled label="리스크 한도 체크를 통과한 경우에만 주문" sub="자동 주문은 항상 리스크 한도를 통과해야 합니다 (끌 수 없음)" />
       </Step>
 
-      {error && <p role="alert" className="m-0 text-13 text-[#ff8a8a]">{error}</p>}
-      {!error && edit?.serverError && <p role="alert" className="m-0 text-13 text-[#ff8a8a]">{edit.serverError}</p>}
+      {error && <p role="alert" className="m-0 text-13 text-danger">{error}</p>}
+      {!error && edit?.serverError && <p role="alert" className="m-0 text-13 text-danger">{edit.serverError}</p>}
 
       {edit ? (
         <div className="flex gap-2">

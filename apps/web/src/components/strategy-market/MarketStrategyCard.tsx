@@ -8,6 +8,7 @@ import { getStrategySignals } from "@/services/strategyMarket";
 import { useToast } from "@/hooks/useToast";
 import { Btn, Pill, Sparkline, Stat, fmtPct } from "@/components/terminal";
 import { PastPerformanceNote, fmtMatch, fmtMdd, forwardWeeks, matchTone } from "@/components/quant/parts";
+import { themeColorVar } from "@/lib/themes";
 
 export { forwardWeeks };
 
@@ -27,7 +28,7 @@ function SignalFeed({ marketId }: { marketId: number }) {
     <div className="flex flex-col gap-1.5 border-t border-tm-line pt-2.5">
       <span className="text-2xs text-tm-muted">최근 신호 · 새 신호는 실시간으로 갱신됩니다</span>
       {error ? (
-        <p className="m-0 text-xs text-[#ff8a8a]">{(error as Error).message}</p>
+        <p className="m-0 text-xs text-danger">{(error as Error).message}</p>
       ) : isLoading ? (
         <p className="m-0 text-xs text-tm-muted">불러오는 중…</p>
       ) : signals.length === 0 ? (
@@ -99,7 +100,7 @@ export function MarketStrategyCard({ strategy }: { strategy: MarketStrategy }) {
         <p className="m-0 line-clamp-2 min-h-[2.6em] text-xs leading-relaxed text-tm-soft">{strategy.description}</p>
       )}
       {bt && bt.curve.length > 1 ? (
-        <Sparkline values={bt.curve} color="#bd93f9" width={290} height={56} stretch />
+        <Sparkline values={bt.curve} color={themeColorVar("accent")} width={290} height={56} stretch />
       ) : (
         <div className="grid h-14 place-items-center rounded-lg bg-tm-inner text-2xs text-tm-muted">백테스트 곡선 없음</div>
       )}

@@ -50,7 +50,7 @@ export function ConditionalStatusCell({ o }: { o: ConditionalOrderResponse }) {
           {new Date(o.expiresAt).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" })} 만료
         </span>
       )}
-      {o.failReason && <span className="max-w-[240px] whitespace-normal text-2xs leading-snug text-[#ff8a8a]">{o.failReason}</span>}
+      {o.failReason && <span className="max-w-[240px] whitespace-normal text-2xs leading-snug text-danger">{o.failReason}</span>}
       {(o.priceFeed === "NONE" || o.priceFeed === "STALE") && (
         // ADR-060 — 실시세가 없으면 조건을 만족해도 발동하지 않는다. 사용자가 보호받고 있다고 믿지 않게 분명히 말한다.
         <p role="status" className="m-0 max-w-[260px] whitespace-normal text-2xs leading-snug text-dracula-yellow">
@@ -88,7 +88,7 @@ export function ConditionalCancelButton({ o }: { o: ConditionalOrderResponse }) 
   return (
     <>
       <button type="button" onClick={() => setConfirming(true)} disabled={cancelOrder.isPending}
-        className="inline-flex h-7 items-center whitespace-nowrap rounded-lg border border-[#6b3a44] px-2.5 text-xs font-semibold text-[#ff8a8a] hover:bg-[#3d252b] disabled:opacity-40">
+        className="inline-flex h-7 items-center whitespace-nowrap rounded-lg border border-danger/45 px-2.5 text-xs font-semibold text-danger hover:bg-danger/15 disabled:opacity-40">
         {cancelOrder.isPending ? "취소 중..." : "감시 취소"}
       </button>
       {confirming && (

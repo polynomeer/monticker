@@ -2,78 +2,71 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useConsentStatus } from "@/hooks/useConsents";
-import { useAccountChipSummary } from "@/hooks/useAccountSummary";
-import { Icon, type IconName } from "./Icon";
+import { Icon } from "./Icon";
 import { IconBtn } from "./ui";
 import { FlashValue } from "./FlashValue";
+import { HeaderSearch, type HeaderSearchHandle } from "./HeaderSearch";
+import { StatusPill } from "./StatusPill";
+import { activeRail, RAIL, sectionTabs } from "./nav";
 
-// ── 아이콘 레일 ────────────────────────────────────────────────────────
-interface RailItem {
-  label: string;
-  icon: IconName;
-  href: string;
-  /** 이 경로들 아래에 있으면 활성 */
-  match: string[];
-}
-
-const RAIL: (RailItem | null)[] = [
-  { label: "홈", icon: "home", href: "/", match: ["/"] },
-  { label: "트레이딩", icon: "candles", href: "/stocks/search", match: ["/stocks", "/compare"] },
-  { label: "스크리너", icon: "filter", href: "/screener", match: ["/screener"] },
-  { label: "관심종목", icon: "star", href: "/watchlist", match: ["/watchlist"] },
-  // ADR-115 — 모의 포트폴리오는 내 자산의 모의투자 탭이 됐다. 체결 엔진·자동 주문 규칙도 여기 묶는다
-  { label: "내 자산", icon: "pie", href: "/assets", match: ["/assets", "/portfolio", "/matching", "/watch-rules"] },
-  { label: "지갑", icon: "wallet", href: "/wallet", match: ["/wallet", "/settlement"] },
-  { label: "퀀트랩", icon: "flask", href: "/quant-lab", match: ["/quant-lab", "/backtest", "/analytics"] },
-  { label: "전략 마켓", icon: "store", href: "/quant-lab/market", match: ["/quant-lab/market", "/quant-lab/earnings"] },
-  { label: "실전투자", icon: "bank", href: "/brokerage", match: ["/brokerage"] },
-  { label: "리스크", icon: "shield", href: "/risk", match: ["/risk"] },
-  null,
-  { label: "알림", icon: "bell", href: "/alerts", match: ["/alerts"] },
-  { label: "설정", icon: "sliders", href: "/settings/appearance", match: ["/settings", "/subscription"] },
-];
-
-/** 가장 구체적인(긴) match가 이기도록 — /quant-lab/market은 퀀트랩이 아니라 전략 마켓 */
-function activeRail(pathname: string) {
-  let best: { label: string; len: number } | null = null;
-  for (const it of RAIL) {
-    if (!it) continue;
-    for (const m of it.match) {
-      const hit = m === "/" ? pathname === "/" : pathname === m || pathname.startsWith(m + "/");
-      if (hit && (!best || m.length > best.len)) best = { label: it.label, len: m.length };
-    }
-  }
-  return best?.label;
-}
-
+// ── 라벨 레일 (ADR-112) ────────────────────────────────────────────────
 function Rail() {
   const pathname = usePathname() ?? "/";
-  const active = activeRail(pathname);
+  const active = activeRail(pathname)?.label;
+  const link = (it: (typeof RAIL)[number]) => (
+    <Link
+      key={it.href}
+      href={it.href}
+      aria-current={it.label === active ? "page" : undefined}
+      className={cn(
+        "flex w-[60px] flex-col items-center gap-1 rounded-[10px] py-2 text-[0.6875rem] leading-tight",
+        it.label === active ? "bg-tm-raised text-dracula-purple" : "text-tm-muted hover:bg-tm-raised/60 hover:text-dracula-fg",
+      )}
+    >
+      <Icon name={it.icon} size={20} />
+      <span className="whitespace-nowrap">{it.label}</span>
+    </Link>
+  );
   return (
-    <nav aria-label="주 메뉴" className="flex flex-[0_0_56px] flex-col items-center gap-1.5 border-r border-tm-line py-2">
-      {RAIL.map((it, i) =>
-        it === null ? (
-          <span key={`sep${i}`} className="my-1.5 h-px w-7 bg-tm-line" />
-        ) : (
+    <nav aria-label="주 메뉴" className="flex flex-[0_0_72px] flex-col items-center gap-1 border-r border-tm-line py-2">
+      {RAIL.filter((it) => !it.bottom).map((it) => (
+        <div key={it.href} className="contents">
+          {it.divider && <span aria-hidden className="my-1 h-px w-8 bg-tm-line" />}
+          {link(it)}
+        </div>
+      ))}
+      <div className="mt-auto flex flex-col items-center">{RAIL.filter((it) => it.bottom).map(link)}</div>
+    </nav>
+  );
+}
+
+/** 묶인 화면들 사이를 오가는 본문 첫 줄 탭. 셸이 지금 주소로 고른다 — 화면 코드는 신경 쓰지 않는다 */
+function SectionTabs() {
+  const pathname = usePathname() ?? "/";
+  const section = sectionTabs(pathname);
+  if (!section) return null;
+  return (
+    <nav aria-label={`${section.item.label} 구역`} className="flex flex-none gap-1 overflow-x-auto border-b border-tm-line px-1">
+      {section.item.tabs!.map((t) => {
+        const on = t === section.active;
+        return (
           <Link
-            key={it.href}
-            href={it.href}
-            aria-label={it.label}
-            title={it.label}
-            aria-current={it.label === active ? "page" : undefined}
+            key={t.href}
+            href={t.href}
+            aria-current={on ? "page" : undefined}
             className={cn(
-              "grid h-10 w-10 place-items-center rounded-[10px]",
-              it.label === active ? "bg-tm-raised text-dracula-purple" : "text-tm-muted hover:bg-tm-raised/60 hover:text-dracula-fg",
+              "-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-13",
+              on ? "border-dracula-purple font-semibold text-dracula-fg" : "border-transparent text-tm-muted hover:text-dracula-fg",
             )}
           >
-            <Icon name={it.icon} size={20} />
+            {t.label}
           </Link>
-        ),
-      )}
+        );
+      })}
     </nav>
   );
 }
@@ -112,34 +105,101 @@ export interface TopStat {
 
 export function TitleBlock({ title, crumb }: { title: ReactNode; crumb?: ReactNode }) {
   return (
-    <div className="flex min-w-[120px] flex-col gap-px">
-      {crumb && <span className="text-2xs text-tm-muted">{crumb}</span>}
+    <div className="flex min-w-0 flex-none flex-col gap-px">
+      {crumb && <span className="whitespace-nowrap text-2xs text-tm-muted">{crumb}</span>}
       <h1 className="m-0 whitespace-nowrap text-base font-bold text-dracula-fg">{title}</h1>
     </div>
   );
 }
 
-/** 종목 화면 상단의 종목 선택 버튼 — 누르면 검색으로 */
+/** 종목 화면 상단의 종목 이름표. 검색은 상단 검색창 하나라 돋보기·⌘K는 두지 않는다(ADR-112) */
 export function SymbolPill({ name, code, market }: { name: string; code?: string; market?: string }) {
   return (
-    <Link href="/stocks/search" className="flex h-9 items-center gap-2.5 rounded-lg bg-tm-panel px-2.5 text-dracula-fg hover:bg-tm-raised">
-      <Icon name="search" size={16} className="text-tm-muted" />
+    <div className="flex h-9 flex-none items-center gap-2.5 whitespace-nowrap rounded-lg bg-tm-panel px-2.5 text-dracula-fg">
       <span className="grid h-5 w-5 place-items-center rounded-md bg-dracula-purple text-2xs font-bold text-tm-on-accent">{name.slice(0, 1)}</span>
       <h1 className="m-0 text-sm font-bold">{name}</h1>
       {code && <span className="num text-2xs text-tm-muted">{code}</span>}
       {market && <span className="rounded-sm bg-tm-raised px-1.5 py-px text-2xs text-tm-soft">{market}</span>}
-      <span className="num ml-1.5 text-2xs text-tm-muted">⌘K</span>
-    </Link>
+    </div>
   );
 }
 
-export function SearchPill() {
+function StatCell({ s }: { s: TopStat }) {
   return (
-    <Link href="/stocks/search" className="flex h-9 min-w-[220px] items-center gap-2.5 rounded-lg bg-tm-panel px-3 text-13 text-tm-muted hover:text-dracula-fg">
-      <Icon name="search" size={16} />
-      <span className="flex-1">종목·이벤트·전략 검색</span>
-      <span className="num text-2xs">⌘K</span>
-    </Link>
+    <div className="flex flex-none flex-col gap-0.5" title={s.hint}>
+      <span className="whitespace-nowrap text-[0.65625rem] tracking-[0.04em] text-tm-muted">{s.label}</span>
+      <span className={cn("num whitespace-nowrap text-13", s.tone ?? "text-dracula-fg")}>
+        {s.flash !== undefined ? <FlashValue value={s.flash}>{s.value}</FlashValue> : s.value}
+      </span>
+    </div>
+  );
+}
+
+const STAT_GAP = 26;
+const MORE_WIDTH = 72;
+
+/** 몇 개가 한 줄에 들어가는지 — 넘치면 뒤에서부터 "+N 지표"로 접는다. 순수 함수라 테스트한다 */
+export function fitCount(widths: number[], available: number, gap = STAT_GAP, more = MORE_WIDTH): number {
+  const total = widths.reduce((a, w, i) => a + w + (i ? gap : 0), 0);
+  if (total <= available) return widths.length;
+  let used = 0;
+  for (let i = 0; i < widths.length; i++) {
+    const next = used + widths[i] + (i ? gap : 0);
+    if (next + gap + more > available) return i;
+    used = next;
+  }
+  return widths.length;
+}
+
+/** 지표 칸 — 한 줄 고정(ADR-112). 들어가는 만큼 보이고 나머지는 "+N 지표" 펼침에 둔다 */
+function TopStats({ stats }: { stats: TopStat[] }) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const [shown, setShown] = useState(stats.length);
+  const [open, setOpen] = useState(false);
+  const key = stats.map((s) => s.label).join("|");
+
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    const measure = measureRef.current;
+    if (!box || !measure) return;
+    const update = () => {
+      const widths = Array.from(measure.children).map((c) => (c as HTMLElement).offsetWidth);
+      setShown(fitCount(widths, box.clientWidth));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [key]);
+
+  const hidden = stats.slice(shown);
+  return (
+    <div ref={boxRef} className="relative flex min-w-0 flex-1 items-center gap-[26px] overflow-hidden">
+      {/* 너비 재기용 사본 — 화면·스크린리더에 나오지 않는다 */}
+      <div ref={measureRef} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex gap-[26px]">
+        {stats.map((s) => <StatCell key={s.label} s={s} />)}
+      </div>
+      {stats.slice(0, shown).map((s) => <StatCell key={s.label} s={s} />)}
+      {hidden.length > 0 && (
+        <div className="relative flex-none">
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen((v) => !v)}
+            onBlur={() => setOpen(false)}
+            className="h-7 rounded-md border border-tm-line2 px-2 text-2xs text-tm-soft hover:bg-tm-raised"
+          >
+            +{hidden.length} 지표
+          </button>
+          {open && (
+            <div className="fixed z-50 mt-2 flex flex-col gap-2.5 rounded-[10px] border border-tm-line2 bg-tm-panel p-3 shadow-glow-line">
+              {hidden.map((s) => <StatCell key={s.label} s={s} />)}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -158,13 +218,13 @@ function UserMenu() {
 
   if (!isLoggedIn) {
     return (
-      <Link href="/login" className="inline-flex h-9 items-center rounded-lg bg-dracula-purple px-3.5 text-13 font-bold text-tm-on-accent">
+      <Link href="/login" className="inline-flex h-9 flex-none items-center whitespace-nowrap rounded-lg bg-dracula-purple px-3.5 text-13 font-bold text-tm-on-accent">
         로그인
       </Link>
     );
   }
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative flex-none" ref={ref}>
       <IconBtn name="user" label="내 계정" size={36} iconSize={18} aria-expanded={open} onClick={() => setOpen((v) => !v)} />
       {open && (
         <div className="absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-[10px] border border-tm-line2 bg-tm-panel py-1 shadow-glow-line">
@@ -189,53 +249,25 @@ function UserMenu() {
 }
 
 export interface AccountChip {
-  /** 실전(live)이면 주황 표시. 잔액은 셸이 공유 쿼리로 채운다(모의 총자산·실계좌 가용 현금) */
+  /** 실전(live)이면 상태 알약·상단 줄이 주황 */
   kind: "paper" | "live";
 }
 
-function TopBar({ left, stats, account }: { left: ReactNode; stats: TopStat[]; account: AccountChip }) {
-  const live = account.kind === "live";
-  const { isLoggedIn } = useAuth();
-  const chip = useAccountChipSummary(account.kind, isLoggedIn);
+/** ADR-112 — 한 줄 56px. 로고 · 검색 · 제목(또는 종목) · 지표 · (오른쪽 끝) 레이아웃 · 상태 알약 · 알림 · 계정 */
+function TopBar({ left, stats, account, searchRef }: { left: ReactNode; stats: TopStat[]; account: AccountChip; searchRef: RefObject<HeaderSearchHandle | null> }) {
   return (
-    <header className="flex flex-wrap items-center gap-x-6 gap-y-2.5 border-b border-tm-line bg-tm-page py-2.5 pl-[15px] pr-4">
-      <Link href="/" aria-label="monticker 홈" className="grid w-[26px] place-items-center">
+    <header className="flex h-14 flex-none flex-nowrap items-center gap-5 border-b border-tm-line bg-tm-page pl-[15px] pr-4">
+      <Link href="/" aria-label="monticker 홈" className="grid w-[26px] flex-none place-items-center">
         <LogoMark />
       </Link>
+      <HeaderSearch ref={searchRef} />
       {left}
-      <div className="flex min-w-0 flex-[1_1_300px] flex-wrap gap-x-[26px] gap-y-2">
-        {stats.map((s) => (
-          <div key={s.label} className="flex min-w-0 flex-col gap-0.5" title={s.hint}>
-            <span className="whitespace-nowrap text-[0.65625rem] tracking-[0.04em] text-tm-muted">{s.label}</span>
-            <span className={cn("num whitespace-nowrap text-13", s.tone ?? "text-dracula-fg")}>
-              {s.flash !== undefined ? <FlashValue value={s.flash}>{s.value}</FlashValue> : s.value}
-            </span>
-          </div>
-        ))}
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {/* 레이아웃 편집·전체 메뉴 — 시안 요소, 기능은 docs/design-rollout-plan.md */}
+      <TopStats stats={stats} />
+      <div className="ml-auto flex flex-none items-center gap-1.5">
+        {/* 레이아웃 편집 — 시안 요소, 기능은 docs/design-rollout-plan.md */}
         <IconBtn name="layout" label="레이아웃 편집 (준비 중)" size={36} iconSize={18} aria-disabled="true" />
-        <Link
-          href={live ? "/brokerage" : "/wallet"}
-          data-account={account.kind}
-          className={cn(
-            "flex h-9 items-center gap-2 rounded-lg border px-3 text-13 text-dracula-fg hover:bg-tm-raised",
-            live ? "border-live/60" : "border-tm-line2",
-          )}
-        >
-          <span aria-hidden className={cn("h-[7px] w-[7px] rounded-full", live ? "bg-live" : "bg-dracula-yellow")} />
-          {live ? "실전" : "모의투자"} 계좌
-          {chip.amount !== undefined && (
-            <span className={cn("num", live ? "text-live" : "text-tm-muted")} title={chip.amountLabel}>
-              <span className="sr-only">{chip.amountLabel} </span>
-              {chip.amount}
-            </span>
-          )}
-          <Icon name="chev" size={14} className="text-tm-muted" />
-        </Link>
-        <IconBtn name="grid" label="전체 메뉴 (준비 중)" size={36} iconSize={18} aria-disabled="true" />
-        <Link href="/alerts" aria-label="알림" className="grid h-9 w-9 place-items-center rounded-lg text-tm-muted hover:bg-tm-raised hover:text-dracula-fg">
+        <StatusPill kind={account.kind} />
+        <Link href="/alerts" aria-label="알림" className="grid h-9 w-9 flex-none place-items-center rounded-lg text-tm-muted hover:bg-tm-raised hover:text-dracula-fg">
           <Icon name="bell" size={18} />
         </Link>
         <UserMenu />
@@ -258,45 +290,49 @@ function useConsentGate() {
   }, [data, pathname, router]);
 }
 
-/** ⌘K / Ctrl+K → 검색. 입력 중일 때는 가로채지 않는다. */
-function useSearchShortcut() {
-  const router = useRouter();
+/** ⌘K / Ctrl+K → 상단 검색창에 포커스(ADR-112). 검색 화면으로 옮겨 가지 않는다 */
+function useSearchShortcut(searchRef: RefObject<HeaderSearchHandle | null>) {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        router.push("/stocks/search");
+        searchRef.current?.focus();
       }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [router]);
+  }, [searchRef]);
 }
 
 /**
- * 터미널 화면 골격 — 상단 바(로고·제목/종목·시세 스트립·계좌·알림·계정) + 왼쪽 아이콘 레일 + 본문.
- * 모든 앱 화면은 이걸로 감싼다. 로그인·약관 같은 바깥 화면은 쓰지 않는다.
+ * 터미널 화면 골격 — 상단 바(로고·검색·제목/종목·지표·상태 알약·알림·계정) + 왼쪽 라벨 레일 + 섹션 탭 + 본문.
+ * 모든 앱 화면은 이걸로 감싼다. 로그인·약관 같은 바깥 화면은 쓰지 않는다. 실전 화면은 상단에 주황 줄을 두른다.
  */
 export function TerminalPage({
   title, crumb, left, stats = [], account = { kind: "paper" }, children, className,
 }: {
   title?: ReactNode;
   crumb?: ReactNode;
-  /** title 대신 왼쪽에 둘 요소(SymbolPill, SearchPill) */
+  /** title 대신 왼쪽에 둘 요소(SymbolPill) */
   left?: ReactNode;
   stats?: TopStat[];
   account?: AccountChip;
   children: ReactNode;
   className?: string;
 }) {
-  useSearchShortcut();
+  const searchRef = useRef<HeaderSearchHandle | null>(null);
+  useSearchShortcut(searchRef);
   useConsentGate();
   return (
     <div className="flex min-h-screen flex-col bg-tm-page text-13 text-dracula-fg">
-      <TopBar left={left ?? <TitleBlock title={title} crumb={crumb} />} stats={stats} account={account} />
+      {account.kind === "live" && <div aria-hidden className="h-[3px] flex-none bg-live" />}
+      <TopBar left={left ?? <TitleBlock title={title} crumb={crumb} />} stats={stats} account={account} searchRef={searchRef} />
       <div className="flex min-h-0 flex-1">
         <Rail />
-        <main className={cn("flex min-w-0 flex-auto flex-col gap-2 p-2", className)}>{children}</main>
+        <div className="flex min-w-0 flex-auto flex-col">
+          <SectionTabs />
+          <main className={cn("flex min-w-0 flex-auto flex-col gap-2 p-2", className)}>{children}</main>
+        </div>
       </div>
     </div>
   );

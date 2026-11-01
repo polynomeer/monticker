@@ -132,9 +132,9 @@ export default function TradeModal({ stock, currentPrice, side, maxQuantity, onC
             {isBuy && cash > 0 && <KV k="주문 후 잔고" v={`${fmt(cash - totalAmount)}원`} valueClassName="text-tm-muted" />}
           </div>
 
-          {error && <p role="alert" className="m-0 text-xs text-[#ff8a8a]">{error}</p>}
+          {error && <p role="alert" className="m-0 text-xs text-danger">{error}</p>}
           {!isValid && quantity > max && (
-            <p className="m-0 text-xs text-[#ff8a8a]">
+            <p className="m-0 text-xs text-danger">
               {isBuy ? `잔고 부족 (최대 ${max}주 가능)` : `보유 수량 초과 (최대 ${max}주)`}
             </p>
           )}

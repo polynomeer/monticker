@@ -158,7 +158,7 @@ export default function AlertsPage() {
                     </span>
                     <span className="text-13 text-tm-soft">{a.message}</span>
                     <span className="text-2xs text-tm-muted">
-                      {m.tag} · <span className={failed ? "text-[#ff8a8a]" : undefined}>{STATUS_LABEL[a.deliveryStatus] ?? a.deliveryStatus}</span>
+                      {m.tag} · <span className={failed ? "text-danger" : undefined}>{STATUS_LABEL[a.deliveryStatus] ?? a.deliveryStatus}</span>
                     </span>
                   </div>
                   <span className="flex flex-col items-end gap-1">

@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
 import { isInterestSector, type InterestSector } from "@/lib/interestSectors";
+import { themeColorVar } from "@/lib/themes";
 
 export interface AlertStats {
   totalFired: number; totalSent: number; totalFailed: number;
@@ -124,24 +125,24 @@ export function useAlertMutations() {
 export type AlertCategory = "price" | "event" | "news" | "signal" | "account";
 
 export const RULE_META: Record<string, { letter: string; color: string; tag: string; category: AlertCategory }> = {
-  PRICE_ABOVE:          { letter: "P", color: "#f1fa8c", tag: "가격", category: "price" },
-  PRICE_BELOW:          { letter: "P", color: "#f1fa8c", tag: "가격", category: "price" },
-  PRICE_ABOVE_MA:       { letter: "M", color: "#f1fa8c", tag: "가격", category: "price" },
-  PRICE_BELOW_MA:       { letter: "M", color: "#f1fa8c", tag: "가격", category: "price" },
-  RSI_ABOVE:            { letter: "R", color: "#8be9fd", tag: "지표", category: "price" },
-  RSI_BELOW:            { letter: "R", color: "#8be9fd", tag: "지표", category: "price" },
-  VOLUME_SURGE:         { letter: "V", color: "#bd93f9", tag: "거래량", category: "event" },
-  NEWS_PUBLISHED:       { letter: "N", color: "#c3c8e2", tag: "뉴스", category: "news" },
-  DISCLOSURE_PUBLISHED: { letter: "D", color: "#8be9fd", tag: "공시", category: "news" },
-  HOLDING_DROP:         { letter: "H", color: "#ff8a8a", tag: "보유 종목", category: "account" },
+  PRICE_ABOVE:          { letter: "P", color: themeColorVar("yellow"), tag: "가격", category: "price" },
+  PRICE_BELOW:          { letter: "P", color: themeColorVar("yellow"), tag: "가격", category: "price" },
+  PRICE_ABOVE_MA:       { letter: "M", color: themeColorVar("yellow"), tag: "가격", category: "price" },
+  PRICE_BELOW_MA:       { letter: "M", color: themeColorVar("yellow"), tag: "가격", category: "price" },
+  RSI_ABOVE:            { letter: "R", color: themeColorVar("cyan"), tag: "지표", category: "price" },
+  RSI_BELOW:            { letter: "R", color: themeColorVar("cyan"), tag: "지표", category: "price" },
+  VOLUME_SURGE:         { letter: "V", color: themeColorVar("accent"), tag: "거래량", category: "event" },
+  NEWS_PUBLISHED:       { letter: "N", color: themeColorVar("soft"), tag: "뉴스", category: "news" },
+  DISCLOSURE_PUBLISHED: { letter: "D", color: themeColorVar("cyan"), tag: "공시", category: "news" },
+  HOLDING_DROP:         { letter: "H", color: themeColorVar("danger"), tag: "보유 종목", category: "account" },
   // ADR-090 — 내 전략·구독 전략의 포워드 테스트 신호(규칙 없이 서버가 적재)
-  QUANT_SIGNAL:         { letter: "Q", color: "#50fa7b", tag: "시그널", category: "signal" },
+  QUANT_SIGNAL:         { letter: "Q", color: themeColorVar("green"), tag: "시그널", category: "signal" },
   // ADR-100 — 관심종목의 새 뉴스·중요 공시(규칙 없이 서버가 적재). 공시는 메시지가 "[공시] …"로 시작한다.
-  NEWS:                 { letter: "N", color: "#8be9fd", tag: "뉴스·공시", category: "news" },
+  NEWS:                 { letter: "N", color: themeColorVar("cyan"), tag: "뉴스·공시", category: "news" },
 };
 
 export function ruleMeta(type: string) {
-  return RULE_META[type] ?? { letter: "?", color: "#c3c8e2", tag: type, category: "event" as AlertCategory };
+  return RULE_META[type] ?? { letter: "?", color: themeColorVar("soft"), tag: type, category: "event" as AlertCategory };
 }
 
 export type AlertFilter = "all" | "unread" | AlertCategory;

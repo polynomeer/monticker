@@ -6,6 +6,7 @@ import type { QuantBacktestResult, RuleSet } from "@monticker/types";
 import { authFetch } from "@/services/api";
 import { Icon, IconBtn, Pill, Sparkline, Stat, fmtPct } from "@/components/terminal";
 import { PastPerformanceNote, fmtMatch, fmtMdd, forwardWeeks, matchTone, rulesetStatus } from "./parts";
+import { themeColorVar } from "@/lib/themes";
 
 /** 상세 화면과 같은 queryKey — 카드에서 받은 결과를 상세 화면이 그대로 재사용한다. */
 export function useRuleSetBacktests(id: string | null | undefined, enabled = true) {
@@ -33,7 +34,7 @@ export function RuleSetCard({ rs, onDelete, deleting }: { rs: RuleSet; onDelete:
   const cagr = latest?.annualReturn ?? null;
 
   return (
-    <article className="relative flex min-w-0 flex-col gap-3 rounded-xl bg-tm-panel p-4 text-dracula-fg hover:bg-[#2c2e3c]">
+    <article className="relative flex min-w-0 flex-col gap-3 rounded-xl bg-tm-panel p-4 text-dracula-fg hover:bg-tm-raised">
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 flex-col gap-[3px]">
           <Link
@@ -48,7 +49,7 @@ export function RuleSetCard({ rs, onDelete, deleting }: { rs: RuleSet; onDelete:
       </div>
 
       {curve.length > 1 ? (
-        <Sparkline values={curve} color="#bd93f9" width={300} height={64} stretch />
+        <Sparkline values={curve} color={themeColorVar("accent")} width={300} height={64} stretch />
       ) : (
         <div className="grid h-16 place-items-center rounded-lg bg-tm-inner text-2xs text-tm-muted">
           {rs.status === "DRAFT" ? "백테스트 전" : "자산 곡선 없음"}
@@ -81,7 +82,7 @@ export function RuleSetCard({ rs, onDelete, deleting }: { rs: RuleSet; onDelete:
           >
             <Icon name="pencil" size={14} />
           </Link>
-          <IconBtn name="trash" label={`${rs.name} 삭제`} size={28} iconSize={14} disabled={deleting} onClick={onDelete} className="hover:text-[#ff8a8a]" />
+          <IconBtn name="trash" label={`${rs.name} 삭제`} size={28} iconSize={14} disabled={deleting} onClick={onDelete} className="hover:text-danger" />
         </span>
       </div>
     </article>

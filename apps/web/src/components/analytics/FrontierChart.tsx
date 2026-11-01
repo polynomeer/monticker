@@ -5,7 +5,8 @@
 
 import { useMemo } from "react";
 import { useReducedMotion } from "@/stores/a11yStore";
-import { dracula, tm } from "@/lib/designTokens";
+import { useThemePalette } from "@/stores/themeStore";
+import type { ThemePalette } from "@/lib/themes";
 import EChartsFrontierAdapter from "@/components/stock/chart/EChartsFrontierAdapter";
 import type { FrontierAdapterComponent, FrontierChartData, FrontierChartTheme } from "@/components/stock/chart/types";
 
@@ -13,20 +14,25 @@ export type { FrontierChartData, RiskReturnPoint } from "@/components/stock/char
 
 const ActiveAdapter: FrontierAdapterComponent = EChartsFrontierAdapter;
 
-const THEME: FrontierChartTheme = {
-  bg: tm.panel,
-  text: tm.muted,
-  grid: tm.line,
-  sample: tm.soft,
-  frontier: dracula.purple,
-  maxSharpe: dracula.green,
-  optimal: dracula.purple,
-  equalWeight: dracula.pink,
-  held: dracula.cyan,
-};
+/** 캔버스(ECharts)는 CSS 변수를 못 읽어 지금 테마의 팔레트 값을 넘긴다 */
+export function frontierTheme(p: ThemePalette): FrontierChartTheme {
+  return {
+    bg: p.panel,
+    text: p.muted,
+    grid: p.line,
+    sample: p.soft,
+    frontier: p.accent,
+    maxSharpe: p.green,
+    optimal: p.accent,
+    equalWeight: p.pink,
+    held: p.cyan,
+  };
+}
 
 export function FrontierChart({ data, height = 320 }: { data: FrontierChartData; height?: number }) {
   const reduceMotion = useReducedMotion();
+  const palette = useThemePalette();
+  const theme = useMemo(() => frontierTheme(palette), [palette]);
   const empty = useMemo(
     () => data.samples.length === 0 && data.frontier.length === 0 && !data.maxSharpe && !data.optimal && !data.equalWeight && !data.held,
     [data],
@@ -38,5 +44,5 @@ export function FrontierChart({ data, height = 320 }: { data: FrontierChartData;
       </div>
     );
   }
-  return <ActiveAdapter data={data} theme={THEME} height={height} reduceMotion={reduceMotion} />;
+  return <ActiveAdapter data={data} theme={theme} height={height} reduceMotion={reduceMotion} />;
 }

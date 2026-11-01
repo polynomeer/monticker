@@ -28,6 +28,10 @@ export interface ThemePalette {
   yellow: string;
   orange: string;
   red: string;
+  /** 오류·실패 글자(입력 오류, 요청 실패) — 상승·하락 색 설정과 무관 */
+  danger: string;
+  /** 옅은 강조색 — 강조 링크 호버·강조 배경 위 글자 */
+  accentSoft: string;
   /** 이 테마의 기본 상승·하락 색 — 사용자 시세 색상이 '글로벌'(default)일 때 */
   up: string;
   down: string;
@@ -55,6 +59,7 @@ export const THEMES: Record<AppThemeKey, AppTheme> = {
       fg: dracula.fg, soft: tm.soft, muted: tm.muted, comment: dracula.comment,
       accent: dracula.purple, onAccent: tm.page,
       cyan: dracula.cyan, green: dracula.green, pink: dracula.pink, yellow: dracula.yellow, orange: dracula.orange, red: dracula.red,
+      danger: "#ff8a8a", accentSoft: "#d6bcfb",
       up: "#0ecb81", down: "#f6465d",
     },
   },
@@ -67,6 +72,7 @@ export const THEMES: Record<AppThemeKey, AppTheme> = {
       fg: "#e8eaed", soft: "#c4c9d2", muted: "#8f96a3", comment: "#6f7683",
       accent: "#5b8cff", onAccent: "#ffffff",
       cyan: "#38bdf8", green: "#22c55e", pink: "#f472b6", yellow: "#facc15", orange: "#f59e0b", red: "#ef4444",
+      danger: "#f87171", accentSoft: "#93b4ff",
       up: "#16c784", down: "#ea3943",
     },
   },
@@ -79,6 +85,7 @@ export const THEMES: Record<AppThemeKey, AppTheme> = {
       fg: "#eef3ff", soft: "#c5d0e6", muted: "#8d9bb8", comment: "#6c7a98",
       accent: "#2dd4bf", onAccent: "#062421",
       cyan: "#7dd3fc", green: "#4ade80", pink: "#f9a8d4", yellow: "#fde047", orange: "#fb923c", red: "#f2545b",
+      danger: "#f98a8f", accentSoft: "#7ee8d6",
       up: "#22c993", down: "#f2545b",
     },
   },
@@ -91,6 +98,7 @@ export const THEMES: Record<AppThemeKey, AppTheme> = {
       fg: "#191c22", soft: "#3d4350", muted: "#646b78", comment: "#8f96a3",
       accent: "#6d4bd8", onAccent: "#ffffff",
       cyan: "#0e7490", green: "#15803d", pink: "#be185d", yellow: "#8a6a00", orange: "#c2410c", red: "#c81e3a",
+      danger: "#c81e3a", accentSoft: "#5b33ad",
       up: "#d0263c", down: "#1b64da",
     },
   },
@@ -103,6 +111,7 @@ export const THEMES: Record<AppThemeKey, AppTheme> = {
       fg: "#2b2620", soft: "#4a4237", muted: "#73685a", comment: "#9a8f7c",
       accent: "#5b4bc4", onAccent: "#ffffff",
       cyan: "#0f6e7d", green: "#2f7d32", pink: "#a8326e", yellow: "#7d6000", orange: "#b4530a", red: "#b3261e",
+      danger: "#b3261e", accentSoft: "#4a3ba8",
       up: "#c62f3d", down: "#2160c4",
     },
   },
@@ -115,6 +124,7 @@ export const THEMES: Record<AppThemeKey, AppTheme> = {
       fg: "#ffffff", soft: "#f2f2f2", muted: "#cccccc", comment: "#a8a8a8",
       accent: "#c9a7ff", onAccent: "#000000",
       cyan: "#7ee8ff", green: "#6bff95", pink: "#ff8ccf", yellow: "#fff36b", orange: "#ffa94d", red: "#ff6b7d",
+      danger: "#ff8c99", accentSoft: "#e2d0ff",
       up: "#33e29b", down: "#ff6b7d",
     },
   },

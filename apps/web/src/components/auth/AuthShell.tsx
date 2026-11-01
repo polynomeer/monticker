@@ -77,7 +77,7 @@ export function AuthField({
       <span
         className={cn(
           "flex h-[46px] items-center gap-2.5 rounded-[10px] border bg-tm-inner px-3.5 focus-within:border-dracula-purple",
-          error ? "border-[#ff8a8a]" : "border-tm-line2",
+          error ? "border-danger" : "border-tm-line2",
         )}
       >
         {icon && <Icon name={icon} size={16} className="flex-none text-tm-muted" />}
@@ -85,12 +85,12 @@ export function AuthField({
           id={id}
           aria-invalid={!!error}
           aria-describedby={descId}
-          className="min-w-0 flex-1 bg-transparent text-15 text-dracula-fg outline-hidden placeholder:text-[#8b92b8]"
+          className="min-w-0 flex-1 bg-transparent text-15 text-dracula-fg outline-hidden placeholder:text-tm-muted"
           {...rest}
         />
       </span>
       {error ? (
-        <span id={`${id}-error`} className="text-xs text-[#ff8a8a]">{error}</span>
+        <span id={`${id}-error`} className="text-xs text-danger">{error}</span>
       ) : hint ? (
         <span id={`${id}-hint`} className="text-xs text-tm-muted">{hint}</span>
       ) : null}
@@ -101,7 +101,7 @@ export function AuthField({
 /** 폼 전체 오류 */
 export function FormError({ children }: { children: ReactNode }) {
   return (
-    <p role="alert" className="m-0 rounded-[10px] border border-[#64363f] bg-[#3d252b] px-3.5 py-2.5 text-13 text-[#ff8a8a]">
+    <p role="alert" className="m-0 rounded-[10px] border border-danger/40 bg-danger/15 px-3.5 py-2.5 text-13 text-danger">
       {children}
     </p>
   );

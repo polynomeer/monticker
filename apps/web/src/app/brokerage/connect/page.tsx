@@ -146,7 +146,7 @@ export default function BrokerageConnectPage() {
     <TerminalPage title="증권사 계좌 연동" crumb="실전투자 · 4 / 4 단계" stats={topStats} account={{ kind: "live" }}>
       <div className="mx-auto w-full max-w-[520px] pt-10">
         <Panel tabs={["연동 완료"]} actions={[]} closable={false} bodyClassName="items-center gap-3 p-8 text-center">
-          <span className="grid h-10 w-10 place-items-center rounded-full bg-[#22392c] text-dracula-green"><Icon name="check" size={20} strokeWidth={2.4} /></span>
+          <span className="grid h-10 w-10 place-items-center rounded-full bg-dracula-green/15 text-dracula-green"><Icon name="check" size={20} strokeWidth={2.4} /></span>
           <p className="m-0 text-15 font-semibold">이미 계좌가 연동되어 있습니다</p>
           <p className="num m-0 text-xs text-tm-muted">
             {brokerageProviderLabel(account.provider)} · 계좌번호 {maskAccount(account.accountNumber)}
@@ -168,7 +168,7 @@ export default function BrokerageConnectPage() {
 
           {needsReconnect && (
             <Notice tone="danger">
-              <b className="text-[#ff8a8a]">재인증이 필요합니다</b>
+              <b className="text-danger">재인증이 필요합니다</b>
               <br />
               증권사 인증이 만료되었거나 앱키/시크릿이 변경되었을 수 있습니다. 아래에서 다시 발급받은 정보로 재연동해주세요.
             </Notice>
@@ -187,7 +187,7 @@ export default function BrokerageConnectPage() {
                     onClick={() => setProvider(p)}
                     className={cn(
                       "flex flex-[1_1_200px] items-center gap-3 rounded-[10px] p-3.5 text-left text-dracula-fg",
-                      on ? "border-[1.5px] border-dracula-purple bg-[#3a2f52]" : "border border-tm-line2 bg-tm-inner hover:bg-tm-raised",
+                      on ? "border-[1.5px] border-dracula-purple bg-dracula-purple/20" : "border border-tm-line2 bg-tm-inner hover:bg-tm-raised",
                     )}
                   >
                     <span className="grid h-9 w-9 flex-none place-items-center rounded-[10px] bg-tm-raised"><Icon name="bank" size={18} /></span>

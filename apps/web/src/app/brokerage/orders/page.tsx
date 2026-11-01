@@ -46,14 +46,14 @@ interface Check {
 function CheckLine({ c }: { c: Check }) {
   const icon = {
     ok: <Icon name="check" size={14} strokeWidth={2.4} className="text-dracula-green" />,
-    fail: <Icon name="x" size={14} strokeWidth={2.4} className="text-[#ff8a8a]" />,
+    fail: <Icon name="x" size={14} strokeWidth={2.4} className="text-danger" />,
     warn: <Icon name="alert" size={14} className="text-caution" />,
     wait: <Icon name="clock" size={14} className="text-tm-muted" />,
     na: <span className="w-3.5 text-center text-tm-muted">–</span>,
   }[c.state];
   const srState = { ok: "통과", fail: "실패", warn: "주의", wait: "확인 중", na: "해당 없음" }[c.state];
   return (
-    <li className={cn("flex items-center gap-1.5 text-xs", c.state === "fail" ? "text-[#ff8a8a]" : c.state === "na" ? "text-tm-muted" : "text-tm-soft")}>
+    <li className={cn("flex items-center gap-1.5 text-xs", c.state === "fail" ? "text-danger" : c.state === "na" ? "text-tm-muted" : "text-tm-soft")}>
       <span className="grid w-3.5 place-items-center">{icon}</span>
       <span>{c.label}</span>
       <span className="sr-only">: {srState}{c.server ? " (서버 검증)" : c.required ? "" : " (참고)"}</span>
@@ -372,7 +372,7 @@ export default function BrokerageOrderPage() {
                   : side === "BUY" ? `최대 매수 가능 ${fmtNum(maxQty)}주` : `보유 수량 ${fmtNum(holding?.quantity ?? 0)}주`}
               </span>
               {balanceReady && quantity > maxQty && (
-                <span className="text-2xs text-[#ff8a8a]">{side === "BUY" ? "가용 현금을 초과했습니다." : "보유 수량을 초과했습니다."}</span>
+                <span className="text-2xs text-danger">{side === "BUY" ? "가용 현금을 초과했습니다." : "보유 수량을 초과했습니다."}</span>
               )}
 
               <section aria-labelledby="order-checks-title" className="flex flex-col gap-2 rounded-lg bg-tm-inner px-3 py-2.5">
@@ -389,7 +389,7 @@ export default function BrokerageOrderPage() {
               <KV k="예상 주문 금액" v={priceForEstimate > 0 ? `${fmtNum(estimatedAmount)}원` : "—"} />
               <KV k="예상 수수료" v="증권사 기준" mono={false} />
 
-              {riskFail?.reason && <p role="alert" className="m-0 text-xs text-[#ff8a8a]">{riskFail.reason}</p>}
+              {riskFail?.reason && <p role="alert" className="m-0 text-xs text-danger">{riskFail.reason}</p>}
               <Btn kind={side === "BUY" ? "buy" : "sell"} size="lg" full onClick={openConfirm} disabled={!isValid || submitOrder.isPending}>
                 주문 확인
               </Btn>
@@ -456,7 +456,7 @@ export default function BrokerageOrderPage() {
 
           {riskBlock && (
             <Notice tone="danger">
-              <b className="text-[#ff8a8a]">리스크 게이트에 의해 주문이 차단되었습니다</b>
+              <b className="text-danger">리스크 게이트에 의해 주문이 차단되었습니다</b>
               <br />{riskBlock}
             </Notice>
           )}

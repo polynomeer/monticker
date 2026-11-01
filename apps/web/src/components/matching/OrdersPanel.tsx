@@ -25,7 +25,7 @@ function StatusFlow({ order }: { order: OrderDto | null }) {
               aria-current={i === cur ? "step" : undefined}
               className={cn(
                 "rounded-lg px-2.5 py-1.5 text-xs",
-                i === cur ? "bg-dracula-purple font-bold text-tm-on-accent" : i < cur ? "bg-[#22392c] text-dracula-green" : "border border-dashed border-tm-line2 text-tm-muted",
+                i === cur ? "bg-dracula-purple font-bold text-tm-on-accent" : i < cur ? "bg-dracula-green/15 text-dracula-green" : "border border-dashed border-tm-line2 text-tm-muted",
               )}
             >
               {s}

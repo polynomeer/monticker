@@ -160,7 +160,7 @@ export function ReceiptCard({ receipt, onSaved, onSkip }: { receipt: Receipt; on
           onChange={(e) => setMemo(e.target.value)}
           rows={2}
           maxLength={500}
-          className="w-full resize-none rounded-lg border border-tm-line bg-tm-inner px-3 py-2 text-13 text-dracula-fg outline-hidden placeholder:text-[#8b92b8] focus:border-dracula-purple"
+          className="w-full resize-none rounded-lg border border-tm-line bg-tm-inner px-3 py-2 text-13 text-dracula-fg outline-hidden placeholder:text-tm-muted focus:border-dracula-purple"
         />
         <span className="text-2xs text-tm-muted">감정 태그는 리플레이와 투자 행동 점수에서 체결 결과와 함께 복기됩니다.</span>
         <div className="flex gap-2">

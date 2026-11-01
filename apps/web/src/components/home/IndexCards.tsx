@@ -3,6 +3,7 @@
 import { Pill, Sparkline, Tile, dirClass, fmtPct, fmtSigned } from "@/components/terminal";
 import { useMarketColors } from "@/stores/themeStore";
 import { fmtIndexValue, kstTime, useMarketIndices } from "./data";
+import { themeColorVar } from "@/lib/themes";
 
 // 시안의 지수 카드(KOSPI·KOSDAQ·USD/KRW). 값은 GET /api/market/indices(ADR-071).
 const SLOTS = [
@@ -30,7 +31,7 @@ export default function IndexCards() {
       {SLOTS.map(({ code, label }) => {
         const ix = byCode.get(code);
         const rate = ix?.changeRate ?? null;
-        const color = rate == null ? "#a4abcf" : rate >= 0 ? theme.upColor : theme.downColor;
+        const color = rate == null ? themeColorVar("muted") : rate >= 0 ? theme.upColor : theme.downColor;
         return (
           <Tile key={code}>
             <div className="flex items-start justify-between gap-2">

@@ -6,10 +6,10 @@ import { useToastStore, Toast, ToastType } from "@/hooks/useToast";
 // 터미널 Notice 톤과 같은 색 — 성공/실패는 상승·하락색이 아니라 의미색(초록/빨강)을 쓴다.
 // (사용자가 한국식 시세 색을 고르면 상승색이 빨강이 되어 "성공=빨강"이 되는 걸 막는다)
 const STYLES: Record<ToastType, { box: string; icon: IconName; tone: string }> = {
-  success: { box: "border-[#2f4d39]", icon: "check", tone: "text-dracula-green" },
-  error: { box: "border-[#64363f]", icon: "x", tone: "text-[#ff8a8a]" },
-  warning: { box: "border-[#55583a]", icon: "alert", tone: "text-caution" },
-  info: { box: "border-[#33415e]", icon: "info", tone: "text-dracula-cyan" },
+  success: { box: "border-dracula-green/35", icon: "check", tone: "text-dracula-green" },
+  error: { box: "border-danger/40", icon: "x", tone: "text-danger" },
+  warning: { box: "border-caution/35", icon: "alert", tone: "text-caution" },
+  info: { box: "border-dracula-cyan/30", icon: "info", tone: "text-dracula-cyan" },
 };
 
 function ToastItem({ toast }: { toast: Toast }) {

@@ -449,8 +449,8 @@ export default function AnalyticsPage() {
               {period.kind === "CUSTOM" ? `적용: ${periodLabel(period)}` : "한국 날짜 기준, 오늘까지"} · 직접 지정은 60일~3년
             </span>
           </div>
-          {customError && <span className="text-xs text-[#ff8a8a]">{customError}</span>}
-          {selected.length < 2 && <span className="text-xs text-[#ff8a8a]">2개 이상 종목을 선택하세요</span>}
+          {customError && <span className="text-xs text-danger">{customError}</span>}
+          {selected.length < 2 && <span className="text-xs text-danger">2개 이상 종목을 선택하세요</span>}
           {opt.error && <Notice tone="danger">{(opt.error as Error).message}</Notice>}
           {frontier.error && !opt.error && <Notice tone="danger">{(frontier.error as Error).message}</Notice>}
           <FrontierChart

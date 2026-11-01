@@ -16,7 +16,7 @@ function passwordStrength(pw: string): { label: string; level: 0 | 1 | 2 | 3 | 4
   if (/[A-Z]/.test(pw)) score++;
   if (/[0-9]/.test(pw)) score++;
   if (/[^A-Za-z0-9]/.test(pw)) score++;
-  if (score <= 1) return { label: "약함", level: 1, color: "bg-[#ff8a8a]", text: "text-[#ff8a8a]" };
+  if (score <= 1) return { label: "약함", level: 1, color: "bg-danger", text: "text-danger" };
   if (score <= 2) return { label: "보통", level: 2, color: "bg-caution", text: "text-caution" };
   if (score <= 3) return { label: "강함", level: 3, color: "bg-dracula-green", text: "text-dracula-green" };
   return { label: "매우 강함", level: 4, color: "bg-dracula-green", text: "text-dracula-green" };
@@ -75,7 +75,7 @@ export default function SignupPage() {
     <AuthShell title={<>아이디어를 규칙으로,<br />규칙을 <span className="text-dracula-purple">검증된 전략</span>으로</>}>
       <AuthHeading title="회원가입">
         이미 계정이 있나요?{" "}
-        <Link href="/login" className="text-dracula-purple hover:text-[#d6bcfb]">로그인</Link>
+        <Link href="/login" className="text-dracula-purple hover:text-accent-soft">로그인</Link>
       </AuthHeading>
 
       <SocialButtons onError={(m) => setErrors({ form: m })} />
@@ -118,7 +118,7 @@ export default function SignupPage() {
           <ConsentRow checked={consent.privacy} onChange={setOne("privacy")} label="[필수] 개인정보 수집·이용" href="/privacy" />
           <Checkbox checked={consent.age} onChange={setOne("age")} label="[필수] 만 19세 이상입니다" />
           <Checkbox checked={consent.marketing} onChange={setOne("marketing")} label="[선택] 이벤트·리포트 이메일 수신" />
-          {errors.consent && <span className="text-xs text-[#ff8a8a]">{errors.consent}</span>}
+          {errors.consent && <span className="text-xs text-danger">{errors.consent}</span>}
         </fieldset>
 
         {errors.form && <FormError>{errors.form}</FormError>}

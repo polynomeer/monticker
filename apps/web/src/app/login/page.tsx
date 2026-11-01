@@ -54,7 +54,7 @@ export default function LoginPage() {
     >
       <AuthHeading title="로그인">
         계정이 없나요?{" "}
-        <Link href="/signup" className="text-dracula-purple hover:text-[#d6bcfb]">회원가입</Link>
+        <Link href="/signup" className="text-dracula-purple hover:text-accent-soft">회원가입</Link>
       </AuthHeading>
 
       {!queryErrorDismissed && (
@@ -84,7 +84,7 @@ export default function LoginPage() {
             <Checkbox checked disabled label="로그인 상태 유지" />
             <PreviewTag />
           </span>
-          <Link href="/forgot-password" className="text-13 text-dracula-purple hover:text-[#d6bcfb]">비밀번호 찾기</Link>
+          <Link href="/forgot-password" className="text-13 text-dracula-purple hover:text-accent-soft">비밀번호 찾기</Link>
         </div>
 
         {errors.form && <FormError>{errors.form}</FormError>}
