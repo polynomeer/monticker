@@ -40,7 +40,8 @@ export function useBrokerageAccount() {
     queryKey: ["brokerage", "account"],
     queryFn: getBrokerageAccount,
     // apiHealth(마지막 증권사 호출 지연·오류)가 바뀐다. DB 조회만 하는 엔드포인트라 증권사를 부르지 않는다.
-    refetchInterval: 30_000,
+    // 실패하면 멈춘다 — 재조회 중엔 데이터 없는 쿼리가 로딩으로 돌아가 오류 화면이 깜빡인다. 다시 시도는 화면 버튼으로
+    refetchInterval: (q) => (q.state.status === "error" ? false : 30_000),
   });
 }
 
