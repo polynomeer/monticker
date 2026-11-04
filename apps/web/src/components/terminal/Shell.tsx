@@ -6,6 +6,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, ty
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useConsentStatus } from "@/hooks/useConsents";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import { Icon } from "./Icon";
 import { IconBtn } from "./ui";
 import { FlashValue } from "./FlashValue";
@@ -208,6 +209,7 @@ function UserMenu() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
+  const profile = useUserProfile(isLoggedIn && open);
   useEffect(() => setOpen(false), [pathname]);
   useEffect(() => {
     if (!open) return;
@@ -227,7 +229,16 @@ function UserMenu() {
     <div className="relative flex-none" ref={ref}>
       <IconBtn name="user" label="내 계정" size={36} iconSize={18} aria-expanded={open} onClick={() => setOpen((v) => !v)} />
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-[10px] border border-tm-line2 bg-tm-panel py-1 shadow-glow-line">
+        <div className="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-[10px] border border-tm-line2 bg-tm-panel py-1 shadow-glow-line">
+          {profile.data && (
+            <>
+              <div className="flex flex-col gap-0.5 px-4 py-2.5">
+                <span className="truncate text-13 font-semibold text-dracula-fg">{profile.data.nickname}</span>
+                <span className="truncate text-2xs text-tm-muted">{profile.data.email}</span>
+              </div>
+              <div className="my-1 h-px bg-tm-line" />
+            </>
+          )}
           {[
             { href: "/subscription", label: "구독", icon: "card" as const },
             { href: "/settings/appearance", label: "설정", icon: "sliders" as const },
