@@ -262,7 +262,7 @@ export default function RebalancePage() {
       </span>
     ) },
     { key: "target", header: "목표", cell: r => r.inTarget ? (
-      <label className="inline-flex h-8 items-center gap-1.5 rounded-md border border-tm-line2 bg-tm-inner px-2.5">
+      <label className="inline-flex h-8 items-center gap-1.5 rounded-md border border-control bg-tm-inner px-2.5">
         <span className="sr-only">{r.name} 목표 비중</span>
         <input
           className="num w-12 bg-transparent text-right text-13 text-dracula-fg outline-hidden"
@@ -346,7 +346,7 @@ export default function RebalancePage() {
               value={presetValue}
               onChange={updateThreshold}
             />
-            <label className="inline-flex h-8 items-center gap-1.5 rounded-md border border-tm-line2 bg-tm-inner px-2.5">
+            <label className="inline-flex h-8 items-center gap-1.5 rounded-md border border-control bg-tm-inner px-2.5">
               <span className="sr-only">실행 임계값 직접 입력</span>
               <input
                 className="num w-12 bg-transparent text-right text-13 text-dracula-fg outline-hidden"

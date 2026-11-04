@@ -449,7 +449,7 @@ export default function BuilderPage() {
                   setDrag({ kind: "block", label: b.label });
                 }}
                 onDragEnd={() => { setDrag(null); setDropHint(null); }}
-                className="flex h-[38px] items-center gap-2 rounded-lg border border-tm-line bg-tm-inner px-2.5 text-left text-13 text-tm-soft hover:border-tm-line2 hover:text-dracula-fg disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex h-[38px] items-center gap-2 rounded-lg border border-control bg-tm-inner px-2.5 text-left text-13 text-tm-soft hover:border-control hover:text-dracula-fg disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Icon name={b.icon} size={15} />
                 <span className="min-w-0 truncate">{b.label}</span>

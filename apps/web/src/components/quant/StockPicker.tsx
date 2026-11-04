@@ -64,7 +64,7 @@ export function StockPicker({
 
   return (
     <div className={`relative min-w-0 ${className ?? ""}`} ref={containerRef}>
-      <label className="flex min-h-[52px] min-w-0 flex-col justify-center gap-0.5 rounded-lg border border-tm-line bg-tm-inner px-3 py-1.5 focus-within:border-dracula-purple">
+      <label className="flex min-h-[52px] min-w-0 flex-col justify-center gap-0.5 rounded-lg border border-control bg-tm-inner px-3 py-1.5 focus-within:border-dracula-purple">
         <span className="text-2xs text-tm-muted">{label}</span>
         <input
           type="text"

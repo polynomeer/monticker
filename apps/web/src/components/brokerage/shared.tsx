@@ -92,7 +92,7 @@ export function StockSearchBox({ onSelect, placeholder = "종목명 또는 코�
   const [results, setResults] = useStockSearch(query);
   return (
     <div className="relative">
-      <label className="flex min-h-10 items-center gap-2 rounded-lg border border-tm-line bg-tm-inner px-3 py-1.5 focus-within:border-dracula-purple">
+      <label className="flex min-h-10 items-center gap-2 rounded-lg border border-control bg-tm-inner px-3 py-1.5 focus-within:border-dracula-purple">
         <span className="sr-only">{label}</span>
         <Icon name="search" size={16} className="flex-none text-tm-muted" />
         <input

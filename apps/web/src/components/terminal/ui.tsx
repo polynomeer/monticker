@@ -126,7 +126,7 @@ export function BuySell({ value, onChange, buyLabel = "매수", sellLabel = "매
 /** 라벨이 박스 안 위쪽에 붙는 촘촘한 입력(주문폼 스타일). */
 export function Field({ label, unit, className, inputClassName, mono = true, ...rest }: { label: string; unit?: string; mono?: boolean; inputClassName?: string } & ComponentProps<"input">) {
   return (
-    <label className={cn("flex min-h-[52px] min-w-0 flex-1 items-center gap-2 rounded-lg border border-tm-line bg-tm-inner px-3 py-1.5", className)}>
+    <label className={cn("flex min-h-[52px] min-w-0 flex-1 items-center gap-2 rounded-lg border border-control bg-tm-inner px-3 py-1.5", className)}>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-2xs text-tm-muted">{label}</span>
         <input className={cn("w-full bg-transparent p-0 text-sm text-dracula-fg outline-hidden placeholder:text-tm-muted", mono && "num", inputClassName)} {...rest} />
@@ -141,7 +141,7 @@ export function TextField({ label, icon, hint, error, className, ...rest }: { la
   return (
     <label className={cn("flex flex-col gap-1.5 text-13 text-tm-soft", className)}>
       {label}
-      <span className={cn("flex h-[46px] items-center gap-2.5 rounded-[10px] border bg-tm-inner px-3.5 focus-within:border-dracula-purple", error ? "border-danger" : "border-tm-line2")}>
+      <span className={cn("flex h-[46px] items-center gap-2.5 rounded-[10px] border bg-tm-inner px-3.5 focus-within:border-dracula-purple", error ? "border-danger" : "border-control")}>
         {icon && <Icon name={icon} size={16} className="text-tm-muted" />}
         <input className="min-w-0 flex-1 bg-transparent text-15 text-dracula-fg outline-hidden placeholder:text-tm-muted" {...rest} />
       </span>
@@ -153,7 +153,7 @@ export function TextField({ label, icon, hint, error, className, ...rest }: { la
 /** 네이티브 select를 시안의 드롭다운 박스 모양으로 감싼다. */
 export function SelectBox({ label, className, children, ...rest }: { label?: string } & ComponentProps<"select">) {
   return (
-    <label className={cn("relative flex min-h-10 w-full flex-col justify-center gap-0.5 rounded-lg border border-tm-line bg-tm-inner px-3 py-1.5", className)}>
+    <label className={cn("relative flex min-h-10 w-full flex-col justify-center gap-0.5 rounded-lg border border-control bg-tm-inner px-3 py-1.5", className)}>
       {label && <span className="text-2xs text-tm-muted">{label}</span>}
       <select className="w-full appearance-none bg-transparent pr-6 text-sm text-dracula-fg outline-hidden [&>option]:bg-tm-panel" {...rest}>
         {children}

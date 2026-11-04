@@ -486,7 +486,7 @@ function SymbolTabs({ stockId, symbol, stockName, currentPrice, dayChangeRate }:
               {e.name}
               <span className={cn("num", q ? (q.changeRate >= 0 ? "text-up" : "text-down") : "text-tm-muted")}>{q ? fmtNum(q.price) : "—"}</span>
             </Link>
-            <IconBtn name="x" label={`${e.name} 탭 닫기`} size={20} iconSize={11} onClick={() => setHidden((h) => [...h, e.stockId])} />
+            <IconBtn name="x" label={`${e.name} 탭 닫기`} size={24} iconSize={12} onClick={() => setHidden((h) => [...h, e.stockId])} />
           </span>
         );
       })}
