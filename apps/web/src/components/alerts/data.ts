@@ -56,7 +56,8 @@ export function useAlertHistory(enabled: boolean) {
     queryKey: ["alerts", "history"],
     queryFn: async () => {
       const r = await authFetch("/api/alerts/history/search?limit=50");
-      return r.ok ? r.json() : [];
+      if (!r.ok) throw new Error("알림 이력 조회 실패");
+      return r.json();
     },
     enabled,
     refetchInterval: 30_000,
@@ -72,7 +73,8 @@ export function useAlertRules(enabled: boolean) {
     queryKey: ["alerts", "rules", "all"],
     queryFn: async () => {
       const r = await authFetch("/api/alerts/rules?includePaused=true");
-      return r.ok ? r.json() : [];
+      if (!r.ok) throw new Error("알림 규칙 조회 실패");
+      return r.json();
     },
     enabled,
   });

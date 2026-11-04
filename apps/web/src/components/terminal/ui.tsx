@@ -327,6 +327,23 @@ const NOTICE = {
   ok: { box: "bg-dracula-green/12 border-dracula-green/35", icon: "text-dracula-green" },
 };
 
+/**
+ * 데이터를 못 읽었을 때 — "없습니다"로 보이지 않게 실패를 그대로 알린다. 지금 값을 모르는 것이지 0건이 아니다.
+ */
+export function LoadError({ what, onRetry, className }: { what: string; onRetry?: () => void; className?: string }) {
+  return (
+    <Notice tone="danger" icon="alert" className={className}>
+      {what}을(를) 불러오지 못했습니다. 없는 것이 아니라 확인하지 못한 상태입니다.
+      {onRetry && (
+        <>
+          {" "}
+          <button type="button" onClick={onRetry} className="underline">다시 시도</button>
+        </>
+      )}
+    </Notice>
+  );
+}
+
 export function Notice({ tone = "info", icon, children, className }: { tone?: keyof typeof NOTICE; icon?: IconName; children: ReactNode; className?: string }) {
   const t = NOTICE[tone];
   return (

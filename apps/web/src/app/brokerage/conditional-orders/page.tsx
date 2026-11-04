@@ -9,7 +9,7 @@ import {
 import { useToast } from "@/hooks/useToast";
 import { ApiError } from "@/services/brokerage";
 import {
-  Bar, Btn, BuySell, ConfirmDialog, DataTable, Field, Icon, KV, Notice, Panel, PanelCol, PanelRow, Pill, Seg, SelectBox, StockCell,
+  Bar, Btn, BuySell, ConfirmDialog, DataTable, Field, Icon, KV, LoadError, Notice, Panel, PanelCol, PanelRow, Pill, Seg, SelectBox, StockCell,
   TerminalPage, fmtNum, type Column,
 } from "@/components/terminal";
 import {
@@ -17,7 +17,7 @@ import {
 } from "@/components/brokerage/ConditionalOrderRow";
 import { TradingHaltBanner } from "@/components/brokerage/TradingHaltBanner";
 import {
-  LiveNotice, LoginRequired, NoAccount, ORDER_STATUS, PagerButtons, SelectedStock, SkeletonRows, StockSearchBox, fmtDateTime, maskAccount,
+  AccountLoadError, LiveNotice, LoginRequired, NoAccount, ORDER_STATUS, PagerButtons, SelectedStock, SkeletonRows, StockSearchBox, fmtDateTime, maskAccount,
   sideLabel, type StockHit,
 } from "@/components/brokerage/shared";
 import { brokerageProviderLabel } from "@/lib/brokerageProvider";
@@ -59,13 +59,14 @@ export default function ConditionalOrderPage() {
 
   useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
 
-  const { data: account, isLoading: accountLoading } = useBrokerageAccount();
+  const { data: account, isLoading: accountLoading, isError: accountError, refetch: refetchAccount } = useBrokerageAccount();
   const ordersQuery = useConditionalOrders(page, !!account);
   const { data: ordersData, isLoading: ordersLoading } = ordersQuery;
   const createSingle = useCreateConditionalOrder();
   const createOco = useCreateOcoOrder();
   const { toast } = useToast();
 
+  const ordersFailed = ordersQuery.isError && !ordersData;
   const orders = ordersData?.content ?? [];
   const active = orders.filter(o => o.status === "ACTIVE");
   // 발동하지 않고 끝난 것(취소·만료). 발동한 것은 서버 발동 기록(전체 기준)에서 본다.
@@ -146,6 +147,8 @@ export default function ConditionalOrderPage() {
   };
 
   if (!isLoggedIn) return <LoginRequired title="조건부 주문" message="조건부 주문을 이용하려면 로그인이 필요합니다." />;
+  if (accountLoading) return <TerminalPage title="조건부 주문" crumb="실전투자" account={{ kind: "live" }}><SkeletonRows n={4} /></TerminalPage>;
+  if (accountError && !account) return <AccountLoadError title="조건부 주문" onRetry={() => refetchAccount()} />;
   if (!accountLoading && !account) return <NoAccount title="조건부 주문" message="조건부 주문을 등록하려면 먼저 증권사 계좌를 연동하세요." />;
 
   // "트리거까지" — 현재가가 트리거에 얼마나 가까운지. 현재가를 모르면 표시하지 않는다.
@@ -414,8 +417,8 @@ export default function ConditionalOrderPage() {
         </Panel>
 
         <PanelCol className="flex-[999_1_600px]">
-          <Panel tabs={[`감시 중 ${active.length}`]} actions={["refresh"]} onAction={() => ordersQuery.refetch()} bodyClassName="px-1.5 pb-1.5 pt-1">
-            {ordersLoading ? <SkeletonRows n={2} /> : (
+          <Panel tabs={[ordersFailed ? "감시 중 —" : `감시 중 ${active.length}`]} actions={["refresh"]} onAction={() => ordersQuery.refetch()} bodyClassName="px-1.5 pb-1.5 pt-1">
+            {ordersLoading ? <SkeletonRows n={2} /> : ordersFailed ? <LoadError what="감시 중인 조건부 주문" onRetry={() => ordersQuery.refetch()} /> : (
               <DataTable columns={activeCols} rows={active} rowKey={o => o.id} minWidth={900} empty="감시 중인 조건부 주문이 없습니다." />
             )}
           </Panel>
@@ -430,7 +433,7 @@ export default function ConditionalOrderPage() {
           >
             {logTab === "triggers" ? (
               <>
-                {triggersQuery.isLoading ? <SkeletonRows n={2} /> : (
+                {triggersQuery.isLoading ? <SkeletonRows n={2} /> : triggersQuery.isError && !triggersQuery.data ? <LoadError what="발동 기록" onRetry={() => triggersQuery.refetch()} /> : (
                   <DataTable columns={triggerCols} rows={triggersQuery.data?.content ?? []} rowKey={e => e.conditionalOrderId} minWidth={640}
                     empty="발동한 조건부 주문이 없습니다." />
                 )}
@@ -438,7 +441,7 @@ export default function ConditionalOrderPage() {
               </>
             ) : (
               <>
-                {ordersLoading ? <SkeletonRows n={2} /> : (
+                {ordersLoading ? <SkeletonRows n={2} /> : ordersFailed ? <LoadError what="취소·만료 내역" onRetry={() => ordersQuery.refetch()} /> : (
                   <DataTable columns={historyCols} rows={closed} rowKey={o => o.id} minWidth={600} empty="취소·만료된 조건부 주문이 없습니다(이 페이지 기준)." />
                 )}
                 <PagerButtons page={page} totalPages={ordersData?.totalPages ?? 0} onChange={setPage} />

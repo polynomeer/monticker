@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Panel, Sparkline, dirClass, fmtPct } from "@/components/terminal";
+import { LoadError, Panel, Sparkline, dirClass, fmtPct } from "@/components/terminal";
 import { useMarketColors } from "@/stores/themeStore";
 import { useDailyCloses, useIsLoggedIn, useQuotes, useWatchlistGroups } from "./data";
 import { themeColorVar } from "@/lib/themes";
@@ -10,7 +10,7 @@ import { themeColorVar } from "@/lib/themes";
 export default function HomeWatchlist() {
   const isLoggedIn = useIsLoggedIn();
   const theme = useMarketColors();
-  const { data: groups = [], isLoading } = useWatchlistGroups(isLoggedIn);
+  const { data: groups = [], isLoading, isError, refetch } = useWatchlistGroups(isLoggedIn);
   const items = Array.from(new Map(groups.flatMap((g) => g.items).map((i) => [i.stockId, i])).values()).slice(0, 5);
   const ids = items.map((i) => i.stockId);
   const quotes = useQuotes(ids, "home-watchlist", 15_000);
@@ -24,6 +24,8 @@ export default function HomeWatchlist() {
         </p>
       ) : isLoading ? (
         <div className="h-24 animate-pulse rounded-lg bg-tm-inner" />
+      ) : isError && groups.length === 0 ? (
+        <LoadError what="관심종목" onRetry={() => refetch()} />
       ) : items.length === 0 ? (
         <p className="py-4 text-center text-13 text-tm-muted">관심종목이 없습니다. 스크리너에서 ☆를 눌러 추가하세요.</p>
       ) : (

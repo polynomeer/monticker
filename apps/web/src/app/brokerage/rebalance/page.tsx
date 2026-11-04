@@ -17,7 +17,7 @@ import {
   Btn, DataTable, Icon, IconBtn, KV, Notice, Panel, PanelRow, Pill, Seg, TerminalPage, fmtNum, type Column,
 } from "@/components/terminal";
 import { TradingHaltBanner } from "@/components/brokerage/TradingHaltBanner";
-import { LiveNotice, LoginRequired, NoAccount, StockSearchBox, sideClass, sideLabel, useLastRebalanceExecution, useSymbolQuotes, type StockHit } from "@/components/brokerage/shared";
+import { AccountLoadError, LiveNotice, LoginRequired, NoAccount, SkeletonRows, StockSearchBox, sideClass, sideLabel, useLastRebalanceExecution, useSymbolQuotes, type StockHit } from "@/components/brokerage/shared";
 import { cn } from "@/lib/utils";
 import type { RebalanceExecutionResponse, RebalanceLegResponse, RebalanceTargetSource } from "@monticker/types";
 import { takeRebalanceDraft } from "@/lib/rebalanceDraft";
@@ -61,7 +61,7 @@ export default function RebalancePage() {
 
   useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
 
-  const { data: account, isLoading: accountLoading } = useBrokerageAccount();
+  const { data: account, isLoading: accountLoading, isError: accountError, refetch: refetchAccount } = useBrokerageAccount();
   const { data: balance, isError: balanceError } = useBrokerageBalance(!!account);
   const { data: target, isFetched: targetFetched } = useRebalanceTarget(!!account);
   // /analytics "리밸런싱으로 보내기"가 남긴 초안 — 저장된 목표를 먼저 읽은 뒤 편집 중 상태로만 채운다.
@@ -221,6 +221,8 @@ export default function RebalancePage() {
   };
 
   if (!isLoggedIn) return <LoginRequired title="리밸런싱" message="리밸런싱을 이용하려면 로그인이 필요합니다." />;
+  if (accountLoading) return <TerminalPage title="리밸런싱" crumb="실전투자" account={{ kind: "live" }}><SkeletonRows n={4} /></TerminalPage>;
+  if (accountError && !account) return <AccountLoadError title="리밸런싱" onRetry={() => refetchAccount()} />;
   if (!accountLoading && !account) return <NoAccount title="리밸런싱" message="리밸런싱을 실행하려면 먼저 증권사 계좌를 연동하세요." />;
 
   // 현재 비중 = 보유 평가액 / 증권사 총평가액 — 서버 미리보기(RebalanceExecutionService)와 같은 식.

@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
 import {
-  Btn, BtnLink, DataTable, EventBadge, Icon, IconBtn, Panel, PanelRow, Seg, SelectBox, Sparkline, TerminalPage, TitleBlock,
+  Btn, BtnLink, DataTable, EventBadge, Icon, IconBtn, LoadError, Panel, PanelRow, Seg, SelectBox, Sparkline, TerminalPage, TitleBlock,
   dirClass, fmtNum, fmtPct, fmtSigned, type Column,
 } from "@/components/terminal";
 import {
@@ -59,7 +59,7 @@ export default function WatchlistPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const { data: groups = [], isLoading } = useWatchlistGroups(isLoggedIn);
+  const { data: groups = [], isLoading, isError: groupsError, refetch: refetchGroups } = useWatchlistGroups(isLoggedIn);
   const activeGroup: WatchlistGroup | undefined = groups.find((g) => g.id === activeGroupId) ?? groups[0];
 
   const stockIds = Array.from(new Set(groups.flatMap(g => g.items.map(i => i.stockId))));
@@ -410,7 +410,9 @@ export default function WatchlistPage() {
           </form>
         )}
 
-        {groups.length === 0 ? (
+        {groupsError && groups.length === 0 ? (
+          <LoadError what="관심종목" onRetry={() => refetchGroups()} />
+        ) : groups.length === 0 ? (
           <p className="py-8 text-center text-tm-muted">관심종목 그룹이 없습니다.</p>
         ) : groupItems.length === 0 ? (
           <p className="py-8 text-center text-13 text-tm-muted">종목이 없습니다.</p>

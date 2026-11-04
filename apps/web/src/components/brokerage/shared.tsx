@@ -7,7 +7,7 @@ import { latencyStat } from "@/lib/brokerApiHealth";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
 import type { BrokerageAccountResponse, BrokerageBalanceResponse, BrokerageOrderStatus, RebalanceExecutionResponse } from "@monticker/types";
-import { BtnLink, Icon, Notice, Panel, TerminalPage, fmtNum, type Tone, type TopStat } from "@/components/terminal";
+import { Btn, BtnLink, Icon, Notice, Panel, TerminalPage, fmtNum, type Tone, type TopStat } from "@/components/terminal";
 import { brokerageProviderLabel } from "@/lib/brokerageProvider";
 
 export interface StockHit { id: number; symbol: string; name: string; }
@@ -50,6 +50,17 @@ export function LoginRequired({ title, message }: { title: string; message: stri
     <GateScreen title={title} crumb="실전투자" panelTitle="로그인 필요">
       <p className="text-13 text-tm-soft">{message}</p>
       <BtnLink href="/login">로그인</BtnLink>
+    </GateScreen>
+  );
+}
+
+/** 계좌 조회 실패(5xx·연결 끊김) — "연동된 계좌 없음"(409)과 구분한다. 연동을 다시 하라고 안내하면 안 된다 */
+export function AccountLoadError({ title, onRetry }: { title: string; onRetry: () => void }) {
+  return (
+    <GateScreen title={title} crumb="실전투자" panelTitle="계좌 조회 실패">
+      <p className="text-15 font-semibold text-dracula-fg">계좌 정보를 불러오지 못했습니다</p>
+      <p className="text-xs leading-relaxed text-tm-muted">연동이 끊겼다는 뜻은 아닙니다. 진행 중인 주문과 조건부 주문은 그대로일 수 있으니, 잠시 뒤 다시 확인해 주세요.</p>
+      <Btn onClick={onRetry} icon="refresh">다시 시도</Btn>
     </GateScreen>
   );
 }

@@ -40,7 +40,7 @@ async function fetchPortfolio(): Promise<Portfolio> {
 
 async function fetchHistory(): Promise<TradeHistory[]> {
   const r = await authFetch("/api/paper/history");
-  if (!r.ok) return [];
+  if (!r.ok) throw new Error("거래 내역 조회 실패");
   return r.json();
 }
 

@@ -107,7 +107,8 @@ export function useWatchlistGroups(enabled: boolean) {
     queryKey: ["watchlist", "groups"],
     queryFn: async () => {
       const r = await authFetch("/api/watchlists");
-      return r.ok ? r.json() : [];
+      if (!r.ok) throw new Error("관심종목 조회 실패");
+      return r.json();
     },
     enabled,
     staleTime: 15_000,

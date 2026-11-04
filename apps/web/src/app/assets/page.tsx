@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { PortfolioAccount } from "@monticker/types";
-import { Btn, Icon, Notice, Panel, PanelRow, Seg, TerminalPage, dirClass, fmtSigned, type TopStat } from "@/components/terminal";
+import { LoadError, Btn, Icon, Notice, Panel, PanelRow, Seg, TerminalPage, dirClass, fmtSigned, type TopStat } from "@/components/terminal";
 import { LoginRequired, Skeleton } from "@/components/portfolio/PaperStates";
 import { useIsLoggedIn } from "@/components/home/data";
 import { useConsentStatus } from "@/hooks/useConsents";
@@ -89,9 +89,9 @@ function AssetsScreen() {
       ? { label: `총 평가금액${fxTag}`, value: fmtMoney(conv.marketValueKrw, "KRW"), hint: "해외 종목은 지금 원/달러로 바꿨습니다" }
       : { label: "원화 평가금액", value: krw ? fmtMoney(krw.marketValue, "KRW") : "—" },
     { label: conv ? `평가손익${fxTag}` : "원화 평가손익", value: pnl == null ? "—" : fmtSigned(pnl), tone: pnl == null ? undefined : dirClass(pnl) },
-    { label: "외화 통화", value: `${real.data?.totals.filter((t) => t.currency !== "KRW").length ?? 0}개`, hint: "환율 환산은 아직 하지 않습니다 — 통화별로 따로 봅니다" },
+    { label: "외화 통화", value: real.data ? `${real.data.totals.filter((t) => t.currency !== "KRW").length}개` : "—", hint: "환율 환산은 아직 하지 않습니다 — 통화별로 따로 봅니다" },
     { label: "계좌", value: `${list.length}개` },
-    { label: "보유 종목", value: `${real.data?.holdings.length ?? 0}개` },
+    { label: "보유 종목", value: real.data ? `${real.data.holdings.length}개` : "—" },
   ];
 
   const onCreated = (a: PortfolioAccount) => {
@@ -134,7 +134,7 @@ function AssetsScreen() {
           )}
           <PanelRow>
             <Panel tabs={["보유 종목"]} actions={[]} closable={false} className="flex-[999_1_700px]" bodyClassName="px-1.5 pb-1.5 pt-1">
-              {real.isPending ? <Skeleton className="h-60" /> : <AssetHoldingsTable holdings={real.data?.holdings ?? []} />}
+              {real.isPending ? <Skeleton className="h-60" /> : real.isError && !real.data ? <LoadError what="보유 종목" onRetry={() => real.refetch()} /> : <AssetHoldingsTable holdings={real.data?.holdings ?? []} />}
               <p className="m-0 px-2 py-1.5 text-2xs text-tm-muted">
                 평균단가는 이동평균(매수 수수료 포함)입니다 — 증권사 앱과 기준이 다를 수 있습니다. 현재가는 monticker가 받은 최근 1분봉 종가입니다.
               </p>
