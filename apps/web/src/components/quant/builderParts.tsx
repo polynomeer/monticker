@@ -8,7 +8,7 @@ import { Field, Icon, IconBtn } from "@/components/terminal";
 /** 칩 모양 네이티브 select */
 export function ChipSelect({ className, colorClass = "text-dracula-fg", children, ...rest }: { colorClass?: string } & ComponentProps<"select">) {
   return (
-    <span className={cn("relative inline-flex h-9 items-center rounded-lg border border-tm-line2 bg-tm-inner", className)}>
+    <span className={cn("relative inline-flex h-9 items-center rounded-lg border border-control bg-tm-inner", className)}>
       <select className={cn("h-full appearance-none bg-transparent pl-3 pr-8 text-13 outline-hidden [&>option]:bg-tm-panel [&>option]:text-dracula-fg", colorClass)} {...rest}>
         {children}
       </select>
@@ -20,7 +20,7 @@ export function ChipSelect({ className, colorClass = "text-dracula-fg", children
 /** 칩 모양 숫자 입력 */
 export function ChipNumber({ suffix, className, ...rest }: { suffix?: string } & ComponentProps<"input">) {
   return (
-    <span className={cn("inline-flex h-9 items-center gap-1 rounded-lg border border-tm-line2 bg-tm-inner px-3 focus-within:border-dracula-purple", className)}>
+    <span className={cn("inline-flex h-9 items-center gap-1 rounded-lg border border-control bg-tm-inner px-3 focus-within:border-dracula-purple", className)}>
       <input type="number" className="num w-14 bg-transparent text-13 text-dracula-fg outline-hidden" {...rest} />
       {suffix && <span className="text-xs text-tm-muted">{suffix}</span>}
     </span>

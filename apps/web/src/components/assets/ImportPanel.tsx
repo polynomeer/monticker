@@ -131,7 +131,7 @@ export function ImportPanel({ accountId }: { accountId: number }) {
               value={form.typeValuesText}
               onChange={(e) => update({ typeValuesText: e.target.value })}
               placeholder={"주식매수=매수\n주식매도=매도"}
-              className="rounded-lg border border-tm-line bg-tm-inner px-3 py-2 text-13 text-dracula-fg outline-hidden placeholder:text-tm-muted"
+              className="rounded-lg border border-control bg-tm-inner px-3 py-2 text-13 text-dracula-fg outline-hidden placeholder:text-tm-muted"
             />
           </label>
         </div>
@@ -145,7 +145,7 @@ export function ImportPanel({ accountId }: { accountId: number }) {
             type="file"
             accept=".csv,.txt,text/csv"
             onChange={(e) => pick(e.target.files?.[0] ?? null)}
-            className="rounded-lg border border-tm-line bg-tm-inner px-3 py-2 text-13 text-dracula-fg file:mr-3 file:rounded-md file:border-0 file:bg-tm-raised file:px-2.5 file:py-1 file:text-xs file:text-dracula-fg"
+            className="rounded-lg border border-control bg-tm-inner px-3 py-2 text-13 text-dracula-fg file:mr-3 file:rounded-md file:border-0 file:bg-tm-raised file:px-2.5 file:py-1 file:text-xs file:text-dracula-fg"
           />
         </label>
         <Field label="기본 통화 (선택)" placeholder="KRW" maxLength={3} className="max-w-[140px]" value={form.defaultCurrency} onChange={(e) => update({ defaultCurrency: e.target.value.toUpperCase() })} />

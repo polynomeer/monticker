@@ -15,7 +15,7 @@ import { ApiError } from "@/services/brokerage";
 import StockChart from "@/components/stock/chart/StockChart";
 import OrderProposalCard from "@/components/ai/OrderProposalCard";
 import {
-  Btn, BuySell, DataTable, Field, Icon, KV, LiveBadge, Notice, Panel, PanelRow, SelectBox, SymbolPill, TerminalPage, TitleBlock,
+  Btn, BuySell, DataTable, Field, Icon, KV, LiveBadge, LoadError, Notice, Panel, PanelRow, SelectBox, SymbolPill, TerminalPage, TitleBlock,
   dirClass, fmtNum, type Column,
 } from "@/components/terminal";
 import { TradingHaltBanner } from "@/components/brokerage/TradingHaltBanner";
@@ -23,7 +23,7 @@ import { OrderActions, OrderStatusCell, orderPriceText } from "@/components/brok
 import { exportBrokerageCsv, ordersTable, settlementsTable } from "@/components/brokerage/exportCsv";
 import { SettlementsTable } from "@/components/brokerage/SettlementsTable";
 import {
-  LiveNotice, LoginRequired, NoAccount, PagerButtons, SelectedStock, SkeletonRows, StockSearchBox, apiStat, maskAccount,
+  AccountLoadError, LiveNotice, LoginRequired, NoAccount, PagerButtons, SelectedStock, SkeletonRows, StockSearchBox, apiStat, maskAccount,
   sideClass, sideLabel, won, ORDER_STATUS, type StockHit,
 } from "@/components/brokerage/shared";
 import { brokerageProviderLabel } from "@/lib/brokerageProvider";
@@ -103,7 +103,7 @@ export default function BrokerageOrderPage() {
 
   useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
 
-  const { data: account, isLoading: accountLoading } = useBrokerageAccount();
+  const { data: account, isLoading: accountLoading, isError: accountError, refetch: refetchAccount } = useBrokerageAccount();
   const { data: balance, isLoading: balanceLoading, isError: balanceError } = useBrokerageBalance(!!account);
   const { data: trading } = useTradingStatus(!!account);
   // 리스크 한도(사용자 단위 유효 한도 — 모의·실전 공통). 노출도 값들은 모의계좌 기준이라 여기서는 limits만 쓴다.
@@ -264,6 +264,9 @@ export default function BrokerageOrderPage() {
   };
 
   if (!isLoggedIn) return <LoginRequired title="실전 주문" message="실전투자를 이용하려면 로그인이 필요합니다." />;
+  // 계좌를 읽는 동안 폼을 그리면 가용 현금 0원·빈 주문 내역으로 보인다
+  if (accountLoading) return <TerminalPage title="실전 주문" crumb="실전투자" account={{ kind: "live" }}><SkeletonRows n={4} /></TerminalPage>;
+  if (accountError && !account) return <AccountLoadError title="실전 주문" onRetry={() => refetchAccount()} />;
   if (!accountLoading && !account) return <NoAccount title="실전 주문" message="주문을 넣으려면 먼저 증권사 계좌를 연동하세요." />;
 
   const stats = [
@@ -508,14 +511,14 @@ export default function BrokerageOrderPage() {
         bodyClassName="px-1.5 pb-1.5 pt-1"
       >
         {histTab === "orders" ? (
-          ordersQuery.isLoading ? <SkeletonRows /> : (
+          ordersQuery.isLoading ? <SkeletonRows /> : ordersQuery.isError && !ordersQuery.data ? <LoadError what="주문 내역" onRetry={() => ordersQuery.refetch()} /> : (
             <>
               <DataTable columns={histCols} rows={ordersQuery.data?.content ?? []} rowKey={o => o.id} minWidth={860} empty="주문 내역이 없습니다." />
               <PagerButtons page={histPage} totalPages={ordersQuery.data?.totalPages ?? 0} onChange={setHistPage} />
             </>
           )
         ) : (
-          fillsQuery.isLoading ? <SkeletonRows /> : (
+          fillsQuery.isLoading ? <SkeletonRows /> : fillsQuery.isError && !fillsQuery.data ? <LoadError what="체결·정산 내역" onRetry={() => fillsQuery.refetch()} /> : (
             <>
               <SettlementsTable rows={fillsQuery.data?.content ?? []} />
               <PagerButtons page={histPage} totalPages={fillsQuery.data?.totalPages ?? 0} onChange={setHistPage} />

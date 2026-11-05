@@ -6,7 +6,7 @@ import NewRuleForm from "@/components/alerts/NewRuleForm";
 import DeliveryChannelsPanel from "@/components/alerts/DeliveryChannelsPanel";
 import { channelsSummary, useDeliveryChannels } from "@/components/alerts/channels";
 import {
-  Btn, BtnLink, Notice, Panel, PanelRow, Seg, TerminalPage, TitleBlock, Toggle,
+  Btn, BtnLink, LoadError, Notice, Panel, PanelRow, Seg, TerminalPage, TitleBlock, Toggle,
 } from "@/components/terminal";
 import { useIsLoggedIn, useQuotes } from "@/components/home/data";
 import { useInterestOrdering } from "@/hooks/useUserPreferences";
@@ -55,8 +55,8 @@ export default function AlertsPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [showNewRule, setShowNewRule] = useState(false);
 
-  const { data: alerts = [], isLoading: loadingHistory, dataUpdatedAt: historyFetchedAt } = useAlertHistory(isLoggedIn);
-  const { data: rules = [], isLoading: loadingRules } = useAlertRules(isLoggedIn);
+  const { data: alerts = [], isLoading: loadingHistory, isError: historyError, refetch: refetchHistory, dataUpdatedAt: historyFetchedAt } = useAlertHistory(isLoggedIn);
+  const { data: rules = [], isLoading: loadingRules, isError: rulesError, refetch: refetchRules } = useAlertRules(isLoggedIn);
   const { data: stats } = useAlertStats(isLoggedIn);
   const { data: channels, isLoading: loadingChannels } = useDeliveryChannels(isLoggedIn);
   const { toggleRule, markRead, markAllRead } = useAlertMutations();
@@ -123,6 +123,8 @@ export default function AlertsPage() {
         {actionError && <Notice tone="warn" className="m-3.5 mb-0">{actionError.message}</Notice>}
         {loadingHistory ? (
           <div className="m-3.5 h-32 animate-shimmer rounded-lg bg-linear-to-r from-tm-inner via-tm-raised to-tm-inner bg-size-[200%_100%]" />
+        ) : historyError && alerts.length === 0 ? (
+          <LoadError className="m-3.5" what="알림 이력" onRetry={() => refetchHistory()} />
         ) : shown.length === 0 ? (
           <div className="flex flex-col items-center gap-1.5 px-4 py-16 text-center">
             <span className="text-sm font-semibold text-tm-soft">알림 이력이 없습니다</span>
@@ -184,6 +186,8 @@ export default function AlertsPage() {
       <Panel tabs={["알림 규칙"]} actions={[]} closable={false} className="flex-[1_1_320px]">
         {loadingRules ? (
           <div className="h-24 animate-pulse rounded-lg bg-tm-inner" />
+        ) : rulesError && rules.length === 0 ? (
+          <LoadError what="알림 규칙" onRetry={() => refetchRules()} />
         ) : rules.length === 0 ? (
           <p className="py-6 text-center text-13 text-tm-muted">알림 규칙이 없습니다.</p>
         ) : (

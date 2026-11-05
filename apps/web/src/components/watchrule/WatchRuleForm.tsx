@@ -433,7 +433,7 @@ export function WatchRuleForm(props: Props) {
           {stock && (
             <Chip active>
               {stock.name} {stock.symbol && <span className="num text-tm-muted">{stock.symbol}</span>}
-              <button type="button" onClick={reset} aria-label={`${stock.name} 선택 해제`} className="-mr-1 grid h-4 w-4 place-items-center text-tm-muted hover:text-dracula-fg">
+              <button type="button" onClick={reset} aria-label={`${stock.name} 선택 해제`} className="-mr-1.5 grid h-6 w-6 place-items-center text-tm-muted hover:text-dracula-fg">
                 <Icon name="x" size={12} strokeWidth={2.4} />
               </button>
             </Chip>
@@ -441,7 +441,7 @@ export function WatchRuleForm(props: Props) {
         </div>
         {!stock && (
           <div className="relative">
-            <label className="flex h-10 items-center gap-2.5 rounded-lg border border-tm-line bg-tm-inner px-3">
+            <label className="flex h-10 items-center gap-2.5 rounded-lg border border-control bg-tm-inner px-3">
               <Icon name="search" size={16} className="text-tm-muted" />
               <input
                 aria-label="종목"

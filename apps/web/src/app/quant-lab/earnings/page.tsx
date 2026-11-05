@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { CreatorDashboard, CreatorEarning, CreatorPayout, CreatorStrategyRow, EarningsSummaryResponse, MonthlyNetPoint, PageResponse } from "@monticker/types";
 import { authFetch } from "@/services/api";
 import { useToast } from "@/hooks/useToast";
-import {
+import { LoadError,
   AutoGrid, Btn, BtnLink, DataTable, Field, KV, Notice, Panel, PanelCol, PanelRow, Pill, SelectBox, Stat, TerminalPage, Tile, type Column, type Tone,
 } from "@/components/terminal";
 
@@ -117,6 +117,12 @@ function PayoutPanel({ available, pending, onSubmit }: { available: number; pend
   );
 }
 
+/** 실패 응답을 빈 값으로 읽지 않게 — 오류 본문을 데이터로 쓰면 수익이 0원처럼 보인다 */
+function okJson(r: Response) {
+  if (!r.ok) throw new Error("수익 정보 조회 실패");
+  return r.json();
+}
+
 export default function EarningsPage() {
   const [tab, setTab] = useState<"overview" | "earnings" | "payouts">("overview");
   const [earningPage, setEarningPage] = useState(0);
@@ -126,7 +132,7 @@ export default function EarningsPage() {
 
   const { data: summary } = useQuery<EarningsSummaryResponse>({
     queryKey: ["earnings", "summary"],
-    queryFn: () => authFetch("/api/settlement/strategy/earnings/summary").then(r => r.json()),
+    queryFn: () => authFetch("/api/settlement/strategy/earnings/summary").then(okJson),
   });
   const balance = summary?.availableBalance ?? 0;
 
@@ -142,17 +148,17 @@ export default function EarningsPage() {
   const strategies = dash?.strategies ?? [];
   const nameOf = (id: number) => strategies.find(s => s.marketId === id)?.name ?? `전략 #${id}`;
 
-  const { data: earningsData } = useQuery<PageResponse<CreatorEarning>>({
+  const { data: earningsData, isError: earningsError, refetch: refetchEarnings } = useQuery<PageResponse<CreatorEarning>>({
     queryKey: ["earnings", "list", earningPage],
     queryFn: () =>
-      authFetch(`/api/settlement/strategy/earnings?page=${earningPage}&size=20`).then(r => r.json()),
+      authFetch(`/api/settlement/strategy/earnings?page=${earningPage}&size=20`).then(okJson),
     enabled: tab === "earnings",
   });
 
-  const { data: payoutsData } = useQuery<PageResponse<CreatorPayout>>({
+  const { data: payoutsData, isError: payoutsError, refetch: refetchPayouts } = useQuery<PageResponse<CreatorPayout>>({
     queryKey: ["earnings", "payouts", payoutPage],
     queryFn: () =>
-      authFetch(`/api/settlement/strategy/payouts?page=${payoutPage}&size=20`).then(r => r.json()),
+      authFetch(`/api/settlement/strategy/payouts?page=${payoutPage}&size=20`).then(okJson),
     enabled: tab === "payouts",
   });
 
@@ -225,7 +231,7 @@ export default function EarningsPage() {
             <Tile><Stat big label="누적 순수익" value={dash ? won(dash.totalNet) : "—"} valueClassName={dash ? undefined : "text-tm-muted"} sub="플랫폼 수수료 차감 후 · 취소 제외" /></Tile>
             <Tile><Stat big label="이번 달" value={dash ? won(dash.thisMonthNet) : "—"} valueClassName={dash ? (dash.thisMonthNet > 0 ? "text-up" : undefined) : "text-tm-muted"} sub={`${new Date().getMonth() + 1}월 · KST 기준`} /></Tile>
             <Tile><Stat big label="활성 구독자" value={dash ? `${dash.activeSubscribers.toLocaleString("ko-KR")}명` : "—"} valueClassName={dash ? undefined : "text-tm-muted"} sub="내 공유 전략 전체" /></Tile>
-            <Tile><Stat big label="출금 가능" value={won(balance)} valueClassName="text-dracula-purple" sub="최소 10,000원" /></Tile>
+            <Tile><Stat big label="출금 가능" value={summary ? won(balance) : "—"} valueClassName="text-dracula-purple" sub="최소 10,000원" /></Tile>
           </AutoGrid>
 
           <Panel tabs={["월별 수익"]} actions={[]} closable={false}>
@@ -247,7 +253,7 @@ export default function EarningsPage() {
             bodyClassName="px-1.5 pb-1.5 pt-1"
           >
             {tab === "overview" && (
-              strategies.length === 0 ? (
+              dashError && !dash ? <LoadError what="전략별 수익" /> : strategies.length === 0 ? (
                 <div className="flex flex-col items-center gap-3 py-12 text-center">
                   <p className="m-0 text-13 text-tm-muted">아직 공유한 전략이 없습니다. 전략을 공유하고 구독자를 모아보세요.</p>
                   <BtnLink href="/quant-lab/builder" size="sm">룰셋 만들기 →</BtnLink>
@@ -258,13 +264,13 @@ export default function EarningsPage() {
             )}
             {tab === "earnings" && (
               <>
-                <DataTable columns={earningCols} rows={earningsData?.content ?? []} rowKey={e => e.id} minWidth={640} empty="수익 내역이 없습니다." />
+                {earningsError && !earningsData ? <LoadError what="수익 내역" onRetry={() => refetchEarnings()} /> : <DataTable columns={earningCols} rows={earningsData?.content ?? []} rowKey={e => e.id} minWidth={640} empty="수익 내역이 없습니다." />}
                 {pager(earningPage, earningsData?.totalPages ?? 1, setEarningPage)}
               </>
             )}
             {tab === "payouts" && (
               <>
-                <DataTable columns={payoutCols} rows={payoutsData?.content ?? []} rowKey={p => p.id} minWidth={640} empty="출금 내역이 없습니다." />
+                {payoutsError && !payoutsData ? <LoadError what="출금 내역" onRetry={() => refetchPayouts()} /> : <DataTable columns={payoutCols} rows={payoutsData?.content ?? []} rowKey={p => p.id} minWidth={640} empty="출금 내역이 없습니다." />}
                 {pager(payoutPage, payoutsData?.totalPages ?? 1, setPayoutPage)}
               </>
             )}

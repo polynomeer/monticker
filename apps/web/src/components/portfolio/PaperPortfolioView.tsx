@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/portfolio/PaperStates";
 import { useStockMeta } from "@/components/portfolio/useStockMeta";
 import { downloadCsv } from "@/components/portfolio/csv";
 import { fmtDateTime } from "@/components/portfolio/format";
-import { Btn, Panel, PanelRow, dirClass, fmtNum, fmtPct, fmtSigned, type TopStat } from "@/components/terminal";
+import { LoadError, Btn, Panel, PanelRow, dirClass, fmtNum, fmtPct, fmtSigned, type TopStat } from "@/components/terminal";
 
 /** 상단 바 지표 — 모의 계좌 기준. 같은 쿼리를 쓰므로 요청은 한 번이다 */
 export function usePaperStats(): TopStat[] {
@@ -40,8 +40,8 @@ export function PaperPortfolioView() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [holdTab, setHoldTab] = useState("보유 종목");
 
-  const { data: portfolio, isLoading } = usePaperPortfolio();
-  const { data: history = [] } = usePaperHistory();
+  const { data: portfolio, isLoading, isError, refetch } = usePaperPortfolio();
+  const { data: history = [], isError: historyError, refetch: refetchHistory } = usePaperHistory();
   const { reset } = usePaperTrade();
   const { toast } = useToast();
 
@@ -89,6 +89,9 @@ export function PaperPortfolioView() {
     );
   }
 
+  // 못 읽었는데 빈 보유·현금 0원으로 그리면 돈이 사라진 것처럼 보인다
+  if (isError && !portfolio) return <LoadError what="모의 포트폴리오" onRetry={() => refetch()} />;
+
   return (
     <>
       <PanelRow>
@@ -115,7 +118,9 @@ export function PaperPortfolioView() {
                 onSell={setSellModal}
               />
             ) : (
-              <TradeHistoryTable history={history} />
+              historyError && history.length === 0
+                ? <LoadError what="거래 내역" onRetry={() => refetchHistory()} />
+                : <TradeHistoryTable history={history} />
             )
           }
         />

@@ -7,7 +7,7 @@ import { latencyStat } from "@/lib/brokerApiHealth";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { authFetch } from "@/services/api";
 import type { BrokerageAccountResponse, BrokerageBalanceResponse, BrokerageOrderStatus, RebalanceExecutionResponse } from "@monticker/types";
-import { BtnLink, Icon, Notice, Panel, TerminalPage, fmtNum, type Tone, type TopStat } from "@/components/terminal";
+import { Btn, BtnLink, Icon, Notice, Panel, TerminalPage, fmtNum, type Tone, type TopStat } from "@/components/terminal";
 import { brokerageProviderLabel } from "@/lib/brokerageProvider";
 
 export interface StockHit { id: number; symbol: string; name: string; }
@@ -54,6 +54,17 @@ export function LoginRequired({ title, message }: { title: string; message: stri
   );
 }
 
+/** 계좌 조회 실패(5xx·연결 끊김) — "연동된 계좌 없음"(409)과 구분한다. 연동을 다시 하라고 안내하면 안 된다 */
+export function AccountLoadError({ title, onRetry }: { title: string; onRetry: () => void }) {
+  return (
+    <GateScreen title={title} crumb="실전투자" panelTitle="계좌 조회 실패">
+      <p className="text-15 font-semibold text-dracula-fg">계좌 정보를 불러오지 못했습니다</p>
+      <p className="text-xs leading-relaxed text-tm-muted">연동이 끊겼다는 뜻은 아닙니다. 진행 중인 주문과 조건부 주문은 그대로일 수 있으니, 잠시 뒤 다시 확인해 주세요.</p>
+      <Btn onClick={onRetry} icon="refresh">다시 시도</Btn>
+    </GateScreen>
+  );
+}
+
 export function NoAccount({ title, message }: { title: string; message: ReactNode }) {
   return (
     <GateScreen title={title} crumb="실전투자" panelTitle="연동된 계좌 없음">
@@ -92,7 +103,7 @@ export function StockSearchBox({ onSelect, placeholder = "종목명 또는 코�
   const [results, setResults] = useStockSearch(query);
   return (
     <div className="relative">
-      <label className="flex min-h-10 items-center gap-2 rounded-lg border border-tm-line bg-tm-inner px-3 py-1.5 focus-within:border-dracula-purple">
+      <label className="flex min-h-10 items-center gap-2 rounded-lg border border-control bg-tm-inner px-3 py-1.5 focus-within:border-dracula-purple">
         <span className="sr-only">{label}</span>
         <Icon name="search" size={16} className="flex-none text-tm-muted" />
         <input

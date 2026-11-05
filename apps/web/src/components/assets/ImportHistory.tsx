@@ -1,14 +1,16 @@
 "use client";
 
 import type { ImportBatch } from "@monticker/types";
-import { Btn, DataTable, type Column } from "@/components/terminal";
+import { LoadError, Btn, DataTable, type Column } from "@/components/terminal";
 import { fmtDateTime } from "@/components/portfolio/format";
 import { useImports, useRevertImport } from "@/hooks/usePortfolio";
 
 /** 가져오기 기록 — 한 번을 통째로 되돌리면 그때 들어온 거래만 지워진다 */
 export function ImportHistory({ accountId }: { accountId: number }) {
-  const { data = [] } = useImports(accountId, true);
+  const { data = [], isError, refetch } = useImports(accountId, true);
   const revert = useRevertImport(accountId);
+  // 기록을 못 읽었는데 비어 보이면 같은 파일을 다시 올리게 된다
+  const failed = isError && data.length === 0;
   const columns: Column<ImportBatch>[] = [
     { key: "at", header: "가져온 시각", cell: (b) => <span className="num">{fmtDateTime(b.createdAt)}</span> },
     { key: "format", header: "형식", cell: (b) => (b.format === "CUSTOM" ? "열 직접 지정" : "표준 템플릿") },
@@ -28,5 +30,6 @@ export function ImportHistory({ accountId }: { accountId: number }) {
       ),
     },
   ];
+  if (failed) return <LoadError what="가져오기 기록" onRetry={() => refetch()} />;
   return <DataTable columns={columns} rows={data} rowKey={(b) => b.id} minWidth={640} empty="아직 가져온 파일이 없습니다." />;
 }
