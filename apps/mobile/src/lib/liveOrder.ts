@@ -16,6 +16,16 @@ export function concentrationAfter(
   return (Math.max(0, qty) * unit / totalEvaluated) * 100;
 }
 
+/**
+ * 실전 시트의 리스크 머리글(ADR-116). 화면이 계산한 집중도 초과만 제출을 막고, 서버 미리보기의 실패는 경고다 —
+ * 미리보기는 체결된 지정가 매수를 이중으로 셀 수 있고 그 갱신은 제출할 때만 일어난다.
+ */
+export function liveRiskHeadline(concOver: boolean, preview: { approved: boolean } | null): { text: string; tone: "danger" | "caution" | "muted" } {
+  if (concOver) return { text: "한도 초과", tone: "danger" };
+  if (preview && !preview.approved) return { text: "주문 때 막힐 수 있어요", tone: "caution" };
+  return { text: "제출 때 서버가 판정", tone: "muted" };
+}
+
 export type LiveOutcome =
   | { kind: "accepted"; message: string }
   | { kind: "rejected"; message: string }

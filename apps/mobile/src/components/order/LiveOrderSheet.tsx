@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,7 +12,9 @@ import { brokerName, useTradingMode } from "@/services/mode";
 import { Badge, Button, GlassButton, Icon, Loading, withAlpha } from "@/components/ui";
 import { formatPct, formatWon } from "@/lib/format";
 import { clampQuantity, isOrderable, maxQuantity, newIdempotencyKey, parseAmount, quickQuantity, type Side } from "@/lib/order";
-import { classifyLiveResult, concentrationAfter, DEVIATION_WARN_PCT, priceDeviationPct, type LiveOutcome } from "@/lib/liveOrder";
+import { classifyLiveResult, concentrationAfter, DEVIATION_WARN_PCT, liveRiskHeadline, priceDeviationPct, type LiveOutcome } from "@/lib/liveOrder";
+import { RULE_LABEL, ruleValue, visibleChecks } from "@/lib/risk";
+import { useLiveRiskPreview } from "@/services/riskPreview";
 import { clearPendingUnknown, markPendingUnknown, usePendingUnknown } from "@/services/pendingLive";
 import { HoldToConfirm } from "./HoldToConfirm";
 
@@ -50,10 +52,17 @@ export function LiveOrderSheet({ symbol, initialSide }: { symbol: string; initia
   const current = price.data?.price ?? 0;
   useEffect(() => { if (!limitText && current > 0) setLimitText(formatWon(current)); }, [current, limitText]);
 
-  if (search.loading || !stock) return <Loading />;
-
+  // ADR-116 — 증권사 잔고 기준 서버 미리보기. 결과는 경고로만 쓴다(liveRiskHeadline 주석).
   const isLimit = orderType === "LIMIT";
   const unitPrice = isLimit ? parseAmount(limitText) : current;
+  const previewable = Number.isInteger(quantity) && quantity > 0 && (!isLimit || unitPrice > 0);
+  const preview = useLiveRiskPreview(useMemo(
+    () => (previewable ? { symbol, side, quantity, limitPrice: isLimit ? unitPrice : null } : null),
+    [previewable, symbol, side, quantity, isLimit, unitPrice],
+  ));
+
+  if (search.loading || !stock) return <Loading />;
+
   const b = balance.data;
   const holding = Number(b?.holdings.find((h) => h.symbol === symbol)?.quantity ?? 0);
   const max = maxQuantity(side, Number(b?.cash ?? 0), unitPrice, holding);
@@ -71,6 +80,8 @@ export function LiveOrderSheet({ symbol, initialSide }: { symbol: string; initia
   const sideFg = side === "BUY" ? market.onUp : market.onDown;
   const deviation = isLimit ? priceDeviationPct(unitPrice, current) : null;
   const farFromPrice = deviation != null && Math.abs(deviation) > DEVIATION_WARN_PCT;
+  const headline = liveRiskHeadline(concOver, preview.data);
+  const previewFail = preview.data?.checks.find((r) => !r.passed) ?? null;
   const blocked = !valid || halted || concOver || !b || !broker || !!pendingSince || (!isLimit && !(current > 0));
 
   const submit = async () => {
@@ -204,12 +215,21 @@ export function LiveOrderSheet({ symbol, initialSide }: { symbol: string; initia
             <View style={[s.riskBox, { backgroundColor: c.card }]}>
               <View style={s.riskHead}>
                 <Text style={[font.subhead, s.semibold, { color: c.text }]}>주문 전 리스크 체크</Text>
-                <Text style={[font.caption, { color: concOver ? c.danger : c.muted }]}>{concOver ? "한도 초과" : "제출 때 서버가 판정"}</Text>
+                <Text style={[font.caption, { color: { danger: c.danger, caution: c.caution, muted: c.muted }[headline.tone] }]}>{headline.text}</Text>
               </View>
-              <RiskRow label="종목 집중도" value={concentration != null && concLimit != null ? `${concentration.toFixed(1)}% / ${concLimit}%` : "—"} ok={!concOver} />
-              <RiskRow label="일간 손실 한도" value={limits.data ? `서버 검증 · ${Number(limits.data.dailyLossLimitPct)}%` : "서버 검증"} ok />
-              <RiskRow label="시간당 주문 수" value={limits.data ? `서버 검증 · ${limits.data.maxHourlyOrders}건` : "서버 검증"} ok />
-              <Text style={[font.caption, { color: c.muted }]}>집중도는 {firm} 잔고로 미리 계산했어요. 실전 판단에는 모의 데이터를 쓰지 않아요.</Text>
+              {preview.data ? (
+                visibleChecks(preview.data.checks).map((r) => (
+                  <RiskRow key={r.rule} label={RULE_LABEL[r.rule] ?? r.rule} value={ruleValue(r)} ok={r.passed} />
+                ))
+              ) : (
+                <>
+                  <RiskRow label="종목 집중도" value={concentration != null && concLimit != null ? `${concentration.toFixed(1)}% / ${concLimit}%` : "—"} ok={!concOver} />
+                  <RiskRow label="일간 손실 한도" value={limits.data ? `서버 검증 · ${Number(limits.data.dailyLossLimitPct)}%` : "서버 검증"} ok />
+                  <RiskRow label="시간당 주문 수" value={limits.data ? `서버 검증 · ${limits.data.maxHourlyOrders}건` : "서버 검증"} ok />
+                </>
+              )}
+              {previewFail && <Text style={[font.caption, { color: c.caution }]}>{previewFail.detail}</Text>}
+              <Text style={[font.caption, { color: c.muted }]}>{firm} 잔고로 미리 계산했어요. 주문하면 최신 잔고로 다시 판정합니다. 실전 판단에는 모의 데이터를 쓰지 않아요.</Text>
             </View>
           </ScrollView>
 
