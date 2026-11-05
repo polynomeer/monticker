@@ -9,6 +9,7 @@ import com.monticker.api.brokerage.infrastructure.BrokerCallHealthTracker
 import com.monticker.api.brokerage.infrastructure.BrokerageBalance
 import com.monticker.api.brokerage.infrastructure.BrokerageOrderRequest
 import com.monticker.api.common.aop.RateLimited
+import com.monticker.api.risk.application.RiskCheckResult
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
@@ -40,6 +41,38 @@ data class OrderRequest(
     @field:Positive val quantity: Int,
     val limitPrice: BigDecimal? = null,
 )
+
+/**
+ * ADR-116 — 실전 주문 리스크 미리보기 요청. 수량을 BigDecimal로 받는 이유는 ADR-092와 같다: Jackson 기본 설정은 `1.5`를
+ * Int에 `1`로 잘라 넣는다. 주문 유형은 받지 않는다 — limitPrice가 null이거나 0이면 시장가로 보고 최근가로 판정한다.
+ */
+data class RiskPreviewOrderRequest(
+    val symbol: String? = null,
+    val side: String? = null,
+    val quantity: BigDecimal? = null,
+    val limitPrice: BigDecimal? = null,
+) {
+    fun validated(): Validated {
+        val sym = symbol?.takeIf { it.isNotBlank() && it.length <= MAX_SYMBOL_LENGTH }
+            ?: throw IllegalArgumentException("종목 코드가 필요합니다.")
+        val s = side?.takeIf { it == "BUY" || it == "SELL" } ?: throw IllegalArgumentException("side는 BUY 또는 SELL이어야 합니다.")
+        val q = quantity ?: throw IllegalArgumentException("수량이 필요합니다.")
+        require(q.signum() > 0) { "수량은 0보다 커야 합니다." }
+        require(q.stripTrailingZeros().scale() <= 0) { "수량은 정수여야 합니다." }
+        require(q <= MAX_QUANTITY) { "수량이 너무 큽니다(최대 ${MAX_QUANTITY.toPlainString()}주)." }
+        require(limitPrice == null || limitPrice.signum() >= 0) { "가격은 0 이상이어야 합니다." }
+        require(limitPrice == null || limitPrice <= MAX_PRICE) { "가격이 너무 큽니다." }
+        return Validated(sym, s, q.intValueExact(), limitPrice)
+    }
+
+    data class Validated(val symbol: String, val side: String, val quantity: Int, val limitPrice: BigDecimal?)
+
+    private companion object {
+        const val MAX_SYMBOL_LENGTH = 32
+        val MAX_QUANTITY = BigDecimal(1_000_000)
+        val MAX_PRICE = BigDecimal("1000000000000")
+    }
+}
 
 // ── 응답 DTO ───────────────────────────────────────────────────────────────────
 
@@ -213,6 +246,18 @@ class BrokerageController(
             )
         )
         return ResponseEntity.ok(order.toResponse())
+    }
+
+    // ADR-116 — 증권사 잔고 기준 주문 전 리스크 미리보기. 판정만 돌려주고 아무것도 기록·주문하지 않는다.
+    // 멱등 필터 대상이 아니며 동의 확인도 하지 않는다 — 주문이 아니라 잔고 조회와 같은 읽기다.
+    @PostMapping("/risk-preview")
+    @RateLimited(limit = 60, windowSec = 60, keyPrefix = "brokerage.risk-preview")
+    fun previewOrderRisk(
+        @RequestHeader("Authorization") token: String,
+        @RequestBody req: RiskPreviewOrderRequest,
+    ): ResponseEntity<RiskCheckResult> {
+        val v = req.validated()
+        return ResponseEntity.ok(brokerageService.previewOrderRisk(userId(token), v.symbol, v.side, v.quantity, v.limitPrice))
     }
 
     // 주문 상태 동기화

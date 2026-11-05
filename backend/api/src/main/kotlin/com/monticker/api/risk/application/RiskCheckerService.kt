@@ -215,6 +215,25 @@ class RiskCheckerService(
         return finalize(userId, stockId, side, qty, checks, accountType = "REAL")
     }
 
+    /**
+     * ADR-116 — [checkBrokerageOrder]와 같은 규칙·유효 한도·isActive 무시로 판정하되 감사 행과 메트릭을 남기지 않는다.
+     * 스냅샷은 호출자가 증권사 잔고로 만든다 — 실거래 판정에 모의 데이터를 쓰지 않는다(ADR-025).
+     */
+    @Transactional(readOnly = true)
+    fun previewBrokerageOrder(
+        userId: Long,
+        stockId: Long,
+        side: String,
+        qty: Int,
+        estimatedPrice: BigDecimal,
+        snapshot: PortfolioSnapshot,
+    ): RiskCheckResult {
+        requireSide(side)
+        ensureStockExists(stockId)
+        val limits = limitService.effective(userId)
+        return judge(riskRuleQueryService.evaluateWithSnapshot(stockId, side, qty, estimatedPrice, limits, snapshot))
+    }
+
     private fun finalize(
         userId: Long,
         stockId: Long,

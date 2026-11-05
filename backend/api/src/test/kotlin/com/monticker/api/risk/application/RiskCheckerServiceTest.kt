@@ -535,6 +535,22 @@ class RiskCheckerServiceTest {
     }
 
     @Test
+    fun `실전 미리보기는 게이트와 같은 판정을 내고 감사 행을 남기지 않는다`() {
+        stubSafeDefaults(inactiveLimits())
+        val snapshot = PortfolioSnapshot(
+            cash = BigDecimal("10000000"), holdings = emptyList(), dailyPnl = BigDecimal("-400000"), recentOrderCount = 0,
+            totalAssets = BigDecimal("10000000"),
+        )
+
+        val preview = service.previewBrokerageOrder(userId, stockId, "BUY", 1, estimatedPrice, snapshot)
+        // 모의 "리스크 체크 끄기"를 따르지 않는다 — 꺼져 있어도 실전 규칙을 평가한다(ADR-069)
+        assertThat(preview.blockedBy).isEqualTo("DailyLossRule")
+        verify(exactly = 0) { jdbc.update(match<String> { it.contains("INSERT INTO risk_check_logs") }, *anyVararg()) }
+
+        assertThat(service.checkBrokerageOrder(userId, stockId, "BUY", 1, estimatedPrice, snapshot)).isEqualTo(preview)
+    }
+
+    @Test
     fun `checkBrokerageOrder rejects a side other than BUY or SELL`() {
         stubSafeDefaults()
         val snapshot = PortfolioSnapshot(BigDecimal("10000000"), emptyList(), BigDecimal.ZERO, 0, totalAssets = BigDecimal("10000000"))
