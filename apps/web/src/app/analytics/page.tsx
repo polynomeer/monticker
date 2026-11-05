@@ -397,7 +397,7 @@ export default function AnalyticsPage() {
             {selected.map(id => (
               <span key={id} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-tm-line2 bg-tm-inner pl-3 pr-1.5 text-13">
                 {labelOf(id)}
-                <IconBtn name="x" label={`${labelOf(id)} 제거`} size={22} iconSize={11} onClick={() => setSelected(p => p.filter(x => x !== id))} />
+                <IconBtn name="x" label={`${labelOf(id)} 제거`} size={24} iconSize={12} onClick={() => setSelected(p => p.filter(x => x !== id))} />
               </span>
             ))}
             {unselected.length > 0 && (
@@ -437,10 +437,10 @@ export default function AnalyticsPage() {
             {customOpen && (
               <>
                 <input type="date" aria-label="분석 시작일" value={customFrom} max={today} onChange={e => setCustomFrom(e.target.value)}
-                  className="num h-8 rounded-lg border border-tm-line2 bg-tm-inner px-2 text-13 text-dracula-fg" />
+                  className="num h-8 rounded-lg border border-control bg-tm-inner px-2 text-13 text-dracula-fg" />
                 <span className="text-tm-muted">~</span>
                 <input type="date" aria-label="분석 종료일" value={customTo} max={today} onChange={e => setCustomTo(e.target.value)}
-                  className="num h-8 rounded-lg border border-tm-line2 bg-tm-inner px-2 text-13 text-dracula-fg" />
+                  className="num h-8 rounded-lg border border-control bg-tm-inner px-2 text-13 text-dracula-fg" />
                 <Btn size="sm" kind="ghost" className="h-8" disabled={customError != null}
                   onClick={() => setPeriod({ kind: "CUSTOM", from: customFrom, to: customTo })}>적용</Btn>
               </>

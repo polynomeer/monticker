@@ -4,14 +4,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getAccessToken } from "@/services/auth";
 import { useBrokerageAccount, useBrokerageBalance, useBrokerageOrders, useConditionalOrders, useBrokerageSettlements } from "@/hooks/useBrokerage";
-import {
+import { LoadError,
   AutoGrid, BtnLink, ChgNum, DataTable, Icon, LiveBadge, Notice, Panel, PanelCol, PanelRow, Pill, Stat, StockCell, TerminalPage,
   fmtNum, fmtSigned, dirClass, type Column, type IconName,
 } from "@/components/terminal";
 import { OrderActions, OrderStatusCell, orderPriceText } from "@/components/brokerage/OrderCells";
 import { COND_STATUS, ConditionalCancelButton, TRIGGER_LABEL } from "@/components/brokerage/ConditionalOrderRow";
 import {
-  LiveNotice, LoginRequired, NoAccount, PagerButtons, SkeletonRows, brokerageStats, fmtDateTime, maskAccount,
+  AccountLoadError, LiveNotice, LoginRequired, NoAccount, PagerButtons, SkeletonRows, brokerageStats, fmtDateTime, maskAccount,
   sideClass, sideLabel, useSymbolQuotes, won,
 } from "@/components/brokerage/shared";
 import { SettlementsTable } from "@/components/brokerage/SettlementsTable";
@@ -38,7 +38,7 @@ export default function BrokerageDashboardPage() {
 
   useEffect(() => { setIsLoggedIn(!!getAccessToken()); }, []);
 
-  const { data: account, isLoading: accountLoading } = useBrokerageAccount();
+  const { data: account, isLoading: accountLoading, isError: accountError, refetch: refetchAccount } = useBrokerageAccount();
   const balanceQuery = useBrokerageBalance(!!account);
   const { data: balance, isLoading: balanceLoading, isError: balanceError, error: balanceErr } = balanceQuery;
   const ordersQuery = useBrokerageOrders(ordersPage, !!account && orderTab === "orders");
@@ -54,6 +54,8 @@ export default function BrokerageDashboardPage() {
       <SkeletonRows n={4} />
     </TerminalPage>
   );
+
+  if (accountError && !account) return <AccountLoadError title="실전투자" onRetry={() => refetchAccount()} />;
 
   if (!account) return (
     <NoAccount
@@ -215,7 +217,7 @@ export default function BrokerageDashboardPage() {
             {orderTab === "orders" ? (
               // 일반 주문 + 조건부 주문을 시간순으로 합쳐서 보여준다. 모의투자(matching)는 별도 계좌(가상 자금)라 섞지 않는다.
               <>
-                {(ordersQuery.isLoading || conditionalQuery.isLoading) ? <SkeletonRows /> : (
+                {(ordersQuery.isLoading || conditionalQuery.isLoading) ? <SkeletonRows /> : (ordersQuery.isError && !ordersQuery.data) || (conditionalQuery.isError && !conditionalQuery.data) ? <LoadError what="주문 내역" onRetry={() => { ordersQuery.refetch(); conditionalQuery.refetch(); }} /> : (
                   <DataTable
                     columns={timelineCols}
                     rows={timeline}
@@ -232,7 +234,7 @@ export default function BrokerageDashboardPage() {
               </>
             ) : (
               <>
-                {settlementsQuery.isLoading ? <SkeletonRows /> : (
+                {settlementsQuery.isLoading ? <SkeletonRows /> : settlementsQuery.isError && !settlementsQuery.data ? <LoadError what="정산 내역" onRetry={() => settlementsQuery.refetch()} /> : (
                   <SettlementsTable rows={settlements} />
                 )}
                 <PagerButtons page={settlementsPage} totalPages={settlementsQuery.data?.totalPages ?? 0} onChange={setSettlementsPage} />

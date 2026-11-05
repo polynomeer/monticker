@@ -122,7 +122,7 @@ export function QuickTradePanel({ portfolio, meta, sectorValue }: {
         </div>
       ) : (
         <div className="relative">
-          <label htmlFor={inputId} className="flex min-h-10 items-center gap-2.5 rounded-lg border border-tm-line bg-tm-inner px-3 py-1.5">
+          <label htmlFor={inputId} className="flex min-h-10 items-center gap-2.5 rounded-lg border border-control bg-tm-inner px-3 py-1.5">
             <span className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="text-2xs text-tm-muted">종목</span>
               <input

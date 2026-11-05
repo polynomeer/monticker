@@ -234,7 +234,7 @@ export default function ScreenerPage() {
                   maxLength={40}
                   value={naming}
                   onChange={(e) => setNaming(e.target.value)}
-                  className="h-9 rounded-lg border border-tm-line2 bg-tm-inner px-3 text-13 text-dracula-fg outline-hidden focus:border-dracula-purple"
+                  className="h-9 rounded-lg border border-control bg-tm-inner px-3 text-13 text-dracula-fg outline-hidden focus:border-dracula-purple"
                 />
               </label>
               {save.error && <span className="text-xs text-danger">{(save.error as Error).message}</span>}

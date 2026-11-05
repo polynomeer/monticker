@@ -13,7 +13,7 @@ import { reconciliationLabel, useReconciliation } from "@/components/wallet/useR
 import { ScoreDetailGrid } from "@/components/wallet/ScoreDetailGrid";
 import type { ScoreDetails } from "@/components/wallet/insights";
 import { EmptyNote, LoginRequired, Skeleton } from "@/components/portfolio/PaperStates";
-import {
+import { LoadError,
   AutoGrid, Bar, BtnLink, Panel, PanelCol, PanelRow, Seg, TerminalPage, Tile, dirClass, fmtNum, fmtPct, fmtSigned, type TopStat,
 } from "@/components/terminal";
 import { themeColorVar } from "@/lib/themes";
@@ -40,17 +40,20 @@ function grade(score: number) {
 
 /** 가장 최근 모의 거래의 영수증 — 거래가 없으면 빈 상태 */
 function LatestReceipt() {
-  const { data: history = [], isLoading } = usePaperHistory();
+  const { data: history = [], isLoading, isError, refetch } = usePaperHistory();
   const latest = history[0];
-  const { data: receipt, isLoading: loadingReceipt } = useQuery<Receipt | null>({
+  const { data: receipt, isLoading: loadingReceipt, isError: receiptError, refetch: refetchReceipt } = useQuery<Receipt | null>({
     queryKey: ["receipt", latest?.id],
     queryFn: async () => {
       const r = await authFetch(`/api/paper/trades/${latest!.id}/receipt`);
-      return r.ok ? r.json() : null;
+      if (!r.ok) throw new Error("영수증 조회 실패");
+      return r.json();
     },
     enabled: latest != null,
   });
   if (isLoading || (latest && loadingReceipt)) return <Skeleton className="h-64" />;
+  if (isError && !latest) return <LoadError what="최근 거래" onRetry={() => refetch()} />;
+  if (latest && receiptError && !receipt) return <LoadError what="최근 거래 영수증" onRetry={() => refetchReceipt()} />;
   if (!latest || !receipt) return <EmptyNote>아직 체결된 거래가 없습니다. 첫 모의 주문을 내면 영수증이 여기에 남습니다.</EmptyNote>;
   return <ReceiptCard receipt={receipt} />;
 }

@@ -62,6 +62,7 @@ export function useAccountChipSummary(kind: "paper" | "live", isLoggedIn: boolea
     queryFn: getBrokerageAccount,
     enabled: isLoggedIn && live,
     staleTime: 60_000,
+    retryOnMount: false, // useStatusSummary 주석 참고 — 셸이 다시 마운트돼도 실패한 쿼리를 다시 부르지 않는다
   });
   const connected = !!account.data?.isActive;
   const balance = useQuery({
@@ -69,6 +70,7 @@ export function useAccountChipSummary(kind: "paper" | "live", isLoggedIn: boolea
     queryFn: getBrokerageBalance,
     enabled: isLoggedIn && live && connected,
     staleTime: 30_000,
+    retryOnMount: false,
   });
 
   if (!isLoggedIn) return {};

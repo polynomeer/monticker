@@ -11,6 +11,9 @@
 /* ── v3 기본값 유지(Tailwind v4 호환) ── v4는 아래 기본값을 바꿨다. 화면이 업그레이드 전과 같게 보이도록 v3 값을 되살린다.
    지우려면 해당 기본값에 기대던 요소마다 색·커서를 명시해야 한다. */
 @layer base {
+  /* 키보드 포커스 링(전 테마). 입력칸처럼 outline-hidden + 테두리 색으로 포커스를 보이는 곳은 유틸리티가 덮는다 */
+  :focus-visible { outline: 2px solid rgb(var(--tm-accent)); outline-offset: 2px; }
+
   /* 테두리 기본색: v4는 currentColor, v3는 gray-200 */
   *,
   ::after,
@@ -92,6 +95,9 @@ html[data-contrast="high"]:is([data-theme="light"], [data-theme="paper"]) :is(.b
 html[data-contrast="high"]:is([data-theme="light"], [data-theme="paper"]) :is(.border-tm-line2, .border-tm-muted) { border-color: rgb(var(--tm-muted)) !important; }
 /* 키보드 포커스 링 — 대비와 무관한 접근성 이득 */
 html[data-contrast="high"] :focus-visible { outline: 2px solid currentColor !important; outline-offset: 2px !important; }
+/* 작은 하락 숫자 — 다크 테마의 기본 하락 색은 패널 위 4.04~4.29:1이라 글자만 15% 밝게 해 4.5:1을 넘긴다.
+   차트·버튼은 그대로이고, 사용자가 고른 시세 색도 같은 비율로 따라간다. 라이트 계열은 이미 넘는다. */
+html:not([data-theme="light"]):not([data-theme="paper"]) .text-down { color: color-mix(in srgb, rgb(var(--mt-down)) 85%, white); }
 
 @layer base {
   /* 테마 색(RGB 채널) — :root = 드라큘라(기본), html[data-theme]가 덮는다. Tailwind 색(dracula-*·tm-*·live 등)이
@@ -118,6 +124,7 @@ html[data-contrast="high"] :focus-visible { outline: 2px solid currentColor !imp
     --tm-red: 255 85 85; /* #ff5555 */
     --tm-danger: 255 138 138; /* #ff8a8a */
     --tm-accent-soft: 214 188 251; /* #d6bcfb */
+    --tm-control: 98 114 164; /* #6272a4 */
     --mt-up: 14 203 129; /* #0ecb81 */
     --mt-down: 246 70 93; /* #f6465d */
   }
@@ -133,7 +140,7 @@ html[data-contrast="high"] :focus-visible { outline: 2px solid currentColor !imp
     --tm-muted: 143 150 163; /* #8f96a3 */
     --tm-comment: 111 118 131; /* #6f7683 */
     --tm-accent: 91 140 255; /* #5b8cff */
-    --tm-on-accent: 255 255 255; /* #ffffff */
+    --tm-on-accent: 15 17 21; /* #0f1115 */
     --tm-cyan: 56 189 248; /* #38bdf8 */
     --tm-green: 34 197 94; /* #22c55e */
     --tm-pink: 244 114 182; /* #f472b6 */
@@ -142,6 +149,7 @@ html[data-contrast="high"] :focus-visible { outline: 2px solid currentColor !imp
     --tm-red: 239 68 68; /* #ef4444 */
     --tm-danger: 248 113 113; /* #f87171 */
     --tm-accent-soft: 147 180 255; /* #93b4ff */
+    --tm-control: 111 118 131; /* #6f7683 */
     --mt-up: 22 199 132; /* #16c784 */
     --mt-down: 234 57 67; /* #ea3943 */
   }
@@ -166,6 +174,7 @@ html[data-contrast="high"] :focus-visible { outline: 2px solid currentColor !imp
     --tm-red: 242 84 91; /* #f2545b */
     --tm-danger: 249 138 143; /* #f98a8f */
     --tm-accent-soft: 126 232 214; /* #7ee8d6 */
+    --tm-control: 108 122 152; /* #6c7a98 */
     --mt-up: 34 201 147; /* #22c993 */
     --mt-down: 242 84 91; /* #f2545b */
   }
@@ -190,6 +199,7 @@ html[data-contrast="high"] :focus-visible { outline: 2px solid currentColor !imp
     --tm-red: 200 30 58; /* #c81e3a */
     --tm-danger: 200 30 58; /* #c81e3a */
     --tm-accent-soft: 91 51 173; /* #5b33ad */
+    --tm-control: 127 134 148; /* #7f8694 */
     --mt-up: 208 38 60; /* #d0263c */
     --mt-down: 27 100 218; /* #1b64da */
   }
@@ -202,7 +212,7 @@ html[data-contrast="high"] :focus-visible { outline: 2px solid currentColor !imp
     --tm-line2: 207 196 174; /* #cfc4ae */
     --tm-fg: 43 38 32; /* #2b2620 */
     --tm-soft: 74 66 55; /* #4a4237 */
-    --tm-muted: 115 104 90; /* #73685a */
+    --tm-muted: 111 100 86; /* #6f6456 */
     --tm-comment: 154 143 124; /* #9a8f7c */
     --tm-accent: 91 75 196; /* #5b4bc4 */
     --tm-on-accent: 255 255 255; /* #ffffff */
@@ -214,6 +224,7 @@ html[data-contrast="high"] :focus-visible { outline: 2px solid currentColor !imp
     --tm-red: 179 38 30; /* #b3261e */
     --tm-danger: 179 38 30; /* #b3261e */
     --tm-accent-soft: 74 59 168; /* #4a3ba8 */
+    --tm-control: 138 127 108; /* #8a7f6c */
     --mt-up: 198 47 61; /* #c62f3d */
     --mt-down: 33 96 196; /* #2160c4 */
   }
@@ -238,6 +249,7 @@ html[data-contrast="high"] :focus-visible { outline: 2px solid currentColor !imp
     --tm-red: 255 107 125; /* #ff6b7d */
     --tm-danger: 255 140 153; /* #ff8c99 */
     --tm-accent-soft: 226 208 255; /* #e2d0ff */
+    --tm-control: 168 168 168; /* #a8a8a8 */
     --mt-up: 51 226 155; /* #33e29b */
     --mt-down: 255 107 125; /* #ff6b7d */
   }

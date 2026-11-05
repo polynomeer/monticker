@@ -34,15 +34,19 @@ export function useStatusSummary(kind: "paper" | "live", isLoggedIn: boolean): S
     },
     enabled: isLoggedIn,
     staleTime: 60_000,
+    retryOnMount: false,
   });
   const exposure = useRiskExposure(isLoggedIn && !live);
-  const account = useQuery({ queryKey: ["brokerage", "account"], queryFn: getBrokerageAccount, enabled: isLoggedIn && live, staleTime: 60_000 });
+  // retryOnMount: false — 셸은 화면 전환(로딩 ↔ 오류 화면)마다 다시 마운트된다. 실패한 쿼리를 마운트 때 다시 부르면
+  // 쿼리가 로딩으로 돌아가 화면이 또 바뀌는 고리가 되어 요청이 초당 한 번씩 나간다
+  const account = useQuery({ queryKey: ["brokerage", "account"], queryFn: getBrokerageAccount, enabled: isLoggedIn && live, staleTime: 60_000, retryOnMount: false });
   const orders = useQuery({
     queryKey: ["brokerage", "orders", "status-pill"],
     queryFn: () => getBrokerageOrders(0, 50),
     enabled: isLoggedIn && live,
     staleTime: 30_000,
     refetchInterval: 30_000,
+    retryOnMount: false,
   });
 
   const runningStrategies = rules.data ? rules.data.filter((r) => r.status === "RUNNING").length : null;

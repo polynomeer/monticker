@@ -1,7 +1,7 @@
 "use client";
 
 import type { PortfolioAccount } from "@monticker/types";
-import { Btn, Notice, Panel } from "@/components/terminal";
+import { LoadError, Btn, Notice, Panel } from "@/components/terminal";
 import { Skeleton } from "@/components/portfolio/PaperStates";
 import { useDeleteAccount, useTransactions } from "@/hooks/usePortfolio";
 import { AddTransactionForm } from "./AddTransactionForm";
@@ -50,7 +50,7 @@ export function AccountDetail({ account, consentMissing, onDeleted }: { account:
       )}
 
       <Panel tabs={["거래 내역"]} actions={[]} closable={false} bodyClassName="px-1.5 pb-1.5 pt-1">
-        {txs.isPending ? <Skeleton className="h-32" /> : <TransactionsTable accountId={account.id} rows={txs.data ?? []} />}
+        {txs.isPending ? <Skeleton className="h-32" /> : txs.isError && !txs.data ? <LoadError what="거래 내역" onRetry={() => txs.refetch()} /> : <TransactionsTable accountId={account.id} rows={txs.data ?? []} />}
         {(txs.data?.length ?? 0) >= TX_PAGE && <p className="m-0 px-2 py-1.5 text-2xs text-tm-muted">최근 {TX_PAGE}건까지 보여 줍니다.</p>}
       </Panel>
     </div>
