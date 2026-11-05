@@ -479,6 +479,7 @@ DELETE /api/stocks/{stockId}/comments/{id}
 POST   /api/brokerage/connect
 GET    /api/brokerage/account | account/balance
 POST   /api/brokerage/orders
+POST   /api/brokerage/risk-preview   (ADR-116, 판정만 — 기록·주문 없음)
 GET    /api/brokerage/orders | orders/active | orders/{id}/sync
 DELETE /api/brokerage/orders/{id}
 GET    /api/brokerage/settlements | settlements/pending

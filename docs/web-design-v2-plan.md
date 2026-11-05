@@ -107,4 +107,4 @@ W1~W3는 셸과 겹치지 않아 먼저 한다.
 - 테마 역할 색 두 개를 더했다: `danger`(오류·실패 글자, 상승·하락 설정과 무관)와 `accentSoft`. 드라큘라 값은 예전 `#ff8a8a`·`#d6bcfb` 그대로라 기본 테마 모양은 바뀌지 않는다.
 - 차트 범례·이벤트 색(`EVENT_META`·`EVENT_COLOR`·`ChartPanel`)·알림 규칙 색·지갑 막대·로그인 일러스트 등 SVG/DOM에 넘기던 hex는 `themeColorVar()`(CSS 변수)로 바꿨다 — 테마를 바꾸면 다시 그리지 않아도 따라온다.
 - Frontier 차트(ECharts 캔버스)는 `useThemePalette()`로 지금 테마 값을 넘긴다.
-- 남은 것: 실전 주문 리스크 미리보기 API(백엔드, 이 표의 범위 밖). 차트 마커의 팔레트 없을 때 기본값 하나.
+- 실전 주문 리스크 미리보기는 [ADR-116](decisions/116-brokerage-risk-preview.md)으로 해결했다. 남은 것: 차트 마커의 팔레트 없을 때 기본값 하나.
