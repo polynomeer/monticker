@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Icon, Panel, Pill } from "@/components/terminal";
+import { Icon, LoadError, Panel, Pill } from "@/components/terminal";
 import { authFetch } from "@/services/api";
 import { kstTime, useIsLoggedIn } from "./data";
 
@@ -22,11 +22,12 @@ interface SignalFeedItem {
 /** 시안의 "퀀트 시그널" 피드. 포워드 테스트 신호는 장 마감 후 하루 한 번 평가된다. */
 export default function QuantSignals() {
   const isLoggedIn = useIsLoggedIn();
-  const { data = [], isLoading } = useQuery<SignalFeedItem[]>({
+  const { data = [], isLoading, isError, refetch } = useQuery<SignalFeedItem[]>({
     queryKey: ["quant", "signals", "feed"],
     queryFn: async () => {
       const r = await authFetch("/api/quant/signals/feed?limit=8");
-      return r.ok ? r.json() : [];
+      if (!r.ok) throw new Error("시그널 조회 실패");
+      return r.json();
     },
     enabled: isLoggedIn,
     refetchInterval: 60_000,
@@ -41,6 +42,8 @@ export default function QuantSignals() {
         </p>
       ) : isLoading ? (
         <div className="h-24 animate-pulse rounded-lg bg-tm-inner" />
+      ) : isError && data.length === 0 ? (
+        <LoadError what="퀀트 시그널" onRetry={() => refetch()} />
       ) : data.length === 0 ? (
         <div className="flex gap-2.5 py-3">
           <span className="grid pt-0.5 text-tm-muted"><Icon name="zap" size={15} /></span>

@@ -143,6 +143,9 @@ function AssetsScreen() {
               <HoldingEventsFeed enabled={view === "TOTAL"} />
             </Panel>
           </PanelRow>
+          {analysis.isError && !analysis.data && (
+            <LoadError what="자산 분석(배분·배당·수익률)" onRetry={() => analysis.refetch()} />
+          )}
           {analysis.data && (
             <PanelRow>
               <Panel tabs={["자산 배분"]} actions={[]} closable={false} className="flex-[1_1_320px]">
