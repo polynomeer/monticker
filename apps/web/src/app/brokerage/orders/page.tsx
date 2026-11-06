@@ -10,7 +10,8 @@ import {
 import { useStockChart } from "@/hooks/useStockChart";
 import { useFillHeight } from "@/hooks/useFillHeight";
 import { useRiskExposure } from "@/components/risk/useRiskExposure";
-import { realOrderRiskRows } from "@/lib/realOrderRisk";
+import { mergeServerPreview, realOrderRiskRows } from "@/lib/realOrderRisk";
+import { useBrokerageRiskPreview } from "@/hooks/useRiskPreview";
 import { ApiError } from "@/services/brokerage";
 import StockChart from "@/components/stock/chart/StockChart";
 import OrderProposalCard from "@/components/ai/OrderProposalCard";
@@ -161,11 +162,18 @@ export default function BrokerageOrderPage() {
   const krx = !!stock && isKrxSymbol(stock.symbol);
   const tickOk = orderType !== "LIMIT" || !krx || isOnKrxTick(Number(limitPrice));
   const halted = !!trading?.halted;
+  // ADR-116 — 증권사 잔고 기준 서버 미리보기. 결과는 경고로만 쓴다(mergeServerPreview 주석).
+  const riskPreview = useBrokerageRiskPreview(
+    account && stock && qtyOk && limitOk
+      ? { symbol: stock.symbol, side, quantity, limitPrice: orderType === "LIMIT" ? Number(limitPrice) : null }
+      : null,
+  );
   // 주문 전 리스크 — 화면이 판정할 수 있는 규칙만 막는다(이유는 realOrderRiskRows 주석). 한도를 아직 못 읽었으면 막지 않는다 — 서버 게이트(422)가 최종 판정이다.
   const riskRows = stock
-    ? realOrderRiskRows({ side, quantity, price: priceForEstimate, symbol: stock.symbol, balance: balanceReady ? balance : undefined, limits: exposure?.limits })
+    ? mergeServerPreview(realOrderRiskRows({ side, quantity, price: priceForEstimate, symbol: stock.symbol, balance: balanceReady ? balance : undefined, limits: exposure?.limits }), riskPreview.data)
     : [];
   const riskFail = riskRows.find(r => r.state === "fail") ?? null;
+  const riskWarn = riskRows.find(r => r.state === "warn") ?? null;
   const isValid =
     !!stock &&
     qtyOk &&
@@ -207,7 +215,7 @@ export default function BrokerageOrderPage() {
     ...riskRows.map((r): Check => ({
       label: r.label,
       state: r.state === "server" ? "na" : r.state,
-      required: r.state !== "server",
+      required: r.state !== "server" && r.state !== "warn",
       server: r.state === "server",
     })),
   ];
@@ -393,6 +401,9 @@ export default function BrokerageOrderPage() {
               <KV k="예상 수수료" v="증권사 기준" mono={false} />
 
               {riskFail?.reason && <p role="alert" className="m-0 text-xs text-danger">{riskFail.reason}</p>}
+              {!riskFail && riskWarn?.reason && (
+                <p className="m-0 text-xs text-caution">{riskWarn.reason} 주문하면 최신 잔고로 다시 판정합니다.</p>
+              )}
               <Btn kind={side === "BUY" ? "buy" : "sell"} size="lg" full onClick={openConfirm} disabled={!isValid || submitOrder.isPending}>
                 주문 확인
               </Btn>

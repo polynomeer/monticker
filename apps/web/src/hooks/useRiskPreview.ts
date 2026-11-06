@@ -95,13 +95,44 @@ export async function fetchRiskPreview(i: RiskPreviewInput): Promise<RiskCheckRe
  */
 export function useRiskPreview(input: RiskPreviewInput | null, enabled: boolean) {
   const key = enabled && isPreviewable(input) ? JSON.stringify(input) : null;
+  return useDebouncedPreview("risk-preview", key, (k) => fetchRiskPreview(JSON.parse(k) as RiskPreviewInput), 15_000);
+}
+
+export interface BrokerageRiskPreviewInput {
+  symbol: string;
+  side: "BUY" | "SELL";
+  quantity: number;
+  /** 지정가. null이면 시장가 — 서버가 최근가로 판정한다. */
+  limitPrice: number | null;
+}
+
+export async function fetchBrokerageRiskPreview(i: BrokerageRiskPreviewInput): Promise<RiskCheckResult> {
+  const res = await authFetch("/api/brokerage/risk-preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(i),
+  });
+  if (!res.ok) throw new RiskPreviewError(res.status, "리스크 점검 실패");
+  return res.json();
+}
+
+/**
+ * ADR-116 — 증권사 잔고 기준 실전 주문 미리보기. 모의 미리보기와 달리 결과가 게이트보다 엄할 수 있어 제출을 막는 데 쓰지 않는다
+ * ([mergeServerPreview]). 서버가 잔고를 10초 재사용하므로 같은 입력을 그보다 오래 들고 있지 않는다.
+ */
+export function useBrokerageRiskPreview(input: BrokerageRiskPreviewInput | null) {
+  const key = input ? JSON.stringify(input) : null;
+  return useDebouncedPreview("brokerage-risk-preview", key, (k) => fetchBrokerageRiskPreview(JSON.parse(k) as BrokerageRiskPreviewInput), 10_000);
+}
+
+function useDebouncedPreview(name: string, key: string | null, fetcher: (key: string) => Promise<RiskCheckResult>, staleTime: number) {
   const debouncedKey = useDebouncedValue<string | null>(key, RISK_PREVIEW_DEBOUNCE_MS, null);
   const query = useQuery({
-    queryKey: ["risk-preview", debouncedKey],
-    queryFn: () => fetchRiskPreview(JSON.parse(debouncedKey!) as RiskPreviewInput),
+    queryKey: [name, debouncedKey],
+    queryFn: () => fetcher(debouncedKey!),
     enabled: debouncedKey != null && debouncedKey === key,
     retry: false,
-    staleTime: 15_000,
+    staleTime,
     gcTime: 60_000,
   });
   return {

@@ -29,6 +29,7 @@ import com.monticker.api.common.exception.BusinessRuleException
 import com.monticker.api.common.exception.ReconnectRequiredException
 import com.monticker.api.risk.application.HoldingPosition
 import com.monticker.api.risk.application.PortfolioSnapshot
+import com.monticker.api.risk.application.RiskCheckResult
 import com.monticker.api.risk.application.RiskCheckerService
 import com.monticker.api.wallet.application.LedgerService
 import org.slf4j.LoggerFactory
@@ -71,6 +72,7 @@ class BrokerageService(
     private val calendar: TradingCalendar,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+    private val previewBalances = PreviewBalanceCache(PREVIEW_BALANCE_TTL)
 
     // ADR-056 — 주문 제출은 트랜잭션을 셋으로 나눈다. 같은 빈 안의 자기 호출에는 @Transactional이 걸리지 않으므로
     // (ADR-011 Note) 경계를 템플릿으로 연다. REQUIRES_NEW라 호출자가 트랜잭션 안에서 불러도 각 단계가 독립 커밋된다.
@@ -298,6 +300,28 @@ class BrokerageService(
         log.error("주문 결과 기록 실패 — PENDING_SUBMIT으로 남아 대조 잡이 해소한다: orderId={} outcome={} pgOrderId={} brokerOrderRef={}",
             prepared.orderId, result.outcome, result.pgOrderId, result.brokerOrderRef, lastError)
         throw OrderOutcomeUnknownException(prepared.orderId, lastError!!)
+    }
+
+    /**
+     * ADR-116 — 실전 주문 리스크 미리보기. 판정만 돌려줄 뿐 주문·감사 행·진행 중 매수 갱신 어느 것도 하지 않는다.
+     *
+     * 게이트와 다른 점이 둘 있어 결과가 게이트보다 엄하게 나올 수 있다: 잔고가 최대 [PREVIEW_BALANCE_TTL] 묵었고,
+     * 체결됐지만 아직 갱신 안 된 지정가 매수가 보유와 대기에 이중으로 잡힌다. 그래서 화면은 이 결과로 제출을 막지 않는다.
+     * 거래 중지·결과 불명 주문은 게이트가 따로 막으며 화면도 따로 보여 준다 — 여기서 판정하지 않는다.
+     */
+    fun previewOrderRisk(userId: Long, symbol: String, side: String, quantity: Int, limitPrice: BigDecimal?): RiskCheckResult {
+        val account = getAccount(userId)
+        val stockId = resolveStockId(symbol) ?: throw IllegalArgumentException("등록되지 않은 종목입니다: $symbol")
+        val client = clientRegistry.get(account.provider)
+        val balance = previewBalances.getOrLoad(account.id) {
+            // 만료된 토큰 재발급은 저장이 필요하다(getBalance와 같은 이유, ADR-027). 증권사 조회 동안 트랜잭션은 잡지 않는다.
+            client.getBalance(requiresNew.execute { requireCredentials(account) }!!)
+        }
+        // 게이트와 같다 — 가격을 전혀 모르면 0으로 넘겨 규칙이 보수적으로 거부한다.
+        val estimatedPrice = limitPrice?.takeIf { it.signum() > 0 } ?: currentPrice(symbol) ?: BigDecimal.ZERO
+        return riskChecker.previewBrokerageOrder(
+            userId, stockId, side, quantity, estimatedPrice, snapshotOf(userId, account, balance),
+        )
     }
 
     /** tx1 — 검증·리스크 게이트·중복 가드를 통과하면 PENDING_SUBMIT 행을 남긴다. 여기서 난 예외는 증권사 호출 전이다. */
@@ -779,6 +803,16 @@ class BrokerageService(
         userId: Long, account: BrokerageAccount, stockId: Long, client: BrokerageClient, credentials: BrokerageCredentials,
     ): Pair<PortfolioSnapshot, BrokerageBalance> {
         val balance = client.getBalance(credentials)
+
+        // ADR-058 — 같은 종목의 진행 중 매수 상태를 증권사에서 먼저 갱신한다. 지정가 매수는 체결돼도 자동으로 FILLED가 되지
+        // 않아(대조 잡은 결과 불명만 본다) 체결분이 보유와 대기에 하루 종일 이중으로 잡힌다. 이중 계산이 문제되는 건 집중도이고
+        // 집중도는 이 종목만 보므로 이 종목만 조회한다(보통 0~1건). 조회가 실패하면 SUBMITTED로 남아 대기로 센다(안전 쪽).
+        refreshOpenBuys(account, stockId, client, credentials)
+        return snapshotOf(userId, account, balance) to balance
+    }
+
+    /** 잔고 → 판정 스냅샷. 게이트와 미리보기(ADR-116)가 같은 계산을 쓰도록 나눠 둔다. 증권사를 부르지 않고 쓰기도 없다. */
+    private fun snapshotOf(userId: Long, account: BrokerageAccount, balance: BrokerageBalance): PortfolioSnapshot {
         // 수량 0(오늘 전량 매도) 행은 빼고, 한 종목이 여러 행(현금·신용 등)으로 오면 합친다 — 그대로 두면 보유 종목 수가
         // 부풀고, 집중도는 첫 행만 봐서 과소평가된다.
         val holdings = balance.holdings
@@ -786,11 +820,6 @@ class BrokerageService(
             .mapNotNull { h -> resolveStockId(h.symbol)?.let { it to h.quantity } }
             .groupBy({ it.first }, { it.second })
             .map { (id, qtys) -> HoldingPosition(stockId = id, qty = qtys.sum()) }
-
-        // ADR-058 — 같은 종목의 진행 중 매수 상태를 증권사에서 먼저 갱신한다. 지정가 매수는 체결돼도 자동으로 FILLED가 되지
-        // 않아(대조 잡은 결과 불명만 본다) 체결분이 보유와 대기에 하루 종일 이중으로 잡힌다. 이중 계산이 문제되는 건 집중도이고
-        // 집중도는 이 종목만 보므로 이 종목만 조회한다(보통 0~1건). 조회가 실패하면 SUBMITTED로 남아 대기로 센다(안전 쪽).
-        refreshOpenBuys(account, stockId, client, credentials)
 
         // ADR-062 — 오늘(KST) 체결된 매도의 실현손익. 예전엔 SUM(매도 대금 − 매수 대금) 현금 흐름이라 매수가 손실로 잡혀, 하루 3%
         // 넘게 사면 이후 모든 실거래 매수가 막혔다. 날짜도 DB 세션(UTC) 기준이었다. 원가가 없는(이 변경 전) 매도는 뺀다.
@@ -818,7 +847,7 @@ class BrokerageService(
             // 진행 중 매수는 노출에 더하고, 분모는 증권사가 계산한 총평가액을 쓴다.
             pendingBuys      = pendingBuyQuery.pendingBuys(account.id),
             totalAssets      = balance.totalEvaluated,
-        ) to balance
+        )
     }
 
     /** ADR-062 — 증권사 잔고에서 그 종목의 평단가(여러 행이면 수량 가중 평균). 보유가 없으면 null. */
@@ -889,6 +918,9 @@ class BrokerageService(
     companion object {
         // ADR-027 — 취소된 앱키로 매 요청마다 브로커 인증 엔드포인트를 두드리지 않기 위한 쿨다운.
         private const val AUTH_RETRY_COOLDOWN_SECONDS = 300L
+
+        /** ADR-116 — 리스크 미리보기가 증권사 잔고를 재사용하는 시간. 실주문 게이트는 재사용하지 않는다. */
+        private val PREVIEW_BALANCE_TTL: Duration = Duration.ofSeconds(10)
 
         /** pg_advisory_xact_lock의 첫 번째 키 — 다른 advisory lock 사용처와 겹치지 않게 네임스페이스를 둔다. */
         private const val ADVISORY_NS_ORDER = 56_001

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyLiveResult, concentrationAfter, priceDeviationPct } from "./liveOrder.ts";
+import { classifyLiveResult, concentrationAfter, liveRiskHeadline, priceDeviationPct } from "./liveOrder.ts";
 
 const holdings = [{ symbol: "005930", quantity: 18, currentPrice: 71255 }];
 
@@ -36,4 +36,12 @@ test("확정 거절이 아닌 4xx와 본문 없는 2xx는 결과 불명", () => 
 test("지정가 괴리율", () => {
   assert.equal(priceDeviationPct(78_100, 71_000)!.toFixed(1), "10.0");
   assert.equal(priceDeviationPct(1, 0), null);
+});
+
+test("리스크 머리글 — 화면 판정만 차단, 서버 미리보기 실패는 경고", () => {
+  assert.equal(liveRiskHeadline(true, { approved: true }).tone, "danger");
+  assert.equal(liveRiskHeadline(false, { approved: false }).tone, "caution");
+  assert.equal(liveRiskHeadline(false, { approved: true }).tone, "muted");
+  // 미리보기를 못 받아도 통과라고 말하지 않는다
+  assert.match(liveRiskHeadline(false, null).text, /서버가 판정/);
 });

@@ -30,6 +30,7 @@ import com.monticker.api.common.consent.ConsentSource
 import com.monticker.api.common.exception.ReconnectRequiredException
 import com.monticker.api.risk.application.RiskCheckResult
 import com.monticker.api.risk.application.RiskCheckerService
+import com.monticker.api.risk.application.PortfolioSnapshot
 import com.monticker.api.wallet.application.LedgerService
 import io.mockk.*
 import org.assertj.core.api.Assertions.assertThat
@@ -461,6 +462,67 @@ class BrokerageServiceTest {
             com.monticker.api.brokerage.infrastructure.BrokerageOrderStatus(secondArg(), "SUBMITTED", 0, null)
         }
         return serviceWithFakeClient(fakeClient) to fakeClient
+    }
+
+    // ── ADR-116 리스크 미리보기 ─────────────────────────
+
+    private fun previewService(balance: BrokerageBalance): Pair<BrokerageService, BrokerageClient> {
+        val fakeClient = mockk<BrokerageClient>()
+        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(makeAccount())
+        stubStockLookup()
+        every { jdbc.queryForObject(any<String>(), eq(BigDecimal::class.java), any()) } returns BigDecimal("70000")
+        every { riskChecker.previewBrokerageOrder(any(), any(), any(), any(), any(), any()) } returns approvedRisk
+        every { fakeClient.getBalance(any()) } returns balance
+        return serviceWithFakeClient(fakeClient) to fakeClient
+    }
+
+    @Test
+    fun `미리보기는 증권사 잔고로 판정하고 주문·감사·상태 갱신을 하지 않는다`() {
+        val balance = BrokerageBalance(BigDecimal("1000000"), BigDecimal("3000000"), emptyList())
+        val (svc, fakeClient) = previewService(balance)
+        val snapshot = slot<PortfolioSnapshot>()
+        every { riskChecker.previewBrokerageOrder(any(), any(), any(), any(), any(), capture(snapshot)) } returns approvedRisk
+
+        assertThat(svc.previewOrderRisk(1L, "005930", "BUY", 1, BigDecimal("70000"))).isEqualTo(approvedRisk)
+
+        assertThat(snapshot.captured.cash).isEqualByComparingTo("1000000")
+        assertThat(snapshot.captured.totalAssets).isEqualByComparingTo("3000000")
+        verify(exactly = 0) { riskChecker.checkBrokerageOrder(any(), any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { orderRepo.save(any()) }
+        verify(exactly = 0) { fakeClient.submitOrder(any(), any(), any()) }
+        verify(exactly = 0) { fakeClient.getOrderStatus(any(), any()) }
+        verify(exactly = 0) { jdbc.query(match<String> { it.contains("pg_advisory_xact_lock") }, any<org.springframework.jdbc.core.RowCallbackHandler>(), *anyVararg()) }
+    }
+
+    @Test
+    fun `미리보기는 잔고를 재사용하고 실주문 게이트는 재사용하지 않는다`() {
+        val orderSlot = slot<BrokerageOrder>()
+        val (svc, fakeClient) = fakeClientService(BrokerageOrderResult.accepted("ODNO-1"), orderSlot)
+        every { riskChecker.previewBrokerageOrder(any(), any(), any(), any(), any(), any()) } returns approvedRisk
+
+        svc.previewOrderRisk(1L, "005930", "BUY", 1, null)
+        svc.previewOrderRisk(1L, "005930", "BUY", 2, null)
+        verify(exactly = 1) { fakeClient.getBalance(any()) }
+
+        svc.submitOrder(1L, req)
+        verify(exactly = 2) { fakeClient.getBalance(any()) }
+    }
+
+    @Test
+    fun `지정가가 0이면 시장가로 보고 최근가로 판정한다`() {
+        val (svc, _) = previewService(BrokerageBalance(BigDecimal.TEN, BigDecimal.TEN, emptyList()))
+        svc.previewOrderRisk(1L, "005930", "BUY", 1, BigDecimal.ZERO)
+        verify { riskChecker.previewBrokerageOrder(1L, 1L, "BUY", 1, BigDecimal("70000"), any()) }
+    }
+
+    @Test
+    fun `등록되지 않은 종목은 미리보기도 거부하고 증권사를 부르지 않는다`() {
+        val fakeClient = mockk<BrokerageClient>()
+        every { accountRepo.findByUserIdAndIsActiveTrue(1L) } returns Optional.of(makeAccount())
+        every { jdbc.queryForObject(STOCK_ID_BY_SYMBOL_SQL, Long::class.java, any()) } throws RuntimeException("없음")
+
+        assertThrows<IllegalArgumentException> { serviceWithFakeClient(fakeClient).previewOrderRisk(1L, "NOPE", "BUY", 1, null) }
+        verify(exactly = 0) { fakeClient.getBalance(any()) }
     }
 
     @Test
