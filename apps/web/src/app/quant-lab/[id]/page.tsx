@@ -12,7 +12,7 @@ import { getScreenerQuotes } from "@/services/screener";
 import { StockPicker } from "@/components/quant/StockPicker";
 import { shareStrategy } from "@/services/strategyMarket";
 import {
-  AutoGrid, Btn, BtnLink, Checkbox, DataTable, Field, KV, Legend, LineChart, Notice, Panel, PanelCol, PanelRow,
+  AutoGrid, Btn, BtnLink, Checkbox, DataTable, Field, KV, Legend, LineChart, LoadError, Notice, Panel, PanelCol, PanelRow,
   Pill, PreviewTag, Stat, TerminalPage, fmtNum, fmtPct, type Column,
 } from "@/components/terminal";
 import { MonthlyHeatmap, TradeHistogram, fmtMatch, fmtMdd, matchTone, rulesetStatus } from "@/components/quant/parts";
@@ -81,7 +81,7 @@ export default function QuantLabDetailPage() {
     },
   });
 
-  const { data: results = [], isLoading: resultsLoading } = useQuery<BacktestResult[]>({
+  const { data: results = [], isLoading: resultsLoading, isError: resultsError, refetch: refetchResults } = useQuery<BacktestResult[]>({
     queryKey: ["quant", "backtest", id],
     queryFn: async () => {
       const res = await authFetch(`/api/quant/rulesets/${id}/backtest`);
@@ -250,7 +250,9 @@ export default function QuantLabDetailPage() {
             closable={false}
             right={latestResult?.reliabilityScore ? <Pill tone={RELIABILITY_TONE[latestResult.reliabilityScore] ?? "muted"}>신뢰도 {latestResult.reliabilityScore}</Pill> : undefined}
           >
-            {results.length === 0 && !resultsLoading ? (
+            {resultsError && results.length === 0 ? (
+              <LoadError what="백테스트 결과" onRetry={() => refetchResults()} />
+            ) : results.length === 0 && !resultsLoading ? (
               <div className="grid h-64 place-items-center rounded-lg border border-dashed border-tm-line2 text-center text-13 text-tm-muted">
                 <div>아직 백테스트 결과가 없습니다.<br />위의 실행 조건을 정한 뒤 실행하세요.</div>
               </div>

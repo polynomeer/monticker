@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import type { BrokerageOrderResponse, ConditionalOrderResponse } from "@monticker/types";
-import { ChgNum, DataTable, Panel, Pill, StockCell, dirClass, fmtNum, fmtSigned, type Column } from "@/components/terminal";
+import { ChgNum, DataTable, LoadError, Panel, Pill, StockCell, dirClass, fmtNum, fmtSigned, type Column } from "@/components/terminal";
 import { usePaperConditionalMutations, usePaperConditionalOrders, usePaperHistory, usePaperPortfolio, type Holding, type PaperConditionalOrder, type PaperOpenOrder, type TradeHistory } from "@/hooks/usePaperTrade";
 import { PAPER_COND_STATUS, PAPER_TRIGGER_LABEL } from "./PaperConditionalPanel";
 import { useConditionalOrders } from "@/hooks/useBrokerage";
@@ -244,7 +244,7 @@ function Conditional({ connected, symbol }: { connected: boolean; symbol: string
 }
 
 function Fills() {
-  const { data = [], isLoading } = usePaperHistory();
+  const { data = [], isLoading, isError, refetch } = usePaperHistory();
   const cols: Column<TradeHistory>[] = [
     { key: "at", header: "체결 시각", cell: (t) => <span className="num text-tm-muted">{when(t.tradedAt)}</span> },
     { key: "name", header: "종목", cell: (t) => <StockCell name={t.name} code={t.symbol} href={`/stocks/${t.symbol}`} /> },
@@ -255,6 +255,7 @@ function Fills() {
     { key: "acc", header: "계좌", cell: () => <Pill tone="yellow">모의</Pill> },
   ];
   if (isLoading) return <div className="m-1.5 h-24 animate-pulse rounded-lg bg-tm-inner" />;
+  if (isError && data.length === 0) return <LoadError className="m-1.5" what="체결 내역" onRetry={() => refetch()} />;
   return <DataTable columns={cols} rows={data.slice(0, 50)} rowKey={(t) => t.id} minWidth={760} empty="모의투자 체결 내역이 없습니다." />;
 }
 
