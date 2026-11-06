@@ -284,7 +284,7 @@ Expo SDK는 React Native·React·expo-* 패키지 버전을 한 세트로 고정
 | B4-1 statemachine 제거 | 완료 | #213 | ADR-103. 50조합 동작 일치 |
 | B4-2 Modulith v2 컬럼 | 완료 | #223 | V101 nullable 추가. "backfill 불필요"는 틀렸다 — 1.x 행 상태 표시는 B4-5a(ADR-104) |
 | B4-3 직렬화 고정 테스트 | 완료 | #225 | worker·api·Go 양쪽에 같은 JSON 고정, gateway-ci 신설 |
-| B4-4 ES 9 서버 | 로컬 완료 | — | 로컬 9.4.5(B4-5b PR). 운영은 8.19 → 9, **B4-5b 배포 전에** — 일정 필요 |
+| B4-4 ES 9 서버 | 로컬 완료 | — | 로컬 9.4.8(Boot 4.1.2와 함께). 2026-11-06 기준 운영 ES는 없다(K8s 매니페스트·`ELASTICSEARCH_URI` 없음). 프로비저닝할 때 8.x를 거치지 않고 9.x로 시작한다 |
 | B4-5a worker Boot 4.1 | 완료 | #229 | ADR-104. 통합 테스트·로컬 기동(api 3.5와 혼합)으로 확인 |
 | B4-5b api Boot 4.1 | PR | #233 | ES 9 선행. V108·V109, Batch JDBC 저장소, 캐시 동기 쓰기 |
 | B4-6 | 진행 중 | #235 #236 | worker 완료. api는 #233 뒤 |
