@@ -1,14 +1,14 @@
 plugins {
 	kotlin("jvm") version "2.4.21"
 	kotlin("plugin.spring") version "2.4.21"
-	id("org.springframework.boot") version "4.1.1"
+	id("org.springframework.boot") version "4.1.2"
 	id("io.spring.dependency-management") version "1.1.7"
 	kotlin("plugin.jpa") version "2.4.21"
 }
 
 dependencyManagement {
 	imports {
-		mavenBom("org.springframework.modulith:spring-modulith-bom:2.1.1")
+		mavenBom("org.springframework.modulith:spring-modulith-bom:2.1.2")
 		mavenBom("org.testcontainers:testcontainers-bom:2.0.5")
 	}
 }
