@@ -57,7 +57,7 @@ dependencies {
 	// Boot 매퍼(Modulith 아웃박스 직렬화·Kafka 외부화)는 Jackson 3다(ADR-104). Kotlin 모듈은 Jackson 3용을 따로 받는다
 	implementation("tools.jackson.module:jackson-module-kotlin")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
-	implementation("com.google.guava:guava:33.7.2-jre")
+	implementation("com.google.guava:guava:33.8.0-jre")
 	implementation("com.anthropic:anthropic-java:2.73.0")
 	implementation("org.springframework.boot:spring-boot-starter-mail")
 	runtimeOnly("org.postgresql:postgresql")
