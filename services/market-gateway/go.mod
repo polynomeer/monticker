@@ -3,7 +3,7 @@ module monticker/market-gateway
 go 1.25.0
 
 require (
-	github.com/jackc/pgx/v5 v5.12.0
+	github.com/jackc/pgx/v5 v5.13.0
 	github.com/segmentio/kafka-go v0.4.47
 )
 
